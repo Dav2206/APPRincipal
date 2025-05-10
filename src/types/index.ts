@@ -46,7 +46,7 @@ export interface Appointment extends BaseEntity {
   patientId: string;
   patient?: Patient; // Populated for display
   locationId: LocationId;
-  professionalId?: string; // Attending professional, can be initially null
+  professionalId?: string | null; // Attending professional, can be initially null
   professional?: Professional; // Populated for display
   serviceId: ServiceId;
   service?: Service; // Populated for display
@@ -60,7 +60,7 @@ export interface Appointment extends BaseEntity {
   // Post-booking / Confirmation details
   status: AppointmentStatus;
   actualArrivalTime?: string; // HH:MM
-  addedServices?: { serviceId: ServiceId; professionalId?: string | null; price?: number | null }[];
+  addedServices?: { serviceId: ServiceId; professionalId?: string | null; price?: number | null; service?: Service, professional?: Professional }[]; // Added service and professional for display
   paymentMethod?: PaymentMethod;
   amountPaid?: number;
   staffNotes?: string; // Notes by staff after service
@@ -86,3 +86,7 @@ export type AppointmentFormData = {
 };
 
 export type ProfessionalFormData = Omit<Professional, 'biWeeklyEarnings'>;
+
+// Export AppointmentStatus to be available for other modules if needed directly
+export type { AppointmentStatus };
+```

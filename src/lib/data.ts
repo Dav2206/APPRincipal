@@ -1,6 +1,7 @@
-import type { User, Professional, Patient, Service, Appointment, AppointmentFormData, ProfessionalFormData } from '@/types';
+
+import type { User, Professional, Patient, Service, Appointment, AppointmentFormData, ProfessionalFormData, AppointmentStatus } from '@/types';
 import { LOCATIONS, USER_ROLES, SERVICES, PROFESSIONAL_SPECIALIZATIONS, APPOINTMENT_STATUS, LocationId, ServiceId } from './constants';
-import { formatISO, parseISO, addDays, setHours, setMinutes, startOfDay, addMinutes } from 'date-fns';
+import { formatISO, parseISO, addDays, setHours, setMinutes, startOfDay, endOfDay, addMinutes } from 'date-fns';
 
 let users: User[] = [
   { id: 'admin001', username: 'Admin', password: 'admin', role: USER_ROLES.ADMIN, name: 'Administrator' },
@@ -46,7 +47,7 @@ const mockServices: Service[] = SERVICES.map(s => ({
 
 let appointments: Appointment[] = [];
 const today = new Date();
-const numDays = 5; // Generate appointments for a few days around today
+const numDays = 30; // Generate appointments for a month around today for better revenue data
 
 for (let dayOffset = -Math.floor(numDays / 2); dayOffset <= Math.floor(numDays / 2); dayOffset++) {
   const currentDate = addDays(startOfDay(today), dayOffset);
@@ -54,7 +55,7 @@ for (let dayOffset = -Math.floor(numDays / 2); dayOffset <= Math.floor(numDays /
     const locationProfessionals = professionals.filter(p => p.locationId === location.id);
     if (locationProfessionals.length === 0) return;
 
-    const appointmentsPerDay = Math.floor(Math.random() * 15) + 5; // 5 to 20 appts per day/location for demo
+    const appointmentsPerDay = Math.floor(Math.random() * 10) + 3; // 3 to 13 appts per day/location for demo
     for (let i = 0; i < appointmentsPerDay; i++) {
       const randomPatient = patients[Math.floor(Math.random() * patients.length)];
       const randomService = mockServices[Math.floor(Math.random() * mockServices.length)];
@@ -65,7 +66,17 @@ for (let dayOffset = -Math.floor(numDays / 2); dayOffset <= Math.floor(numDays /
       const appointmentDateTime = setMinutes(setHours(currentDate, hour), minute);
       
       const statusKeys = Object.values(APPOINTMENT_STATUS);
-      const randomStatus = statusKeys[Math.floor(Math.random() * statusKeys.length)];
+      let randomStatus = statusKeys[Math.floor(Math.random() * statusKeys.length)];
+
+      // Ensure 'completed' appointments are generally in the past or today for realistic revenue
+      if (randomStatus === APPOINTMENT_STATUS.COMPLETED && appointmentDateTime > today) {
+        randomStatus = APPOINTMENT_STATUS.BOOKED;
+      }
+      // Ensure 'booked' appointments are generally for today or future
+      if (randomStatus === APPOINTMENT_STATUS.BOOKED && appointmentDateTime < startOfDay(today)) {
+         randomStatus = APPOINTMENT_STATUS.COMPLETED; // Or another past status
+      }
+
 
       appointments.push({
         id: `appt-${location.id}-${dayOffset}-${i}`,
@@ -81,7 +92,7 @@ for (let dayOffset = -Math.floor(numDays / 2); dayOffset <= Math.floor(numDays /
         updatedAt: formatISO(new Date()),
         ...(randomStatus === APPOINTMENT_STATUS.COMPLETED && {
             actualArrivalTime: `${String(hour).padStart(2, '0')}:${String(minute + Math.floor(Math.random()*10-5)).padStart(2, '0')}`, // slight variation
-            amountPaid: randomService.price,
+            amountPaid: randomService.price + (Math.random() > 0.5 ? (mockServices[1].price || 0) : 0), // Main service + potential added
             paymentMethod: 'Efectivo',
             addedServices: Math.random() > 0.8 ? [{ serviceId: mockServices[1].id, professionalId: locationProfessionals[0].id, price: mockServices[1].price }] : undefined,
         })
@@ -162,11 +173,21 @@ export const getServiceById = async (id: ServiceId): Promise<Service | undefined
 }
 
 // --- Appointments ---
-export const getAppointments = async (filters: { locationId?: LocationId, date?: Date, patientId?: string, professionalId?: string }): Promise<Appointment[]> => {
+export const getAppointments = async (filters: { 
+  locationId?: LocationId | LocationId[]; // Allow array of locationIds for admin 'all'
+  date?: Date, 
+  dateRange?: { start: Date; end: Date };
+  status?: AppointmentStatus | AppointmentStatus[];
+  patientId?: string, 
+  professionalId?: string 
+}): Promise<Appointment[]> => {
   let filteredAppointments = [...appointments];
 
   if (filters.locationId) {
-    filteredAppointments = filteredAppointments.filter(a => a.locationId === filters.locationId);
+    const locationsToFilter = Array.isArray(filters.locationId) ? filters.locationId : [filters.locationId];
+    if (locationsToFilter.length > 0) { // Avoid filtering if an empty array is somehow passed
+        filteredAppointments = filteredAppointments.filter(a => locationsToFilter.includes(a.locationId));
+    }
   }
   if (filters.patientId) {
     filteredAppointments = filteredAppointments.filter(a => a.patientId === filters.patientId);
@@ -178,6 +199,18 @@ export const getAppointments = async (filters: { locationId?: LocationId, date?:
     const filterDateString = formatISO(startOfDay(filters.date), { representation: 'date' });
     filteredAppointments = filteredAppointments.filter(a => formatISO(parseISO(a.appointmentDateTime), { representation: 'date' }) === filterDateString);
   }
+  if (filters.dateRange) {
+    const rangeStart = startOfDay(filters.dateRange.start);
+    const rangeEnd = endOfDay(filters.dateRange.end);
+    filteredAppointments = filteredAppointments.filter(a => {
+      const apptDate = parseISO(a.appointmentDateTime);
+      return apptDate >= rangeStart && apptDate <= rangeEnd;
+    });
+  }
+  if (filters.status) {
+    const statusesToFilter = Array.isArray(filters.status) ? filters.status : [filters.status];
+    filteredAppointments = filteredAppointments.filter(a => statusesToFilter.includes(a.status));
+  }
   
   // Populate related data
   return filteredAppointments.map(appt => ({
@@ -185,7 +218,6 @@ export const getAppointments = async (filters: { locationId?: LocationId, date?:
     patient: patients.find(p => p.id === appt.patientId),
     professional: professionals.find(p => p.id === appt.professionalId),
     service: mockServices.find(s => s.id === appt.serviceId),
-    // Ensure addedServices are mapped with their details if necessary (e.g. service name) - for now, direct pass-through
     addedServices: appt.addedServices?.map(as => ({
       ...as,
       service: mockServices.find(s => s.id === as.serviceId),
@@ -261,7 +293,6 @@ export const updateAppointment = async (id: string, data: Partial<Appointment>):
   const index = appointments.findIndex(a => a.id === id);
   if (index === -1) return undefined;
   
-  // Ensure professionalId in addedServices is handled if it's a placeholder or empty string
   const processedData = {
     ...data,
     addedServices: data.addedServices?.map(as => ({
@@ -272,7 +303,7 @@ export const updateAppointment = async (id: string, data: Partial<Appointment>):
   
   appointments[index] = { 
     ...appointments[index], 
-    ...processedData, // Use processedData
+    ...processedData, 
     updatedAt: formatISO(new Date()) 
   };
   

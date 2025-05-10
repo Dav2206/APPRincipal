@@ -2,7 +2,7 @@
 "use client";
 
 import { useAuth } from '@/contexts/auth-provider';
-import { USER_ROLES, LOCATIONS, LocationId } from '@/lib/constants';
+import { USER_ROLES, LOCATIONS, LocationId, APPOINTMENT_STATUS } from '@/lib/constants';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import Link from 'next/link';
@@ -11,12 +11,12 @@ import { CalendarPlus, Users, History, Briefcase, Loader2 } from 'lucide-react';
 import { useAppState } from '@/contexts/app-state-provider';
 import { useState, useEffect } from 'react';
 import { getAppointments, getProfessionals } from '@/lib/data';
-import { startOfDay } from 'date-fns';
+import { startOfDay, startOfMonth, endOfMonth } from 'date-fns';
 
 interface DashboardStats {
   todayAppointments: string;
-  pendingConfirmations: number;
-  activeProfessionals: number;
+  pendingConfirmations: string;
+  activeProfessionals: string;
   totalRevenueMonth: string;
 }
 
@@ -25,8 +25,8 @@ export default function DashboardPage() {
   const { selectedLocationId } = useAppState();
   const [stats, setStats] = useState<DashboardStats>({
     todayAppointments: "0",
-    pendingConfirmations: 0,
-    activeProfessionals: 0,
+    pendingConfirmations: "0",
+    activeProfessionals: "0",
     totalRevenueMonth: '0.00',
   });
   const [isLoadingStats, setIsLoadingStats] = useState(true);
@@ -37,16 +37,22 @@ export default function DashboardPage() {
 
       setIsLoadingStats(true);
       let todayAppointmentsCount = 0;
+      let pendingConfirmationsCount = 0;
       let activeProfessionalsCount = 0;
+      let totalRevenueMonthValue = 0;
 
       try {
         const today = startOfDay(new Date());
+        const currentMonthStart = startOfMonth(today);
+        const currentMonthEnd = endOfMonth(today);
 
         // Fetch Today's Appointments
         if (user.role === USER_ROLES.ADMIN) {
           if (selectedLocationId === 'all') {
-            const allAppointments = await getAppointments({ date: today });
-            todayAppointmentsCount = allAppointments.length;
+            // Sum appointments from all locations for admin 'all' view
+            const allLocationsAppointmentsPromises = LOCATIONS.map(loc => getAppointments({ date: today, locationId: loc.id }));
+            const allLocationsAppointmentsResults = await Promise.all(allLocationsAppointmentsPromises);
+            todayAppointmentsCount = allLocationsAppointmentsResults.reduce((sum, result) => sum + result.length, 0);
           } else if (selectedLocationId) {
             const locationAppointments = await getAppointments({ date: today, locationId: selectedLocationId as LocationId });
             todayAppointmentsCount = locationAppointments.length;
@@ -56,11 +62,58 @@ export default function DashboardPage() {
           todayAppointmentsCount = locationAppointments.length;
         }
 
+        // Fetch Pending Confirmations (status: 'booked')
+        if (user.role === USER_ROLES.ADMIN) {
+          if (selectedLocationId === 'all') {
+             const allLocationsPendingPromises = LOCATIONS.map(loc => getAppointments({ status: APPOINTMENT_STATUS.BOOKED, locationId: loc.id }));
+             const allLocationsPendingResults = await Promise.all(allLocationsPendingPromises);
+             pendingConfirmationsCount = allLocationsPendingResults.reduce((sum, result) => sum + result.length, 0);
+          } else if (selectedLocationId) {
+            const bookedAppointments = await getAppointments({ status: APPOINTMENT_STATUS.BOOKED, locationId: selectedLocationId as LocationId });
+            pendingConfirmationsCount = bookedAppointments.length;
+          }
+        } else if (user.role === USER_ROLES.LOCATION_STAFF && user.locationId) {
+          const bookedAppointments = await getAppointments({ status: APPOINTMENT_STATUS.BOOKED, locationId: user.locationId });
+          pendingConfirmationsCount = bookedAppointments.length;
+        }
+        
+        // Fetch Total Revenue for Current Month (status: 'completed')
+        if (user.role === USER_ROLES.ADMIN) {
+          if (selectedLocationId === 'all') {
+            const allLocationsCompletedPromises = LOCATIONS.map(loc => getAppointments({
+              status: APPOINTMENT_STATUS.COMPLETED,
+              locationId: loc.id,
+              dateRange: { start: currentMonthStart, end: currentMonthEnd },
+            }));
+            const allLocationsCompletedResults = await Promise.all(allLocationsCompletedPromises);
+            totalRevenueMonthValue = allLocationsCompletedResults.reduce((totalSum, locationResults) => 
+              totalSum + locationResults.reduce((locationSum, appt) => locationSum + (appt.amountPaid || 0), 0), 
+            0);
+          } else if (selectedLocationId) {
+            const completedAppointmentsMonth = await getAppointments({
+              status: APPOINTMENT_STATUS.COMPLETED,
+              locationId: selectedLocationId as LocationId,
+              dateRange: { start: currentMonthStart, end: currentMonthEnd },
+            });
+            totalRevenueMonthValue = completedAppointmentsMonth.reduce((sum, appt) => sum + (appt.amountPaid || 0), 0);
+          }
+        } else if (user.role === USER_ROLES.LOCATION_STAFF && user.locationId) {
+          const completedAppointmentsMonth = await getAppointments({
+            status: APPOINTMENT_STATUS.COMPLETED,
+            locationId: user.locationId,
+            dateRange: { start: currentMonthStart, end: currentMonthEnd },
+          });
+          totalRevenueMonthValue = completedAppointmentsMonth.reduce((sum, appt) => sum + (appt.amountPaid || 0), 0);
+        }
+
+
         // Fetch Active Professionals
         if (user.role === USER_ROLES.ADMIN) {
             if (selectedLocationId === 'all') {
-                const allProfessionals = await getProfessionals();
-                activeProfessionalsCount = allProfessionals.length;
+                // For 'all' view, count all professionals from all locations (non-duplicated if a professional could work in multiple, but current model is 1 loc per prof)
+                const allProfessionalsPromises = LOCATIONS.map(loc => getProfessionals(loc.id));
+                const allProfessionalsResults = await Promise.all(allProfessionalsPromises);
+                activeProfessionalsCount = allProfessionalsResults.reduce((sum, result) => sum + result.length, 0);
             } else if (selectedLocationId) {
                 const locationProfessionals = await getProfessionals(selectedLocationId as LocationId);
                 activeProfessionalsCount = locationProfessionals.length;
@@ -71,25 +124,20 @@ export default function DashboardPage() {
         }
 
 
-        // For other stats, continue using client-side generation for now
-        const pendingConfirmations = Math.floor(Math.random() * 10);
-        const totalRevenueMonth = (Math.random() * 5000 + 2000).toFixed(2);
-
         setStats({
           todayAppointments: todayAppointmentsCount.toString(),
-          pendingConfirmations: pendingConfirmations,
-          activeProfessionals: activeProfessionalsCount,
-          totalRevenueMonth: totalRevenueMonth,
+          pendingConfirmations: pendingConfirmationsCount.toString(),
+          activeProfessionals: activeProfessionalsCount.toString(),
+          totalRevenueMonth: totalRevenueMonthValue.toFixed(2),
         });
 
       } catch (error) {
         console.error("Failed to fetch dashboard stats:", error);
-        // Fallback to random/default values on error
         setStats({
             todayAppointments: "N/A",
-            pendingConfirmations: Math.floor(Math.random() * 10),
-            activeProfessionals: user.role === USER_ROLES.ADMIN ? (Math.floor(Math.random() * 20) + 10) : (Math.floor(Math.random() * 4) + 1),
-            totalRevenueMonth: (Math.random() * 5000 + 2000).toFixed(2),
+            pendingConfirmations: "N/A",
+            activeProfessionals: "N/A",
+            totalRevenueMonth: "N/A",
         });
       } finally {
         setIsLoadingStats(false);
@@ -134,16 +182,16 @@ export default function DashboardPage() {
         />
         <StatCard 
           title="Pendientes de Confirmar" 
-          value={isLoadingStats ? "..." : stats.pendingConfirmations.toString()} 
+          value={isLoadingStats ? "..." : stats.pendingConfirmations} 
           icon={<Users className="h-6 w-6 text-primary" />} 
         />
         <StatCard 
           title="Profesionales Activos" 
-          value={isLoadingStats ? "..." : stats.activeProfessionals.toString()} 
+          value={isLoadingStats ? "..." : stats.activeProfessionals} 
           icon={<Briefcase className="h-6 w-6 text-primary" />} 
         />
         <StatCard 
-          title="Ingresos del Mes (Estimado)" 
+          title="Ingresos del Mes" 
           value={isLoadingStats ? "..." : `S/ ${stats.totalRevenueMonth}`} 
           icon={<History className="h-6 w-6 text-primary" />} 
         />
@@ -244,4 +292,3 @@ function ActionCard({ title, description, href, icon }: ActionCardProps) {
     </Card>
   );
 }
-
