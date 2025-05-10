@@ -2,17 +2,19 @@
 "use client";
 
 import { useAuth } from '@/contexts/auth-provider';
-import { USER_ROLES, LOCATIONS } from '@/lib/constants';
+import { USER_ROLES, LOCATIONS, LocationId } from '@/lib/constants';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import Link from 'next/link';
 import Image from 'next/image';
-import { CalendarPlus, Users, History, Briefcase } from 'lucide-react';
+import { CalendarPlus, Users, History, Briefcase, Loader2 } from 'lucide-react';
 import { useAppState } from '@/contexts/app-state-provider';
 import { useState, useEffect } from 'react';
+import { getAppointments, getProfessionals } from '@/lib/data';
+import { startOfDay } from 'date-fns';
 
 interface DashboardStats {
-  todayAppointments: string; // Changed from number to string
+  todayAppointments: string;
   pendingConfirmations: number;
   activeProfessionals: number;
   totalRevenueMonth: string;
@@ -22,24 +24,80 @@ export default function DashboardPage() {
   const { user } = useAuth();
   const { selectedLocationId } = useAppState();
   const [stats, setStats] = useState<DashboardStats>({
-    todayAppointments: "", // Initial value as string
+    todayAppointments: "0",
     pendingConfirmations: 0,
     activeProfessionals: 0,
     totalRevenueMonth: '0.00',
   });
+  const [isLoadingStats, setIsLoadingStats] = useState(true);
 
   useEffect(() => {
-    if (user) {
-      // Simulate fetching stats or generating them client-side
-      // This ensures Math.random is only called on the client
-      setStats({
-        todayAppointments: "el valor de este digito debe ser la sumatoria de cada sede", // Set to the requested string
-        pendingConfirmations: Math.floor(Math.random() * 10),
-        activeProfessionals: user.role === USER_ROLES.ADMIN ? (Math.floor(Math.random() * 20) + 10) : (Math.floor(Math.random() * 4) + 1),
-        totalRevenueMonth: (Math.random() * 5000 + 2000).toFixed(2),
-      });
-    }
-  }, [user]);
+    const fetchDashboardStats = async () => {
+      if (!user) return;
+
+      setIsLoadingStats(true);
+      let todayAppointmentsCount = 0;
+      let activeProfessionalsCount = 0;
+
+      try {
+        const today = startOfDay(new Date());
+
+        // Fetch Today's Appointments
+        if (user.role === USER_ROLES.ADMIN) {
+          if (selectedLocationId === 'all') {
+            const allAppointments = await getAppointments({ date: today });
+            todayAppointmentsCount = allAppointments.length;
+          } else if (selectedLocationId) {
+            const locationAppointments = await getAppointments({ date: today, locationId: selectedLocationId as LocationId });
+            todayAppointmentsCount = locationAppointments.length;
+          }
+        } else if (user.role === USER_ROLES.LOCATION_STAFF && user.locationId) {
+          const locationAppointments = await getAppointments({ date: today, locationId: user.locationId });
+          todayAppointmentsCount = locationAppointments.length;
+        }
+
+        // Fetch Active Professionals
+        if (user.role === USER_ROLES.ADMIN) {
+            if (selectedLocationId === 'all') {
+                const allProfessionals = await getProfessionals();
+                activeProfessionalsCount = allProfessionals.length;
+            } else if (selectedLocationId) {
+                const locationProfessionals = await getProfessionals(selectedLocationId as LocationId);
+                activeProfessionalsCount = locationProfessionals.length;
+            }
+        } else if (user.role === USER_ROLES.LOCATION_STAFF && user.locationId) {
+            const locationProfessionals = await getProfessionals(user.locationId);
+            activeProfessionalsCount = locationProfessionals.length;
+        }
+
+
+        // For other stats, continue using client-side generation for now
+        const pendingConfirmations = Math.floor(Math.random() * 10);
+        const totalRevenueMonth = (Math.random() * 5000 + 2000).toFixed(2);
+
+        setStats({
+          todayAppointments: todayAppointmentsCount.toString(),
+          pendingConfirmations: pendingConfirmations,
+          activeProfessionals: activeProfessionalsCount,
+          totalRevenueMonth: totalRevenueMonth,
+        });
+
+      } catch (error) {
+        console.error("Failed to fetch dashboard stats:", error);
+        // Fallback to random/default values on error
+        setStats({
+            todayAppointments: "N/A",
+            pendingConfirmations: Math.floor(Math.random() * 10),
+            activeProfessionals: user.role === USER_ROLES.ADMIN ? (Math.floor(Math.random() * 20) + 10) : (Math.floor(Math.random() * 4) + 1),
+            totalRevenueMonth: (Math.random() * 5000 + 2000).toFixed(2),
+        });
+      } finally {
+        setIsLoadingStats(false);
+      }
+    };
+
+    fetchDashboardStats();
+  }, [user, selectedLocationId]);
 
 
   if (!user) {
@@ -69,10 +127,26 @@ export default function DashboardPage() {
       </Card>
 
       <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4 mb-8">
-        <StatCard title="Citas de Hoy" value={stats.todayAppointments} icon={<CalendarPlus className="h-6 w-6 text-primary" />} />
-        <StatCard title="Pendientes de Confirmar" value={stats.pendingConfirmations.toString()} icon={<Users className="h-6 w-6 text-primary" />} />
-        <StatCard title="Profesionales Activos" value={stats.activeProfessionals.toString()} icon={<Briefcase className="h-6 w-6 text-primary" />} />
-        <StatCard title="Ingresos del Mes (Estimado)" value={`S/ ${stats.totalRevenueMonth}`} icon={<History className="h-6 w-6 text-primary" />} />
+        <StatCard 
+          title="Citas de Hoy" 
+          value={isLoadingStats ? "..." : stats.todayAppointments} 
+          icon={<CalendarPlus className="h-6 w-6 text-primary" />} 
+        />
+        <StatCard 
+          title="Pendientes de Confirmar" 
+          value={isLoadingStats ? "..." : stats.pendingConfirmations.toString()} 
+          icon={<Users className="h-6 w-6 text-primary" />} 
+        />
+        <StatCard 
+          title="Profesionales Activos" 
+          value={isLoadingStats ? "..." : stats.activeProfessionals.toString()} 
+          icon={<Briefcase className="h-6 w-6 text-primary" />} 
+        />
+        <StatCard 
+          title="Ingresos del Mes (Estimado)" 
+          value={isLoadingStats ? "..." : `S/ ${stats.totalRevenueMonth}`} 
+          icon={<History className="h-6 w-6 text-primary" />} 
+        />
       </div>
       
       <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
@@ -137,7 +211,9 @@ function StatCard({ title, value, icon }: StatCardProps) {
         {icon}
       </CardHeader>
       <CardContent>
-        <div className="text-2xl font-bold">{value}</div>
+        <div className="text-2xl font-bold">
+            {value === "..." ? <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" /> : value}
+        </div>
         {/* <p className="text-xs text-muted-foreground">+20.1% from last month</p> */}
       </CardContent>
     </Card>
