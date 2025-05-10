@@ -1,14 +1,14 @@
 
 "use client";
 
-import type { Appointment } from '@/types';
+import type { Appointment, Service } from '@/types';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { APPOINTMENT_STATUS, USER_ROLES, PAYMENT_METHODS, SERVICES as ALL_SERVICES } from '@/lib/constants';
+import { APPOINTMENT_STATUS, USER_ROLES, PAYMENT_METHODS, SERVICES as ALL_SERVICES_CONSTANTS } from '@/lib/constants';
 import { format, parseISO } from 'date-fns';
 import { es } from 'date-fns/locale';
-import { CalendarIcon, ClockIcon, UserIcon, StethoscopeIcon, DollarSignIcon, EditIcon, CheckCircle2, XCircle, AlertTriangle, Info, Loader2 } from 'lucide-react';
+import { CalendarIcon, ClockIcon, UserIcon, StethoscopeIcon, DollarSignIcon, EditIcon, CheckCircle2, XCircle, AlertTriangle, Info, Loader2, PlusCircle, Trash2, ShoppingBag } from 'lucide-react';
 import { useAuth } from '@/contexts/auth-provider';
 import {
   Dialog,
@@ -23,14 +23,15 @@ import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
-import { useForm, Controller } from 'react-hook-form';
+import { useForm, Controller, useFieldArray } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { AppointmentUpdateSchema } from '@/lib/schemas';
-import { FormField } from '@/components/ui/form'; // Added import
+import { Form, FormControl, FormItem, FormLabel, FormMessage, FormField as ShadFormField } from "@/components/ui/form";
 import type { Professional } from '@/types';
-import { getProfessionals, updateAppointment as updateAppointmentData } from '@/lib/data';
+import { getProfessionals, updateAppointment as updateAppointmentData, getServices } from '@/lib/data';
 import React, { useState, useEffect } from 'react';
 import { useToast } from '@/hooks/use-toast';
+import { Separator } from '../ui/separator';
 
 
 interface AppointmentCardProps {
@@ -40,11 +41,14 @@ interface AppointmentCardProps {
 
 type AppointmentUpdateFormData = Zod.infer<typeof AppointmentUpdateSchema>;
 
+const NO_SELECTION_PLACEHOLDER = "_no_selection_placeholder_";
+
 export function AppointmentCard({ appointment, onUpdate }: AppointmentCardProps) {
   const { user } = useAuth();
   const { toast } = useToast();
   const [isUpdateModalOpen, setIsUpdateModalOpen] = useState(false);
   const [professionals, setProfessionals] = useState<Professional[]>([]);
+  const [allServices, setAllServices] = useState<Service[]>([]);
   const [isLoading, setIsLoading] = useState(false);
 
   const form = useForm<AppointmentUpdateFormData>({
@@ -52,38 +56,54 @@ export function AppointmentCard({ appointment, onUpdate }: AppointmentCardProps)
     defaultValues: {
       status: appointment.status,
       actualArrivalTime: appointment.actualArrivalTime || '',
-      professionalId: appointment.professionalId || null,
+      professionalId: appointment.professionalId || NO_SELECTION_PLACEHOLDER,
       durationMinutes: appointment.durationMinutes || appointment.service?.defaultDuration,
       paymentMethod: appointment.paymentMethod || undefined,
       amountPaid: appointment.amountPaid || undefined,
       staffNotes: appointment.staffNotes || '',
+      addedServices: appointment.addedServices?.map(as => ({
+        serviceId: as.serviceId,
+        professionalId: as.professionalId || NO_SELECTION_PLACEHOLDER,
+        price: as.price || undefined,
+      })) || [],
     },
+  });
+
+  const { fields: addedServiceFields, append: appendAddedService, remove: removeAddedService } = useFieldArray({
+    control: form.control,
+    name: "addedServices",
   });
   
   useEffect(() => {
     form.reset({
       status: appointment.status,
       actualArrivalTime: appointment.actualArrivalTime || format(new Date(), 'HH:mm'),
-      professionalId: appointment.professionalId || null,
+      professionalId: appointment.professionalId || NO_SELECTION_PLACEHOLDER,
       durationMinutes: appointment.durationMinutes || appointment.service?.defaultDuration,
       paymentMethod: appointment.paymentMethod || undefined,
       amountPaid: appointment.amountPaid || undefined,
       staffNotes: appointment.staffNotes || '',
+      addedServices: appointment.addedServices?.map(as => ({
+        serviceId: as.serviceId,
+        // Ensure professionalId is correctly mapped, handling null/undefined from data
+        professionalId: as.professionalId || NO_SELECTION_PLACEHOLDER,
+        price: as.price ?? undefined, // Use ?? to convert null to undefined for form
+      })) || [],
     });
-  }, [appointment, form]);
+  }, [appointment, form, isUpdateModalOpen]);
 
 
   useEffect(() => {
-    async function loadProfessionals() {
+    async function loadPrerequisites() {
       if (user?.locationId || user?.role === USER_ROLES.ADMIN) {
-        // For admin, ideally, this should be professionals of appointment.locationId
-        // For simplicity, if admin, might load all or based on a selected context
         const profs = await getProfessionals(appointment.locationId);
         setProfessionals(profs);
+        const servicesData = await getServices();
+        setAllServices(servicesData);
       }
     }
     if (isUpdateModalOpen) {
-      loadProfessionals();
+      loadPrerequisites();
     }
   }, [isUpdateModalOpen, user, appointment.locationId]);
 
@@ -92,8 +112,8 @@ export function AppointmentCard({ appointment, onUpdate }: AppointmentCardProps)
   const getStatusBadgeVariant = (status: string) => {
     switch (status) {
       case APPOINTMENT_STATUS.BOOKED: return 'default';
-      case APPOINTMENT_STATUS.CONFIRMED: return 'default'; // could be different e.g. blue
-      case APPOINTMENT_STATUS.COMPLETED: return 'default'; // custom variant, using success style in Badge component directly
+      case APPOINTMENT_STATUS.CONFIRMED: return 'default'; 
+      case APPOINTMENT_STATUS.COMPLETED: return 'default';
       case APPOINTMENT_STATUS.CANCELLED_CLIENT:
       case APPOINTMENT_STATUS.CANCELLED_STAFF:
       case APPOINTMENT_STATUS.NO_SHOW: return 'destructive';
@@ -110,15 +130,19 @@ export function AppointmentCard({ appointment, onUpdate }: AppointmentCardProps)
     try {
       const updatedData: Partial<Appointment> = {
         ...data,
-        professionalId: data.professionalId === "NO_SELECTION_PLACEHOLDER" ? undefined : data.professionalId,
-        // Ensure numbers are numbers, not strings from form
+        professionalId: data.professionalId === NO_SELECTION_PLACEHOLDER ? null : data.professionalId,
         durationMinutes: data.durationMinutes ? parseInt(String(data.durationMinutes), 10) : undefined,
         amountPaid: data.amountPaid ? parseFloat(String(data.amountPaid)) : undefined,
+        addedServices: data.addedServices?.map(as => ({
+          ...as,
+          professionalId: as.professionalId === NO_SELECTION_PLACEHOLDER ? null : as.professionalId,
+          price: as.price ? parseFloat(String(as.price)) : null,
+        })),
       };
       
       const result = await updateAppointmentData(appointment.id, updatedData);
       if (result) {
-        onUpdate(result);
+        onUpdate(result); // This result should now contain populated addedServices if backend returns them
         toast({ title: "Cita Actualizada", description: "Los detalles de la cita han sido actualizados." });
         setIsUpdateModalOpen(false);
       } else {
@@ -149,7 +173,7 @@ export function AppointmentCard({ appointment, onUpdate }: AppointmentCardProps)
               variant={getStatusBadgeVariant(appointment.status)} 
               className={`capitalize text-xs h-fit ${appointment.status === APPOINTMENT_STATUS.COMPLETED ? 'bg-green-600 text-white' : '' }`}
             >
-              {appointment.status.replace('_', ' ')}
+              {appointment.status.replace(/_/g, ' ')}
             </Badge>
           </div>
         </CardHeader>
@@ -178,6 +202,20 @@ export function AppointmentCard({ appointment, onUpdate }: AppointmentCardProps)
             <div className="flex items-start gap-2 text-muted-foreground pt-1">
               <Info className="h-4 w-4 mt-0.5 shrink-0" />
               <p className="text-xs italic">Obs. Reserva: {appointment.bookingObservations}</p>
+            </div>
+          )}
+          {appointment.addedServices && appointment.addedServices.length > 0 && (
+            <div className="pt-2 mt-2 border-t border-border">
+              <p className="text-xs font-medium text-muted-foreground flex items-center gap-1 mb-1"><ShoppingBag size={14}/> Servicios Adicionales:</p>
+              <ul className="list-disc list-inside pl-1 space-y-0.5">
+                {appointment.addedServices.map((as, index) => (
+                  <li key={index} className="text-xs text-muted-foreground">
+                    {ALL_SERVICES_CONSTANTS.find(s => s.id === as.serviceId)?.name || 'Servicio Desconocido'}
+                    {as.professionalId && ` (con ${professionals.find(p=>p.id === as.professionalId)?.firstName || 'prof.'})`}
+                    {as.price && ` - S/ ${as.price.toFixed(2)}`}
+                  </li>
+                ))}
+              </ul>
             </div>
           )}
           {appointment.status === APPOINTMENT_STATUS.COMPLETED && appointment.amountPaid && (
@@ -211,116 +249,194 @@ export function AppointmentCard({ appointment, onUpdate }: AppointmentCardProps)
               Actualizar estado y detalles de la cita para {appointment.patient?.firstName} {appointment.patient?.lastName}.
             </DialogDescription>
           </DialogHeader>
+          <Form {...form}>
           <form onSubmit={form.handleSubmit(onSubmitUpdate)} className="space-y-4 py-4 max-h-[70vh] overflow-y-auto pr-2">
-            <FormField
+            <ShadFormField
               control={form.control}
               name="status"
               render={({ field }) => (
-                <div className="space-y-1">
-                  <Label htmlFor="status">Estado de la Cita</Label>
-                  <Select onValueChange={field.onChange} defaultValue={field.value}>
-                    <SelectTrigger id="status">
-                      <SelectValue placeholder="Seleccionar estado" />
-                    </SelectTrigger>
+                <FormItem>
+                  <FormLabel>Estado de la Cita</FormLabel>
+                  <Select onValueChange={field.onChange} value={field.value}>
+                    <FormControl>
+                      <SelectTrigger id="status">
+                        <SelectValue placeholder="Seleccionar estado" />
+                      </SelectTrigger>
+                    </FormControl>
                     <SelectContent>
                       {Object.values(APPOINTMENT_STATUS).map(s => (
-                        <SelectItem key={s} value={s} className="capitalize">{s.replace('_', ' ')}</SelectItem>
+                        <SelectItem key={s} value={s} className="capitalize">{s.replace(/_/g, ' ')}</SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
-                </div>
+                  <FormMessage/>
+                </FormItem>
               )}
             />
 
             {form.watch('status') === APPOINTMENT_STATUS.CONFIRMED && (
-              <FormField
+              <ShadFormField
                 control={form.control}
                 name="actualArrivalTime"
                 render={({ field }) => (
-                  <div className="space-y-1">
-                    <Label htmlFor="actualArrivalTime">Hora Real de Llegada (HH:MM)</Label>
-                    <Input id="actualArrivalTime" type="time" {...field} value={field.value || ''} />
-                  </div>
+                  <FormItem>
+                    <FormLabel htmlFor="actualArrivalTime">Hora Real de Llegada (HH:MM)</FormLabel>
+                    <FormControl><Input id="actualArrivalTime" type="time" {...field} value={field.value || ''} /></FormControl>
+                     <FormMessage/>
+                  </FormItem>
                 )}
               />
             )}
             
             {(form.watch('status') === APPOINTMENT_STATUS.CONFIRMED || form.watch('status') === APPOINTMENT_STATUS.COMPLETED) && (
-              <FormField
+              <ShadFormField
                 control={form.control}
                 name="professionalId"
                 render={({ field }) => (
-                  <div className="space-y-1">
-                    <Label htmlFor="professionalId">Profesional que Atendió</Label>
-                    <Select onValueChange={field.onChange} value={field.value || "NO_SELECTION_PLACEHOLDER"}>
-                      <SelectTrigger id="professionalId">
-                        <SelectValue placeholder="Seleccionar profesional" />
-                      </SelectTrigger>
+                  <FormItem>
+                    <FormLabel htmlFor="professionalId">Profesional que Atendió</FormLabel>
+                    <Select onValueChange={field.onChange} value={field.value || NO_SELECTION_PLACEHOLDER}>
+                      <FormControl>
+                        <SelectTrigger id="professionalId">
+                          <SelectValue placeholder="Seleccionar profesional" />
+                        </SelectTrigger>
+                      </FormControl>
                       <SelectContent>
-                        <SelectItem value="NO_SELECTION_PLACEHOLDER">Sin asignar / Como estaba</SelectItem>
+                        <SelectItem value={NO_SELECTION_PLACEHOLDER}>Sin asignar / Como estaba</SelectItem>
                         {professionals.map(p => (
                           <SelectItem key={p.id} value={p.id}>{p.firstName} {p.lastName}</SelectItem>
                         ))}
                       </SelectContent>
                     </Select>
-                  </div>
+                     <FormMessage/>
+                  </FormItem>
                 )}
               />
             )}
 
             {form.watch('status') === APPOINTMENT_STATUS.COMPLETED && (
               <>
-                <FormField
+                <ShadFormField
                   control={form.control}
                   name="durationMinutes"
                   render={({ field }) => (
-                    <div className="space-y-1">
-                      <Label htmlFor="durationMinutes">Duración Real (minutos)</Label>
-                      <Input id="durationMinutes" type="number" {...field} value={field.value || ''} onChange={e => field.onChange(parseInt(e.target.value,10) || undefined)} />
-                    </div>
+                    <FormItem>
+                      <FormLabel htmlFor="durationMinutes">Duración Real (minutos)</FormLabel>
+                      <FormControl><Input id="durationMinutes" type="number" {...field} value={field.value || ''} onChange={e => field.onChange(parseInt(e.target.value,10) || undefined)} /></FormControl>
+                       <FormMessage/>
+                    </FormItem>
                   )}
                 />
-                <FormField
+                <ShadFormField
                   control={form.control}
                   name="paymentMethod"
                   render={({ field }) => (
-                    <div className="space-y-1">
-                      <Label htmlFor="paymentMethod">Método de Pago</Label>
+                    <FormItem>
+                      <FormLabel htmlFor="paymentMethod">Método de Pago</FormLabel>
                        <Select onValueChange={field.onChange} value={field.value || undefined}>
-                        <SelectTrigger id="paymentMethod">
-                          <SelectValue placeholder="Seleccionar método de pago" />
-                        </SelectTrigger>
+                        <FormControl>
+                          <SelectTrigger id="paymentMethod">
+                            <SelectValue placeholder="Seleccionar método de pago" />
+                          </SelectTrigger>
+                        </FormControl>
                         <SelectContent>
                           {PAYMENT_METHODS.map(method => (
                             <SelectItem key={method} value={method}>{method}</SelectItem>
                           ))}
                         </SelectContent>
                       </Select>
-                    </div>
+                       <FormMessage/>
+                    </FormItem>
                   )}
                 />
-                <FormField
+                <ShadFormField
                   control={form.control}
                   name="amountPaid"
                   render={({ field }) => (
-                    <div className="space-y-1">
-                      <Label htmlFor="amountPaid">Monto Pagado (S/)</Label>
-                      <Input id="amountPaid" type="number" step="0.01" {...field} value={field.value || ''} onChange={e => field.onChange(parseFloat(e.target.value) || undefined)} />
-                    </div>
+                    <FormItem>
+                      <FormLabel htmlFor="amountPaid">Monto Pagado (S/)</FormLabel>
+                      <FormControl><Input id="amountPaid" type="number" step="0.01" {...field} value={field.value || ''} onChange={e => field.onChange(parseFloat(e.target.value) || undefined)} /></FormControl>
+                       <FormMessage/>
+                    </FormItem>
                   )}
                 />
               </>
             )}
-             <FormField
+             <ShadFormField
                 control={form.control}
                 name="staffNotes"
                 render={({ field }) => (
-                  <div className="space-y-1">
-                    <Label htmlFor="staffNotes">Notas del Staff (Internas)</Label>
-                    <Textarea id="staffNotes" placeholder="Añadir observaciones sobre la cita..." {...field} value={field.value || ''} />
-                  </div>
+                  <FormItem>
+                    <FormLabel htmlFor="staffNotes">Notas del Staff (Internas)</FormLabel>
+                    <FormControl><Textarea id="staffNotes" placeholder="Añadir observaciones sobre la cita..." {...field} value={field.value || ''} /></FormControl>
+                     <FormMessage/>
+                  </FormItem>
                 )}
               />
+
+            {/* Added Services Section */}
+            {(form.watch('status') === APPOINTMENT_STATUS.CONFIRMED || form.watch('status') === APPOINTMENT_STATUS.COMPLETED) && (
+              <div className="space-y-3 pt-3 mt-3 border-t">
+                <div className="flex justify-between items-center">
+                  <h4 className="text-md font-semibold">Servicios Adicionales</h4>
+                  <Button type="button" size="sm" variant="outline" onClick={() => appendAddedService({ serviceId: '', professionalId: NO_SELECTION_PLACEHOLDER, price: undefined })}>
+                    <PlusCircle className="mr-2 h-4 w-4" /> Agregar Servicio
+                  </Button>
+                </div>
+                {addedServiceFields.map((item, index) => (
+                  <div key={item.id} className="p-3 border rounded-md space-y-3 bg-muted/50 relative">
+                     <Button type="button" variant="ghost" size="icon" className="absolute top-1 right-1 h-6 w-6" onClick={() => removeAddedService(index)}>
+                        <Trash2 className="h-4 w-4 text-destructive" />
+                      </Button>
+                    <ShadFormField
+                      control={form.control}
+                      name={`addedServices.${index}.serviceId`}
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Servicio Adicional</FormLabel>
+                          <Select onValueChange={field.onChange} value={field.value || ''}>
+                            <FormControl><SelectTrigger><SelectValue placeholder="Seleccionar servicio" /></SelectTrigger></FormControl>
+                            <SelectContent>
+                              {allServices.map(s => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}
+                            </SelectContent>
+                          </Select>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                    <ShadFormField
+                      control={form.control}
+                      name={`addedServices.${index}.professionalId`}
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Profesional (Opcional)</FormLabel>
+                          <Select onValueChange={field.onChange} value={field.value || NO_SELECTION_PLACEHOLDER}>
+                           <FormControl><SelectTrigger><SelectValue placeholder="Mismo prof. / Cualquiera" /></SelectTrigger></FormControl>
+                            <SelectContent>
+                              <SelectItem value={NO_SELECTION_PLACEHOLDER}>Mismo prof. / Cualquiera</SelectItem>
+                              {professionals.map(p => <SelectItem key={p.id} value={p.id}>{p.firstName} {p.lastName}</SelectItem>)}
+                            </SelectContent>
+                          </Select>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                    <ShadFormField
+                      control={form.control}
+                      name={`addedServices.${index}.price`}
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Precio (S/) (Opcional)</FormLabel>
+                          <FormControl><Input type="number" step="0.01" placeholder="Ej: 50.00" {...field} value={field.value || ''} onChange={e => field.onChange(parseFloat(e.target.value) || null)} /></FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                  </div>
+                ))}
+              </div>
+            )}
+
 
             <DialogFooter className="pt-4">
               <DialogClose asChild>
@@ -332,17 +448,9 @@ export function AppointmentCard({ appointment, onUpdate }: AppointmentCardProps)
               </Button>
             </DialogFooter>
           </form>
+          </Form>
         </DialogContent>
       </Dialog>
     </>
   );
 }
-
-// Custom success badge variant (add to globals.css or tailwind.config.js if needed)
-// For now, Badge component default variant will be used for 'success'.
-// You might want to add this to your tailwind.config.js for a distinct success style:
-// theme: { extend: { colors: { success: 'hsl(var(--success))', 'success-foreground': 'hsl(var(--success-foreground))' } } }
-// And in globals.css:
-// :root { --success: 140 60% 40%; --success-foreground: 0 0% 98%; }
-// Then use variant="success" in Badge. For now, this is just a comment.
-

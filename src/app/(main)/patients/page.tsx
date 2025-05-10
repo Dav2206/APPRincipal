@@ -2,14 +2,15 @@
 "use client";
 
 import React, { useState, useEffect, useCallback } from 'react';
-import type { Patient } from '@/types';
+import type { Patient, Appointment } from '@/types';
 import { useAuth } from '@/contexts/auth-provider';
-import { getPatients, addPatient, findPatient } from '@/lib/data'; 
+import { getPatients, addPatient, findPatient, getAppointments } from '@/lib/data'; 
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
-import { Label } from '@/components/ui/label'; // Still used for non-form elements if any
+import { Checkbox } from '@/components/ui/checkbox';
+import { Label } from '@/components/ui/label';
 import {
   Table,
   TableBody,
@@ -28,13 +29,17 @@ import {
   DialogClose,
 } from '@/components/ui/dialog';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
-import { PlusCircle, Edit2, Users, Search, Loader2, FileText } from 'lucide-react';
+import { PlusCircle, Edit2, Users, Search, Loader2, FileText, CalendarClock } from 'lucide-react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { useToast } from '@/hooks/use-toast';
 import { PatientHistoryPanel } from '@/components/appointments/patient-history-panel';
 import { AttendancePredictionTool } from '@/components/appointments/attendance-prediction-tool';
+import { formatISO, startOfDay } from 'date-fns';
+import { useAppState } from '@/contexts/app-state-provider';
+import { USER_ROLES } from '@/lib/constants';
+
 
 const PatientFormSchema = z.object({
   id: z.string().optional(),
@@ -42,25 +47,30 @@ const PatientFormSchema = z.object({
   lastName: z.string().min(2, "Apellido es requerido."),
   phone: z.string().optional(),
   email: z.string().email("Email inválido.").optional().or(z.literal('')),
-  dateOfBirth: z.string().optional(), // Consider using a date picker
+  dateOfBirth: z.string().optional().refine(val => !val || /^\d{4}-\d{2}-\d{2}$/.test(val), {
+    message: "Formato de fecha debe ser YYYY-MM-DD",
+  }),
   notes: z.string().optional(),
 });
 type PatientFormData = z.infer<typeof PatientFormSchema>;
 
 export default function PatientsPage() {
   const { user } = useAuth();
+  const { selectedLocationId: adminSelectedLocation } = useAppState();
   const { toast } = useToast();
-  const [patients, setPatients] = useState<Patient[]>([]);
+  const [allPatients, setAllPatients] = useState<Patient[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [editingPatient, setEditingPatient] = useState<Patient | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [viewingPatientDetails, setViewingPatientDetails] = useState<Patient | null>(null);
-
+  const [filterPatientsWithAppointmentsToday, setFilterPatientsWithAppointmentsToday] = useState(false);
+  const [patientsWithAppointmentsTodayIds, setPatientsWithAppointmentsTodayIds] = useState<Set<string>>(new Set());
+  const [isLoadingTodayAppointments, setIsLoadingTodayAppointments] = useState(false);
 
   const form = useForm<PatientFormData>({
     resolver: zodResolver(PatientFormSchema),
-    defaultValues: { // Add default values for all fields
+    defaultValues: { 
       firstName: '',
       lastName: '',
       phone: '',
@@ -70,16 +80,46 @@ export default function PatientsPage() {
     }
   });
 
-  const fetchPatients = useCallback(async () => {
+  const fetchAllPatients = useCallback(async () => {
     setIsLoading(true);
     const data = await getPatients();
-    setPatients(data);
+    setAllPatients(data);
     setIsLoading(false);
   }, []);
 
   useEffect(() => {
-    fetchPatients();
-  }, [fetchPatients]);
+    fetchAllPatients();
+  }, [fetchAllPatients]);
+
+  const fetchPatientsWithAppointmentsToday = useCallback(async () => {
+    if (!filterPatientsWithAppointmentsToday) {
+      setPatientsWithAppointmentsTodayIds(new Set());
+      return;
+    }
+    setIsLoadingTodayAppointments(true);
+    try {
+      const today = startOfDay(new Date());
+      const effectiveLocationId = user?.role === USER_ROLES.ADMIN 
+        ? (adminSelectedLocation === 'all' ? undefined : adminSelectedLocation) 
+        : user?.locationId;
+
+      const dailyAppointments = await getAppointments({ 
+        date: today,
+        locationId: effectiveLocationId 
+      });
+      const patientIds = new Set(dailyAppointments.map(app => app.patientId));
+      setPatientsWithAppointmentsTodayIds(patientIds);
+    } catch (error) {
+      console.error("Error fetching patients with appointments today:", error);
+      toast({ title: "Error", description: "No se pudo cargar pacientes con citas hoy.", variant: "destructive" });
+    } finally {
+      setIsLoadingTodayAppointments(false);
+    }
+  }, [filterPatientsWithAppointmentsToday, user, adminSelectedLocation, toast]);
+
+  useEffect(() => {
+    fetchPatientsWithAppointmentsToday();
+  }, [fetchPatientsWithAppointmentsToday]);
 
   const handleAddPatient = () => {
     setEditingPatient(null);
@@ -101,8 +141,7 @@ export default function PatientsPage() {
     try {
       if (editingPatient) {
         const updatedPatientData = { ...editingPatient, ...data };
-         // Simulate update in local state for mock data
-        setPatients(prev => prev.map(p => p.id === updatedPatientData.id ? updatedPatientData : p));
+        setAllPatients(prev => prev.map(p => p.id === updatedPatientData.id ? updatedPatientData : p));
         toast({ title: "Paciente Actualizado", description: `${data.firstName} ${data.lastName} actualizado.` });
       } else {
         const existing = await findPatient(data.firstName, data.lastName);
@@ -111,22 +150,27 @@ export default function PatientsPage() {
             return;
         }
         const newPatient = await addPatient(data as Omit<Patient, 'id'>);
-        setPatients(prev => [newPatient, ...prev]);
+        setAllPatients(prev => [newPatient, ...prev]);
         toast({ title: "Paciente Agregado", description: `${newPatient.firstName} ${newPatient.lastName} agregado.` });
       }
       setIsFormOpen(false);
-      // fetchPatients(); // Re-fetch can be done if optimistic update is not enough or for consistency
     } catch (error) {
       toast({ title: "Error", description: "No se pudo guardar el paciente.", variant: "destructive" });
       console.error(error);
     }
   };
 
-  const filteredPatients = patients.filter(p =>
-    `${p.firstName} ${p.lastName}`.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    (p.phone && p.phone.includes(searchTerm)) ||
-    (p.email && p.email.toLowerCase().includes(searchTerm.toLowerCase()))
-  );
+  const filteredPatients = allPatients.filter(p => {
+    const matchesSearchTerm = 
+      `${p.firstName} ${p.lastName}`.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (p.phone && p.phone.includes(searchTerm)) ||
+      (p.email && p.email.toLowerCase().includes(searchTerm.toLowerCase()));
+
+    if (filterPatientsWithAppointmentsToday) {
+      return matchesSearchTerm && patientsWithAppointmentsTodayIds.has(p.id);
+    }
+    return matchesSearchTerm;
+  });
   
   const LoadingState = () => (
      <div className="flex flex-col items-center justify-center h-64 col-span-full">
@@ -138,7 +182,7 @@ export default function PatientsPage() {
   return (
     <div className="space-y-6">
       <Card className="shadow-md">
-        <CardHeader className="flex flex-col md:flex-row justify-between items-center">
+        <CardHeader className="flex flex-col md:flex-row justify-between items-start md:items-center">
           <div>
             <CardTitle className="text-2xl flex items-center gap-2"><Users className="text-primary"/> Gestión de Pacientes</CardTitle>
             <CardDescription>Ver, agregar o editar información de pacientes.</CardDescription>
@@ -148,8 +192,8 @@ export default function PatientsPage() {
           </Button>
         </CardHeader>
         <CardContent>
-          <div className="mb-4">
-            <div className="relative">
+          <div className="mb-4 flex flex-col sm:flex-row gap-4">
+            <div className="relative flex-grow">
               <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
               <Input
                 type="search"
@@ -158,6 +202,17 @@ export default function PatientsPage() {
                 onChange={(e) => setSearchTerm(e.target.value)}
                 className="pl-8 w-full"
               />
+            </div>
+            <div className="flex items-center space-x-2">
+              <Checkbox 
+                id="filterToday" 
+                checked={filterPatientsWithAppointmentsToday} 
+                onCheckedChange={(checked) => setFilterPatientsWithAppointmentsToday(checked as boolean)}
+              />
+              <Label htmlFor="filterToday" className="text-sm font-medium whitespace-nowrap flex items-center gap-1">
+                <CalendarClock size={16} /> Mostrar solo pacientes con citas hoy
+              </Label>
+              {isLoadingTodayAppointments && <Loader2 className="h-4 w-4 animate-spin" />}
             </div>
           </div>
 
@@ -181,10 +236,10 @@ export default function PatientsPage() {
                     <TableCell className="hidden md:table-cell">{patient.phone || 'N/A'}</TableCell>
                     <TableCell className="hidden lg:table-cell">{patient.email || 'N/A'}</TableCell>
                     <TableCell className="text-right">
-                       <Button variant="ghost" size="sm" onClick={() => handleViewDetails(patient)} className="mr-2">
+                       <Button variant="ghost" size="sm" onClick={() => handleViewDetails(patient)} className="mr-2" title="Ver Detalles">
                         <FileText className="h-4 w-4" /> <span className="sr-only">Detalles</span>
                       </Button>
-                      <Button variant="ghost" size="sm" onClick={() => handleEditPatient(patient)}>
+                      <Button variant="ghost" size="sm" onClick={() => handleEditPatient(patient)} title="Editar Paciente">
                         <Edit2 className="h-4 w-4" /> <span className="sr-only">Editar</span>
                       </Button>
                     </TableCell>
@@ -192,7 +247,9 @@ export default function PatientsPage() {
                 )) : (
                   <TableRow>
                     <TableCell colSpan={4} className="h-24 text-center">
-                      No se encontraron pacientes.
+                      {filterPatientsWithAppointmentsToday && searchTerm === '' ? "No hay pacientes con citas hoy." : 
+                       filterPatientsWithAppointmentsToday && searchTerm !== '' ? "No hay pacientes con citas hoy que coincidan con la búsqueda." :
+                       "No se encontraron pacientes."}
                     </TableCell>
                   </TableRow>
                 )}
@@ -242,8 +299,8 @@ export default function PatientsPage() {
                )}/>
                <FormField control={form.control} name="dateOfBirth" render={({ field }) => (
                   <FormItem>
-                      <FormLabel>Fecha de Nacimiento (Opcional)</FormLabel>
-                      <FormControl><Input type="date" {...field} /></FormControl>
+                      <FormLabel>Fecha de Nacimiento (YYYY-MM-DD)</FormLabel>
+                      <FormControl><Input type="text" placeholder="Ej: 1990-01-15" {...field} /></FormControl>
                       <FormMessage />
                   </FormItem>
                )}/>

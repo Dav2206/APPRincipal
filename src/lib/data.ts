@@ -31,11 +31,11 @@ LOCATIONS.forEach((location, locIndex) => {
 });
 
 let patients: Patient[] = [
-  { id: 'pat001', firstName: 'Ana', lastName: 'García', phone: '111222333', email: 'ana.garcia@example.com', preferredProfessionalId: professionals[0].id, notes: 'Paciente regular, prefiere citas por la mañana.' },
-  { id: 'pat002', firstName: 'Luis', lastName: 'Martínez', phone: '444555666', email: 'luis.martinez@example.com', notes: 'Primera visita.' },
-  { id: 'pat003', firstName: 'Sofía', lastName: 'Rodríguez', phone: '777888999', email: 'sofia.rodriguez@example.com', preferredProfessionalId: professionals[2].id },
-  { id: 'pat004', firstName: 'Carlos', lastName: 'López', phone: '123123123', email: 'carlos.lopez@example.com', notes: 'Suele llegar 5 minutos tarde.' },
-  { id: 'pat005', firstName: 'Elena', lastName: 'Pérez', phone: '456456456', email: 'elena.perez@example.com' },
+  { id: 'pat001', firstName: 'Ana', lastName: 'García', phone: '111222333', email: 'ana.garcia@example.com', preferredProfessionalId: professionals[0].id, notes: 'Paciente regular, prefiere citas por la mañana.', dateOfBirth: '1985-05-15' },
+  { id: 'pat002', firstName: 'Luis', lastName: 'Martínez', phone: '444555666', email: 'luis.martinez@example.com', notes: 'Primera visita.', dateOfBirth: '1992-11-20' },
+  { id: 'pat003', firstName: 'Sofía', lastName: 'Rodríguez', phone: '777888999', email: 'sofia.rodriguez@example.com', preferredProfessionalId: professionals[2].id, dateOfBirth: '1978-02-10' },
+  { id: 'pat004', firstName: 'Carlos', lastName: 'López', phone: '123123123', email: 'carlos.lopez@example.com', notes: 'Suele llegar 5 minutos tarde.', dateOfBirth: '2000-07-30' },
+  { id: 'pat005', firstName: 'Elena', lastName: 'Pérez', phone: '456456456', email: 'elena.perez@example.com', dateOfBirth: '1995-09-05' },
 ];
 
 const mockServices: Service[] = SERVICES.map(s => ({
@@ -83,6 +83,7 @@ for (let dayOffset = -Math.floor(numDays / 2); dayOffset <= Math.floor(numDays /
             actualArrivalTime: `${String(hour).padStart(2, '0')}:${String(minute + Math.floor(Math.random()*10-5)).padStart(2, '0')}`, // slight variation
             amountPaid: randomService.price,
             paymentMethod: 'Efectivo',
+            addedServices: Math.random() > 0.8 ? [{ serviceId: mockServices[1].id, professionalId: locationProfessionals[0].id, price: mockServices[1].price }] : undefined,
         })
       });
     }
@@ -111,11 +112,11 @@ export const getProfessionalById = async (id: string): Promise<Professional | un
   return professionals.find(p => p.id === id);
 };
 
-export const addProfessional = async (data: ProfessionalFormData): Promise<Professional> => {
+export const addProfessional = async (data: Omit<ProfessionalFormData, 'id'>): Promise<Professional> => {
   const newProfessional: Professional = {
     ...data,
     id: `prof-${Date.now()}`,
-    biWeeklyEarnings: 0,
+    biWeeklyEarnings: 0, // Initialize earnings
   };
   professionals.push(newProfessional);
   return newProfessional;
@@ -127,6 +128,7 @@ export const updateProfessional = async (id: string, data: Partial<ProfessionalF
   professionals[index] = { ...professionals[index], ...data };
   return professionals[index];
 };
+
 
 // --- Patients ---
 export const getPatients = async (): Promise<Patient[]> => {
@@ -183,6 +185,12 @@ export const getAppointments = async (filters: { locationId?: LocationId, date?:
     patient: patients.find(p => p.id === appt.patientId),
     professional: professionals.find(p => p.id === appt.professionalId),
     service: mockServices.find(s => s.id === appt.serviceId),
+    // Ensure addedServices are mapped with their details if necessary (e.g. service name) - for now, direct pass-through
+    addedServices: appt.addedServices?.map(as => ({
+      ...as,
+      service: mockServices.find(s => s.id === as.serviceId),
+      professional: professionals.find(p => p.id === as.professionalId)
+    })) || undefined
   })).sort((a, b) => parseISO(a.appointmentDateTime).getTime() - parseISO(b.appointmentDateTime).getTime());
 };
 
@@ -194,6 +202,11 @@ export const getAppointmentById = async (id: string): Promise<Appointment | unde
     patient: patients.find(p => p.id === appt.patientId),
     professional: professionals.find(p => p.id === appt.professionalId),
     service: mockServices.find(s => s.id === appt.serviceId),
+    addedServices: appt.addedServices?.map(as => ({
+      ...as,
+      service: mockServices.find(s => s.id === as.serviceId),
+      professional: professionals.find(p => p.id === as.professionalId)
+    })) || undefined
   };
 };
 
@@ -217,8 +230,7 @@ export const addAppointment = async (data: AppointmentFormData): Promise<Appoint
   const service = await getServiceById(data.serviceId);
   const appointmentDateTime = setMinutes(setHours(data.appointmentDate, parseInt(data.appointmentTime.split(':')[0])), parseInt(data.appointmentTime.split(':')[1]));
 
-  const newAppointment: Appointment = {
-    id: `appt-${Date.now()}`,
+  const newAppointmentData: Omit<Appointment, 'id' | 'createdAt' | 'updatedAt' | 'patient' | 'professional' | 'service'> & { patientId: string } = {
     patientId: patientId!,
     locationId: data.locationId,
     serviceId: data.serviceId,
@@ -227,14 +239,21 @@ export const addAppointment = async (data: AppointmentFormData): Promise<Appoint
     preferredProfessionalId: data.preferredProfessionalId || undefined,
     bookingObservations: data.bookingObservations,
     status: APPOINTMENT_STATUS.BOOKED,
+    // addedServices is not part of initial booking form
+  };
+  
+  const newAppointmentEntry: Appointment = {
+    ...newAppointmentData,
+    id: `appt-${Date.now()}`,
     createdAt: formatISO(new Date()),
     updatedAt: formatISO(new Date()),
   };
-  appointments.push(newAppointment);
+
+  appointments.push(newAppointmentEntry);
   return {
-    ...newAppointment,
-    patient: patients.find(p => p.id === newAppointment.patientId),
-    service: mockServices.find(s => s.id === newAppointment.serviceId),
+    ...newAppointmentEntry,
+    patient: patients.find(p => p.id === newAppointmentEntry.patientId),
+    service: mockServices.find(s => s.id === newAppointmentEntry.serviceId),
   };
 };
 
@@ -242,9 +261,18 @@ export const updateAppointment = async (id: string, data: Partial<Appointment>):
   const index = appointments.findIndex(a => a.id === id);
   if (index === -1) return undefined;
   
+  // Ensure professionalId in addedServices is handled if it's a placeholder or empty string
+  const processedData = {
+    ...data,
+    addedServices: data.addedServices?.map(as => ({
+      ...as,
+      professionalId: as.professionalId === "NO_SELECTION_PLACEHOLDER" || as.professionalId === "" ? null : as.professionalId
+    }))
+  };
+  
   appointments[index] = { 
     ...appointments[index], 
-    ...data,
+    ...processedData, // Use processedData
     updatedAt: formatISO(new Date()) 
   };
   
@@ -253,12 +281,17 @@ export const updateAppointment = async (id: string, data: Partial<Appointment>):
     patient: patients.find(p => p.id === appointments[index].patientId),
     professional: professionals.find(p => p.id === appointments[index].professionalId),
     service: mockServices.find(s => s.id === appointments[index].serviceId),
+    addedServices: appointments[index].addedServices?.map(as => ({
+      ...as,
+      service: mockServices.find(s => s.id === as.serviceId),
+      professional: professionals.find(p => p.id === as.professionalId)
+    })) || undefined
   };
 };
 
 // Patient History specific functions
 export const getPatientAppointmentHistory = async (patientId: string): Promise<Appointment[]> => {
   return (await getAppointments({ patientId }))
-    .filter(a => a.status === APPOINTMENT_STATUS.COMPLETED || a.status === APPOINTMENT_STATUS.NO_SHOW || a.status === APPOINTMENT_STATUS.CANCELLED_CLIENT)
+    .filter(a => a.status === APPOINTMENT_STATUS.COMPLETED || a.status === APPOINTMENT_STATUS.NO_SHOW || a.status === APPOINTMENT_STATUS.CANCELLED_CLIENT || a.status === APPOINTMENT_STATUS.CANCELLED_STAFF)
     .sort((a,b) => parseISO(b.appointmentDateTime).getTime() - parseISO(a.appointmentDateTime).getTime());
 };

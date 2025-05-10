@@ -60,7 +60,7 @@ export interface Appointment extends BaseEntity {
   // Post-booking / Confirmation details
   status: AppointmentStatus;
   actualArrivalTime?: string; // HH:MM
-  addedServices?: { serviceId: ServiceId; professionalId?: string; price?: number }[];
+  addedServices?: { serviceId: ServiceId; professionalId?: string | null; price?: number | null }[];
   paymentMethod?: PaymentMethod;
   amountPaid?: number;
   staffNotes?: string; // Notes by staff after service
@@ -85,4 +85,4 @@ export type AppointmentFormData = {
   bookingObservations?: string;
 };
 
-export type ProfessionalFormData = Omit<Professional, 'id' | 'biWeeklyEarnings'> & { id?: string };
+export type ProfessionalFormData = Omit<Professional, 'biWeeklyEarnings'>;

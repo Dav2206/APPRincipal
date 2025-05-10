@@ -1,3 +1,4 @@
+
 "use client";
 
 import Link from 'next/link';
@@ -16,12 +17,14 @@ import {
   Footprints,
   PanelLeft,
   X,
+  CalendarClock, // Added for schedule view
 } from 'lucide-react';
 import { USER_ROLES } from '@/lib/constants';
 
 const navItems = [
   { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard, roles: [USER_ROLES.ADMIN, USER_ROLES.LOCATION_STAFF] },
-  { href: '/appointments', label: 'Citas', icon: CalendarDays, roles: [USER_ROLES.ADMIN, USER_ROLES.LOCATION_STAFF] },
+  { href: '/appointments', label: 'Citas del Día', icon: CalendarDays, roles: [USER_ROLES.ADMIN, USER_ROLES.LOCATION_STAFF] },
+  { href: '/schedule', label: 'Agenda Horaria', icon: CalendarClock, roles: [USER_ROLES.ADMIN, USER_ROLES.LOCATION_STAFF] },
   { href: '/history', label: 'Historial', icon: History, roles: [USER_ROLES.ADMIN, USER_ROLES.LOCATION_STAFF] },
   { href: '/patients', label: 'Pacientes', icon: Users, roles: [USER_ROLES.ADMIN, USER_ROLES.LOCATION_STAFF] },
   { href: '/professionals', label: 'Profesionales', icon: Briefcase, roles: [USER_ROLES.ADMIN, USER_ROLES.LOCATION_STAFF] },
@@ -36,7 +39,6 @@ export function AppSidebar() {
 
   const filteredNavItems = navItems.filter(item => item.roles.includes(user.role));
   
-  // Header height is h-16 (4rem)
   const commonSidebarClass = "fixed left-0 bottom-0 top-16 z-40 flex h-[calc(100vh-4rem)] w-64 flex-col border-r bg-sidebar text-sidebar-foreground transition-transform duration-300 ease-in-out md:static md:h-[calc(100vh-4rem)] md:translate-x-0";
   const openSidebarClass = "translate-x-0";
   const closedSidebarClass = "-translate-x-full";
@@ -48,7 +50,7 @@ export function AppSidebar() {
       {sidebarOpen && (
         <div 
           onClick={() => setSidebarOpen(false)}
-          className="fixed left-0 bottom-0 top-16 z-30 bg-black/50 md:hidden" 
+          className="fixed inset-0 top-16 z-30 bg-black/50 md:hidden" // Ensure it covers from top-16
           aria-hidden="true"
         />
       )}
@@ -66,7 +68,18 @@ export function AppSidebar() {
         <ScrollArea className="flex-1">
           <nav className="grid items-start gap-1 px-2 py-4 text-sm font-medium">
             {filteredNavItems.map(({ href, label, icon: Icon }) => {
-              const isActive = pathname === href || (href !== '/dashboard' && pathname.startsWith(href));
+              const isActive = pathname === href || (href !== '/dashboard' && pathname.startsWith(href) && href !== '/appointments' && href !=='/schedule');
+              // Special handling for appointments and schedule to avoid both being active if path is /appointments/anything
+              const isAppointmentsActive = href === '/appointments' && (pathname === '/appointments' || pathname.startsWith('/appointments/'));
+              const isScheduleActive = href === '/schedule' && (pathname === '/schedule' || pathname.startsWith('/schedule/'));
+              
+              let finalIsActive = isActive;
+              if (href === '/appointments') finalIsActive = isAppointmentsActive;
+              if (href === '/schedule') finalIsActive = isScheduleActive;
+              // Ensure dashboard is only active for exact match
+              if (href === '/dashboard' && pathname !== '/dashboard') finalIsActive = false;
+
+
               return (
                 <Link
                   key={href}
@@ -74,7 +87,7 @@ export function AppSidebar() {
                   onClick={() => { if (window.innerWidth < 768) setSidebarOpen(false);}} // Close sidebar on mobile nav
                   className={cn(
                     'flex items-center gap-3 rounded-lg px-3 py-2 transition-all hover:bg-sidebar-accent hover:text-sidebar-accent-foreground',
-                    isActive ? 'bg-sidebar-accent text-sidebar-accent-foreground font-semibold' : 'text-sidebar-foreground'
+                    finalIsActive ? 'bg-sidebar-accent text-sidebar-accent-foreground font-semibold' : 'text-sidebar-foreground'
                   )}
                 >
                   <Icon className="h-4 w-4" />
@@ -85,7 +98,6 @@ export function AppSidebar() {
           </nav>
         </ScrollArea>
         <div className="mt-auto border-t p-4">
-          {/* Can add user profile quick view or settings link here later */}
           <p className="text-xs text-muted-foreground">© 2024 Footprints Scheduler</p>
         </div>
       </aside>

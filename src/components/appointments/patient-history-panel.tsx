@@ -1,3 +1,4 @@
+
 "use client";
 
 import type { Patient, Appointment } from '@/types';
@@ -6,9 +7,9 @@ import { useEffect, useState } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Badge } from '@/components/ui/badge';
-import { format, parseISO, differenceInDays, formatDistanceToNow } from 'date-fns';
+import { format, parseISO, differenceInDays, formatDistanceToNow, differenceInYears } from 'date-fns';
 import { es } from 'date-fns/locale';
-import { UserSquare, CalendarDays, Stethoscope, TrendingUp, MessageSquare, AlertTriangle, Repeat } from 'lucide-react';
+import { UserSquare, CalendarDays, Stethoscope, TrendingUp, MessageSquare, AlertTriangle, Repeat, Cake } from 'lucide-react';
 
 interface PatientHistoryPanelProps {
   patient: Patient;
@@ -19,6 +20,7 @@ export function PatientHistoryPanel({ patient }: PatientHistoryPanelProps) {
   const [loading, setLoading] = useState(true);
   const [preferredProfessionalName, setPreferredProfessionalName] = useState<string | null>(null);
   const [averageDaysBetweenVisits, setAverageDaysBetweenVisits] = useState<number | null>(null);
+  const [age, setAge] = useState<number | null>(null);
 
   useEffect(() => {
     async function fetchData() {
@@ -33,16 +35,34 @@ export function PatientHistoryPanel({ patient }: PatientHistoryPanelProps) {
         setPreferredProfessionalName(null);
       }
 
-      if (appointmentHistory.length >= 2) {
-        // Sort ascending to calculate differences easily
-        const sortedHistory = [...appointmentHistory].sort((a,b) => parseISO(a.appointmentDateTime).getTime() - parseISO(b.appointmentDateTime).getTime());
-        let totalDaysDifference = 0;
-        for (let i = 1; i < sortedHistory.length; i++) {
-          const prevDate = parseISO(sortedHistory[i-1].appointmentDateTime);
-          const currentDate = parseISO(sortedHistory[i].appointmentDateTime);
-          totalDaysDifference += differenceInDays(currentDate, prevDate);
+      if (patient.dateOfBirth) {
+        try {
+          const dob = parseISO(patient.dateOfBirth);
+          setAge(differenceInYears(new Date(), dob));
+        } catch (e) {
+          console.error("Error parsing date of birth:", e);
+          setAge(null);
         }
-        setAverageDaysBetweenVisits(Math.round(totalDaysDifference / (sortedHistory.length - 1)));
+      } else {
+        setAge(null);
+      }
+
+      if (appointmentHistory.length >= 2) {
+        const sortedHistory = [...appointmentHistory]
+          .filter(appt => appt.status === 'completed') // Consider only completed visits for frequency
+          .sort((a,b) => parseISO(a.appointmentDateTime).getTime() - parseISO(b.appointmentDateTime).getTime());
+        
+        if (sortedHistory.length >=2) {
+            let totalDaysDifference = 0;
+            for (let i = 1; i < sortedHistory.length; i++) {
+              const prevDate = parseISO(sortedHistory[i-1].appointmentDateTime);
+              const currentDate = parseISO(sortedHistory[i].appointmentDateTime);
+              totalDaysDifference += differenceInDays(currentDate, prevDate);
+            }
+            setAverageDaysBetweenVisits(Math.round(totalDaysDifference / (sortedHistory.length - 1)));
+        } else {
+             setAverageDaysBetweenVisits(null);
+        }
       } else {
         setAverageDaysBetweenVisits(null);
       }
@@ -56,8 +76,8 @@ export function PatientHistoryPanel({ patient }: PatientHistoryPanelProps) {
     return <p className="text-muted-foreground">Cargando historial del paciente...</p>;
   }
 
-  const totalVisits = history.length;
-  const lastVisit = history.length > 0 ? history[0] : null; // history is sorted descending by date by default
+  const totalVisits = history.filter(h => h.status === 'completed').length;
+  const lastVisit = history.length > 0 ? history[0] : null; 
   const lastVisitDate = lastVisit ? parseISO(lastVisit.appointmentDateTime) : null;
 
   return (
@@ -69,7 +89,7 @@ export function PatientHistoryPanel({ patient }: PatientHistoryPanelProps) {
       <CardContent className="space-y-4">
         <div className="grid grid-cols-2 md:grid-cols-3 gap-4 text-sm">
           <div>
-            <p className="font-medium flex items-center gap-1"><TrendingUp size={16} /> Visitas Totales:</p>
+            <p className="font-medium flex items-center gap-1"><TrendingUp size={16} /> Visitas Completadas:</p>
             <p>{totalVisits}</p>
           </div>
           <div>
@@ -80,6 +100,12 @@ export function PatientHistoryPanel({ patient }: PatientHistoryPanelProps) {
             <p className="font-medium flex items-center gap-1"><Repeat size={16} /> Frecuencia Aprox.:</p>
             <p>{averageDaysBetweenVisits !== null ? `Cada ${averageDaysBetweenVisits} días` : (totalVisits < 2 ? 'Pocas visitas para calcular' : 'N/A')}</p>
           </div>
+          {age !== null && (
+            <div>
+              <p className="font-medium flex items-center gap-1"><Cake size={16} /> Edad:</p>
+              <p>{age} años</p>
+            </div>
+          )}
           <div>
             <p className="font-medium flex items-center gap-1"><Stethoscope size={16} /> Profesional Preferido:</p>
             <p>{preferredProfessionalName || 'No especificado'}</p>
@@ -97,16 +123,17 @@ export function PatientHistoryPanel({ patient }: PatientHistoryPanelProps) {
             <h4 className="font-semibold mb-2 text-md">Citas Anteriores (más recientes primero):</h4>
             <ScrollArea className="h-40 rounded-md border p-2 bg-background">
               <ul className="space-y-2">
-                {history.slice(0, 5).map(appt => ( // Show last 5
+                {history.slice(0, 10).map(appt => ( // Show last 10
                   <li key={appt.id} className="p-2 border-b last:border-b-0 text-xs">
                     <div className="flex justify-between items-center">
                       <span>{format(parseISO(appt.appointmentDateTime), "dd/MM/yy HH:mm", { locale: es })} - {appt.service?.name}</span>
                        <Badge variant={appt.status === 'completed' ? 'default' : 'destructive'} className={`capitalize text-xs ${appt.status === 'completed' ? 'bg-green-600 text-white' : ''}`}>
-                        {appt.status.replace('_', ' ')}
+                        {appt.status.replace(/_/g, ' ')}
                       </Badge>
                     </div>
                     {appt.professional && <p className="text-muted-foreground text-xs">Atendido por: {appt.professional.firstName} {appt.professional.lastName}</p>}
-                    {appt.bookingObservations && <p className="text-muted-foreground text-xs mt-1">Obs: {appt.bookingObservations}</p>}
+                    {appt.bookingObservations && <p className="text-muted-foreground text-xs mt-1">Obs. Reserva: {appt.bookingObservations}</p>}
+                     {appt.staffNotes && <p className="text-blue-700 text-xs mt-1">Obs. Staff: {appt.staffNotes}</p>}
                   </li>
                 ))}
               </ul>
