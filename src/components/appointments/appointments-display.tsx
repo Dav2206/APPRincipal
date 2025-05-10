@@ -1,3 +1,4 @@
+
 "use client";
 
 import type { Appointment } from '@/types';
@@ -68,7 +69,7 @@ export function AppointmentsDisplay() {
         <p className="text-muted-foreground mb-4">
           No se encontraron citas para {effectiveLocationId ? LOCATIONS.find(l=>l.id === effectiveLocationId)?.name : 'todas las sedes'} en la fecha seleccionada.
         </p>
-        {((user?.role === USER_ROLES.ADMIN && adminSelectedLocation !== 'all') || user?.role === USER_ROLES.LOCATION_STAFF) && (
+        {(user?.role === USER_ROLES.ADMIN || user?.role === USER_ROLES.LOCATION_STAFF) && (
           <Button onClick={() => setIsFormOpen(true)}>
             <PlusCircleIcon className="mr-2 h-4 w-4" /> Agendar Nueva Cita
           </Button>
@@ -126,7 +127,7 @@ export function AppointmentsDisplay() {
           )}
         </CardHeader>
         <CardContent>
-          {((user?.role === USER_ROLES.ADMIN && adminSelectedLocation !== 'all') || user?.role === USER_ROLES.LOCATION_STAFF) && (
+          {(user?.role === USER_ROLES.ADMIN || user?.role === USER_ROLES.LOCATION_STAFF) && (
              <Button onClick={() => setIsFormOpen(true)} className="mb-6 w-full md:w-auto">
               <PlusCircleIcon className="mr-2 h-4 w-4" /> Agendar Nueva Cita
             </Button>
@@ -159,3 +160,4 @@ export function AppointmentsDisplay() {
     </div>
   );
 }
+
