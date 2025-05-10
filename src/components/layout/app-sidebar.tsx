@@ -27,7 +27,7 @@ const navItems = [
   { href: '/schedule', label: 'Agenda Horaria', icon: CalendarClock, roles: [USER_ROLES.ADMIN, USER_ROLES.LOCATION_STAFF] },
   { href: '/history', label: 'Historial', icon: History, roles: [USER_ROLES.ADMIN, USER_ROLES.LOCATION_STAFF] },
   { href: '/patients', label: 'Pacientes', icon: Users, roles: [USER_ROLES.ADMIN, USER_ROLES.LOCATION_STAFF] },
-  { href: '/professionals', label: 'Profesionales', icon: Briefcase, roles: [USER_ROLES.ADMIN, USER_ROLES.LOCATION_STAFF] },
+  { href: '/professionals', label: 'Profesionales', icon: Briefcase, roles: [USER_ROLES.ADMIN] },
 ];
 
 export function AppSidebar() {
@@ -104,3 +104,4 @@ export function AppSidebar() {
     </>
   );
 }
+
