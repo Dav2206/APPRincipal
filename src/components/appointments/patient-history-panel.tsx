@@ -7,10 +7,11 @@ import { useEffect, useState } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Badge } from '@/components/ui/badge';
-import { format, parseISO, differenceInDays, formatDistanceToNow, differenceInYears, addDays } from 'date-fns';
+import { format, parseISO, differenceInDays, formatDistanceToNow, differenceInYears, addDays as dateAddDays } from 'date-fns';
 import { es } from 'date-fns/locale';
-import { UserSquare, CalendarDays, Stethoscope, TrendingUp, MessageSquare, AlertTriangle, Repeat, Cake } from 'lucide-react';
+import { UserSquare, CalendarDays, Stethoscope, TrendingUp, MessageSquare, AlertTriangle, Repeat, Cake, Paperclip } from 'lucide-react';
 import { APPOINTMENT_STATUS, APPOINTMENT_STATUS_DISPLAY } from '@/lib/constants';
+import Image from 'next/image';
 
 interface PatientHistoryPanelProps {
   patient: Patient;
@@ -63,13 +64,13 @@ export function PatientHistoryPanel({ patient }: PatientHistoryPanelProps) {
         setAverageDaysBetweenVisits(avgDays);
         
         const lastCompletedVisitDate = parseISO(completedVisits[completedVisits.length - 1].appointmentDateTime);
-        const recommendedNextDate = addDays(lastCompletedVisitDate, avgDays);
+        const recommendedNextDate = dateAddDays(lastCompletedVisitDate, avgDays);
         setNextRecommendedVisit(format(recommendedNextDate, "PPP", { locale: es }));
 
       } else if (completedVisits.length === 1) {
         // Default recommendation if only one visit (e.g. 30 days)
         const lastCompletedVisitDate = parseISO(completedVisits[0].appointmentDateTime);
-        const recommendedNextDate = addDays(lastCompletedVisitDate, 30); // Default to 30 days for next visit
+        const recommendedNextDate = dateAddDays(lastCompletedVisitDate, 30); // Default to 30 days for next visit
         setNextRecommendedVisit(format(recommendedNextDate, "PPP", { locale: es }));
         setAverageDaysBetweenVisits(null); // Not enough data for average
       }
@@ -144,13 +145,23 @@ export function PatientHistoryPanel({ patient }: PatientHistoryPanelProps) {
                   <li key={appt.id} className="p-2 border-b last:border-b-0 text-xs">
                     <div className="flex justify-between items-center">
                       <span>{format(parseISO(appt.appointmentDateTime), "dd/MM/yy HH:mm", { locale: es })} - {appt.service?.name}</span>
-                       <Badge variant={appt.status === APPOINTMENT_STATUS.COMPLETED ? 'default' : 'destructive'} className={`capitalize text-xs ${appt.status === APPOINTMENT_STATUS.COMPLETED ? 'bg-green-600 text-white' : ''}`}>
+                       <Badge variant={appt.status === APPOINTMENT_STATUS.COMPLETED ? 'default' : 'destructive'} className={`capitalize text-xs ${APPOINTMENT_STATUS_DISPLAY[appt.status as AppointmentStatus] === APPOINTMENT_STATUS_DISPLAY.completed ? 'bg-green-600 text-white' : ''}`}>
                         {APPOINTMENT_STATUS_DISPLAY[appt.status as AppointmentStatus] || appt.status}
                       </Badge>
                     </div>
                     {appt.professional && <p className="text-muted-foreground text-xs">Atendido por: {appt.professional.firstName} {appt.professional.lastName}</p>}
                     {appt.bookingObservations && <p className="text-muted-foreground text-xs mt-1">Obs. Reserva: {appt.bookingObservations}</p>}
                      {appt.staffNotes && <p className="text-blue-700 text-xs mt-1">Obs. Staff: {appt.staffNotes}</p>}
+                     {appt.attachedPhotos && appt.attachedPhotos.length > 0 && (
+                       <div className="mt-1">
+                         <p className="text-xs font-medium text-muted-foreground flex items-center gap-1"><Paperclip size={12}/> Fotos:</p>
+                         <div className="flex flex-wrap gap-1 mt-0.5">
+                           {appt.attachedPhotos.map((photoUri, index) => (
+                             <Image key={index} src={photoUri} alt={`Foto ${index + 1}`} width={24} height={24} className="rounded object-cover aspect-square" data-ai-hint="medical thumbnail" />
+                           ))}
+                         </div>
+                       </div>
+                     )}
                   </li>
                 ))}
               </ul>

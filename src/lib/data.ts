@@ -1,6 +1,6 @@
 
 import type { User, Professional, Patient, Service, Appointment, AppointmentFormData, ProfessionalFormData, AppointmentStatus } from '@/types';
-import { LOCATIONS, USER_ROLES, SERVICES, PROFESSIONAL_SPECIALIZATIONS, APPOINTMENT_STATUS, LocationId, ServiceId } from './constants';
+import { LOCATIONS, USER_ROLES, SERVICES, PROFESSIONAL_SPECIALIZATIONS, APPOINTMENT_STATUS, LocationId, ServiceId, APPOINTMENT_STATUS_DISPLAY } from './constants';
 import { formatISO, parseISO, addDays, setHours, setMinutes, startOfDay, endOfDay, addMinutes } from 'date-fns';
 
 let users: User[] = [
@@ -49,6 +49,10 @@ let appointments: Appointment[] = [];
 const today = new Date();
 const numDays = 30; // Generate appointments for a month around today for better revenue data
 
+// Placeholder for a short base64 image for testing
+const placeholderPhotoDataUri = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=";
+
+
 for (let dayOffset = -Math.floor(numDays / 2); dayOffset <= Math.floor(numDays / 2); dayOffset++) {
   const currentDate = addDays(startOfDay(today), dayOffset);
   LOCATIONS.forEach(location => {
@@ -88,6 +92,7 @@ for (let dayOffset = -Math.floor(numDays / 2); dayOffset <= Math.floor(numDays /
         durationMinutes: randomService.defaultDuration,
         status: randomStatus,
         bookingObservations: Math.random() > 0.7 ? 'Requiere atención especial.' : undefined,
+        attachedPhotos: Math.random() > 0.85 ? [placeholderPhotoDataUri] : undefined,
         createdAt: formatISO(new Date()),
         updatedAt: formatISO(new Date()),
         ...(randomStatus === APPOINTMENT_STATUS.COMPLETED && {
@@ -174,7 +179,7 @@ export const getServiceById = async (id: ServiceId): Promise<Service | undefined
 
 // --- Appointments ---
 export const getAppointments = async (filters: { 
-  locationId?: LocationId | LocationId[]; // Allow array of locationIds for admin 'all'
+  locationId?: LocationId | LocationId[] | undefined; 
   date?: Date, 
   dateRange?: { start: Date; end: Date };
   status?: AppointmentStatus | AppointmentStatus[];
@@ -185,7 +190,7 @@ export const getAppointments = async (filters: {
 
   if (filters.locationId) {
     const locationsToFilter = Array.isArray(filters.locationId) ? filters.locationId : [filters.locationId];
-    if (locationsToFilter.length > 0) { // Avoid filtering if an empty array is somehow passed
+    if (locationsToFilter.length > 0) { 
         filteredAppointments = filteredAppointments.filter(a => locationsToFilter.includes(a.locationId));
     }
   }
@@ -222,7 +227,8 @@ export const getAppointments = async (filters: {
       ...as,
       service: mockServices.find(s => s.id === as.serviceId),
       professional: professionals.find(p => p.id === as.professionalId)
-    })) || undefined
+    })) || undefined,
+    attachedPhotos: appt.attachedPhotos || [], // Ensure it's an array
   })).sort((a, b) => parseISO(a.appointmentDateTime).getTime() - parseISO(b.appointmentDateTime).getTime());
 };
 
@@ -238,7 +244,8 @@ export const getAppointmentById = async (id: string): Promise<Appointment | unde
       ...as,
       service: mockServices.find(s => s.id === as.serviceId),
       professional: professionals.find(p => p.id === as.professionalId)
-    })) || undefined
+    })) || undefined,
+    attachedPhotos: appt.attachedPhotos || [], // Ensure it's an array
   };
 };
 
@@ -271,6 +278,7 @@ export const addAppointment = async (data: AppointmentFormData): Promise<Appoint
     preferredProfessionalId: data.preferredProfessionalId || undefined,
     bookingObservations: data.bookingObservations,
     status: APPOINTMENT_STATUS.BOOKED,
+    attachedPhotos: [], // Initialize with empty array
     // addedServices is not part of initial booking form
   };
   
@@ -298,7 +306,9 @@ export const updateAppointment = async (id: string, data: Partial<Appointment>):
     addedServices: data.addedServices?.map(as => ({
       ...as,
       professionalId: as.professionalId === "NO_SELECTION_PLACEHOLDER" || as.professionalId === "" ? null : as.professionalId
-    }))
+    })),
+    // Ensure attachedPhotos is always an array, even if null/undefined is passed
+    attachedPhotos: Array.isArray(data.attachedPhotos) ? data.attachedPhotos : (appointments[index].attachedPhotos || []),
   };
   
   appointments[index] = { 
@@ -316,7 +326,8 @@ export const updateAppointment = async (id: string, data: Partial<Appointment>):
       ...as,
       service: mockServices.find(s => s.id === as.serviceId),
       professional: professionals.find(p => p.id === as.professionalId)
-    })) || undefined
+    })) || undefined,
+    attachedPhotos: appointments[index].attachedPhotos || [],
   };
 };
 

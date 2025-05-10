@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { LOCATIONS, SERVICES, TIME_SLOTS, PROFESSIONAL_SPECIALIZATIONS, PAYMENT_METHODS, APPOINTMENT_STATUS } from './constants';
+import { LOCATIONS, SERVICES, TIME_SLOTS, PROFESSIONAL_SPECIALIZATIONS, PAYMENT_METHODS, APPOINTMENT_STATUS, APPOINTMENT_STATUS_DISPLAY } from './constants';
 
 export const LoginSchema = z.object({
   username: z.string().min(1, { message: 'El nombre de usuario es requerido.' }),
@@ -11,7 +11,7 @@ const locationIds = LOCATIONS.map(loc => loc.id);
 const serviceIds = SERVICES.map(s => s.id);
 const professionalSpecializationValues = PROFESSIONAL_SPECIALIZATIONS.map(spec => spec);
 const paymentMethodValues = PAYMENT_METHODS.map(pm => pm);
-const appointmentStatusValues = Object.values(APPOINTMENT_STATUS);
+const appointmentStatusKeys = Object.keys(APPOINTMENT_STATUS_DISPLAY) as (keyof typeof APPOINTMENT_STATUS_DISPLAY)[];
 
 
 export const AppointmentFormSchema = z.object({
@@ -40,13 +40,14 @@ export const ProfessionalFormSchema = z.object({
 });
 
 export const AppointmentUpdateSchema = z.object({
-  status: z.string().refine(val => appointmentStatusValues.includes(val as any), {message: "Estado inválido"}),
+  status: z.string().refine(val => appointmentStatusKeys.includes(val as any), {message: "Estado inválido"}),
   actualArrivalTime: z.string().optional().nullable(), // HH:MM
   professionalId: z.string().optional().nullable(), // Attending professional
   durationMinutes: z.number().int().positive().optional().nullable(),
   paymentMethod: z.string().refine(val => paymentMethodValues.includes(val as any), {message: "Método de pago inválido"}).optional().nullable(),
   amountPaid: z.number().positive().optional().nullable(),
   staffNotes: z.string().optional().nullable(),
+  attachedPhotos: z.array(z.string().startsWith("data:image/", { message: "Debe ser un data URI de imagen válido." })).optional().nullable(),
   addedServices: z.array(z.object({
     serviceId: z.string().refine(val => serviceIds.includes(val as any), { message: "Servicio adicional inválido."}),
     professionalId: z.string().optional().nullable(),

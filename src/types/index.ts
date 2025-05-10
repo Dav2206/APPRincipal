@@ -64,6 +64,7 @@ export interface Appointment extends BaseEntity {
   paymentMethod?: PaymentMethod;
   amountPaid?: number;
   staffNotes?: string; // Notes by staff after service
+  attachedPhotos?: string[]; // Array of data URIs for attached photos
 
   createdAt: string; // ISO string
   updatedAt: string; // ISO string
@@ -89,4 +90,3 @@ export type ProfessionalFormData = Omit<Professional, 'biWeeklyEarnings'>;
 
 // Export AppointmentStatus to be available for other modules if needed directly
 export type { AppointmentStatus };
-```
