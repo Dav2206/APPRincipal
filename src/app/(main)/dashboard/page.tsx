@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useAuth } from '@/contexts/auth-provider';
@@ -8,10 +9,38 @@ import Link from 'next/link';
 import Image from 'next/image';
 import { CalendarPlus, Users, History, Briefcase } from 'lucide-react';
 import { useAppState } from '@/contexts/app-state-provider';
+import { useState, useEffect } from 'react';
+
+interface DashboardStats {
+  todayAppointments: number;
+  pendingConfirmations: number;
+  activeProfessionals: number;
+  totalRevenueMonth: string;
+}
 
 export default function DashboardPage() {
   const { user } = useAuth();
   const { selectedLocationId } = useAppState();
+  const [stats, setStats] = useState<DashboardStats>({
+    todayAppointments: 0,
+    pendingConfirmations: 0,
+    activeProfessionals: 0,
+    totalRevenueMonth: '0.00',
+  });
+
+  useEffect(() => {
+    if (user) {
+      // Simulate fetching stats or generating them client-side
+      // This ensures Math.random is only called on the client
+      setStats({
+        todayAppointments: Math.floor(Math.random() * 20) + 5,
+        pendingConfirmations: Math.floor(Math.random() * 10),
+        activeProfessionals: user.role === USER_ROLES.ADMIN ? (Math.floor(Math.random() * 20) + 10) : (Math.floor(Math.random() * 4) + 1),
+        totalRevenueMonth: (Math.random() * 5000 + 2000).toFixed(2),
+      });
+    }
+  }, [user]);
+
 
   if (!user) {
     return null; // Or a loading indicator
@@ -27,14 +56,6 @@ export default function DashboardPage() {
     displayLocationName = LOCATIONS.find(l => l.id === selectedLocationId)?.name || "Sede Seleccionada";
   }
   
-  // TODO: Fetch actual stats based on user role and selectedLocationId
-  const stats = {
-    todayAppointments: Math.floor(Math.random() * 20) + 5,
-    pendingConfirmations: Math.floor(Math.random() * 10),
-    activeProfessionals: user.role === USER_ROLES.ADMIN ? (Math.floor(Math.random() * 20) + 10) : (Math.floor(Math.random() * 4) + 1),
-    totalRevenueMonth: (Math.random() * 5000 + 2000).toFixed(2),
-  };
-
   return (
     <div className="container mx-auto py-8 px-4 md:px-0">
       <Card className="mb-8 shadow-lg">

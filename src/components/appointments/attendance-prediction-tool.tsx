@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useState } from 'react';
@@ -7,6 +8,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Loader2, Brain, Percent, ScrollText } from 'lucide-react';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Progress } from '@/components/ui/progress';
+import { cn } from '@/lib/utils';
 
 interface AttendancePredictionToolProps {
   patientId: string;
@@ -30,6 +32,12 @@ export function AttendancePredictionTool({ patientId }: AttendancePredictionTool
     } finally {
       setIsLoading(false);
     }
+  };
+
+  const getIndicatorColorClass = (probability: number) => {
+    if (probability > 0.7) return '[&>[role=progressbar]]:bg-green-500';
+    if (probability > 0.4) return '[&>[role=progressbar]]:bg-yellow-500';
+    return '[&>[role=progressbar]]:bg-red-500';
   };
 
   return (
@@ -63,11 +71,9 @@ export function AttendancePredictionTool({ patientId }: AttendancePredictionTool
                   {(prediction.attendanceProbability * 100).toFixed(0)}%
                 </span>
               </div>
-              <Progress value={prediction.attendanceProbability * 100} className="h-2" 
-                 indicatorClassName={
-                    prediction.attendanceProbability > 0.7 ? 'bg-green-500' : 
-                    prediction.attendanceProbability > 0.4 ? 'bg-yellow-500' : 'bg-red-500'
-                  }
+              <Progress 
+                value={prediction.attendanceProbability * 100} 
+                className={cn("h-2", getIndicatorColorClass(prediction.attendanceProbability))}
               />
             </div>
             <div>

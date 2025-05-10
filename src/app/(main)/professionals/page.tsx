@@ -1,3 +1,4 @@
+
 "use client";
 
 import type { Professional, ProfessionalFormData } from '@/types';
@@ -6,10 +7,10 @@ import { useAuth } from '@/contexts/auth-provider';
 import { useAppState } from '@/contexts/app-state-provider';
 import { getProfessionals, addProfessional, updateProfessional } from '@/lib/data';
 import { LOCATIONS, PROFESSIONAL_SPECIALIZATIONS, USER_ROLES, LocationId } from '@/lib/constants';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
+import { Label } from '@/components/ui/label'; // Keep for direct use outside FormField context if needed
 import { Checkbox } from '@/components/ui/checkbox';
 import {
   Table,
@@ -27,8 +28,9 @@ import {
   DialogFooter,
   DialogClose,
 } from '@/components/ui/dialog';
-import { PlusCircle, Edit2, Briefcase, Search, Loader2, BadgeDollarSign } from 'lucide-react';
-import { useForm, Controller } from 'react-hook-form';
+import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
+import { PlusCircle, Edit2, Briefcase, Search, Loader2 } from 'lucide-react';
+import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { ProfessionalFormSchema } from '@/lib/schemas';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -75,7 +77,6 @@ export default function ProfessionalsPage() {
 
   const handleAddProfessional = () => {
     setEditingProfessional(null);
-    // Set default location based on context, or first location for admin if 'all' is selected
     const defaultLoc = user?.role === USER_ROLES.LOCATION_STAFF 
       ? user.locationId 
       : (adminSelectedLocation && adminSelectedLocation !== 'all' ? adminSelectedLocation : LOCATIONS[0].id);
@@ -95,7 +96,7 @@ export default function ProfessionalsPage() {
     setEditingProfessional(professional);
     form.reset({
         ...professional,
-        locationId: professional.locationId as LocationId, // Ensure type correctness
+        locationId: professional.locationId as LocationId, 
     });
     setIsFormOpen(true);
   };
@@ -110,8 +111,8 @@ export default function ProfessionalsPage() {
             toast({ title: "Error", description: `No se pudo actualizar a ${data.firstName}.`, variant: "destructive" });
         }
       } else {
-        const newProfessional = await addProfessional(data);
-        toast({ title: "Profesional Agregado", description: `${newProfessional.firstName} ${newProfessional.lastName} agregado.` });
+        const newProfessionalData = await addProfessional(data);
+        toast({ title: "Profesional Agregado", description: `${newProfessionalData.firstName} ${newProfessionalData.lastName} agregado.` });
       }
       setIsFormOpen(false);
       fetchProfessionals();
@@ -197,7 +198,7 @@ export default function ProfessionalsPage() {
                   </TableRow>
                 )) : (
                   <TableRow>
-                    <TableCell colSpan={user?.role === USER_ROLES.ADMIN ? 6: 5} className="h-24 text-center"> {/* Adjusted colSpan */}
+                    <TableCell colSpan={user?.role === USER_ROLES.ADMIN ? 6: 5} className="h-24 text-center"> 
                       No se encontraron profesionales.
                     </TableCell>
                   </TableRow>
@@ -214,90 +215,98 @@ export default function ProfessionalsPage() {
           <DialogHeader>
             <DialogTitle>{editingProfessional ? 'Editar' : 'Agregar'} Profesional</DialogTitle>
           </DialogHeader>
-          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4 py-4 max-h-[70vh] overflow-y-auto pr-2">
-            {editingProfessional && <input type="hidden" {...form.register("id")} />}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <FormField control={form.control} name="firstName" render={({ field }) => (
-                <div className="space-y-1">
-                  <Label htmlFor="firstName">Nombre(s)</Label>
-                  <Input id="firstName" placeholder="Ej: Juan" {...field} />
-                  {form.formState.errors.firstName && <p className="text-xs text-destructive">{form.formState.errors.firstName.message}</p>}
-                </div>
-              )}/>
-              <FormField control={form.control} name="lastName" render={({ field }) => (
-                <div className="space-y-1">
-                  <Label htmlFor="lastName">Apellido(s)</Label>
-                  <Input id="lastName" placeholder="Ej: Pérez" {...field} />
-                  {form.formState.errors.lastName && <p className="text-xs text-destructive">{form.formState.errors.lastName.message}</p>}
-                </div>
-              )}/>
-            </div>
-            <FormField
-              control={form.control}
-              name="locationId"
-              render={({ field }) => (
-                <div className="space-y-1">
-                  <Label htmlFor="locationId">Sede</Label>
-                  <Select 
-                    onValueChange={field.onChange} 
-                    defaultValue={field.value} 
-                    disabled={user?.role === USER_ROLES.LOCATION_STAFF && !editingProfessional} // Location staff can't change location unless admin
-                  >
-                    <SelectTrigger id="locationId"><SelectValue placeholder="Seleccionar sede" /></SelectTrigger>
-                    <SelectContent>
-                      {LOCATIONS.map(loc => (
-                        <SelectItem key={loc.id} value={loc.id}>{loc.name}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                   {form.formState.errors.locationId && <p className="text-xs text-destructive">{form.formState.errors.locationId.message}</p>}
-                </div>
-              )}
-            />
-            <div className="space-y-1">
-              <Label>Especializaciones</Label>
-              <Controller
+          <Form {...form}>
+            <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4 py-4 max-h-[70vh] overflow-y-auto pr-2">
+              {editingProfessional && <input type="hidden" {...form.register("id")} />}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <FormField control={form.control} name="firstName" render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Nombre(s)</FormLabel>
+                    <FormControl><Input placeholder="Ej: Juan" {...field} /></FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}/>
+                <FormField control={form.control} name="lastName" render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Apellido(s)</FormLabel>
+                    <FormControl><Input placeholder="Ej: Pérez" {...field} /></FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}/>
+              </div>
+              <FormField
+                control={form.control}
+                name="locationId"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Sede</FormLabel>
+                    <Select 
+                      onValueChange={field.onChange} 
+                      value={field.value} 
+                      disabled={user?.role === USER_ROLES.LOCATION_STAFF && !editingProfessional} 
+                    >
+                      <FormControl>
+                        <SelectTrigger><SelectValue placeholder="Seleccionar sede" /></SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        {LOCATIONS.map(loc => (
+                          <SelectItem key={loc.id} value={loc.id}>{loc.name}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
                 control={form.control}
                 name="specializations"
                 render={({ field }) => (
-                  <div className="grid grid-cols-2 md:grid-cols-3 gap-2 p-2 border rounded-md">
-                    {PROFESSIONAL_SPECIALIZATIONS.map(spec => (
-                      <div key={spec} className="flex items-center space-x-2">
-                        <Checkbox
-                          id={`spec-${spec}`}
-                          checked={field.value?.includes(spec)}
-                          onCheckedChange={(checked) => {
-                            return checked
-                              ? field.onChange([...(field.value || []), spec])
-                              : field.onChange((field.value || []).filter(value => value !== spec))
-                          }}
-                        />
-                        <Label htmlFor={`spec-${spec}`} className="text-sm font-normal">{spec}</Label>
+                  <FormItem>
+                    <FormLabel>Especializaciones</FormLabel>
+                    <FormControl>
+                      <div className="grid grid-cols-2 md:grid-cols-3 gap-2 p-2 border rounded-md">
+                        {PROFESSIONAL_SPECIALIZATIONS.map(spec => (
+                          <div key={spec} className="flex items-center space-x-2">
+                            <Checkbox
+                              id={`spec-${spec}`}
+                              checked={field.value?.includes(spec)}
+                              onCheckedChange={(checked) => {
+                                return checked
+                                  ? field.onChange([...(field.value || []), spec])
+                                  : field.onChange((field.value || []).filter(value => value !== spec))
+                              }}
+                            />
+                            {/* Use ShadCN Label for consistency with FormLabel if preferred, or keep basic HTML label */}
+                            <Label htmlFor={`spec-${spec}`} className="text-sm font-normal cursor-pointer">{spec}</Label>
+                          </div>
+                        ))}
                       </div>
-                    ))}
-                  </div>
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
                 )}
               />
-              {form.formState.errors.specializations && <p className="text-xs text-destructive">{form.formState.errors.specializations.message}</p>}
-            </div>
-             <FormField control={form.control} name="email" render={({ field }) => (
-                <div className="space-y-1">
-                    <Label htmlFor="email">Email (Opcional)</Label>
-                    <Input id="email" type="email" placeholder="Ej: juan.perez@mail.com" {...field} />
-                    {form.formState.errors.email && <p className="text-xs text-destructive">{form.formState.errors.email.message}</p>}
-                </div>
-             )}/>
-             <FormField control={form.control} name="phone" render={({ field }) => (
-                <div className="space-y-1">
-                    <Label htmlFor="phone">Teléfono (Opcional)</Label>
-                    <Input id="phone" type="tel" placeholder="Ej: 987654321" {...field} />
-                </div>
-             )}/>
-            <DialogFooter className="pt-4">
-              <DialogClose asChild><Button type="button" variant="outline">Cancelar</Button></DialogClose>
-              <Button type="submit">{form.formState.isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}{editingProfessional ? 'Guardar Cambios' : 'Agregar Profesional'}</Button>
-            </DialogFooter>
-          </form>
+               <FormField control={form.control} name="email" render={({ field }) => (
+                  <FormItem>
+                      <FormLabel>Email (Opcional)</FormLabel>
+                      <FormControl><Input type="email" placeholder="Ej: juan.perez@mail.com" {...field} /></FormControl>
+                      <FormMessage />
+                  </FormItem>
+               )}/>
+               <FormField control={form.control} name="phone" render={({ field }) => (
+                  <FormItem>
+                      <FormLabel>Teléfono (Opcional)</FormLabel>
+                      <FormControl><Input type="tel" placeholder="Ej: 987654321" {...field} /></FormControl>
+                      <FormMessage />
+                  </FormItem>
+               )}/>
+              <DialogFooter className="pt-4">
+                <DialogClose asChild><Button type="button" variant="outline">Cancelar</Button></DialogClose>
+                <Button type="submit" disabled={form.formState.isSubmitting}>{form.formState.isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}{editingProfessional ? 'Guardar Cambios' : 'Agregar Profesional'}</Button>
+              </DialogFooter>
+            </form>
+          </Form>
         </DialogContent>
       </Dialog>
     </div>
