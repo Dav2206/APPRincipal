@@ -8,7 +8,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Badge } from '@/components/ui/badge';
 import { format, parseISO, differenceInDays, formatDistanceToNow } from 'date-fns';
 import { es } from 'date-fns/locale';
-import { UserSquare, CalendarDays, Stethoscope, TrendingUp, MessageSquare, AlertTriangle } from 'lucide-react';
+import { UserSquare, CalendarDays, Stethoscope, TrendingUp, MessageSquare, AlertTriangle, Repeat } from 'lucide-react';
 
 interface PatientHistoryPanelProps {
   patient: Patient;
@@ -18,6 +18,7 @@ export function PatientHistoryPanel({ patient }: PatientHistoryPanelProps) {
   const [history, setHistory] = useState<Appointment[]>([]);
   const [loading, setLoading] = useState(true);
   const [preferredProfessionalName, setPreferredProfessionalName] = useState<string | null>(null);
+  const [averageDaysBetweenVisits, setAverageDaysBetweenVisits] = useState<number | null>(null);
 
   useEffect(() => {
     async function fetchData() {
@@ -31,6 +32,21 @@ export function PatientHistoryPanel({ patient }: PatientHistoryPanelProps) {
       } else {
         setPreferredProfessionalName(null);
       }
+
+      if (appointmentHistory.length >= 2) {
+        // Sort ascending to calculate differences easily
+        const sortedHistory = [...appointmentHistory].sort((a,b) => parseISO(a.appointmentDateTime).getTime() - parseISO(b.appointmentDateTime).getTime());
+        let totalDaysDifference = 0;
+        for (let i = 1; i < sortedHistory.length; i++) {
+          const prevDate = parseISO(sortedHistory[i-1].appointmentDateTime);
+          const currentDate = parseISO(sortedHistory[i].appointmentDateTime);
+          totalDaysDifference += differenceInDays(currentDate, prevDate);
+        }
+        setAverageDaysBetweenVisits(Math.round(totalDaysDifference / (sortedHistory.length - 1)));
+      } else {
+        setAverageDaysBetweenVisits(null);
+      }
+
       setLoading(false);
     }
     fetchData();
@@ -41,7 +57,7 @@ export function PatientHistoryPanel({ patient }: PatientHistoryPanelProps) {
   }
 
   const totalVisits = history.length;
-  const lastVisit = history.length > 0 ? history[0] : null;
+  const lastVisit = history.length > 0 ? history[0] : null; // history is sorted descending by date by default
   const lastVisitDate = lastVisit ? parseISO(lastVisit.appointmentDateTime) : null;
 
   return (
@@ -51,7 +67,7 @@ export function PatientHistoryPanel({ patient }: PatientHistoryPanelProps) {
         <CardDescription>Resumen de actividad y preferencias del paciente.</CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
-        <div className="grid grid-cols-2 gap-4 text-sm">
+        <div className="grid grid-cols-2 md:grid-cols-3 gap-4 text-sm">
           <div>
             <p className="font-medium flex items-center gap-1"><TrendingUp size={16} /> Visitas Totales:</p>
             <p>{totalVisits}</p>
@@ -60,14 +76,18 @@ export function PatientHistoryPanel({ patient }: PatientHistoryPanelProps) {
             <p className="font-medium flex items-center gap-1"><CalendarDays size={16} /> Última Visita:</p>
             <p>{lastVisitDate ? `${format(lastVisitDate, "PPP", { locale: es })} (Hace ${formatDistanceToNow(lastVisitDate, { locale: es, addSuffix: true })})` : 'N/A'}</p>
           </div>
+           <div>
+            <p className="font-medium flex items-center gap-1"><Repeat size={16} /> Frecuencia Aprox.:</p>
+            <p>{averageDaysBetweenVisits !== null ? `Cada ${averageDaysBetweenVisits} días` : (totalVisits < 2 ? 'Pocas visitas para calcular' : 'N/A')}</p>
+          </div>
           <div>
             <p className="font-medium flex items-center gap-1"><Stethoscope size={16} /> Profesional Preferido:</p>
             <p>{preferredProfessionalName || 'No especificado'}</p>
           </div>
           {patient.notes && (
-             <div>
+             <div className="md:col-span-2">
                 <p className="font-medium flex items-center gap-1"><MessageSquare size={16} /> Observaciones Generales:</p>
-                <p className="text-xs p-2 bg-background rounded-md">{patient.notes}</p>
+                <p className="text-xs p-2 bg-background rounded-md max-h-20 overflow-y-auto">{patient.notes}</p>
             </div>
           )}
         </div>
@@ -81,7 +101,7 @@ export function PatientHistoryPanel({ patient }: PatientHistoryPanelProps) {
                   <li key={appt.id} className="p-2 border-b last:border-b-0 text-xs">
                     <div className="flex justify-between items-center">
                       <span>{format(parseISO(appt.appointmentDateTime), "dd/MM/yy HH:mm", { locale: es })} - {appt.service?.name}</span>
-                       <Badge variant={appt.status === 'completed' ? 'default' : 'destructive'} className="capitalize text-xs">
+                       <Badge variant={appt.status === 'completed' ? 'default' : 'destructive'} className={`capitalize text-xs ${appt.status === 'completed' ? 'bg-green-600 text-white' : ''}`}>
                         {appt.status.replace('_', ' ')}
                       </Badge>
                     </div>
