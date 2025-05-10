@@ -22,6 +22,7 @@ export function PatientHistoryPanel({ patient }: PatientHistoryPanelProps) {
   const [preferredProfessionalName, setPreferredProfessionalName] = useState<string | null>(null);
   const [averageDaysBetweenVisits, setAverageDaysBetweenVisits] = useState<number | null>(null);
   const [age, setAge] = useState<number | null>(null);
+  const [nextRecommendedVisit, setNextRecommendedVisit] = useState<string | null>(null);
 
   useEffect(() => {
     async function fetchData() {
@@ -47,25 +48,34 @@ export function PatientHistoryPanel({ patient }: PatientHistoryPanelProps) {
       } else {
         setAge(null);
       }
+      
+      const completedVisits = appointmentHistory.filter(appt => appt.status === APPOINTMENT_STATUS.COMPLETED)
+        .sort((a,b) => parseISO(a.appointmentDateTime).getTime() - parseISO(b.appointmentDateTime).getTime());
 
-      if (appointmentHistory.length >= 2) {
-        const sortedHistory = [...appointmentHistory]
-          .filter(appt => appt.status === 'completed') // Consider only completed visits for frequency
-          .sort((a,b) => parseISO(a.appointmentDateTime).getTime() - parseISO(b.appointmentDateTime).getTime());
-        
-        if (sortedHistory.length >=2) {
-            let totalDaysDifference = 0;
-            for (let i = 1; i < sortedHistory.length; i++) {
-              const prevDate = parseISO(sortedHistory[i-1].appointmentDateTime);
-              const currentDate = parseISO(sortedHistory[i].appointmentDateTime);
-              totalDaysDifference += differenceInDays(currentDate, prevDate);
-            }
-            setAverageDaysBetweenVisits(Math.round(totalDaysDifference / (sortedHistory.length - 1)));
-        } else {
-             setAverageDaysBetweenVisits(null);
+      if (completedVisits.length >= 2) {
+        let totalDaysDifference = 0;
+        for (let i = 1; i < completedVisits.length; i++) {
+          const prevDate = parseISO(completedVisits[i-1].appointmentDateTime);
+          const currentDate = parseISO(completedVisits[i].appointmentDateTime);
+          totalDaysDifference += differenceInDays(currentDate, prevDate);
         }
-      } else {
+        const avgDays = Math.round(totalDaysDifference / (completedVisits.length - 1));
+        setAverageDaysBetweenVisits(avgDays);
+        
+        const lastCompletedVisitDate = parseISO(completedVisits[completedVisits.length - 1].appointmentDateTime);
+        const recommendedNextDate = addDays(lastCompletedVisitDate, avgDays);
+        setNextRecommendedVisit(format(recommendedNextDate, "PPP", { locale: es }));
+
+      } else if (completedVisits.length === 1) {
+        // Default recommendation if only one visit (e.g. 30 days)
+        const lastCompletedVisitDate = parseISO(completedVisits[0].appointmentDateTime);
+        const recommendedNextDate = addDays(lastCompletedVisitDate, 30); // Default to 30 days for next visit
+        setNextRecommendedVisit(format(recommendedNextDate, "PPP", { locale: es }));
+        setAverageDaysBetweenVisits(null); // Not enough data for average
+      }
+      else {
         setAverageDaysBetweenVisits(null);
+        setNextRecommendedVisit(null);
       }
 
       setLoading(false);
@@ -111,8 +121,14 @@ export function PatientHistoryPanel({ patient }: PatientHistoryPanelProps) {
             <p className="font-medium flex items-center gap-1"><Stethoscope size={16} /> Profesional Preferido:</p>
             <p>{preferredProfessionalName || 'No especificado'}</p>
           </div>
+           {nextRecommendedVisit && (
+             <div>
+                <p className="font-medium flex items-center gap-1 text-primary"><CalendarDays size={16}/> Próxima Cita Sugerida:</p>
+                <p className="text-primary font-semibold">{nextRecommendedVisit}</p>
+            </div>
+           )}
           {patient.notes && (
-             <div className="md:col-span-2">
+             <div className="md:col-span-full">
                 <p className="font-medium flex items-center gap-1"><MessageSquare size={16} /> Observaciones Generales:</p>
                 <p className="text-xs p-2 bg-background rounded-md max-h-20 overflow-y-auto">{patient.notes}</p>
             </div>
@@ -151,5 +167,3 @@ export function PatientHistoryPanel({ patient }: PatientHistoryPanelProps) {
     </Card>
   );
 }
-
-```
