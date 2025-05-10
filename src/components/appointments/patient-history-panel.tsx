@@ -9,9 +9,10 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Badge } from '@/components/ui/badge';
 import { format, parseISO, differenceInDays, formatDistanceToNow, differenceInYears, addDays as dateAddDays } from 'date-fns';
 import { es } from 'date-fns/locale';
-import { UserSquare, CalendarDays, Stethoscope, TrendingUp, MessageSquare, AlertTriangle, Repeat, Cake, Paperclip } from 'lucide-react';
+import { UserSquare, CalendarDays, Stethoscope, TrendingUp, MessageSquare, AlertTriangle, Repeat, Cake, Paperclip, Camera } from 'lucide-react';
 import { APPOINTMENT_STATUS, APPOINTMENT_STATUS_DISPLAY } from '@/lib/constants';
 import Image from 'next/image';
+import { Separator } from '../ui/separator';
 
 interface PatientHistoryPanelProps {
   patient: Patient;
@@ -29,7 +30,7 @@ export function PatientHistoryPanel({ patient }: PatientHistoryPanelProps) {
     async function fetchData() {
       setLoading(true);
       const appointmentHistory = await getPatientAppointmentHistory(patient.id);
-      setHistory(appointmentHistory);
+      setHistory(appointmentHistory); // Already sorted by most recent first
 
       if (patient.preferredProfessionalId) {
         const prof = await getProfessionalById(patient.preferredProfessionalId);
@@ -51,7 +52,7 @@ export function PatientHistoryPanel({ patient }: PatientHistoryPanelProps) {
       }
       
       const completedVisits = appointmentHistory.filter(appt => appt.status === APPOINTMENT_STATUS.COMPLETED)
-        .sort((a,b) => parseISO(a.appointmentDateTime).getTime() - parseISO(b.appointmentDateTime).getTime());
+        .sort((a,b) => parseISO(a.appointmentDateTime).getTime() - parseISO(b.appointmentDateTime).getTime()); // Sort oldest to newest for calculation
 
       if (completedVisits.length >= 2) {
         let totalDaysDifference = 0;
@@ -64,8 +65,13 @@ export function PatientHistoryPanel({ patient }: PatientHistoryPanelProps) {
         setAverageDaysBetweenVisits(avgDays);
         
         const lastCompletedVisitDate = parseISO(completedVisits[completedVisits.length - 1].appointmentDateTime);
-        const recommendedNextDate = dateAddDays(lastCompletedVisitDate, avgDays);
-        setNextRecommendedVisit(format(recommendedNextDate, "PPP", { locale: es }));
+        if (avgDays > 0) { // Ensure avgDays is positive to avoid recommending past dates
+            const recommendedNextDate = dateAddDays(lastCompletedVisitDate, avgDays);
+            setNextRecommendedVisit(format(recommendedNextDate, "PPP", { locale: es }));
+        } else {
+            setNextRecommendedVisit(null); // Or some default if avgDays is 0 or negative
+        }
+
 
       } else if (completedVisits.length === 1) {
         // Default recommendation if only one visit (e.g. 30 days)
@@ -89,8 +95,12 @@ export function PatientHistoryPanel({ patient }: PatientHistoryPanelProps) {
   }
 
   const totalVisits = history.filter(h => h.status === APPOINTMENT_STATUS.COMPLETED).length;
-  const lastVisit = history.length > 0 ? history.sort((a,b) => parseISO(b.appointmentDateTime).getTime() - parseISO(a.appointmentDateTime).getTime())[0] : null; 
+  const lastVisit = history.length > 0 ? history[0] : null; // History is already sorted, first element is the most recent
   const lastVisitDate = lastVisit ? parseISO(lastVisit.appointmentDateTime) : null;
+
+  const appointmentsWithPhotos = history.filter(appt => appt.attachedPhotos && appt.attachedPhotos.length > 0);
+  const lastFourAppointmentsWithPhotos = appointmentsWithPhotos.slice(0, 4);
+
 
   return (
     <Card className="bg-secondary/50 shadow-inner">
@@ -110,7 +120,7 @@ export function PatientHistoryPanel({ patient }: PatientHistoryPanelProps) {
           </div>
            <div>
             <p className="font-medium flex items-center gap-1"><Repeat size={16} /> Frecuencia Aprox.:</p>
-            <p>{averageDaysBetweenVisits !== null ? `Cada ${averageDaysBetweenVisits} días` : (totalVisits < 2 ? 'Pocas visitas para calcular' : 'N/A')}</p>
+            <p>{averageDaysBetweenVisits !== null && averageDaysBetweenVisits > 0 ? `Cada ${averageDaysBetweenVisits} días` : (totalVisits < 2 ? 'Pocas visitas para calcular' : 'N/A')}</p>
           </div>
           {age !== null && (
             <div>
@@ -136,8 +146,36 @@ export function PatientHistoryPanel({ patient }: PatientHistoryPanelProps) {
           )}
         </div>
 
+        {lastFourAppointmentsWithPhotos.length > 0 && (
+          <div className="mt-4">
+            <Separator className="my-3" />
+            <h4 className="font-semibold mb-2 text-md flex items-center gap-2"><Camera /> Fotos de Últimas Visitas</h4>
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2">
+              {lastFourAppointmentsWithPhotos.map(appt =>
+                appt.attachedPhotos?.map((photoUri, index) => (
+                  <div key={`${appt.id}-photo-${index}`} className="relative group aspect-square">
+                    <Image 
+                        src={photoUri} 
+                        alt={`Foto de cita ${format(parseISO(appt.appointmentDateTime), "dd/MM/yy", { locale: es })} - ${index + 1}`} 
+                        layout="fill"
+                        objectFit="cover" 
+                        className="rounded-md border"
+                        data-ai-hint="patient chart" 
+                    />
+                     <div className="absolute bottom-0 left-0 right-0 bg-black/50 text-white text-xs p-1 text-center opacity-0 group-hover:opacity-100 transition-opacity">
+                        {format(parseISO(appt.appointmentDateTime), "dd/MM/yy", { locale: es })}
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+        )}
+
+
         {history.length > 0 && (
-          <div>
+          <div className="mt-4">
+            <Separator className="my-3" />
             <h4 className="font-semibold mb-2 text-md">Citas Anteriores (más recientes primero):</h4>
             <ScrollArea className="h-40 rounded-md border p-2 bg-background">
               <ul className="space-y-2">
@@ -145,7 +183,7 @@ export function PatientHistoryPanel({ patient }: PatientHistoryPanelProps) {
                   <li key={appt.id} className="p-2 border-b last:border-b-0 text-xs">
                     <div className="flex justify-between items-center">
                       <span>{format(parseISO(appt.appointmentDateTime), "dd/MM/yy HH:mm", { locale: es })} - {appt.service?.name}</span>
-                       <Badge variant={appt.status === APPOINTMENT_STATUS.COMPLETED ? 'default' : 'destructive'} className={`capitalize text-xs ${APPOINTMENT_STATUS_DISPLAY[appt.status as AppointmentStatus] === APPOINTMENT_STATUS_DISPLAY.completed ? 'bg-green-600 text-white' : ''}`}>
+                       <Badge variant={appt.status === APPOINTMENT_STATUS.COMPLETED ? 'default' : 'destructive'} className={`capitalize text-xs ${APPOINTMENT_STATUS_DISPLAY[appt.status as AppointmentStatus] === APPOINTMENT_STATUS_DISPLAY.completado ? 'bg-green-600 text-white' : ''}`}>
                         {APPOINTMENT_STATUS_DISPLAY[appt.status as AppointmentStatus] || appt.status}
                       </Badge>
                     </div>
@@ -157,7 +195,9 @@ export function PatientHistoryPanel({ patient }: PatientHistoryPanelProps) {
                          <p className="text-xs font-medium text-muted-foreground flex items-center gap-1"><Paperclip size={12}/> Fotos:</p>
                          <div className="flex flex-wrap gap-1 mt-0.5">
                            {appt.attachedPhotos.map((photoUri, index) => (
+                            photoUri ? (
                              <Image key={index} src={photoUri} alt={`Foto ${index + 1}`} width={24} height={24} className="rounded object-cover aspect-square" data-ai-hint="medical thumbnail" />
+                            ) : null
                            ))}
                          </div>
                        </div>
@@ -178,3 +218,6 @@ export function PatientHistoryPanel({ patient }: PatientHistoryPanelProps) {
     </Card>
   );
 }
+
+
+    
