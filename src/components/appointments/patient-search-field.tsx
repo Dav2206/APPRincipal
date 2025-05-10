@@ -102,7 +102,7 @@ export function PatientSearchField({ onPatientSelect, selectedPatientId, onClear
                   className="cursor-pointer"
                 >
                   <UserPlus className={cn("mr-2 h-4 w-4")} />
-                  que permita registrar un nuevo paciente
+                  Agregar nuevo cliente
               </CommandItem>
               {filteredPatients.slice(0, 5).map((patient) => (
                 <CommandItem
