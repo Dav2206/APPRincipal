@@ -36,22 +36,23 @@ export function AppSidebar() {
 
   const filteredNavItems = navItems.filter(item => item.roles.includes(user.role));
   
-  const commonSidebarClass = "fixed inset-y-0 left-0 z-40 flex h-full flex-col border-r bg-sidebar text-sidebar-foreground transition-transform duration-300 ease-in-out md:static md:translate-x-0";
+  // Header height is h-16 (4rem)
+  const commonSidebarClass = "fixed left-0 bottom-0 top-16 z-40 flex h-[calc(100vh-4rem)] w-64 flex-col border-r bg-sidebar text-sidebar-foreground transition-transform duration-300 ease-in-out md:static md:h-[calc(100vh-4rem)] md:translate-x-0";
   const openSidebarClass = "translate-x-0";
   const closedSidebarClass = "-translate-x-full";
 
 
   return (
     <>
-      {/* Overlay for mobile */}
+      {/* Overlay for mobile, positioned below the header */}
       {sidebarOpen && (
         <div 
           onClick={() => setSidebarOpen(false)}
-          className="fixed inset-0 z-30 bg-black/50 md:hidden" 
+          className="fixed left-0 bottom-0 top-16 z-30 bg-black/50 md:hidden" 
           aria-hidden="true"
         />
       )}
-      <aside className={cn(commonSidebarClass, sidebarOpen ? openSidebarClass : closedSidebarClass, "w-64")}>
+      <aside className={cn(commonSidebarClass, sidebarOpen ? openSidebarClass : closedSidebarClass)}>
         <div className="flex h-16 items-center justify-between border-b px-4">
           <Link href="/dashboard" className="flex items-center gap-2 font-semibold text-sidebar-primary">
             <Footprints className="h-6 w-6" />

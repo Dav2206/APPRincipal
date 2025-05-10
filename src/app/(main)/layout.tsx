@@ -41,10 +41,10 @@ export default function MainLayout({
 
   return (
     <div className="flex min-h-screen w-full flex-col bg-muted/40">
-      <AppSidebar />
-      <div className="flex flex-col md:pl-64"> {/* Adjust pl based on sidebar width */}
-        <AppHeader />
-        <main className="flex-1 gap-4 p-4 sm:px-6 sm:py-0 md:gap-8 md:p-6">
+      <AppHeader />
+      <div className="flex flex-1"> {/* Container for sidebar and main content */}
+        <AppSidebar />
+        <main className="flex-1 overflow-y-auto gap-4 p-4 sm:px-6 sm:py-0 md:gap-8 md:p-6">
           {children}
         </main>
       </div>
