@@ -163,7 +163,7 @@ export default function PatientsPage() {
 
   const handleEditPatient = (patient: Patient) => {
     setEditingPatient(patient);
-    form.reset(patient);
+    form.reset(patient); // Full patient data for admin, phone will be handled by conditional rendering
     setIsFormOpen(true);
   };
   
@@ -174,7 +174,20 @@ export default function PatientsPage() {
   const onSubmit = async (data: PatientFormData) => {
     try {
       if (editingPatient) {
-        const updatedPatientData = { ...editingPatient, ...data };
+        // For non-admins, if phone field was not rendered, data.phone will be undefined.
+        // We want to preserve the original phone in that case.
+        const currentPatientData = allPatients.find(p => p.id === editingPatient.id);
+        let phoneToSave = data.phone;
+        if (user?.role !== USER_ROLES.ADMIN && currentPatientData) {
+          phoneToSave = currentPatientData.phone; // Preserve original phone if non-admin is editing
+        }
+
+        const updatedPatientData = { 
+          ...editingPatient, 
+          ...data,
+          phone: (user?.role === USER_ROLES.ADMIN) ? data.phone : editingPatient.phone, // Only admin can change phone
+        };
+
         setAllPatients(prev => prev.map(p => p.id === updatedPatientData.id ? updatedPatientData : p).sort((a,b) => `${a.firstName} ${a.lastName}`.localeCompare(`${b.firstName} ${b.lastName}`)));
         toast({ title: "Paciente Actualizado", description: `${data.firstName} ${data.lastName} actualizado.` });
       } else {
@@ -294,7 +307,9 @@ export default function PatientsPage() {
                       <TableCell>
                         <div className="font-medium">{patient.firstName} {patient.lastName}</div>
                       </TableCell>
-                      <TableCell className="hidden md:table-cell">{patient.phone || 'N/A'}</TableCell>
+                      <TableCell className="hidden md:table-cell">
+                        {user?.role === USER_ROLES.ADMIN ? (patient.phone || 'N/A') : 'Restringido'}
+                      </TableCell>
                       <TableCell className="hidden lg:table-cell">{patient.email || 'N/A'}</TableCell>
                       <TableCell className="text-right">
                          <Button variant="ghost" size="sm" onClick={() => handleViewDetails(patient)} className="mr-2" title="Ver Detalles">
@@ -347,7 +362,11 @@ export default function PatientsPage() {
                <FormField control={form.control} name="phone" render={({ field }) => (
                   <FormItem>
                       <FormLabel>Teléfono</FormLabel>
-                      <FormControl><Input type="tel" placeholder="Ej: 987654321" {...field} /></FormControl>
+                      { (user?.role === USER_ROLES.ADMIN || !editingPatient) ? (
+                        <FormControl><Input type="tel" placeholder="Ej: 987654321" {...field} /></FormControl>
+                      ) : (
+                        <p className="pt-2 text-sm text-muted-foreground">Restringido</p>
+                      )}
                       <FormMessage />
                   </FormItem>
                )}/>

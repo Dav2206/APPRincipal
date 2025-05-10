@@ -120,12 +120,16 @@ export function AppointmentForm({ isOpen, onOpenChange, onAppointmentCreated, in
       form.setValue('existingPatientId', patient.id);
       form.setValue('patientFirstName', patient.firstName);
       form.setValue('patientLastName', patient.lastName);
-      form.setValue('patientPhone', patient.phone || '');
+      form.setValue('patientPhone', (user?.role === USER_ROLES.ADMIN ? patient.phone : "Teléfono Restringido") || '');
       form.setValue('patientEmail', patient.email || '');
       setCurrentPatientForHistory(patient);
       setShowPatientHistory(true);
     } else {
       form.setValue('existingPatientId', null);
+      form.setValue('patientFirstName', '');
+      form.setValue('patientLastName', '');
+      form.setValue('patientPhone', '');
+      form.setValue('patientEmail', '');
       setCurrentPatientForHistory(null);
       setShowPatientHistory(false);
     }
@@ -138,6 +142,8 @@ export function AppointmentForm({ isOpen, onOpenChange, onAppointmentCreated, in
       const submitData = {
         ...data,
         preferredProfessionalId: data.preferredProfessionalId === ANY_PROFESSIONAL_VALUE ? null : data.preferredProfessionalId,
+        // Ensure 'Teléfono Restringido' is not sent if patient is existing and user is not admin
+        patientPhone: (data.existingPatientId && user?.role !== USER_ROLES.ADMIN) ? undefined : data.patientPhone,
       };
       console.log("Submitting appointment data:", submitData);
       await addAppointment(submitData);
@@ -271,7 +277,12 @@ export function AppointmentForm({ isOpen, onOpenChange, onAppointmentCreated, in
                     render={({ field }) => (
                       <FormItem>
                         <FormLabel>Teléfono (Opcional)</FormLabel>
-                        <FormControl><Input type="tel" placeholder="Ej: 987654321" {...field} disabled={!!form.getValues("existingPatientId")} /></FormControl>
+                        <FormControl><Input 
+                          type="tel" 
+                          placeholder={(!!form.getValues("existingPatientId") && user?.role !== USER_ROLES.ADMIN) ? "Teléfono Restringido" : "Ej: 987654321"} 
+                          {...field} 
+                          disabled={!!form.getValues("existingPatientId")} 
+                        /></FormControl>
                         <FormMessage />
                       </FormItem>
                     )}

@@ -3,13 +3,15 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
 import type { Patient } from '@/types';
-import { getPatients } from '@/lib/data'; // Mock data access
+import { getPatients } from '@/lib/data'; 
 import { Input } from '@/components/ui/input';
 import { Command, CommandInput, CommandItem, CommandList, CommandEmpty, CommandGroup } from '@/components/ui/command';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Check, ChevronsUpDown, UserPlus } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
+import { useAuth } from '@/contexts/auth-provider';
+import { USER_ROLES } from '@/lib/constants';
 
 interface PatientSearchFieldProps {
   onPatientSelect: (patient: Patient | null) => void; // null for new patient
@@ -18,6 +20,7 @@ interface PatientSearchFieldProps {
 }
 
 export function PatientSearchField({ onPatientSelect, selectedPatientId, onClear }: PatientSearchFieldProps) {
+  const { user } = useAuth();
   const [patients, setPatients] = useState<Patient[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedPatient, setSelectedPatient] = useState<Patient | null>(null);
@@ -41,30 +44,31 @@ export function PatientSearchField({ onPatientSelect, selectedPatientId, onClear
   }, [selectedPatientId, patients]);
 
 
-  const handleSelect = (patient: Patient | "new-patient") => {
+  const handleSelect = (patient: Patient | "new-patient" | "clear-selection") => {
     if (patient === "new-patient") {
       setSelectedPatient(null);
       onPatientSelect(null);
       setSearchTerm('');
-    } else {
-      setSelectedPatient(patient);
-      onPatientSelect(patient);
-      setSearchTerm(`${patient.firstName} ${patient.lastName}`);
+    } else if (patient === "clear-selection") {
+      setSelectedPatient(null);
+      setSearchTerm('');
+      onPatientSelect(null); 
+      if (onClear) onClear();
+    }
+    
+    else {
+      setSelectedPatient(patient as Patient);
+      onPatientSelect(patient as Patient);
+      setSearchTerm(`${(patient as Patient).firstName} ${(patient as Patient).lastName}`);
     }
     setPopoverOpen(false);
   };
   
-  const handleClear = () => {
-    setSelectedPatient(null);
-    setSearchTerm('');
-    onPatientSelect(null); // Notify parent that it's a new patient potentially
-    if (onClear) onClear(); // Specific clear callback
-    setPopoverOpen(false);
-  };
 
   const filteredPatients = searchTerm
     ? patients.filter(p =>
-        `${p.firstName} ${p.lastName}`.toLowerCase().includes(searchTerm.toLowerCase())
+        `${p.firstName} ${p.lastName}`.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        (user?.role === USER_ROLES.ADMIN && p.phone && p.phone.includes(searchTerm)) // Only search by phone if admin
       )
     : patients;
 
@@ -96,8 +100,8 @@ export function PatientSearchField({ onPatientSelect, selectedPatientId, onClear
             </CommandEmpty>
             <CommandGroup>
               <CommandItem
-                  key="new-patient"
-                  value="new-patient"
+                  key="new-patient-option"
+                  value="new-patient-option-value" // Needs a unique string value
                   onSelect={() => handleSelect("new-patient")}
                   className="cursor-pointer"
                 >
@@ -107,7 +111,7 @@ export function PatientSearchField({ onPatientSelect, selectedPatientId, onClear
               {filteredPatients.slice(0, 5).map((patient) => (
                 <CommandItem
                   key={patient.id}
-                  value={`${patient.firstName} ${patient.lastName}`}
+                  value={`${patient.firstName} ${patient.lastName} ${patient.id}`} // Ensure unique value
                   onSelect={() => handleSelect(patient)}
                   className="cursor-pointer"
                 >
@@ -117,12 +121,17 @@ export function PatientSearchField({ onPatientSelect, selectedPatientId, onClear
                       selectedPatient?.id === patient.id ? "opacity-100" : "opacity-0"
                     )}
                   />
-                  {patient.firstName} {patient.lastName} ({patient.phone || 'N/A'})
+                  {patient.firstName} {patient.lastName} ({user?.role === USER_ROLES.ADMIN ? (patient.phone || 'N/A') : 'Tel. Restringido'})
                 </CommandItem>
               ))}
             </CommandGroup>
             {selectedPatient && (
-               <CommandItem onSelect={handleClear} className="cursor-pointer text-destructive">
+               <CommandItem 
+                  key="clear-selection-option"
+                  value="clear-selection-option-value" // Needs a unique string value
+                  onSelect={() => handleSelect("clear-selection")} 
+                  className="cursor-pointer text-destructive"
+                >
                   Limpiar selección (Registrar como nuevo)
                 </CommandItem>
             )}
