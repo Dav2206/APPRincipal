@@ -3,7 +3,6 @@
 
 import type { Appointment, Professional } from '@/types';
 import { parseISO, getHours, getMinutes } from 'date-fns';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { ScrollArea, ScrollBar } from '@/components/ui/scroll-area';
 import { User, Clock } from 'lucide-react';
@@ -13,6 +12,7 @@ interface DailyTimelineProps {
   appointments: Appointment[];
   timeSlots: string[]; // e.g., ["09:00", "09:30", ..., "19:30"]
   currentDate: Date;
+  onAppointmentClick?: (appointment: Appointment) => void;
 }
 
 const PIXELS_PER_MINUTE = 1.5; // Adjust for desired density; 30min slot = 45px
@@ -24,7 +24,7 @@ const timeToMinutesOffset = (timeStr: string): number => {
   return (hours - DAY_START_HOUR) * 60 + minutes;
 };
 
-export function DailyTimeline({ professionals, appointments, timeSlots }: DailyTimelineProps) {
+export function DailyTimeline({ professionals, appointments, timeSlots, onAppointmentClick }: DailyTimelineProps) {
   
   if (professionals.length === 0) {
     return <p className="text-muted-foreground text-center py-8">No hay profesionales para mostrar en esta sede.</p>;
@@ -56,7 +56,7 @@ export function DailyTimeline({ professionals, appointments, timeSlots }: DailyT
           {/* Time Column */}
           <div className="sticky left-0 z-10 bg-background border-r">
             <div className="h-16 flex items-center justify-center font-semibold border-b px-2 text-sm">Hora</div>
-            {timeSlots.map((slot, index) => (
+            {timeSlots.map((slot) => (
               <div 
                 key={slot} 
                 className="h-[45px] flex items-center justify-center text-xs border-b px-2" // 30 min * 1.5 px/min = 45px
@@ -103,6 +103,7 @@ export function DailyTimeline({ professionals, appointments, timeSlots }: DailyT
                               borderColor: `hsl(var(--chart-${(appt.service?.id.charCodeAt(0) % 5) + 1}))`,
                               borderWidth: '1px',
                             }}
+                            onClick={() => onAppointmentClick?.(appt)}
                           >
                             <p className="font-semibold truncate leading-tight">{appt.patient?.firstName} {appt.patient?.lastName}</p>
                             <p className="truncate text-[10px] leading-tight opacity-90">{appt.service?.name}</p>

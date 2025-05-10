@@ -5,7 +5,7 @@ import type { Appointment, Professional } from '@/types';
 import React, { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '@/contexts/auth-provider';
 import { useAppState } from '@/contexts/app-state-provider';
-import { getAppointments, getProfessionals } from '@/lib/data';
+import { getAppointments, getProfessionals, getAppointmentById } from '@/lib/data';
 import { LOCATIONS, USER_ROLES, TIME_SLOTS, LocationId } from '@/lib/constants';
 import { DailyTimeline } from '@/components/schedule/daily-timeline';
 import { Button } from '@/components/ui/button';
@@ -16,6 +16,7 @@ import { format, addDays, subDays, startOfDay, isEqual } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { CalendarIcon, ChevronLeftIcon, ChevronRightIcon, AlertTriangle, Loader2, CalendarClock } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { AppointmentEditDialog } from '@/components/appointments/appointment-edit-dialog';
 
 const timeSlotsForView = TIME_SLOTS.filter(slot => slot >= "09:00"); // 9 AM to 7:30 PM (ends 8 PM)
 
@@ -26,6 +27,9 @@ export default function SchedulePage() {
   const [professionals, setProfessionals] = useState<Professional[]>([]);
   const [currentDate, setCurrentDate] = useState<Date>(startOfDay(new Date()));
   const [isLoading, setIsLoading] = useState(true);
+  const [selectedAppointmentForEdit, setSelectedAppointmentForEdit] = useState<Appointment | null>(null);
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+
 
   const effectiveLocationId = user?.role === USER_ROLES.ADMIN 
     ? (adminSelectedLocation === 'all' ? undefined : adminSelectedLocation as LocationId) 
@@ -62,6 +66,25 @@ export default function SchedulePage() {
     if (date) {
       setCurrentDate(startOfDay(date));
     }
+  };
+
+  const handleTimelineAppointmentClick = async (appointment: Appointment) => {
+    // The appointment from timeline might be minimal, fetch full details if needed
+    const fullAppointmentDetails = await getAppointmentById(appointment.id);
+    if (fullAppointmentDetails) {
+      setSelectedAppointmentForEdit(fullAppointmentDetails);
+      setIsEditModalOpen(true);
+    } else {
+      // Handle case where appointment details couldn't be fetched (e.g. show a toast)
+      console.error("Could not fetch full appointment details for editing.");
+    }
+  };
+
+  const handleAppointmentUpdated = (updatedAppointment: Appointment) => {
+    setAppointments(prev => 
+      prev.map(appt => appt.id === updatedAppointment.id ? updatedAppointment : appt)
+    );
+    setIsEditModalOpen(false);
   };
   
   const NoDataCard = ({ title, message }: { title: string; message: string }) => (
@@ -142,10 +165,20 @@ export default function SchedulePage() {
               appointments={appointments} 
               timeSlots={timeSlotsForView} 
               currentDate={currentDate}
+              onAppointmentClick={handleTimelineAppointmentClick}
             />
           )}
         </CardContent>
       </Card>
+
+      {selectedAppointmentForEdit && isEditModalOpen && (
+        <AppointmentEditDialog
+          appointment={selectedAppointmentForEdit}
+          isOpen={isEditModalOpen}
+          onOpenChange={setIsEditModalOpen}
+          onAppointmentUpdated={handleAppointmentUpdated}
+        />
+      )}
     </div>
   );
 }
