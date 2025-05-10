@@ -12,7 +12,7 @@ import { useAppState } from '@/contexts/app-state-provider';
 import { useState, useEffect } from 'react';
 
 interface DashboardStats {
-  todayAppointments: number;
+  todayAppointments: string; // Changed from number to string
   pendingConfirmations: number;
   activeProfessionals: number;
   totalRevenueMonth: string;
@@ -22,7 +22,7 @@ export default function DashboardPage() {
   const { user } = useAuth();
   const { selectedLocationId } = useAppState();
   const [stats, setStats] = useState<DashboardStats>({
-    todayAppointments: 0,
+    todayAppointments: "", // Initial value as string
     pendingConfirmations: 0,
     activeProfessionals: 0,
     totalRevenueMonth: '0.00',
@@ -33,7 +33,7 @@ export default function DashboardPage() {
       // Simulate fetching stats or generating them client-side
       // This ensures Math.random is only called on the client
       setStats({
-        todayAppointments: Math.floor(Math.random() * 20) + 5,
+        todayAppointments: "el valor de este digito debe ser la sumatoria de cada sede", // Set to the requested string
         pendingConfirmations: Math.floor(Math.random() * 10),
         activeProfessionals: user.role === USER_ROLES.ADMIN ? (Math.floor(Math.random() * 20) + 10) : (Math.floor(Math.random() * 4) + 1),
         totalRevenueMonth: (Math.random() * 5000 + 2000).toFixed(2),
@@ -69,7 +69,7 @@ export default function DashboardPage() {
       </Card>
 
       <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4 mb-8">
-        <StatCard title="Citas de Hoy" value={stats.todayAppointments.toString()} icon={<CalendarPlus className="h-6 w-6 text-primary" />} />
+        <StatCard title="Citas de Hoy" value={stats.todayAppointments} icon={<CalendarPlus className="h-6 w-6 text-primary" />} />
         <StatCard title="Pendientes de Confirmar" value={stats.pendingConfirmations.toString()} icon={<Users className="h-6 w-6 text-primary" />} />
         <StatCard title="Profesionales Activos" value={stats.activeProfessionals.toString()} icon={<Briefcase className="h-6 w-6 text-primary" />} />
         <StatCard title="Ingresos del Mes (Estimado)" value={`S/ ${stats.totalRevenueMonth}`} icon={<History className="h-6 w-6 text-primary" />} />
@@ -168,3 +168,4 @@ function ActionCard({ title, description, href, icon }: ActionCardProps) {
     </Card>
   );
 }
+
