@@ -1,3 +1,4 @@
+
 "use client";
 
 import type { Appointment } from '@/types';
@@ -7,7 +8,7 @@ import { Button } from '@/components/ui/button';
 import { APPOINTMENT_STATUS, USER_ROLES, PAYMENT_METHODS, SERVICES as ALL_SERVICES } from '@/lib/constants';
 import { format, parseISO } from 'date-fns';
 import { es } from 'date-fns/locale';
-import { CalendarIcon, ClockIcon, UserIcon, StethoscopeIcon, DollarSignIcon, EditIcon, CheckCircle2, XCircle, AlertTriangle, Info } from 'lucide-react';
+import { CalendarIcon, ClockIcon, UserIcon, StethoscopeIcon, DollarSignIcon, EditIcon, CheckCircle2, XCircle, AlertTriangle, Info, Loader2 } from 'lucide-react';
 import { useAuth } from '@/contexts/auth-provider';
 import {
   Dialog,
@@ -25,6 +26,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { useForm, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { AppointmentUpdateSchema } from '@/lib/schemas';
+import { FormField } from '@/components/ui/form'; // Added import
 import type { Professional } from '@/types';
 import { getProfessionals, updateAppointment as updateAppointmentData } from '@/lib/data';
 import React, { useState, useEffect } from 'react';
@@ -91,7 +93,7 @@ export function AppointmentCard({ appointment, onUpdate }: AppointmentCardProps)
     switch (status) {
       case APPOINTMENT_STATUS.BOOKED: return 'default';
       case APPOINTMENT_STATUS.CONFIRMED: return 'default'; // could be different e.g. blue
-      case APPOINTMENT_STATUS.COMPLETED: return 'success'; // custom variant, for now use default
+      case APPOINTMENT_STATUS.COMPLETED: return 'default'; // custom variant, using success style in Badge component directly
       case APPOINTMENT_STATUS.CANCELLED_CLIENT:
       case APPOINTMENT_STATUS.CANCELLED_STAFF:
       case APPOINTMENT_STATUS.NO_SHOW: return 'destructive';
@@ -108,7 +110,7 @@ export function AppointmentCard({ appointment, onUpdate }: AppointmentCardProps)
     try {
       const updatedData: Partial<Appointment> = {
         ...data,
-        professionalId: data.professionalId === "" ? undefined : data.professionalId, // Handle empty string for "any professional"
+        professionalId: data.professionalId === "NO_SELECTION_PLACEHOLDER" ? undefined : data.professionalId,
         // Ensure numbers are numbers, not strings from form
         durationMinutes: data.durationMinutes ? parseInt(String(data.durationMinutes), 10) : undefined,
         amountPaid: data.amountPaid ? parseFloat(String(data.amountPaid)) : undefined,
@@ -143,7 +145,10 @@ export function AppointmentCard({ appointment, onUpdate }: AppointmentCardProps)
               </CardTitle>
               <CardDescription>{appointment.service?.name}</CardDescription>
             </div>
-            <Badge variant={getStatusBadgeVariant(appointment.status)} className="capitalize text-xs h-fit">
+            <Badge 
+              variant={getStatusBadgeVariant(appointment.status)} 
+              className={`capitalize text-xs h-fit ${appointment.status === APPOINTMENT_STATUS.COMPLETED ? 'bg-green-600 text-white' : '' }`}
+            >
               {appointment.status.replace('_', ' ')}
             </Badge>
           </div>
@@ -247,12 +252,12 @@ export function AppointmentCard({ appointment, onUpdate }: AppointmentCardProps)
                 render={({ field }) => (
                   <div className="space-y-1">
                     <Label htmlFor="professionalId">Profesional que Atendió</Label>
-                    <Select onValueChange={field.onChange} value={field.value || undefined}>
+                    <Select onValueChange={field.onChange} value={field.value || "NO_SELECTION_PLACEHOLDER"}>
                       <SelectTrigger id="professionalId">
                         <SelectValue placeholder="Seleccionar profesional" />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="">Sin asignar / Como estaba</SelectItem>
+                        <SelectItem value="NO_SELECTION_PLACEHOLDER">Sin asignar / Como estaba</SelectItem>
                         {professionals.map(p => (
                           <SelectItem key={p.id} value={p.id}>{p.firstName} {p.lastName}</SelectItem>
                         ))}
@@ -271,7 +276,7 @@ export function AppointmentCard({ appointment, onUpdate }: AppointmentCardProps)
                   render={({ field }) => (
                     <div className="space-y-1">
                       <Label htmlFor="durationMinutes">Duración Real (minutos)</Label>
-                      <Input id="durationMinutes" type="number" {...field} value={field.value || ''} />
+                      <Input id="durationMinutes" type="number" {...field} value={field.value || ''} onChange={e => field.onChange(parseInt(e.target.value,10) || undefined)} />
                     </div>
                   )}
                 />
@@ -300,7 +305,7 @@ export function AppointmentCard({ appointment, onUpdate }: AppointmentCardProps)
                   render={({ field }) => (
                     <div className="space-y-1">
                       <Label htmlFor="amountPaid">Monto Pagado (S/)</Label>
-                      <Input id="amountPaid" type="number" step="0.01" {...field} value={field.value || ''} />
+                      <Input id="amountPaid" type="number" step="0.01" {...field} value={field.value || ''} onChange={e => field.onChange(parseFloat(e.target.value) || undefined)} />
                     </div>
                   )}
                 />
@@ -340,3 +345,4 @@ export function AppointmentCard({ appointment, onUpdate }: AppointmentCardProps)
 // And in globals.css:
 // :root { --success: 140 60% 40%; --success-foreground: 0 0% 98%; }
 // Then use variant="success" in Badge. For now, this is just a comment.
+
