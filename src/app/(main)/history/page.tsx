@@ -6,7 +6,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { useAuth } from '@/contexts/auth-provider';
 import { useAppState } from '@/contexts/app-state-provider';
 import { getAppointments, getPatients } from '@/lib/data';
-import { LOCATIONS, USER_ROLES, SERVICES, LocationId, ServiceId, APPOINTMENT_STATUS } from '@/lib/constants';
+import { LOCATIONS, USER_ROLES, SERVICES, LocationId, ServiceId, APPOINTMENT_STATUS, APPOINTMENT_STATUS_DISPLAY } from '@/lib/constants';
 import { AppointmentCard } from '@/components/appointments/appointment-card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -17,7 +17,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { format, parseISO } from 'date-fns';
 import { es } from 'date-fns/locale';
-import { CalendarIcon, FilterIcon, AlertTriangle, Loader2, RotateCcw, History as HistoryIcon, ChevronsDown } from 'lucide-react';
+import { CalendarIcon, FilterIcon, AlertTriangle, Loader2, RotateCcw, History as HistoryIconLucide, ChevronsDown } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 const ALL_SERVICES_VALUE = "all_services_placeholder_value";
@@ -34,12 +34,12 @@ export default function HistoryPage() {
   const [allPatients, setAllPatients] = useState<Patient[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
-  // Filters
   const [filterDate, setFilterDate] = useState<Date | undefined>(undefined);
   const [filterPatientName, setFilterPatientName] = useState('');
   const [filterServiceId, setFilterServiceId] = useState<ServiceId | typeof ALL_SERVICES_VALUE>(ALL_SERVICES_VALUE);
 
-  const effectiveLocationId = user?.role === USER_ROLES.ADMIN 
+  const isAdminOrContador = user?.role === USER_ROLES.ADMIN || user?.role === USER_ROLES.CONTADOR;
+  const effectiveLocationId = isAdminOrContador
     ? (adminSelectedLocation === 'all' ? undefined : adminSelectedLocation as LocationId) 
     : user?.locationId;
 
@@ -47,8 +47,8 @@ export default function HistoryPage() {
     async function loadBaseData() {
       if (!user) return;
       setIsLoading(true);
-      setCurrentPage(1); // Reset page on location change
-      setDisplayedAppointments([]); // Clear previous appointments
+      setCurrentPage(1); 
+      setDisplayedAppointments([]); 
 
       const patientsData = await getPatients();
       setAllPatients(patientsData);
@@ -57,7 +57,6 @@ export default function HistoryPage() {
         locationId: effectiveLocationId,
         status: [APPOINTMENT_STATUS.COMPLETED, APPOINTMENT_STATUS.CANCELLED_CLIENT, APPOINTMENT_STATUS.CANCELLED_STAFF, APPOINTMENT_STATUS.NO_SHOW],
       });
-      // Sort once after fetching
       setAllLocationHistory(baseHistory.sort((a, b) => parseISO(b.appointmentDateTime).getTime() - parseISO(a.appointmentDateTime).getTime()));
       setIsLoading(false);
     }
@@ -86,15 +85,13 @@ export default function HistoryPage() {
   useEffect(() => {
     const startIndex = (currentPage - 1) * APPOINTMENTS_PER_PAGE;
     const endIndex = startIndex + APPOINTMENTS_PER_PAGE;
-    const newDisplayedAppointments = filteredAppointmentsList.slice(0, endIndex); // Accumulate previous pages
+    const newDisplayedAppointments = filteredAppointmentsList.slice(0, endIndex); 
     setDisplayedAppointments(newDisplayedAppointments);
   }, [filteredAppointmentsList, currentPage]);
 
 
   const handleApplyFilters = () => {
-    setCurrentPage(1); // Reset to page 1 when applying new filters
-    // The useMemo for filteredAppointmentsList will re-calculate
-    // and the useEffect for displayedAppointments will update the view.
+    setCurrentPage(1); 
   };
   
   const handleResetFilters = () => {
@@ -138,16 +135,15 @@ export default function HistoryPage() {
     <div className="space-y-6">
       <Card className="shadow-md">
         <CardHeader>
-          <CardTitle className="text-2xl flex items-center gap-2"><HistoryIcon className="text-primary"/> Historial de Citas</CardTitle>
+          <CardTitle className="text-2xl flex items-center gap-2"><HistoryIconLucide className="text-primary"/> Historial de Citas</CardTitle>
           <CardDescription>Consulta citas pasadas. Utiliza los filtros para refinar tu búsqueda.</CardDescription>
-           {user?.role === USER_ROLES.ADMIN && (
+           {isAdminOrContador && (
             <div className="mt-2 text-sm text-muted-foreground">
               Viendo: {adminSelectedLocation === 'all' ? 'Todas las sedes' : LOCATIONS.find(l => l.id === adminSelectedLocation)?.name || ''}
             </div>
           )}
         </CardHeader>
         <CardContent>
-          {/* Filter Section */}
           <div className="mb-6 p-4 border rounded-lg bg-card space-y-4">
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 items-end">
               <div>
@@ -191,7 +187,7 @@ export default function HistoryPage() {
             </div>
           </div>
           
-          {isLoading && displayedAppointments.length === 0 ? ( // Show main loader only if initial data isn't even partially loaded
+          {isLoading && displayedAppointments.length === 0 ? ( 
             <LoadingState />
           ) : totalFilteredCount === 0 && !isLoading ? (
             <NoHistoryCard />
@@ -203,9 +199,7 @@ export default function HistoryPage() {
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
                 {displayedAppointments.map(appt => (
                   <AppointmentCard key={appt.id} appointment={appt} onUpdate={(updated) => {
-                      // Optimistically update the specific card
                       setDisplayedAppointments(prev => prev.map(a => a.id === updated.id ? updated : a));
-                      // Update in the main list as well for consistency if filters change
                       setAllLocationHistory(prev => prev.map(a => a.id === updated.id ? updated : a));
                   }} />
                 ))}
@@ -224,3 +218,4 @@ export default function HistoryPage() {
     </div>
   );
 }
+

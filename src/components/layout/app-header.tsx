@@ -31,6 +31,8 @@ export function AppHeader() {
     setSelectedLocationId(value as LocationId | 'all');
   };
 
+  const isAdminOrContador = user?.role === USER_ROLES.ADMIN || user?.role === USER_ROLES.CONTADOR;
+
   return (
     <header className="sticky top-0 z-30 flex h-16 items-center gap-4 border-b bg-background px-4 md:px-6 shadow-sm">
       <div className="flex items-center gap-2">
@@ -46,7 +48,7 @@ export function AppHeader() {
       
       <div className="flex w-full items-center gap-4 md:ml-auto md:gap-2 lg:gap-4">
         <div className="ml-auto flex-1 sm:flex-initial">
-          {(user?.role === USER_ROLES.ADMIN || user?.role === USER_ROLES.CONTADOR) && (
+          {isAdminOrContador && (
             <Select value={selectedLocationId || undefined} onValueChange={handleLocationChange}>
               <SelectTrigger className="w-full md:w-[180px]">
                 <SelectValue placeholder="Seleccionar Sede" />
@@ -75,7 +77,7 @@ export function AppHeader() {
                 <p className="text-sm font-medium leading-none">{user?.name || user?.username}</p>
                 <p className="text-xs leading-none text-muted-foreground">
                   {user?.role === USER_ROLES.ADMIN ? 'Administrador' :
-                   user?.role === USER_ROLES.CONTADOR ? 'Contador' :
+                   user?.role === USER_ROLES.CONTADOR ? 'Contador Principal' :
                    `Staff ${LOCATIONS.find(l => l.id === user?.locationId)?.name || ''}`}
                 </p>
               </div>
@@ -100,3 +102,4 @@ export function AppHeader() {
     </header>
   );
 }
+

@@ -40,6 +40,8 @@ export default function DashboardPage() {
       let pendingConfirmationsCount = 0;
       let activeProfessionalsCount = 0;
       let totalRevenueMonthValue = 0;
+      
+      const isAdminOrContador = user.role === USER_ROLES.ADMIN || user.role === USER_ROLES.CONTADOR;
 
       try {
         const today = startOfDay(new Date());
@@ -47,9 +49,9 @@ export default function DashboardPage() {
         const currentMonthEnd = endOfMonth(today);
 
         // Fetch Today's Appointments
-        if (user.role === USER_ROLES.ADMIN) {
+        if (isAdminOrContador) {
           if (selectedLocationId === 'all') {
-            // Sum appointments from all locations for admin 'all' view
+            // Sum appointments from all locations for admin/contador 'all' view
             const allLocationsAppointmentsPromises = LOCATIONS.map(loc => getAppointments({ date: today, locationId: loc.id }));
             const allLocationsAppointmentsResults = await Promise.all(allLocationsAppointmentsPromises);
             todayAppointmentsCount = allLocationsAppointmentsResults.reduce((sum, result) => sum + result.length, 0);
@@ -63,7 +65,7 @@ export default function DashboardPage() {
         }
 
         // Fetch Pending Confirmations (status: 'booked')
-        if (user.role === USER_ROLES.ADMIN) {
+        if (isAdminOrContador) {
           if (selectedLocationId === 'all') {
              const allLocationsPendingPromises = LOCATIONS.map(loc => getAppointments({ status: APPOINTMENT_STATUS.BOOKED, locationId: loc.id }));
              const allLocationsPendingResults = await Promise.all(allLocationsPendingPromises);
@@ -78,7 +80,7 @@ export default function DashboardPage() {
         }
         
         // Fetch Total Revenue for Current Month (status: 'completed')
-        if (user.role === USER_ROLES.ADMIN) {
+        if (isAdminOrContador) {
           if (selectedLocationId === 'all') {
             const allLocationsCompletedPromises = LOCATIONS.map(loc => getAppointments({
               status: APPOINTMENT_STATUS.COMPLETED,
@@ -108,9 +110,8 @@ export default function DashboardPage() {
 
 
         // Fetch Active Professionals
-        if (user.role === USER_ROLES.ADMIN) {
+        if (isAdminOrContador) {
             if (selectedLocationId === 'all') {
-                // For 'all' view, count all professionals from all locations (non-duplicated if a professional could work in multiple, but current model is 1 loc per prof)
                 const allProfessionalsPromises = LOCATIONS.map(loc => getProfessionals(loc.id));
                 const allProfessionalsResults = await Promise.all(allProfessionalsPromises);
                 activeProfessionalsCount = allProfessionalsResults.reduce((sum, result) => sum + result.length, 0);
@@ -153,12 +154,16 @@ export default function DashboardPage() {
   }
 
   const greetingName = user.name || user.username;
-  const roleDescription = user.role === USER_ROLES.ADMIN ? 'Administrador Global' : `Staff de ${LOCATIONS.find(l => l.id === user.locationId)?.name || 'Sede'}`;
+  let roleDescription = '';
+  if (user.role === USER_ROLES.ADMIN) roleDescription = 'Administrador Global';
+  else if (user.role === USER_ROLES.CONTADOR) roleDescription = 'Contador Principal';
+  else roleDescription = `Staff de ${LOCATIONS.find(l => l.id === user.locationId)?.name || 'Sede'}`;
+
 
   let displayLocationName = "Todas las Sedes";
   if (user.role === USER_ROLES.LOCATION_STAFF && user.locationId) {
     displayLocationName = LOCATIONS.find(l => l.id === user.locationId)?.name || "Tu Sede";
-  } else if (selectedLocationId && selectedLocationId !== 'all') {
+  } else if ((user.role === USER_ROLES.ADMIN || user.role === USER_ROLES.CONTADOR) && selectedLocationId && selectedLocationId !== 'all') {
     displayLocationName = LOCATIONS.find(l => l.id === selectedLocationId)?.name || "Sede Seleccionada";
   }
   
@@ -210,12 +215,14 @@ export default function DashboardPage() {
           href="/history"
           icon={<History className="h-8 w-8 mb-2 text-accent" />}
         />
-        <ActionCard
-          title="Administrar Profesionales"
-          description="Añadir nuevos profesionales y gestionar sus datos."
-          href="/professionals"
-          icon={<Briefcase className="h-8 w-8 mb-2 text-accent" />}
-        />
+        {(user.role === USER_ROLES.ADMIN || user.role === USER_ROLES.CONTADOR) && (
+          <ActionCard
+            title="Administrar Profesionales"
+            description="Añadir nuevos profesionales y gestionar sus datos."
+            href="/professionals"
+            icon={<Briefcase className="h-8 w-8 mb-2 text-accent" />}
+          />
+        )}
       </div>
 
       <Card className="mt-8">
@@ -292,3 +299,4 @@ function ActionCard({ title, description, href, icon }: ActionCardProps) {
     </Card>
   );
 }
+

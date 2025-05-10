@@ -106,7 +106,8 @@ export default function PatientsPage() {
     setIsLoadingTodayAppointments(true);
     try {
       const today = startOfDay(new Date());
-      const effectiveLocationId = user?.role === USER_ROLES.ADMIN 
+      const isAdminOrContador = user?.role === USER_ROLES.ADMIN || user?.role === USER_ROLES.CONTADOR;
+      const effectiveLocationId = isAdminOrContador
         ? (adminSelectedLocation === 'all' ? undefined : adminSelectedLocation) 
         : user?.locationId;
 
@@ -148,7 +149,7 @@ export default function PatientsPage() {
   }, [allPatients, searchTerm, filterPatientsWithAppointmentsToday, patientsWithAppointmentsTodayIds]);
 
   useEffect(() => {
-    const startIndex = 0; // Always load from the beginning up to the current page * items per page
+    const startIndex = 0; 
     const endIndex = currentPage * PATIENTS_PER_PAGE;
     setDisplayedPatients(totalFilteredPatientList.slice(startIndex, endIndex));
   }, [totalFilteredPatientList, currentPage]);
@@ -174,7 +175,6 @@ export default function PatientsPage() {
     try {
       if (editingPatient) {
         const updatedPatientData = { ...editingPatient, ...data };
-        // Optimistic update
         setAllPatients(prev => prev.map(p => p.id === updatedPatientData.id ? updatedPatientData : p).sort((a,b) => `${a.firstName} ${a.lastName}`.localeCompare(`${b.firstName} ${b.lastName}`)));
         toast({ title: "Paciente Actualizado", description: `${data.firstName} ${data.lastName} actualizado.` });
       } else {

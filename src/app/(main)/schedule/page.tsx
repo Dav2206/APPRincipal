@@ -18,7 +18,7 @@ import { CalendarIcon, ChevronLeftIcon, ChevronRightIcon, AlertTriangle, Loader2
 import { cn } from '@/lib/utils';
 import { AppointmentEditDialog } from '@/components/appointments/appointment-edit-dialog';
 
-const timeSlotsForView = TIME_SLOTS.filter(slot => slot >= "09:00"); // 9 AM to 7:30 PM (ends 8 PM)
+const timeSlotsForView = TIME_SLOTS.filter(slot => slot >= "09:00"); 
 
 export default function SchedulePage() {
   const { user } = useAuth();
@@ -30,8 +30,8 @@ export default function SchedulePage() {
   const [selectedAppointmentForEdit, setSelectedAppointmentForEdit] = useState<Appointment | null>(null);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
 
-
-  const effectiveLocationId = user?.role === USER_ROLES.ADMIN 
+  const isAdminOrContador = user?.role === USER_ROLES.ADMIN || user?.role === USER_ROLES.CONTADOR;
+  const effectiveLocationId = isAdminOrContador
     ? (adminSelectedLocation === 'all' ? undefined : adminSelectedLocation as LocationId) 
     : user?.locationId;
 
@@ -69,13 +69,11 @@ export default function SchedulePage() {
   };
 
   const handleTimelineAppointmentClick = async (appointment: Appointment) => {
-    // The appointment from timeline might be minimal, fetch full details if needed
     const fullAppointmentDetails = await getAppointmentById(appointment.id);
     if (fullAppointmentDetails) {
       setSelectedAppointmentForEdit(fullAppointmentDetails);
       setIsEditModalOpen(true);
     } else {
-      // Handle case where appointment details couldn't be fetched (e.g. show a toast)
       console.error("Could not fetch full appointment details for editing.");
     }
   };
@@ -145,7 +143,7 @@ export default function SchedulePage() {
               </Button>
             </div>
           </div>
-          {user?.role === USER_ROLES.ADMIN && (
+          {isAdminOrContador && (
             <div className="mt-2 text-sm text-muted-foreground">
               Viendo: {adminSelectedLocation === 'all' ? 'Todas las sedes' : LOCATIONS.find(l => l.id === adminSelectedLocation)?.name || ''}
             </div>
@@ -182,3 +180,4 @@ export default function SchedulePage() {
     </div>
   );
 }
+

@@ -2,7 +2,7 @@
 "use client";
 
 import type { Appointment, Service, AppointmentStatus, Professional } from '@/types';
-import { APPOINTMENT_STATUS, PAYMENT_METHODS, SERVICES as ALL_SERVICES_CONSTANTS, USER_ROLES, APPOINTMENT_STATUS_DISPLAY } from '@/lib/constants';
+import { APPOINTMENT_STATUS, PAYMENT_METHODS, SERVICES as ALL_SERVICES_CONSTANTS, USER_ROLES, APPOINTMENT_STATUS_DISPLAY, LOCATIONS } from '@/lib/constants';
 import { format, parseISO } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { CameraIcon, Loader2, PlusCircle, Trash2, ShoppingBag } from 'lucide-react';
@@ -59,7 +59,6 @@ export function AppointmentEditDialog({ appointment, isOpen, onOpenChange, onApp
 
   const form = useForm<AppointmentUpdateFormData>({
     resolver: zodResolver(AppointmentUpdateSchema),
-    // Default values are set in useEffect based on appointment prop
   });
 
   const { fields: addedServiceFields, append: appendAddedService, remove: removeAddedService } = useFieldArray({
@@ -82,7 +81,7 @@ export function AppointmentEditDialog({ appointment, isOpen, onOpenChange, onApp
         paymentMethod: appointment.paymentMethod || undefined,
         amountPaid: appointment.amountPaid || undefined,
         staffNotes: appointment.staffNotes || '',
-        attachedPhotos: appointment.attachedPhotos || [],
+        attachedPhotos: appointment.attachedPhotos?.filter(p => typeof p === 'string' && p.startsWith("data:image/")) || [],
         addedServices: appointment.addedServices?.map(as => ({
           serviceId: as.serviceId,
           professionalId: as.professionalId || NO_SELECTION_PLACEHOLDER,
@@ -95,13 +94,13 @@ export function AppointmentEditDialog({ appointment, isOpen, onOpenChange, onApp
 
   useEffect(() => {
     async function loadPrerequisites() {
-      if (user?.locationId || user?.role === USER_ROLES.ADMIN) {
-        // Ensure appointment locationId is used, or user's if admin is viewing all
-        const locationForProfs = appointment.locationId || (user.role === USER_ROLES.ADMIN ? undefined : user.locationId);
+      const isAdminOrContador = user?.role === USER_ROLES.ADMIN || user?.role === USER_ROLES.CONTADOR;
+      if (user?.locationId || isAdminOrContador) {
+        const locationForProfs = appointment.locationId || (isAdminOrContador ? undefined : user.locationId);
         if (locationForProfs){
             const profs = await getProfessionals(locationForProfs);
             setProfessionals(profs);
-        } else {
+        } else if (isAdminOrContador) { // Admin/Contador viewing "All Locations" or no specific location from appointment
              const allProfsPromises = LOCATIONS.map(loc => getProfessionals(loc.id));
              const allProfsResults = await Promise.all(allProfsPromises);
              setProfessionals(allProfsResults.flat());
@@ -118,19 +117,18 @@ export function AppointmentEditDialog({ appointment, isOpen, onOpenChange, onApp
   const handleFileChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const files = event.target.files;
     if (files) {
-      setIsSubmitting(true); // Use isSubmitting to indicate file processing
+      setIsSubmitting(true); 
       try {
         const currentPhotos = form.getValues("attachedPhotos") || [];
         const newPhotoPromises = Array.from(files).map(fileToDataUri);
         const newDataUris = await Promise.all(newPhotoPromises);
-        // Filter out null/undefined/empty strings before setting
         const validNewDataUris = newDataUris.filter(uri => typeof uri === 'string' && uri.startsWith("data:image/"));
         form.setValue("attachedPhotos", [...currentPhotos, ...validNewDataUris], { shouldValidate: true });
       } catch (error) {
         toast({ title: "Error al cargar imagen", description: "No se pudo procesar la imagen.", variant: "destructive"});
       } finally {
         setIsSubmitting(false);
-        if(fileInputRef.current) fileInputRef.current.value = ""; // Reset file input
+        if(fileInputRef.current) fileInputRef.current.value = ""; 
       }
     }
   };
@@ -155,7 +153,7 @@ export function AppointmentEditDialog({ appointment, isOpen, onOpenChange, onApp
       if (result) {
         onAppointmentUpdated(result); 
         toast({ title: "Cita Actualizada", description: "Los detalles de la cita han sido actualizados." });
-        onOpenChange(false); // Close dialog
+        onOpenChange(false); 
       } else {
         toast({ title: "Error", description: "No se pudo actualizar la cita.", variant: "destructive" });
       }
@@ -303,13 +301,12 @@ export function AppointmentEditDialog({ appointment, isOpen, onOpenChange, onApp
               )}
             />
 
-          {/* Attached Photos Section */}
           {(form.watch('status') === APPOINTMENT_STATUS.CONFIRMED || form.watch('status') === APPOINTMENT_STATUS.COMPLETED) && (
             <div className="space-y-3 pt-3 mt-3 border-t">
               <h4 className="text-md font-semibold flex items-center gap-2"><CameraIcon/> Fotos Adjuntas</h4>
               <div className="grid grid-cols-3 sm:grid-cols-4 gap-2">
                 {attachedPhotoFields.map((item, index) => (
-                  item.value && typeof item.value === 'string' && item.value.startsWith("data:image/") ? ( // Check if item.value is a valid data URI string
+                  item.value && typeof item.value === 'string' && item.value.startsWith("data:image/") ? ( 
                     <div key={item.id} className="relative group">
                       <Image src={item.value} alt={`Foto adjunta ${index + 1}`} width={80} height={80} className="rounded object-cover aspect-square border" data-ai-hint="medical image" />
                       <Button
@@ -339,8 +336,6 @@ export function AppointmentEditDialog({ appointment, isOpen, onOpenChange, onApp
             </div>
           )}
 
-
-          {/* Added Services Section */}
           {(form.watch('status') === APPOINTMENT_STATUS.CONFIRMED || form.watch('status') === APPOINTMENT_STATUS.COMPLETED) && (
             <div className="space-y-3 pt-3 mt-3 border-t">
               <div className="flex justify-between items-center">
@@ -419,3 +414,4 @@ export function AppointmentEditDialog({ appointment, isOpen, onOpenChange, onApp
     </Dialog>
   );
 }
+

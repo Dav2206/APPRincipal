@@ -52,8 +52,14 @@ export function AppointmentForm({ isOpen, onOpenChange, onAppointmentCreated, in
   const [showPatientHistory, setShowPatientHistory] = useState(false);
   const [currentPatientForHistory, setCurrentPatientForHistory] = useState<Patient | null>(null);
 
-  const defaultLocation = user?.role === USER_ROLES.LOCATION_STAFF ? user.locationId : 
-                          (adminSelectedLocation && adminSelectedLocation !== 'all' ? adminSelectedLocation : undefined);
+  const isAdminOrContador = user?.role === USER_ROLES.ADMIN || user?.role === USER_ROLES.CONTADOR;
+  const defaultLocation = user?.role === USER_ROLES.LOCATION_STAFF 
+    ? user.locationId 
+    : (isAdminOrContador && adminSelectedLocation && adminSelectedLocation !== 'all' 
+        ? adminSelectedLocation 
+        : (isAdminOrContador ? LOCATIONS[0].id : undefined) // if admin/contador & 'all' selected, default to first location
+    );
+
 
   const form = useForm<FormSchemaType>({
     resolver: zodResolver(AppointmentFormSchema),
@@ -119,13 +125,7 @@ export function AppointmentForm({ isOpen, onOpenChange, onAppointmentCreated, in
       setCurrentPatientForHistory(patient);
       setShowPatientHistory(true);
     } else {
-      // New patient, clear existingPatientId and potentially clear other fields or leave as is for manual entry
       form.setValue('existingPatientId', null);
-      // Optionally clear other fields if strictly new patient:
-      // form.setValue('patientFirstName', '');
-      // form.setValue('patientLastName', '');
-      // form.setValue('patientPhone', '');
-      // form.setValue('patientEmail', '');
       setCurrentPatientForHistory(null);
       setShowPatientHistory(false);
     }
@@ -147,15 +147,23 @@ export function AppointmentForm({ isOpen, onOpenChange, onAppointmentCreated, in
         variant: "default",
       });
       onAppointmentCreated();
-      onOpenChange(false); // Close dialog
-      form.reset({ // Reset form for next use, keeping default date if provided
+      onOpenChange(false); 
+      form.reset({ 
         ...form.formState.defaultValues,
         appointmentDate: defaultDate || new Date(),
-        locationId: initialData?.locationId || defaultLocation || LOCATIONS[0].id,
-        serviceId: initialData?.serviceId || SERVICES[0].id,
-        appointmentTime: initialData?.appointmentTime || TIME_SLOTS[4], 
-        preferredProfessionalId: initialData?.preferredProfessionalId || ANY_PROFESSIONAL_VALUE,
+        locationId: data.locationId, // Keep the selected location for the next booking in this session
+        serviceId: SERVICES[0].id, 
+        appointmentTime: TIME_SLOTS[4], 
+        preferredProfessionalId: ANY_PROFESSIONAL_VALUE,
+        patientFirstName: '',
+        patientLastName: '',
+        patientPhone: '',
+        patientEmail: '',
+        existingPatientId: null,
+        bookingObservations: '',
       }); 
+      setCurrentPatientForHistory(null);
+      setShowPatientHistory(false);
     } catch (error) {
       console.error("Error creating appointment:", error);
       toast({
@@ -172,14 +180,24 @@ export function AppointmentForm({ isOpen, onOpenChange, onAppointmentCreated, in
 
   return (
     <Dialog open={isOpen} onOpenChange={(open) => {
-      if (!open) form.reset({ // Reset form if dialog is closed manually
-        ...form.formState.defaultValues,
-        appointmentDate: defaultDate || new Date(),
-         locationId: initialData?.locationId || defaultLocation || LOCATIONS[0].id,
-        serviceId: initialData?.serviceId || SERVICES[0].id,
-        appointmentTime: initialData?.appointmentTime || TIME_SLOTS[4], 
-        preferredProfessionalId: initialData?.preferredProfessionalId || ANY_PROFESSIONAL_VALUE,
-      }); 
+      if (!open) {
+        form.reset({ 
+          ...form.formState.defaultValues,
+          appointmentDate: defaultDate || new Date(),
+          locationId: initialData?.locationId || defaultLocation || LOCATIONS[0].id,
+          serviceId: SERVICES[0].id,
+          appointmentTime: TIME_SLOTS[4], 
+          preferredProfessionalId: ANY_PROFESSIONAL_VALUE,
+          patientFirstName: '',
+          patientLastName: '',
+          patientPhone: '',
+          patientEmail: '',
+          existingPatientId: null,
+          bookingObservations: '',
+        }); 
+        setCurrentPatientForHistory(null);
+        setShowPatientHistory(false);
+      }
       onOpenChange(open);
     }}>
       <DialogContent className="sm:max-w-3xl max-h-[90vh] flex flex-col">
@@ -193,10 +211,9 @@ export function AppointmentForm({ isOpen, onOpenChange, onAppointmentCreated, in
           </DialogDescription>
         </DialogHeader>
         
-        <div className="flex-grow overflow-y-auto pr-2 -mr-2"> {/* Scrollable content area */}
+        <div className="flex-grow overflow-y-auto pr-2 -mr-2"> 
           <Form {...form}>
             <form onSubmit={form.handleSubmit(onSubmit)} className="grid grid-cols-1 md:grid-cols-2 gap-6 py-4">
-              {/* Patient Details Section */}
               <div className="md:col-span-2 space-y-4 p-4 border rounded-lg shadow-sm bg-card">
                 <h3 className="text-lg font-semibold flex items-center gap-2"><UserPlus /> Información del Paciente</h3>
                 <FormField
@@ -280,7 +297,6 @@ export function AppointmentForm({ isOpen, onOpenChange, onAppointmentCreated, in
                 )}
               </div>
 
-              {/* Appointment Details Section */}
               <div className="space-y-4 p-4 border rounded-lg shadow-sm bg-card">
                  <h3 className="text-lg font-semibold flex items-center gap-2"><ConciergeBell /> Detalles de la Cita</h3>
                 <FormField
@@ -289,7 +305,7 @@ export function AppointmentForm({ isOpen, onOpenChange, onAppointmentCreated, in
                   render={({ field }) => (
                     <FormItem>
                       <FormLabel className="flex items-center gap-1"><Building size={16}/>Sede</FormLabel>
-                      <Select onValueChange={field.onChange} value={field.value} disabled={user?.role === USER_ROLES.LOCATION_STAFF}>
+                      <Select onValueChange={field.onChange} value={field.value} disabled={user?.role === USER_ROLES.LOCATION_STAFF && !isAdminOrContador}>
                         <FormControl>
                           <SelectTrigger><SelectValue placeholder="Seleccionar sede" /></SelectTrigger>
                         </FormControl>
@@ -354,7 +370,7 @@ export function AppointmentForm({ isOpen, onOpenChange, onAppointmentCreated, in
                               mode="single"
                               selected={field.value}
                               onSelect={field.onChange}
-                              disabled={(date) => date < new Date(new Date().setHours(0,0,0,0))} // Disable past dates
+                              disabled={(date) => date < new Date(new Date().setHours(0,0,0,0))} 
                               initialFocus
                             />
                           </PopoverContent>
@@ -386,7 +402,6 @@ export function AppointmentForm({ isOpen, onOpenChange, onAppointmentCreated, in
                 </div>
               </div>
               
-              {/* Professional & Observations Section */}
               <div className="space-y-4 p-4 border rounded-lg shadow-sm bg-card">
                 <h3 className="text-lg font-semibold flex items-center gap-2"><Briefcase /> Profesional y Observaciones</h3>
                 <FormField
@@ -438,14 +453,22 @@ export function AppointmentForm({ isOpen, onOpenChange, onAppointmentCreated, in
         <DialogFooter className="pt-4 border-t">
           <DialogClose asChild>
             <Button variant="outline" onClick={() => {
-               form.reset({ // Reset form if dialog is closed manually
+               form.reset({ 
                 ...form.formState.defaultValues,
                 appointmentDate: defaultDate || new Date(),
                 locationId: initialData?.locationId || defaultLocation || LOCATIONS[0].id,
-                serviceId: initialData?.serviceId || SERVICES[0].id,
-                appointmentTime: initialData?.appointmentTime || TIME_SLOTS[4], 
-                preferredProfessionalId: initialData?.preferredProfessionalId || ANY_PROFESSIONAL_VALUE,
+                serviceId: SERVICES[0].id,
+                appointmentTime: TIME_SLOTS[4], 
+                preferredProfessionalId: ANY_PROFESSIONAL_VALUE,
+                patientFirstName: '',
+                patientLastName: '',
+                patientPhone: '',
+                patientEmail: '',
+                existingPatientId: null,
+                bookingObservations: '',
               }); 
+              setCurrentPatientForHistory(null);
+              setShowPatientHistory(false);
               onOpenChange(false);
             }}>Cancelar</Button>
           </DialogClose>
@@ -458,3 +481,4 @@ export function AppointmentForm({ isOpen, onOpenChange, onAppointmentCreated, in
     </Dialog>
   );
 }
+

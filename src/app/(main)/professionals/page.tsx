@@ -59,7 +59,8 @@ export default function ProfessionalsPage() {
     }
   });
   
-  const effectiveLocationId = (user?.role === USER_ROLES.ADMIN || user?.role === USER_ROLES.CONTADOR)
+  const isAdminOrContador = user?.role === USER_ROLES.ADMIN || user?.role === USER_ROLES.CONTADOR;
+  const effectiveLocationId = isAdminOrContador
     ? (adminSelectedLocation === 'all' ? undefined : adminSelectedLocation as LocationId) 
     : user?.locationId;
 
@@ -77,7 +78,7 @@ export default function ProfessionalsPage() {
 
   const handleAddProfessional = () => {
     setEditingProfessional(null);
-    const defaultLoc = (user?.role === USER_ROLES.ADMIN || user?.role === USER_ROLES.CONTADOR)
+    const defaultLoc = isAdminOrContador
       ? (adminSelectedLocation && adminSelectedLocation !== 'all' ? adminSelectedLocation : LOCATIONS[0].id)
       : user?.locationId;
     
@@ -142,7 +143,7 @@ export default function ProfessionalsPage() {
           <div>
             <CardTitle className="text-2xl flex items-center gap-2"><Briefcase className="text-primary"/> Gestión de Profesionales</CardTitle>
             <CardDescription>Ver, agregar o editar información de los profesionales.</CardDescription>
-            {(user?.role === USER_ROLES.ADMIN || user?.role === USER_ROLES.CONTADOR) && (
+            {isAdminOrContador && (
               <div className="mt-1 text-sm text-muted-foreground">
                 Viendo: {adminSelectedLocation === 'all' ? 'Todas las sedes' : LOCATIONS.find(l => l.id === adminSelectedLocation)?.name || ''}
               </div>
@@ -174,7 +175,7 @@ export default function ProfessionalsPage() {
                   <TableHead className="hidden md:table-cell">Sede</TableHead>
                   <TableHead>Especializaciones</TableHead>
                   <TableHead className="hidden lg:table-cell">Email</TableHead>
-                   <TableHead className="hidden xl:table-cell text-right">Ingresos Quincena (S/)</TableHead>
+                   {isAdminOrContador && <TableHead className="hidden xl:table-cell text-right">Ingresos Quincena (S/)</TableHead> }
                   <TableHead className="text-right">Acciones</TableHead>
                 </TableRow>
               </TableHeader>
@@ -189,7 +190,7 @@ export default function ProfessionalsPage() {
                       </div>
                     </TableCell>
                     <TableCell className="hidden lg:table-cell">{prof.email || 'N/A'}</TableCell>
-                    <TableCell className="hidden xl:table-cell text-right">{prof.biWeeklyEarnings?.toFixed(2) || 'N/A'}</TableCell>
+                    {isAdminOrContador && <TableCell className="hidden xl:table-cell text-right">{prof.biWeeklyEarnings?.toFixed(2) || 'N/A'}</TableCell> }
                     <TableCell className="text-right">
                       <Button variant="ghost" size="sm" onClick={() => handleEditProfessional(prof)}>
                         <Edit2 className="h-4 w-4" /> <span className="sr-only">Editar</span>
@@ -198,7 +199,7 @@ export default function ProfessionalsPage() {
                   </TableRow>
                 )) : (
                   <TableRow>
-                    <TableCell colSpan={(user?.role === USER_ROLES.ADMIN || user?.role === USER_ROLES.CONTADOR) ? 6 : 5} className="h-24 text-center"> 
+                    <TableCell colSpan={isAdminOrContador ? 6 : 5} className="h-24 text-center"> 
                       No se encontraron profesionales.
                     </TableCell>
                   </TableRow>
@@ -243,7 +244,8 @@ export default function ProfessionalsPage() {
                     <Select 
                       onValueChange={field.onChange} 
                       value={field.value} 
-                      disabled={user?.role === USER_ROLES.LOCATION_STAFF && !editingProfessional} 
+                      // Disable if staff and not editing, or if admin/contador and editing (should stick to professional's current location unless specifically changing)
+                      disabled={user?.role === USER_ROLES.LOCATION_STAFF || (isAdminOrContador && !!editingProfessional)}
                     >
                       <FormControl>
                         <SelectTrigger><SelectValue placeholder="Seleccionar sede" /></SelectTrigger>
@@ -277,7 +279,6 @@ export default function ProfessionalsPage() {
                                   : field.onChange((field.value || []).filter(value => value !== spec))
                               }}
                             />
-                            {/* Use ShadCN Label for consistency with FormLabel if preferred, or keep basic HTML label */}
                             <Label htmlFor={`spec-${spec}`} className="text-sm font-normal cursor-pointer">{spec}</Label>
                           </div>
                         ))}
@@ -312,3 +313,4 @@ export default function ProfessionalsPage() {
     </div>
   );
 }
+
