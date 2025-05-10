@@ -9,6 +9,7 @@ import { LOCATIONS, USER_ROLES, SERVICES, LocationId, ServiceId } from '@/lib/co
 import { AppointmentCard } from '@/components/appointments/appointment-card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import { Calendar } from '@/components/ui/calendar';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
@@ -205,3 +206,4 @@ export default function HistoryPage() {
     </div>
   );
 }
+
