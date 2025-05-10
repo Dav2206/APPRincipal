@@ -1,34 +1,149 @@
 
 "use client";
 
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Hourglass } from "lucide-react";
+import type { Appointment, Professional } from '@/types';
+import React, { useState, useEffect, useCallback } from 'react';
+import { useAuth } from '@/contexts/auth-provider';
+import { useAppState } from '@/contexts/app-state-provider';
+import { getAppointments, getProfessionals } from '@/lib/data';
+import { LOCATIONS, USER_ROLES, TIME_SLOTS, LocationId } from '@/lib/constants';
+import { DailyTimeline } from '@/components/schedule/daily-timeline';
+import { Button } from '@/components/ui/button';
+import { Calendar } from '@/components/ui/calendar';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import { format, addDays, subDays, startOfDay, isEqual } from 'date-fns';
+import { es } from 'date-fns/locale';
+import { CalendarIcon, ChevronLeftIcon, ChevronRightIcon, AlertTriangle, Loader2, CalendarClock } from 'lucide-react';
+import { cn } from '@/lib/utils';
+
+const timeSlotsForView = TIME_SLOTS.filter(slot => slot >= "09:00"); // 9 AM to 7:30 PM (ends 8 PM)
 
 export default function SchedulePage() {
+  const { user } = useAuth();
+  const { selectedLocationId: adminSelectedLocation } = useAppState();
+  const [appointments, setAppointments] = useState<Appointment[]>([]);
+  const [professionals, setProfessionals] = useState<Professional[]>([]);
+  const [currentDate, setCurrentDate] = useState<Date>(startOfDay(new Date()));
+  const [isLoading, setIsLoading] = useState(true);
+
+  const effectiveLocationId = user?.role === USER_ROLES.ADMIN 
+    ? (adminSelectedLocation === 'all' ? undefined : adminSelectedLocation as LocationId) 
+    : user?.locationId;
+
+  const fetchData = useCallback(async () => {
+    if (!user) return;
+    setIsLoading(true);
+    
+    try {
+      const [fetchedAppointments, fetchedProfessionals] = await Promise.all([
+        getAppointments({
+          locationId: effectiveLocationId,
+          date: currentDate,
+        }),
+        getProfessionals(effectiveLocationId)
+      ]);
+      setAppointments(fetchedAppointments);
+      setProfessionals(fetchedProfessionals);
+    } catch (error) {
+      console.error("Error fetching schedule data:", error);
+      setAppointments([]);
+      setProfessionals([]);
+    } finally {
+      setIsLoading(false);
+    }
+  }, [user, effectiveLocationId, currentDate]);
+
+  useEffect(() => {
+    fetchData();
+  }, [fetchData]);
+
+  const handleDateChange = (date: Date | undefined) => {
+    if (date) {
+      setCurrentDate(startOfDay(date));
+    }
+  };
+  
+  const NoDataCard = ({ title, message }: { title: string; message: string }) => (
+    <Card className="col-span-full mt-8 border-dashed border-2">
+      <CardContent className="py-10 text-center">
+        <AlertTriangle className="mx-auto h-12 w-12 text-muted-foreground mb-4" />
+        <h3 className="text-xl font-semibold mb-2">{title}</h3>
+        <p className="text-muted-foreground mb-4">{message}</p>
+      </CardContent>
+    </Card>
+  );
+
+  const LoadingState = () => (
+    <div className="flex flex-col items-center justify-center min-h-[400px]">
+      <Loader2 className="h-12 w-12 animate-spin text-primary" />
+      <p className="mt-4 text-muted-foreground">Cargando agenda...</p>
+    </div>
+  );
+
   return (
-    <div className="container mx-auto py-8 px-4 md:px-0">
+    <div className="container mx-auto py-8 px-4 md:px-0 space-y-6">
       <Card className="shadow-lg">
         <CardHeader>
-          <CardTitle className="text-3xl flex items-center gap-2">
-            <Hourglass className="text-primary" />
-            Agenda Horaria
-          </CardTitle>
-          <CardDescription>
-            Vista de la agenda en formato de línea de tiempo por profesional.
-          </CardDescription>
+          <div className="flex flex-col md:flex-row justify-between items-center gap-4">
+            <div className='flex-grow'>
+              <CardTitle className="text-3xl flex items-center gap-2">
+                <CalendarClock className="text-primary" />
+                Agenda Horaria - {format(currentDate, "PPP", { locale: es })}
+              </CardTitle>
+              <CardDescription>
+                Vista de la agenda en formato de línea de tiempo por profesional.
+              </CardDescription>
+            </div>
+            <div className="flex items-center gap-2 w-full md:w-auto">
+              <Button variant="outline" size="icon" onClick={() => handleDateChange(subDays(currentDate, 1))}>
+                <ChevronLeftIcon className="h-4 w-4" />
+              </Button>
+              <Popover>
+                <PopoverTrigger asChild>
+                  <Button variant="outline" className={cn("w-full md:w-[200px] justify-start text-left font-normal", !currentDate && "text-muted-foreground")}>
+                    <CalendarIcon className="mr-2 h-4 w-4" />
+                    {format(currentDate, "PPP", { locale: es })}
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-auto p-0">
+                  <Calendar mode="single" selected={currentDate} onSelect={handleDateChange} initialFocus />
+                </PopoverContent>
+              </Popover>
+              <Button variant="outline" size="icon" onClick={() => handleDateChange(addDays(currentDate, 1))}>
+                <ChevronRightIcon className="h-4 w-4" />
+              </Button>
+              <Button 
+                variant={isEqual(currentDate, startOfDay(new Date())) ? "secondary" : "outline"}
+                onClick={() => handleDateChange(new Date())}
+                className="hidden sm:inline-flex"
+              >
+                Hoy
+              </Button>
+            </div>
+          </div>
+          {user?.role === USER_ROLES.ADMIN && (
+            <div className="mt-2 text-sm text-muted-foreground">
+              Viendo: {adminSelectedLocation === 'all' ? 'Todas las sedes' : LOCATIONS.find(l => l.id === adminSelectedLocation)?.name || ''}
+            </div>
+          )}
         </CardHeader>
         <CardContent>
-          <div className="flex flex-col items-center justify-center min-h-[400px] text-center border-2 border-dashed rounded-lg p-8">
-            <Hourglass size={64} className="text-muted-foreground mb-4" />
-            <h2 className="text-2xl font-semibold mb-2">Próximamente</h2>
-            <p className="text-muted-foreground max-w-md">
-              Esta sección mostrará una vista detallada de la agenda por horas y profesionales. 
-              Actualmente está en desarrollo.
-            </p>
-            <p className="text-sm text-muted-foreground mt-4">
-              Mientras tanto, puedes gestionar las citas del día en la sección "Citas del Día".
-            </p>
-          </div>
+          {isLoading ? (
+            <LoadingState />
+          ) : professionals.length === 0 ? (
+            <NoDataCard 
+              title="No hay profesionales"
+              message={`No se encontraron profesionales para ${effectiveLocationId ? LOCATIONS.find(l => l.id === effectiveLocationId)?.name : 'la selección actual'}.`}
+            />
+          ) : (
+            <DailyTimeline 
+              professionals={professionals} 
+              appointments={appointments} 
+              timeSlots={timeSlotsForView} 
+              currentDate={currentDate}
+            />
+          )}
         </CardContent>
       </Card>
     </div>
