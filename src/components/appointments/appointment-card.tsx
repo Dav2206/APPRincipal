@@ -149,7 +149,7 @@ export function AppointmentCard({ appointment, onUpdate }: AppointmentCardProps)
         const currentPhotos = form.getValues("attachedPhotos") || [];
         const newPhotoPromises = Array.from(files).map(fileToDataUri);
         const newDataUris = await Promise.all(newPhotoPromises);
-        form.setValue("attachedPhotos", [...currentPhotos, ...newDataUris], { shouldValidate: true });
+        form.setValue("attachedPhotos", [...currentPhotos, ...newDataUris.filter(uri => uri)], { shouldValidate: true }); // Filter out any potential empty URIs
       } catch (error) {
         toast({ title: "Error al cargar imagen", description: "No se pudo procesar la imagen.", variant: "destructive"});
       } finally {
@@ -166,7 +166,7 @@ export function AppointmentCard({ appointment, onUpdate }: AppointmentCardProps)
         professionalId: data.professionalId === NO_SELECTION_PLACEHOLDER ? null : data.professionalId,
         durationMinutes: data.durationMinutes ? parseInt(String(data.durationMinutes), 10) : undefined,
         amountPaid: data.amountPaid ? parseFloat(String(data.amountPaid)) : undefined,
-        attachedPhotos: data.attachedPhotos || [],
+        attachedPhotos: (data.attachedPhotos || []).filter(photo => photo && photo.startsWith("data:image/")), // Ensure valid and non-empty URIs
         addedServices: data.addedServices?.map(as => ({
           ...as,
           professionalId: as.professionalId === NO_SELECTION_PLACEHOLDER ? null : as.professionalId,
@@ -205,7 +205,7 @@ export function AppointmentCard({ appointment, onUpdate }: AppointmentCardProps)
             </div>
             <Badge 
               variant={getStatusBadgeVariant(appointment.status)} 
-              className={`capitalize text-xs h-fit ${APPOINTMENT_STATUS_DISPLAY[appointment.status] === APPOINTMENT_STATUS_DISPLAY.COMPLETED ? 'bg-green-600 text-white' : '' }`}
+              className={`capitalize text-xs h-fit ${APPOINTMENT_STATUS_DISPLAY[appointment.status] === APPOINTMENT_STATUS_DISPLAY.completado ? 'bg-green-600 text-white' : '' }`}
             >
               {APPOINTMENT_STATUS_DISPLAY[appointment.status] || appointment.status}
             </Badge>
@@ -268,8 +268,8 @@ export function AppointmentCard({ appointment, onUpdate }: AppointmentCardProps)
             <div className="pt-2 mt-2 border-t border-border">
               <p className="text-xs font-medium text-muted-foreground flex items-center gap-1 mb-1"><Paperclip size={14}/> Fotos Adjuntas:</p>
               <div className="flex flex-wrap gap-2">
-                {appointment.attachedPhotos.map((photoUri, index) => (
-                  <Image key={index} src={photoUri} alt={`Foto adjunta ${index + 1}`} width={40} height={40} className="rounded object-cover aspect-square" data-ai-hint="patient record" />
+                {appointment.attachedPhotos.filter(photoUri => photoUri).map((photoUri, index) => (
+                  <Image key={index} src={photoUri!} alt={`Foto adjunta ${index + 1}`} width={40} height={40} className="rounded object-cover aspect-square" data-ai-hint="patient record" />
                 ))}
               </div>
             </div>
@@ -424,18 +424,20 @@ export function AppointmentCard({ appointment, onUpdate }: AppointmentCardProps)
                 <h4 className="text-md font-semibold flex items-center gap-2"><CameraIcon/> Fotos Adjuntas</h4>
                 <div className="grid grid-cols-3 gap-2">
                   {attachedPhotoFields.map((item, index) => (
-                    <div key={item.id} className="relative group">
-                      <Image src={item.value} alt={`Foto adjunta ${index + 1}`} width={80} height={80} className="rounded object-cover aspect-square border" data-ai-hint="medical image" />
-                      <Button
-                        type="button"
-                        variant="destructive"
-                        size="icon"
-                        className="absolute top-1 right-1 h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity"
-                        onClick={() => removeAttachedPhoto(index)}
-                      >
-                        <Trash2 className="h-3 w-3" />
-                      </Button>
-                    </div>
+                    item.value ? (
+                      <div key={item.id} className="relative group">
+                        <Image src={item.value} alt={`Foto adjunta ${index + 1}`} width={80} height={80} className="rounded object-cover aspect-square border" data-ai-hint="medical image" />
+                        <Button
+                          type="button"
+                          variant="destructive"
+                          size="icon"
+                          className="absolute top-1 right-1 h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity"
+                          onClick={() => removeAttachedPhoto(index)}
+                        >
+                          <Trash2 className="h-3 w-3" />
+                        </Button>
+                      </div>
+                    ) : null
                   ))}
                 </div>
                 <Input 
@@ -456,7 +458,7 @@ export function AppointmentCard({ appointment, onUpdate }: AppointmentCardProps)
               <div className="space-y-3 pt-3 mt-3 border-t">
                 <div className="flex justify-between items-center">
                   <h4 className="text-md font-semibold">Servicios Adicionales</h4>
-                  <Button type="button" size="sm" variant="outline" onClick={() => appendAddedService({ serviceId: '', professionalId: NO_SELECTION_PLACEHOLDER, price: undefined })}>
+                  <Button type="button" size="sm" variant="outline" onClick={() => appendAddedService({ serviceId: ALL_SERVICES_CONSTANTS[0].id, professionalId: NO_SELECTION_PLACEHOLDER, price: undefined })}>
                     <PlusCircle className="mr-2 h-4 w-4" /> Agregar Servicio
                   </Button>
                 </div>
@@ -531,3 +533,5 @@ export function AppointmentCard({ appointment, onUpdate }: AppointmentCardProps)
     </>
   );
 }
+
+    
