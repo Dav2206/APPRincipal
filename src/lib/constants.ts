@@ -13,6 +13,7 @@ export type LocationId = typeof LOCATIONS[number]['id'];
 export const USER_ROLES = {
   ADMIN: 'admin',
   LOCATION_STAFF: 'location_staff',
+  CONTADOR: 'contador', // Added Contador role
 } as const;
 
 export type UserRole = typeof USER_ROLES[keyof typeof USER_ROLES];

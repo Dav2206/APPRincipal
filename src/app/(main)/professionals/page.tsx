@@ -59,7 +59,7 @@ export default function ProfessionalsPage() {
     }
   });
   
-  const effectiveLocationId = user?.role === USER_ROLES.ADMIN 
+  const effectiveLocationId = (user?.role === USER_ROLES.ADMIN || user?.role === USER_ROLES.CONTADOR)
     ? (adminSelectedLocation === 'all' ? undefined : adminSelectedLocation as LocationId) 
     : user?.locationId;
 
@@ -77,9 +77,9 @@ export default function ProfessionalsPage() {
 
   const handleAddProfessional = () => {
     setEditingProfessional(null);
-    const defaultLoc = user?.role === USER_ROLES.LOCATION_STAFF 
-      ? user.locationId 
-      : (adminSelectedLocation && adminSelectedLocation !== 'all' ? adminSelectedLocation : LOCATIONS[0].id);
+    const defaultLoc = (user?.role === USER_ROLES.ADMIN || user?.role === USER_ROLES.CONTADOR)
+      ? (adminSelectedLocation && adminSelectedLocation !== 'all' ? adminSelectedLocation : LOCATIONS[0].id)
+      : user?.locationId;
     
     form.reset({
       firstName: '',
@@ -142,7 +142,7 @@ export default function ProfessionalsPage() {
           <div>
             <CardTitle className="text-2xl flex items-center gap-2"><Briefcase className="text-primary"/> Gestión de Profesionales</CardTitle>
             <CardDescription>Ver, agregar o editar información de los profesionales.</CardDescription>
-            {user?.role === USER_ROLES.ADMIN && (
+            {(user?.role === USER_ROLES.ADMIN || user?.role === USER_ROLES.CONTADOR) && (
               <div className="mt-1 text-sm text-muted-foreground">
                 Viendo: {adminSelectedLocation === 'all' ? 'Todas las sedes' : LOCATIONS.find(l => l.id === adminSelectedLocation)?.name || ''}
               </div>
@@ -198,7 +198,7 @@ export default function ProfessionalsPage() {
                   </TableRow>
                 )) : (
                   <TableRow>
-                    <TableCell colSpan={user?.role === USER_ROLES.ADMIN ? 6: 5} className="h-24 text-center"> 
+                    <TableCell colSpan={(user?.role === USER_ROLES.ADMIN || user?.role === USER_ROLES.CONTADOR) ? 6 : 5} className="h-24 text-center"> 
                       No se encontraron profesionales.
                     </TableCell>
                   </TableRow>

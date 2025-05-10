@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useAuth } from '@/contexts/auth-provider';
@@ -45,7 +46,7 @@ export function AppHeader() {
       
       <div className="flex w-full items-center gap-4 md:ml-auto md:gap-2 lg:gap-4">
         <div className="ml-auto flex-1 sm:flex-initial">
-          {user?.role === USER_ROLES.ADMIN && (
+          {(user?.role === USER_ROLES.ADMIN || user?.role === USER_ROLES.CONTADOR) && (
             <Select value={selectedLocationId || undefined} onValueChange={handleLocationChange}>
               <SelectTrigger className="w-full md:w-[180px]">
                 <SelectValue placeholder="Seleccionar Sede" />
@@ -73,7 +74,9 @@ export function AppHeader() {
               <div className="flex flex-col space-y-1">
                 <p className="text-sm font-medium leading-none">{user?.name || user?.username}</p>
                 <p className="text-xs leading-none text-muted-foreground">
-                  {user?.role === USER_ROLES.ADMIN ? 'Administrador' : `Staff ${LOCATIONS.find(l => l.id === user?.locationId)?.name || ''}`}
+                  {user?.role === USER_ROLES.ADMIN ? 'Administrador' :
+                   user?.role === USER_ROLES.CONTADOR ? 'Contador' :
+                   `Staff ${LOCATIONS.find(l => l.id === user?.locationId)?.name || ''}`}
                 </p>
               </div>
             </DropdownMenuLabel>

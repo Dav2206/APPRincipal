@@ -22,12 +22,12 @@ import {
 import { USER_ROLES } from '@/lib/constants';
 
 const navItems = [
-  { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard, roles: [USER_ROLES.ADMIN, USER_ROLES.LOCATION_STAFF] },
-  { href: '/appointments', label: 'Citas del Día', icon: CalendarDays, roles: [USER_ROLES.ADMIN, USER_ROLES.LOCATION_STAFF] },
-  { href: '/schedule', label: 'Agenda Horaria', icon: CalendarClock, roles: [USER_ROLES.ADMIN, USER_ROLES.LOCATION_STAFF] },
-  { href: '/history', label: 'Historial', icon: History, roles: [USER_ROLES.ADMIN, USER_ROLES.LOCATION_STAFF] },
-  { href: '/patients', label: 'Pacientes', icon: Users, roles: [USER_ROLES.ADMIN, USER_ROLES.LOCATION_STAFF] },
-  { href: '/professionals', label: 'Profesionales', icon: Briefcase, roles: [USER_ROLES.ADMIN] },
+  { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard, roles: [USER_ROLES.ADMIN, USER_ROLES.LOCATION_STAFF, USER_ROLES.CONTADOR] },
+  { href: '/appointments', label: 'Citas del Día', icon: CalendarDays, roles: [USER_ROLES.ADMIN, USER_ROLES.LOCATION_STAFF, USER_ROLES.CONTADOR] },
+  { href: '/schedule', label: 'Agenda Horaria', icon: CalendarClock, roles: [USER_ROLES.ADMIN, USER_ROLES.LOCATION_STAFF, USER_ROLES.CONTADOR] },
+  { href: '/history', label: 'Historial', icon: History, roles: [USER_ROLES.ADMIN, USER_ROLES.LOCATION_STAFF, USER_ROLES.CONTADOR] },
+  { href: '/patients', label: 'Pacientes', icon: Users, roles: [USER_ROLES.ADMIN, USER_ROLES.LOCATION_STAFF, USER_ROLES.CONTADOR] },
+  { href: '/professionals', label: 'Profesionales', icon: Briefcase, roles: [USER_ROLES.ADMIN, USER_ROLES.CONTADOR] },
 ];
 
 export function AppSidebar() {

@@ -5,6 +5,7 @@ import { formatISO, parseISO, addDays, setHours, setMinutes, startOfDay, endOfDa
 
 let users: User[] = [
   { id: 'admin001', username: 'Admin', password: 'admin', role: USER_ROLES.ADMIN, name: 'Administrator' },
+  { id: 'contador001', username: 'Contador', password: 'admin', role: USER_ROLES.CONTADOR, name: 'Contador Principal' }, // Added Contador user
   ...LOCATIONS.map(loc => ({
     id: `user-${loc.id}`,
     username: loc.name,
@@ -308,7 +309,7 @@ export const updateAppointment = async (id: string, data: Partial<Appointment>):
       professionalId: as.professionalId === "NO_SELECTION_PLACEHOLDER" || as.professionalId === "" ? null : as.professionalId
     })),
     // Ensure attachedPhotos is always an array, even if null/undefined is passed
-    attachedPhotos: Array.isArray(data.attachedPhotos) ? data.attachedPhotos : (appointments[index].attachedPhotos || []),
+    attachedPhotos: Array.isArray(data.attachedPhotos) ? data.attachedPhotos.filter(photo => photo && typeof photo === 'string' && photo.startsWith("data:image/")) : (appointments[index].attachedPhotos || []).filter(photo => photo && typeof photo === 'string' && photo.startsWith("data:image/")),
   };
   
   appointments[index] = { 
