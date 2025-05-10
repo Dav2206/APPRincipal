@@ -42,6 +42,7 @@ export default function DashboardPage() {
       let totalRevenueMonthValue = 0;
       
       const isAdminOrContador = user.role === USER_ROLES.ADMIN || user.role === USER_ROLES.CONTADOR;
+      const isContador = user.role === USER_ROLES.CONTADOR;
 
       try {
         const today = startOfDay(new Date());
@@ -49,38 +50,38 @@ export default function DashboardPage() {
         const currentMonthEnd = endOfMonth(today);
 
         // Fetch Today's Appointments
-        if (isAdminOrContador) {
-          if (selectedLocationId === 'all') {
-            // Sum appointments from all locations for admin/contador 'all' view
+        if (isAdminOrContador || user.role === USER_ROLES.LOCATION_STAFF) { // All roles can see today's appointments for their scope
+          if (selectedLocationId === 'all' && (isAdminOrContador)) {
             const allLocationsAppointmentsPromises = LOCATIONS.map(loc => getAppointments({ date: today, locationId: loc.id }));
             const allLocationsAppointmentsResults = await Promise.all(allLocationsAppointmentsPromises);
             todayAppointmentsCount = allLocationsAppointmentsResults.reduce((sum, result) => sum + result.length, 0);
-          } else if (selectedLocationId) {
+          } else if (selectedLocationId && (isAdminOrContador)) {
             const locationAppointments = await getAppointments({ date: today, locationId: selectedLocationId as LocationId });
             todayAppointmentsCount = locationAppointments.length;
+          } else if (user.role === USER_ROLES.LOCATION_STAFF && user.locationId) {
+            const locationAppointments = await getAppointments({ date: today, locationId: user.locationId });
+            todayAppointmentsCount = locationAppointments.length;
           }
-        } else if (user.role === USER_ROLES.LOCATION_STAFF && user.locationId) {
-          const locationAppointments = await getAppointments({ date: today, locationId: user.locationId });
-          todayAppointmentsCount = locationAppointments.length;
         }
 
+
         // Fetch Pending Confirmations (status: 'booked')
-        if (isAdminOrContador) {
-          if (selectedLocationId === 'all') {
+        if (isAdminOrContador || user.role === USER_ROLES.LOCATION_STAFF) { // All roles can see pending confirmations for their scope
+          if (selectedLocationId === 'all' && (isAdminOrContador)) {
              const allLocationsPendingPromises = LOCATIONS.map(loc => getAppointments({ status: APPOINTMENT_STATUS.BOOKED, locationId: loc.id }));
              const allLocationsPendingResults = await Promise.all(allLocationsPendingPromises);
              pendingConfirmationsCount = allLocationsPendingResults.reduce((sum, result) => sum + result.length, 0);
-          } else if (selectedLocationId) {
+          } else if (selectedLocationId && (isAdminOrContador)) {
             const bookedAppointments = await getAppointments({ status: APPOINTMENT_STATUS.BOOKED, locationId: selectedLocationId as LocationId });
             pendingConfirmationsCount = bookedAppointments.length;
+          } else if (user.role === USER_ROLES.LOCATION_STAFF && user.locationId) {
+            const bookedAppointments = await getAppointments({ status: APPOINTMENT_STATUS.BOOKED, locationId: user.locationId });
+            pendingConfirmationsCount = bookedAppointments.length;
           }
-        } else if (user.role === USER_ROLES.LOCATION_STAFF && user.locationId) {
-          const bookedAppointments = await getAppointments({ status: APPOINTMENT_STATUS.BOOKED, locationId: user.locationId });
-          pendingConfirmationsCount = bookedAppointments.length;
         }
         
-        // Fetch Total Revenue for Current Month (status: 'completed')
-        if (isAdminOrContador) {
+        // Fetch Total Revenue for Current Month (status: 'completed') - ONLY FOR CONTADOR
+        if (isContador) {
           if (selectedLocationId === 'all') {
             const allLocationsCompletedPromises = LOCATIONS.map(loc => getAppointments({
               status: APPOINTMENT_STATUS.COMPLETED,
@@ -99,29 +100,22 @@ export default function DashboardPage() {
             });
             totalRevenueMonthValue = completedAppointmentsMonth.reduce((sum, appt) => sum + (appt.amountPaid || 0), 0);
           }
-        } else if (user.role === USER_ROLES.LOCATION_STAFF && user.locationId) {
-          const completedAppointmentsMonth = await getAppointments({
-            status: APPOINTMENT_STATUS.COMPLETED,
-            locationId: user.locationId,
-            dateRange: { start: currentMonthStart, end: currentMonthEnd },
-          });
-          totalRevenueMonthValue = completedAppointmentsMonth.reduce((sum, appt) => sum + (appt.amountPaid || 0), 0);
         }
 
 
         // Fetch Active Professionals
-        if (isAdminOrContador) {
-            if (selectedLocationId === 'all') {
+        if (isAdminOrContador || user.role === USER_ROLES.LOCATION_STAFF) { // All roles can see active professionals for their scope
+            if (selectedLocationId === 'all' && (isAdminOrContador)) {
                 const allProfessionalsPromises = LOCATIONS.map(loc => getProfessionals(loc.id));
                 const allProfessionalsResults = await Promise.all(allProfessionalsPromises);
                 activeProfessionalsCount = allProfessionalsResults.reduce((sum, result) => sum + result.length, 0);
-            } else if (selectedLocationId) {
+            } else if (selectedLocationId && (isAdminOrContador)) {
                 const locationProfessionals = await getProfessionals(selectedLocationId as LocationId);
                 activeProfessionalsCount = locationProfessionals.length;
+            } else if (user.role === USER_ROLES.LOCATION_STAFF && user.locationId) {
+                const locationProfessionals = await getProfessionals(user.locationId);
+                activeProfessionalsCount = locationProfessionals.length;
             }
-        } else if (user.role === USER_ROLES.LOCATION_STAFF && user.locationId) {
-            const locationProfessionals = await getProfessionals(user.locationId);
-            activeProfessionalsCount = locationProfessionals.length;
         }
 
 
@@ -195,11 +189,13 @@ export default function DashboardPage() {
           value={isLoadingStats ? "..." : stats.activeProfessionals} 
           icon={<Briefcase className="h-6 w-6 text-primary" />} 
         />
-        <StatCard 
-          title="Ingresos del Mes" 
-          value={isLoadingStats ? "..." : `S/ ${stats.totalRevenueMonth}`} 
-          icon={<History className="h-6 w-6 text-primary" />} 
-        />
+        {user.role === USER_ROLES.CONTADOR && (
+          <StatCard 
+            title="Ingresos del Mes" 
+            value={isLoadingStats ? "..." : `S/ ${stats.totalRevenueMonth}`} 
+            icon={<History className="h-6 w-6 text-primary" />} 
+          />
+        )}
       </div>
       
       <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
