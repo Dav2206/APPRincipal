@@ -1,3 +1,4 @@
+
 "use client";
 
 import React, { useState, useEffect, useCallback } from 'react';
@@ -101,7 +102,7 @@ export function PatientSearchField({ onPatientSelect, selectedPatientId, onClear
                   className="cursor-pointer"
                 >
                   <UserPlus className={cn("mr-2 h-4 w-4")} />
-                  Registrar Nuevo Paciente
+                  que permita registrar un nuevo paciente
               </CommandItem>
               {filteredPatients.slice(0, 5).map((patient) => (
                 <CommandItem
@@ -131,3 +132,4 @@ export function PatientSearchField({ onPatientSelect, selectedPatientId, onClear
     </Popover>
   );
 }
+
