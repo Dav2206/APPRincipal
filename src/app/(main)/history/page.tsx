@@ -1,4 +1,3 @@
-
 "use client";
 
 import type { Appointment, Patient } from '@/types';
@@ -17,8 +16,10 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { format, startOfDay, parseISO } from 'date-fns';
 import { es } from 'date-fns/locale';
-import { CalendarIcon, SearchIcon, FilterIcon, AlertTriangle, Loader2, RotateCcw, History } from 'lucide-react';
+import { CalendarIcon, SearchIcon, FilterIcon, AlertTriangle, Loader2, RotateCcw, History as HistoryIcon } from 'lucide-react';
 import { cn } from '@/lib/utils';
+
+const ALL_SERVICES_VALUE = "all_services_placeholder_value"; // Unique non-empty value
 
 export default function HistoryPage() {
   const { user } = useAuth();
@@ -117,11 +118,19 @@ export default function HistoryPage() {
       </div>
   );
 
+  const handleServiceFilterChange = (value: string) => {
+    if (value === ALL_SERVICES_VALUE) {
+      setFilterServiceId(undefined);
+    } else {
+      setFilterServiceId(value as ServiceId);
+    }
+  };
+
   return (
     <div className="space-y-6">
       <Card className="shadow-md">
         <CardHeader>
-          <CardTitle className="text-2xl flex items-center gap-2"><History className="text-primary"/> Historial de Citas</CardTitle>
+          <CardTitle className="text-2xl flex items-center gap-2"><HistoryIcon className="text-primary"/> Historial de Citas</CardTitle>
           <CardDescription>Consulta citas pasadas. Utiliza los filtros para refinar tu búsqueda.</CardDescription>
            {user?.role === USER_ROLES.ADMIN && (
             <div className="mt-2 text-sm text-muted-foreground">
@@ -162,17 +171,17 @@ export default function HistoryPage() {
                 <Select value={filterPatientId} onValueChange={setFilterPatientId}>
                   <SelectTrigger id="filterPatient"><SelectValue placeholder="Todos los Pacientes" /></SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="">Todos los Pacientes</SelectItem>
+                    <SelectItem value="all_patients_placeholder_value">Todos los Pacientes</SelectItem> // Needs similar handling if re-enabled
                     {allPatients.map(p => <SelectItem key={p.id} value={p.id}>{p.firstName} {p.lastName}</SelectItem>)}
                   </SelectContent>
                 </Select>
               </div> */}
               <div>
                 <Label htmlFor="filterService" className="text-sm font-medium">Servicio</Label>
-                <Select value={filterServiceId} onValueChange={v => setFilterServiceId(v as ServiceId)}>
+                <Select value={filterServiceId || ALL_SERVICES_VALUE} onValueChange={handleServiceFilterChange}>
                   <SelectTrigger id="filterService"><SelectValue placeholder="Todos los Servicios" /></SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="">Todos los Servicios</SelectItem>
+                    <SelectItem value={ALL_SERVICES_VALUE}>Todos los Servicios</SelectItem>
                     {SERVICES.map(s => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}
                   </SelectContent>
                 </Select>
