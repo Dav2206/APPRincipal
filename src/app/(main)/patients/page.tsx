@@ -1,7 +1,7 @@
 
 "use client";
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import type { Patient, Appointment } from '@/types';
 import { useAuth } from '@/contexts/auth-provider';
 import { getPatients, addPatient, findPatient, getAppointments } from '@/lib/data'; 
@@ -29,7 +29,7 @@ import {
   DialogClose,
 } from '@/components/ui/dialog';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
-import { PlusCircle, Edit2, Users, Search, Loader2, FileText, CalendarClock } from 'lucide-react';
+import { PlusCircle, Edit2, Users, Search, Loader2, FileText, CalendarClock, ChevronsDown, AlertTriangle } from 'lucide-react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
@@ -40,6 +40,7 @@ import { formatISO, startOfDay } from 'date-fns';
 import { useAppState } from '@/contexts/app-state-provider';
 import { USER_ROLES } from '@/lib/constants';
 
+const PATIENTS_PER_PAGE = 20;
 
 const PatientFormSchema = z.object({
   id: z.string().optional(),
@@ -58,7 +59,11 @@ export default function PatientsPage() {
   const { user } = useAuth();
   const { selectedLocationId: adminSelectedLocation } = useAppState();
   const { toast } = useToast();
+  
   const [allPatients, setAllPatients] = useState<Patient[]>([]);
+  const [displayedPatients, setDisplayedPatients] = useState<Patient[]>([]);
+  const [currentPage, setCurrentPage] = useState(1);
+
   const [isLoading, setIsLoading] = useState(true);
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [editingPatient, setEditingPatient] = useState<Patient | null>(null);
@@ -82,8 +87,10 @@ export default function PatientsPage() {
 
   const fetchAllPatients = useCallback(async () => {
     setIsLoading(true);
+    setCurrentPage(1);
+    setDisplayedPatients([]);
     const data = await getPatients();
-    setAllPatients(data);
+    setAllPatients(data.sort((a,b) => `${a.firstName} ${a.lastName}`.localeCompare(`${b.firstName} ${b.lastName}`)));
     setIsLoading(false);
   }, []);
 
@@ -121,6 +128,32 @@ export default function PatientsPage() {
     fetchPatientsWithAppointmentsToday();
   }, [fetchPatientsWithAppointmentsToday]);
 
+
+  const { totalFilteredPatientList, totalFilteredCount } = useMemo(() => {
+    let filtered = [...allPatients];
+    
+    if (searchTerm) {
+      filtered = filtered.filter(p =>
+        `${p.firstName} ${p.lastName}`.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        (p.phone && p.phone.includes(searchTerm)) ||
+        (p.email && p.email.toLowerCase().includes(searchTerm.toLowerCase()))
+      );
+    }
+
+    if (filterPatientsWithAppointmentsToday) {
+      filtered = filtered.filter(p => patientsWithAppointmentsTodayIds.has(p.id));
+    }
+    
+    return { totalFilteredPatientList: filtered, totalFilteredCount: filtered.length };
+  }, [allPatients, searchTerm, filterPatientsWithAppointmentsToday, patientsWithAppointmentsTodayIds]);
+
+  useEffect(() => {
+    const startIndex = 0; // Always load from the beginning up to the current page * items per page
+    const endIndex = currentPage * PATIENTS_PER_PAGE;
+    setDisplayedPatients(totalFilteredPatientList.slice(startIndex, endIndex));
+  }, [totalFilteredPatientList, currentPage]);
+
+
   const handleAddPatient = () => {
     setEditingPatient(null);
     form.reset({ firstName: '', lastName: '', phone: '', email: '', dateOfBirth: '', notes: '' });
@@ -141,7 +174,8 @@ export default function PatientsPage() {
     try {
       if (editingPatient) {
         const updatedPatientData = { ...editingPatient, ...data };
-        setAllPatients(prev => prev.map(p => p.id === updatedPatientData.id ? updatedPatientData : p));
+        // Optimistic update
+        setAllPatients(prev => prev.map(p => p.id === updatedPatientData.id ? updatedPatientData : p).sort((a,b) => `${a.firstName} ${a.lastName}`.localeCompare(`${b.firstName} ${b.lastName}`)));
         toast({ title: "Paciente Actualizado", description: `${data.firstName} ${data.lastName} actualizado.` });
       } else {
         const existing = await findPatient(data.firstName, data.lastName);
@@ -150,7 +184,7 @@ export default function PatientsPage() {
             return;
         }
         const newPatient = await addPatient(data as Omit<Patient, 'id'>);
-        setAllPatients(prev => [newPatient, ...prev]);
+        setAllPatients(prev => [newPatient, ...prev].sort((a,b) => `${a.firstName} ${a.lastName}`.localeCompare(`${b.firstName} ${b.lastName}`)));
         toast({ title: "Paciente Agregado", description: `${newPatient.firstName} ${newPatient.lastName} agregado.` });
       }
       setIsFormOpen(false);
@@ -160,24 +194,46 @@ export default function PatientsPage() {
     }
   };
 
-  const filteredPatients = allPatients.filter(p => {
-    const matchesSearchTerm = 
-      `${p.firstName} ${p.lastName}`.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      (p.phone && p.phone.includes(searchTerm)) ||
-      (p.email && p.email.toLowerCase().includes(searchTerm.toLowerCase()));
+  const handleSearchTermChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setSearchTerm(e.target.value);
+    setCurrentPage(1);
+  };
 
-    if (filterPatientsWithAppointmentsToday) {
-      return matchesSearchTerm && patientsWithAppointmentsTodayIds.has(p.id);
-    }
-    return matchesSearchTerm;
-  });
+  const handleFilterTodayChange = (checked: boolean) => {
+    setFilterPatientsWithAppointmentsToday(checked);
+    setCurrentPage(1);
+  };
   
+  const handleLoadMore = () => {
+    setCurrentPage(prevPage => prevPage + 1);
+  };
+
   const LoadingState = () => (
      <div className="flex flex-col items-center justify-center h-64 col-span-full">
         <Loader2 className="h-12 w-12 animate-spin text-primary" />
         <p className="mt-4 text-muted-foreground">Cargando pacientes...</p>
       </div>
   );
+  
+  const NoPatientsCard = () => (
+    <Card className="col-span-full mt-8 border-dashed border-2">
+      <CardContent className="py-10 text-center">
+        <AlertTriangle className="mx-auto h-12 w-12 text-muted-foreground mb-4" />
+        <h3 className="text-xl font-semibold mb-2">No se encontraron pacientes</h3>
+        <p className="text-muted-foreground mb-4">
+          {filterPatientsWithAppointmentsToday && searchTerm === '' ? "No hay pacientes con citas hoy." : 
+           filterPatientsWithAppointmentsToday && searchTerm !== '' ? "No hay pacientes con citas hoy que coincidan con la búsqueda." :
+           "No se encontraron pacientes que coincidan con los filtros aplicados."}
+        </p>
+        { (searchTerm || filterPatientsWithAppointmentsToday) &&
+          <Button onClick={() => { setSearchTerm(''); setFilterPatientsWithAppointmentsToday(false); setCurrentPage(1);}} variant="outline">
+            Limpiar Filtros
+          </Button>
+        }
+      </CardContent>
+    </Card>
+  );
+
 
   return (
     <div className="space-y-6">
@@ -199,7 +255,7 @@ export default function PatientsPage() {
                 type="search"
                 placeholder="Buscar pacientes por nombre, teléfono o email..."
                 value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
+                onChange={handleSearchTermChange}
                 className="pl-8 w-full"
               />
             </div>
@@ -207,7 +263,7 @@ export default function PatientsPage() {
               <Checkbox 
                 id="filterToday" 
                 checked={filterPatientsWithAppointmentsToday} 
-                onCheckedChange={(checked) => setFilterPatientsWithAppointmentsToday(checked as boolean)}
+                onCheckedChange={(checked) => handleFilterTodayChange(checked as boolean)}
               />
               <Label htmlFor="filterToday" className="text-sm font-medium whitespace-nowrap flex items-center gap-1">
                 <CalendarClock size={16} /> Mostrar solo pacientes con citas hoy
@@ -216,46 +272,51 @@ export default function PatientsPage() {
             </div>
           </div>
 
-          {isLoading ? <LoadingState /> : (
-          <div className="rounded-md border">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Nombre Completo</TableHead>
-                  <TableHead className="hidden md:table-cell">Teléfono</TableHead>
-                  <TableHead className="hidden lg:table-cell">Email</TableHead>
-                  <TableHead className="text-right">Acciones</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {filteredPatients.length > 0 ? filteredPatients.map(patient => (
-                  <TableRow key={patient.id}>
-                    <TableCell>
-                      <div className="font-medium">{patient.firstName} {patient.lastName}</div>
-                    </TableCell>
-                    <TableCell className="hidden md:table-cell">{patient.phone || 'N/A'}</TableCell>
-                    <TableCell className="hidden lg:table-cell">{patient.email || 'N/A'}</TableCell>
-                    <TableCell className="text-right">
-                       <Button variant="ghost" size="sm" onClick={() => handleViewDetails(patient)} className="mr-2" title="Ver Detalles">
-                        <FileText className="h-4 w-4" /> <span className="sr-only">Detalles</span>
-                      </Button>
-                      <Button variant="ghost" size="sm" onClick={() => handleEditPatient(patient)} title="Editar Paciente">
-                        <Edit2 className="h-4 w-4" /> <span className="sr-only">Editar</span>
-                      </Button>
-                    </TableCell>
-                  </TableRow>
-                )) : (
+          {isLoading && displayedPatients.length === 0 ? <LoadingState /> : 
+           totalFilteredCount === 0 && !isLoading ? <NoPatientsCard /> : (
+          <>
+            <p className="text-sm text-muted-foreground mb-4">
+              Mostrando {displayedPatients.length} de {totalFilteredCount} pacientes.
+            </p>
+            <div className="rounded-md border">
+              <Table>
+                <TableHeader>
                   <TableRow>
-                    <TableCell colSpan={4} className="h-24 text-center">
-                      {filterPatientsWithAppointmentsToday && searchTerm === '' ? "No hay pacientes con citas hoy." : 
-                       filterPatientsWithAppointmentsToday && searchTerm !== '' ? "No hay pacientes con citas hoy que coincidan con la búsqueda." :
-                       "No se encontraron pacientes."}
-                    </TableCell>
+                    <TableHead>Nombre Completo</TableHead>
+                    <TableHead className="hidden md:table-cell">Teléfono</TableHead>
+                    <TableHead className="hidden lg:table-cell">Email</TableHead>
+                    <TableHead className="text-right">Acciones</TableHead>
                   </TableRow>
-                )}
-              </TableBody>
-            </Table>
-          </div>
+                </TableHeader>
+                <TableBody>
+                  {displayedPatients.map(patient => (
+                    <TableRow key={patient.id}>
+                      <TableCell>
+                        <div className="font-medium">{patient.firstName} {patient.lastName}</div>
+                      </TableCell>
+                      <TableCell className="hidden md:table-cell">{patient.phone || 'N/A'}</TableCell>
+                      <TableCell className="hidden lg:table-cell">{patient.email || 'N/A'}</TableCell>
+                      <TableCell className="text-right">
+                         <Button variant="ghost" size="sm" onClick={() => handleViewDetails(patient)} className="mr-2" title="Ver Detalles">
+                          <FileText className="h-4 w-4" /> <span className="sr-only">Detalles</span>
+                        </Button>
+                        <Button variant="ghost" size="sm" onClick={() => handleEditPatient(patient)} title="Editar Paciente">
+                          <Edit2 className="h-4 w-4" /> <span className="sr-only">Editar</span>
+                        </Button>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+             {displayedPatients.length < totalFilteredCount && (
+              <div className="mt-8 text-center">
+                <Button onClick={handleLoadMore} variant="outline">
+                  <ChevronsDown className="mr-2 h-4 w-4" /> Cargar Más Pacientes
+                </Button>
+              </div>
+            )}
+          </>
           )}
         </CardContent>
       </Card>
@@ -340,3 +401,4 @@ export default function PatientsPage() {
     </div>
   );
 }
+
