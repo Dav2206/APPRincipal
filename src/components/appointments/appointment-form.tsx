@@ -1,3 +1,4 @@
+
 "use client";
 
 import React, { useState, useEffect } from 'react';
@@ -25,8 +26,8 @@ import { format, parse } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { cn } from '@/lib/utils';
 import { PatientSearchField } from './patient-search-field';
-import { PatientHistoryPanel } from './patient-history-panel'; // Placeholder
-import { AttendancePredictionTool } from './attendance-prediction-tool'; // Placeholder
+import { PatientHistoryPanel } from './patient-history-panel'; 
+import { AttendancePredictionTool } from './attendance-prediction-tool'; 
 import { useToast } from '@/hooks/use-toast';
 
 
@@ -37,6 +38,8 @@ interface AppointmentFormProps {
   initialData?: Partial<FormSchemaType>; // For editing, not fully implemented yet
   defaultDate?: Date;
 }
+
+const ANY_PROFESSIONAL_VALUE = "_any_professional_placeholder_";
 
 export function AppointmentForm({ isOpen, onOpenChange, onAppointmentCreated, initialData, defaultDate }: AppointmentFormProps) {
   const { user } = useAuth();
@@ -64,7 +67,7 @@ export function AppointmentForm({ isOpen, onOpenChange, onAppointmentCreated, in
       serviceId: initialData?.serviceId || SERVICES[0].id,
       appointmentDate: initialData?.appointmentDate || defaultDate || new Date(),
       appointmentTime: initialData?.appointmentTime || TIME_SLOTS[4], // Default to 10:00 AM
-      preferredProfessionalId: initialData?.preferredProfessionalId || null,
+      preferredProfessionalId: initialData?.preferredProfessionalId || ANY_PROFESSIONAL_VALUE,
       bookingObservations: initialData?.bookingObservations || '',
     },
   });
@@ -132,8 +135,12 @@ export function AppointmentForm({ isOpen, onOpenChange, onAppointmentCreated, in
   async function onSubmit(data: FormSchemaType) {
     setIsLoading(true);
     try {
-      console.log("Submitting appointment data:", data);
-      await addAppointment(data);
+      const submitData = {
+        ...data,
+        preferredProfessionalId: data.preferredProfessionalId === ANY_PROFESSIONAL_VALUE ? null : data.preferredProfessionalId,
+      };
+      console.log("Submitting appointment data:", submitData);
+      await addAppointment(submitData);
       toast({
         title: "Cita Agendada",
         description: `La cita para ${data.patientFirstName} ${data.patientLastName} ha sido creada exitosamente.`,
@@ -141,7 +148,14 @@ export function AppointmentForm({ isOpen, onOpenChange, onAppointmentCreated, in
       });
       onAppointmentCreated();
       onOpenChange(false); // Close dialog
-      form.reset(); // Reset form for next use
+      form.reset({ // Reset form for next use, keeping default date if provided
+        ...form.formState.defaultValues,
+        appointmentDate: defaultDate || new Date(),
+        locationId: initialData?.locationId || defaultLocation || LOCATIONS[0].id,
+        serviceId: initialData?.serviceId || SERVICES[0].id,
+        appointmentTime: initialData?.appointmentTime || TIME_SLOTS[4], 
+        preferredProfessionalId: initialData?.preferredProfessionalId || ANY_PROFESSIONAL_VALUE,
+      }); 
     } catch (error) {
       console.error("Error creating appointment:", error);
       toast({
@@ -158,7 +172,14 @@ export function AppointmentForm({ isOpen, onOpenChange, onAppointmentCreated, in
 
   return (
     <Dialog open={isOpen} onOpenChange={(open) => {
-      if (!open) form.reset(); // Reset form if dialog is closed manually
+      if (!open) form.reset({ // Reset form if dialog is closed manually
+        ...form.formState.defaultValues,
+        appointmentDate: defaultDate || new Date(),
+         locationId: initialData?.locationId || defaultLocation || LOCATIONS[0].id,
+        serviceId: initialData?.serviceId || SERVICES[0].id,
+        appointmentTime: initialData?.appointmentTime || TIME_SLOTS[4], 
+        preferredProfessionalId: initialData?.preferredProfessionalId || ANY_PROFESSIONAL_VALUE,
+      }); 
       onOpenChange(open);
     }}>
       <DialogContent className="sm:max-w-3xl max-h-[90vh] flex flex-col">
@@ -268,7 +289,7 @@ export function AppointmentForm({ isOpen, onOpenChange, onAppointmentCreated, in
                   render={({ field }) => (
                     <FormItem>
                       <FormLabel className="flex items-center gap-1"><Building size={16}/>Sede</FormLabel>
-                      <Select onValueChange={field.onChange} defaultValue={field.value} disabled={user?.role === USER_ROLES.LOCATION_STAFF}>
+                      <Select onValueChange={field.onChange} value={field.value} disabled={user?.role === USER_ROLES.LOCATION_STAFF}>
                         <FormControl>
                           <SelectTrigger><SelectValue placeholder="Seleccionar sede" /></SelectTrigger>
                         </FormControl>
@@ -288,7 +309,7 @@ export function AppointmentForm({ isOpen, onOpenChange, onAppointmentCreated, in
                   render={({ field }) => (
                     <FormItem>
                       <FormLabel>Servicio</FormLabel>
-                      <Select onValueChange={field.onChange} defaultValue={field.value}>
+                      <Select onValueChange={field.onChange} value={field.value}>
                         <FormControl>
                           <SelectTrigger><SelectValue placeholder="Seleccionar servicio" /></SelectTrigger>
                         </FormControl>
@@ -348,7 +369,7 @@ export function AppointmentForm({ isOpen, onOpenChange, onAppointmentCreated, in
                     render={({ field }) => (
                       <FormItem>
                         <FormLabel className="flex items-center gap-1"><ClockIcon size={16}/>Hora de la Cita</FormLabel>
-                        <Select onValueChange={field.onChange} defaultValue={field.value}>
+                        <Select onValueChange={field.onChange} value={field.value}>
                           <FormControl>
                             <SelectTrigger><SelectValue placeholder="Seleccionar hora" /></SelectTrigger>
                           </FormControl>
@@ -374,12 +395,15 @@ export function AppointmentForm({ isOpen, onOpenChange, onAppointmentCreated, in
                   render={({ field }) => (
                     <FormItem>
                       <FormLabel>Profesional Preferido (Opcional)</FormLabel>
-                      <Select onValueChange={field.onChange} value={field.value || undefined} >
+                      <Select 
+                        onValueChange={(value) => field.onChange(value === ANY_PROFESSIONAL_VALUE ? null : value)} 
+                        value={field.value || ANY_PROFESSIONAL_VALUE} 
+                      >
                         <FormControl>
                           <SelectTrigger><SelectValue placeholder="Cualquier profesional" /></SelectTrigger>
                         </FormControl>
                         <SelectContent>
-                          <SelectItem value="">Cualquier profesional</SelectItem>
+                          <SelectItem value={ANY_PROFESSIONAL_VALUE}>Cualquier profesional</SelectItem>
                           {professionals.map(prof => (
                             <SelectItem key={prof.id} value={prof.id}>{prof.firstName} {prof.lastName}</SelectItem>
                           ))}
@@ -413,7 +437,17 @@ export function AppointmentForm({ isOpen, onOpenChange, onAppointmentCreated, in
         
         <DialogFooter className="pt-4 border-t">
           <DialogClose asChild>
-            <Button variant="outline" onClick={() => form.reset()}>Cancelar</Button>
+            <Button variant="outline" onClick={() => {
+               form.reset({ // Reset form if dialog is closed manually
+                ...form.formState.defaultValues,
+                appointmentDate: defaultDate || new Date(),
+                locationId: initialData?.locationId || defaultLocation || LOCATIONS[0].id,
+                serviceId: initialData?.serviceId || SERVICES[0].id,
+                appointmentTime: initialData?.appointmentTime || TIME_SLOTS[4], 
+                preferredProfessionalId: initialData?.preferredProfessionalId || ANY_PROFESSIONAL_VALUE,
+              }); 
+              onOpenChange(false);
+            }}>Cancelar</Button>
           </DialogClose>
           <Button type="submit" onClick={form.handleSubmit(onSubmit)} disabled={isLoading}>
             {isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
