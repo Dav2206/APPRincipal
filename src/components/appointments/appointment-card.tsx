@@ -8,7 +8,7 @@ import { Button } from '@/components/ui/button';
 import { APPOINTMENT_STATUS, USER_ROLES, SERVICES as ALL_SERVICES_CONSTANTS, APPOINTMENT_STATUS_DISPLAY, LOCATIONS } from '@/lib/constants';
 import { format, parseISO } from 'date-fns';
 import { es } from 'date-fns/locale';
-import { CalendarIcon, ClockIcon, UserIcon, StethoscopeIcon, DollarSignIcon, EditIcon, Info, Paperclip } from 'lucide-react';
+import { CalendarIcon, ClockIcon, UserIcon, StethoscopeIcon, DollarSignIcon, EditIcon, Info, Paperclip, ShoppingBag } from 'lucide-react';
 import { useAuth } from '@/contexts/auth-provider';
 import React, { useState, useEffect } from 'react';
 import Image from 'next/image';
@@ -80,9 +80,9 @@ export function AppointmentCard({ appointment, onUpdate }: AppointmentCardProps)
             </div>
             <Badge 
               variant={getStatusBadgeVariant(appointment.status)} 
-              className={`capitalize text-xs h-fit ${APPOINTMENT_STATUS_DISPLAY[appointment.status] === APPOINTMENT_STATUS_DISPLAY.completado ? 'bg-green-600 text-white' : '' }`}
+              className={`capitalize text-xs h-fit ${APPOINTMENT_STATUS_DISPLAY[appointment.status as AppointmentStatus] === APPOINTMENT_STATUS_DISPLAY.completado ? 'bg-green-600 text-white' : '' }`}
             >
-              {APPOINTMENT_STATUS_DISPLAY[appointment.status] || appointment.status}
+              {APPOINTMENT_STATUS_DISPLAY[appointment.status as AppointmentStatus] || appointment.status}
             </Badge>
           </div>
         </CardHeader>
