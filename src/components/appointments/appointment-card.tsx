@@ -1,11 +1,11 @@
 
 "use client";
 
-import type { Appointment, Service } from '@/types';
+import type { Appointment, Service, AppointmentStatus } from '@/types';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { APPOINTMENT_STATUS, USER_ROLES, PAYMENT_METHODS, SERVICES as ALL_SERVICES_CONSTANTS } from '@/lib/constants';
+import { APPOINTMENT_STATUS, USER_ROLES, PAYMENT_METHODS, SERVICES as ALL_SERVICES_CONSTANTS, APPOINTMENT_STATUS_DISPLAY } from '@/lib/constants';
 import { format, parseISO } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { CalendarIcon, ClockIcon, UserIcon, StethoscopeIcon, DollarSignIcon, EditIcon, CheckCircle2, XCircle, AlertTriangle, Info, Loader2, PlusCircle, Trash2, ShoppingBag } from 'lucide-react';
@@ -26,7 +26,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { useForm, Controller, useFieldArray } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { AppointmentUpdateSchema } from '@/lib/schemas';
-import { Form, FormControl, FormItem, FormLabel, FormMessage, FormField as ShadFormField } from "@/components/ui/form";
+import { Form, FormControl, FormItem, FormLabel, FormMessage, FormField } from "@/components/ui/form";
 import type { Professional } from '@/types';
 import { getProfessionals, updateAppointment as updateAppointmentData, getServices } from '@/lib/data';
 import React, { useState, useEffect } from 'react';
@@ -109,7 +109,7 @@ export function AppointmentCard({ appointment, onUpdate }: AppointmentCardProps)
 
   const appointmentDate = parseISO(appointment.appointmentDateTime);
 
-  const getStatusBadgeVariant = (status: string) => {
+  const getStatusBadgeVariant = (status: AppointmentStatus) => {
     switch (status) {
       case APPOINTMENT_STATUS.BOOKED: return 'default';
       case APPOINTMENT_STATUS.CONFIRMED: return 'default'; 
@@ -173,7 +173,7 @@ export function AppointmentCard({ appointment, onUpdate }: AppointmentCardProps)
               variant={getStatusBadgeVariant(appointment.status)} 
               className={`capitalize text-xs h-fit ${appointment.status === APPOINTMENT_STATUS.COMPLETED ? 'bg-green-600 text-white' : '' }`}
             >
-              {appointment.status.replace(/_/g, ' ')}
+              {APPOINTMENT_STATUS_DISPLAY[appointment.status] || appointment.status}
             </Badge>
           </div>
         </CardHeader>
@@ -251,7 +251,7 @@ export function AppointmentCard({ appointment, onUpdate }: AppointmentCardProps)
           </DialogHeader>
           <Form {...form}>
           <form onSubmit={form.handleSubmit(onSubmitUpdate)} className="space-y-4 py-4 max-h-[70vh] overflow-y-auto pr-2">
-            <ShadFormField
+            <FormField
               control={form.control}
               name="status"
               render={({ field }) => (
@@ -264,8 +264,8 @@ export function AppointmentCard({ appointment, onUpdate }: AppointmentCardProps)
                       </SelectTrigger>
                     </FormControl>
                     <SelectContent>
-                      {Object.values(APPOINTMENT_STATUS).map(s => (
-                        <SelectItem key={s} value={s} className="capitalize">{s.replace(/_/g, ' ')}</SelectItem>
+                      {Object.entries(APPOINTMENT_STATUS_DISPLAY).map(([key, value]) => (
+                        <SelectItem key={key} value={key as AppointmentStatus} className="capitalize">{value}</SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
@@ -275,7 +275,7 @@ export function AppointmentCard({ appointment, onUpdate }: AppointmentCardProps)
             />
 
             {form.watch('status') === APPOINTMENT_STATUS.CONFIRMED && (
-              <ShadFormField
+              <FormField
                 control={form.control}
                 name="actualArrivalTime"
                 render={({ field }) => (
@@ -289,7 +289,7 @@ export function AppointmentCard({ appointment, onUpdate }: AppointmentCardProps)
             )}
             
             {(form.watch('status') === APPOINTMENT_STATUS.CONFIRMED || form.watch('status') === APPOINTMENT_STATUS.COMPLETED) && (
-              <ShadFormField
+              <FormField
                 control={form.control}
                 name="professionalId"
                 render={({ field }) => (
@@ -316,7 +316,7 @@ export function AppointmentCard({ appointment, onUpdate }: AppointmentCardProps)
 
             {form.watch('status') === APPOINTMENT_STATUS.COMPLETED && (
               <>
-                <ShadFormField
+                <FormField
                   control={form.control}
                   name="durationMinutes"
                   render={({ field }) => (
@@ -327,7 +327,7 @@ export function AppointmentCard({ appointment, onUpdate }: AppointmentCardProps)
                     </FormItem>
                   )}
                 />
-                <ShadFormField
+                <FormField
                   control={form.control}
                   name="paymentMethod"
                   render={({ field }) => (
@@ -349,7 +349,7 @@ export function AppointmentCard({ appointment, onUpdate }: AppointmentCardProps)
                     </FormItem>
                   )}
                 />
-                <ShadFormField
+                <FormField
                   control={form.control}
                   name="amountPaid"
                   render={({ field }) => (
@@ -362,7 +362,7 @@ export function AppointmentCard({ appointment, onUpdate }: AppointmentCardProps)
                 />
               </>
             )}
-             <ShadFormField
+             <FormField
                 control={form.control}
                 name="staffNotes"
                 render={({ field }) => (
@@ -388,7 +388,7 @@ export function AppointmentCard({ appointment, onUpdate }: AppointmentCardProps)
                      <Button type="button" variant="ghost" size="icon" className="absolute top-1 right-1 h-6 w-6" onClick={() => removeAddedService(index)}>
                         <Trash2 className="h-4 w-4 text-destructive" />
                       </Button>
-                    <ShadFormField
+                    <FormField
                       control={form.control}
                       name={`addedServices.${index}.serviceId`}
                       render={({ field }) => (
@@ -404,7 +404,7 @@ export function AppointmentCard({ appointment, onUpdate }: AppointmentCardProps)
                         </FormItem>
                       )}
                     />
-                    <ShadFormField
+                    <FormField
                       control={form.control}
                       name={`addedServices.${index}.professionalId`}
                       render={({ field }) => (
@@ -421,7 +421,7 @@ export function AppointmentCard({ appointment, onUpdate }: AppointmentCardProps)
                         </FormItem>
                       )}
                     />
-                    <ShadFormField
+                    <FormField
                       control={form.control}
                       name={`addedServices.${index}.price`}
                       render={({ field }) => (

@@ -1,7 +1,7 @@
 
 "use client";
 
-import type { Patient, Appointment } from '@/types';
+import type { Patient, Appointment, AppointmentStatus } from '@/types';
 import { getPatientAppointmentHistory, getProfessionalById } from '@/lib/data';
 import { useEffect, useState } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -10,6 +10,7 @@ import { Badge } from '@/components/ui/badge';
 import { format, parseISO, differenceInDays, formatDistanceToNow, differenceInYears } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { UserSquare, CalendarDays, Stethoscope, TrendingUp, MessageSquare, AlertTriangle, Repeat, Cake } from 'lucide-react';
+import { APPOINTMENT_STATUS, APPOINTMENT_STATUS_DISPLAY } from '@/lib/constants';
 
 interface PatientHistoryPanelProps {
   patient: Patient;
@@ -76,8 +77,8 @@ export function PatientHistoryPanel({ patient }: PatientHistoryPanelProps) {
     return <p className="text-muted-foreground">Cargando historial del paciente...</p>;
   }
 
-  const totalVisits = history.filter(h => h.status === 'completed').length;
-  const lastVisit = history.length > 0 ? history[0] : null; 
+  const totalVisits = history.filter(h => h.status === APPOINTMENT_STATUS.COMPLETED).length;
+  const lastVisit = history.length > 0 ? history.sort((a,b) => parseISO(b.appointmentDateTime).getTime() - parseISO(a.appointmentDateTime).getTime())[0] : null; 
   const lastVisitDate = lastVisit ? parseISO(lastVisit.appointmentDateTime) : null;
 
   return (
@@ -127,8 +128,8 @@ export function PatientHistoryPanel({ patient }: PatientHistoryPanelProps) {
                   <li key={appt.id} className="p-2 border-b last:border-b-0 text-xs">
                     <div className="flex justify-between items-center">
                       <span>{format(parseISO(appt.appointmentDateTime), "dd/MM/yy HH:mm", { locale: es })} - {appt.service?.name}</span>
-                       <Badge variant={appt.status === 'completed' ? 'default' : 'destructive'} className={`capitalize text-xs ${appt.status === 'completed' ? 'bg-green-600 text-white' : ''}`}>
-                        {appt.status.replace(/_/g, ' ')}
+                       <Badge variant={appt.status === APPOINTMENT_STATUS.COMPLETED ? 'default' : 'destructive'} className={`capitalize text-xs ${appt.status === APPOINTMENT_STATUS.COMPLETED ? 'bg-green-600 text-white' : ''}`}>
+                        {APPOINTMENT_STATUS_DISPLAY[appt.status as AppointmentStatus] || appt.status}
                       </Badge>
                     </div>
                     {appt.professional && <p className="text-muted-foreground text-xs">Atendido por: {appt.professional.firstName} {appt.professional.lastName}</p>}
@@ -150,3 +151,5 @@ export function PatientHistoryPanel({ patient }: PatientHistoryPanelProps) {
     </Card>
   );
 }
+
+```

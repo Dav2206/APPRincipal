@@ -1,3 +1,4 @@
+
 export const LOCATIONS = [
   { id: 'higuereta', name: 'Higuereta' },
   { id: 'eden_benavides', name: 'Edén Benavides' },
@@ -17,11 +18,11 @@ export const USER_ROLES = {
 export type UserRole = typeof USER_ROLES[keyof typeof USER_ROLES];
 
 export const SERVICES = [
-  { id: 'consulta_general', name: 'Consulta General', duration: 30 }, // duration in minutes
-  { id: 'tratamiento_unas', name: 'Tratamiento de Uñas', duration: 45 },
-  { id: 'quiropodia', name: 'Quiropodia', duration: 60 },
-  { id: 'reflexologia', name: 'Reflexología Podal', duration: 45 },
-  { id: 'estudio_pisada', name: 'Estudio de la Pisada', duration: 60 },
+  { id: 'consulta_general', name: 'Consulta General', defaultDuration: 30 }, // duration in minutes
+  { id: 'tratamiento_unas', name: 'Tratamiento de Uñas', defaultDuration: 45 },
+  { id: 'quiropodia', name: 'Quiropodia', defaultDuration: 60 },
+  { id: 'reflexologia', name: 'Reflexología Podal', defaultDuration: 45 },
+  { id: 'estudio_pisada', name: 'Estudio de la Pisada', defaultDuration: 60 },
 ] as const;
 
 export type ServiceId = typeof SERVICES[number]['id'];
@@ -48,6 +49,16 @@ export const APPOINTMENT_STATUS = {
 } as const;
 
 export type AppointmentStatus = typeof APPOINTMENT_STATUS[keyof typeof APPOINTMENT_STATUS];
+
+export const APPOINTMENT_STATUS_DISPLAY: Record<AppointmentStatus, string> = {
+  [APPOINTMENT_STATUS.BOOKED]: 'Reservado',
+  [APPOINTMENT_STATUS.CONFIRMED]: 'Confirmado en Sede',
+  [APPOINTMENT_STATUS.COMPLETED]: 'Completado',
+  [APPOINTMENT_STATUS.CANCELLED_CLIENT]: 'Cancelado (Cliente)',
+  [APPOINTMENT_STATUS.CANCELLED_STAFF]: 'Cancelado (Staff)',
+  [APPOINTMENT_STATUS.NO_SHOW]: 'No se presentó',
+};
+
 
 export const TIME_SLOTS = Array.from({ length: (20 - 8) * 2 }, (_, i) => { // From 8 AM to 8 PM, 30 min slots
   const hour = Math.floor(i / 2) + 8;
