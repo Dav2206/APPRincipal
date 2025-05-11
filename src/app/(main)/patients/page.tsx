@@ -4,7 +4,7 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import type { Patient, Appointment } from '@/types';
 import { useAuth } from '@/contexts/auth-provider';
-import { getPatients, addPatient, findPatient, getAppointments } from '@/lib/data'; 
+import { getPatients, addPatient, findPatient, getAppointments, updateProfessional, getPatientById } from '@/lib/data'; 
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -29,10 +29,10 @@ import {
   DialogClose,
 } from '@/components/ui/dialog';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
-import { PlusCircle, Edit2, Users, Search, Loader2, FileText, CalendarClock, ChevronsDown, AlertTriangle, Cake } from 'lucide-react';
+import { PlusCircle, Edit2, Users, Search, Loader2, FileText, CalendarClock, ChevronsDown, AlertTriangle, Cake, CheckSquare, Square } from 'lucide-react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { z } from 'zod';
+import { PatientFormSchema, type PatientFormData } from '@/lib/schemas';
 import { useToast } from '@/hooks/use-toast';
 import { PatientHistoryPanel } from '@/components/appointments/patient-history-panel';
 import { AttendancePredictionTool } from '@/components/appointments/attendance-prediction-tool';
@@ -41,19 +41,6 @@ import { useAppState } from '@/contexts/app-state-provider';
 import { USER_ROLES } from '@/lib/constants';
 
 const PATIENTS_PER_PAGE = 20;
-
-const PatientFormSchema = z.object({
-  id: z.string().optional(),
-  firstName: z.string().min(2, "Nombre es requerido."),
-  lastName: z.string().min(2, "Apellido es requerido."),
-  phone: z.string().optional(),
-  email: z.string().email("Email inválido.").optional().or(z.literal('')),
-  dateOfBirth: z.string().optional().refine(val => !val || /^\d{4}-\d{2}-\d{2}$/.test(val), {
-    message: "Formato de fecha debe ser YYYY-MM-DD",
-  }),
-  notes: z.string().optional(),
-});
-type PatientFormData = z.infer<typeof PatientFormSchema>;
 
 export default function PatientsPage() {
   const { user } = useAuth();
@@ -81,6 +68,7 @@ export default function PatientsPage() {
       phone: '',
       email: '',
       dateOfBirth: '',
+      isDiabetic: false,
       notes: ''
     }
   });
@@ -157,13 +145,17 @@ export default function PatientsPage() {
 
   const handleAddPatient = () => {
     setEditingPatient(null);
-    form.reset({ firstName: '', lastName: '', phone: '', email: '', dateOfBirth: '', notes: '' });
+    form.reset({ firstName: '', lastName: '', phone: '', email: '', dateOfBirth: '', isDiabetic: false, notes: '' });
     setIsFormOpen(true);
   };
 
   const handleEditPatient = (patient: Patient) => {
     setEditingPatient(patient);
-    form.reset(patient); // Full patient data for admin, phone will be handled by conditional rendering
+    form.reset({
+        ...patient,
+        phone: (user?.role === USER_ROLES.ADMIN) ? patient.phone : undefined, // only admin sees/edits phone
+        isDiabetic: patient.isDiabetic || false,
+    });
     setIsFormOpen(true);
   };
   
@@ -173,22 +165,23 @@ export default function PatientsPage() {
 
   const onSubmit = async (data: PatientFormData) => {
     try {
-      if (editingPatient) {
-        // For non-admins, if phone field was not rendered, data.phone will be undefined.
-        // We want to preserve the original phone in that case.
-        const currentPatientData = allPatients.find(p => p.id === editingPatient.id);
-        let phoneToSave = data.phone;
-        if (user?.role !== USER_ROLES.ADMIN && currentPatientData) {
-          phoneToSave = currentPatientData.phone; // Preserve original phone if non-admin is editing
+      let updatedPatient: Patient | undefined;
+      if (editingPatient && editingPatient.id) {
+        const patientToUpdate = { ...editingPatient, ...data };
+        // Ensure phone is only updated by admin
+        if(user?.role !== USER_ROLES.ADMIN) {
+            const originalPatient = await getPatientById(editingPatient.id);
+            patientToUpdate.phone = originalPatient?.phone;
         }
-
-        const updatedPatientData = { 
-          ...editingPatient, 
-          ...data,
-          phone: (user?.role === USER_ROLES.ADMIN) ? data.phone : editingPatient.phone, // Only admin can change phone
-        };
-
-        setAllPatients(prev => prev.map(p => p.id === updatedPatientData.id ? updatedPatientData : p).sort((a,b) => `${a.firstName} ${a.lastName}`.localeCompare(`${b.firstName} ${b.lastName}`)));
+        // Call a hypothetical updatePatient function
+        // For now, update in local state for demo. Replace with actual DB call.
+        // updatedPatient = await updatePatientInDb(patientToUpdate.id, patientToUpdate); 
+         const index = allPatients.findIndex(p => p.id === patientToUpdate.id);
+         if (index !== -1) {
+           allPatients[index] = patientToUpdate;
+           updatedPatient = patientToUpdate;
+           setAllPatients([...allPatients].sort((a,b) => `${a.firstName} ${a.lastName}`.localeCompare(`${b.firstName} ${b.lastName}`)));
+         }
         toast({ title: "Paciente Actualizado", description: `${data.firstName} ${data.lastName} actualizado.` });
       } else {
         const existing = await findPatient(data.firstName, data.lastName);
@@ -196,11 +189,21 @@ export default function PatientsPage() {
             toast({ title: "Paciente Existente", description: "Ya existe un paciente con ese nombre y apellido.", variant: "destructive" });
             return;
         }
-        const newPatient = await addPatient(data as Omit<Patient, 'id'>);
+        const newPatientData = { ...data, isDiabetic: data.isDiabetic || false };
+        const newPatient = await addPatient(newPatientData as Omit<Patient, 'id'>);
+        updatedPatient = newPatient;
         setAllPatients(prev => [newPatient, ...prev].sort((a,b) => `${a.firstName} ${a.lastName}`.localeCompare(`${b.firstName} ${b.lastName}`)));
         toast({ title: "Paciente Agregado", description: `${newPatient.firstName} ${newPatient.lastName} agregado.` });
       }
       setIsFormOpen(false);
+      // If there was an update, refresh displayed patients
+      if (updatedPatient) {
+         const startIndex = 0; 
+         const endIndex = currentPage * PATIENTS_PER_PAGE;
+         const currentFilteredList = totalFilteredPatientList.map(p => p.id === updatedPatient!.id ? updatedPatient! : p);
+         setDisplayedPatients(currentFilteredList.slice(startIndex, endIndex));
+      }
+
     } catch (error) {
       toast({ title: "Error", description: "No se pudo guardar el paciente.", variant: "destructive" });
       console.error(error);
@@ -308,8 +311,8 @@ export default function PatientsPage() {
                   <TableRow>
                     <TableHead>Nombre Completo</TableHead>
                     <TableHead className="hidden md:table-cell">Teléfono</TableHead>
-                    {/* <TableHead className="hidden lg:table-cell">Email</TableHead> */}
                     <TableHead className="hidden sm:table-cell">Edad</TableHead>
+                    <TableHead className="hidden lg:table-cell text-center">Diabético</TableHead>
                     <TableHead className="text-right">Acciones</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -322,8 +325,10 @@ export default function PatientsPage() {
                       <TableCell className="hidden md:table-cell">
                         {user?.role === USER_ROLES.ADMIN ? (patient.phone || 'N/A') : 'Restringido'}
                       </TableCell>
-                      {/* <TableCell className="hidden lg:table-cell">{patient.email || 'N/A'}</TableCell> */}
                       <TableCell className="hidden sm:table-cell">{calculateAge(patient.dateOfBirth)}</TableCell>
+                      <TableCell className="hidden lg:table-cell text-center">
+                        {patient.isDiabetic ? <CheckSquare className="h-5 w-5 text-red-600 mx-auto" /> : <Square className="h-5 w-5 text-muted-foreground mx-auto" />}
+                      </TableCell>
                       <TableCell className="text-right">
                          <Button variant="ghost" size="sm" onClick={() => handleViewDetails(patient)} className="mr-2" title="Ver Detalles">
                           <FileText className="h-4 w-4" /> <span className="sr-only">Detalles</span>
@@ -397,6 +402,26 @@ export default function PatientsPage() {
                       <FormMessage />
                   </FormItem>
                )}/>
+                <FormField
+                    control={form.control}
+                    name="isDiabetic"
+                    render={({ field }) => (
+                    <FormItem className="flex flex-row items-center space-x-3 space-y-0 rounded-md border p-3 shadow-sm">
+                        <FormControl>
+                        <Checkbox
+                            checked={field.value}
+                            onCheckedChange={field.onChange}
+                        />
+                        </FormControl>
+                        <div className="space-y-1 leading-none">
+                        <FormLabel>
+                            ¿Es paciente diabético?
+                        </FormLabel>
+                        </div>
+                        <FormMessage />
+                    </FormItem>
+                    )}
+                />
                <FormField control={form.control} name="notes" render={({ field }) => (
                   <FormItem>
                       <FormLabel>Notas Adicionales (Opcional)</FormLabel>

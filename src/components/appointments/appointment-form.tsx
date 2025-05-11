@@ -15,6 +15,7 @@ import { getProfessionals, getServices, addAppointment, getPatientById } from '@
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Checkbox } from '@/components/ui/checkbox';
 import { Textarea } from '@/components/ui/textarea';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Calendar } from '@/components/ui/calendar';
@@ -70,6 +71,7 @@ export function AppointmentForm({ isOpen, onOpenChange, onAppointmentCreated, in
       patientEmail: initialData?.patientEmail || '',
       patientDateOfBirth: initialData?.patientDateOfBirth || '',
       existingPatientId: initialData?.existingPatientId || null,
+      isDiabetic: initialData?.isDiabetic || false,
       locationId: initialData?.locationId || defaultLocation || LOCATIONS[0].id,
       serviceId: initialData?.serviceId || DEFAULT_SERVICE_ID_PLACEHOLDER, // Use placeholder initially
       appointmentDate: initialData?.appointmentDate || defaultDate || new Date(),
@@ -109,14 +111,18 @@ export function AppointmentForm({ isOpen, onOpenChange, onAppointmentCreated, in
       const patient = await getPatientById(patientId);
       setCurrentPatientForHistory(patient || null);
       setShowPatientHistory(!!patient);
+      if (patient) {
+        form.setValue('isDiabetic', patient.isDiabetic || false);
+      }
     }
     if (watchExistingPatientId) {
       fetchAndSetPatientForHistory(watchExistingPatientId);
     } else {
       setCurrentPatientForHistory(null);
       setShowPatientHistory(false);
+      form.setValue('isDiabetic', false); // Reset if no existing patient
     }
-  }, [watchExistingPatientId]);
+  }, [watchExistingPatientId, form]);
 
 
   const handlePatientSelect = (patient: Patient | null) => {
@@ -127,6 +133,7 @@ export function AppointmentForm({ isOpen, onOpenChange, onAppointmentCreated, in
       form.setValue('patientPhone', (user?.role === USER_ROLES.ADMIN ? patient.phone : "Teléfono Restringido") || '');
       form.setValue('patientEmail', patient.email || '');
       form.setValue('patientDateOfBirth', patient.dateOfBirth || '');
+      form.setValue('isDiabetic', patient.isDiabetic || false);
       setCurrentPatientForHistory(patient);
       setShowPatientHistory(true);
     } else {
@@ -136,6 +143,7 @@ export function AppointmentForm({ isOpen, onOpenChange, onAppointmentCreated, in
       form.setValue('patientPhone', '');
       form.setValue('patientEmail', '');
       form.setValue('patientDateOfBirth', '');
+      form.setValue('isDiabetic', false);
       setCurrentPatientForHistory(null);
       setShowPatientHistory(false);
     }
@@ -149,6 +157,7 @@ export function AppointmentForm({ isOpen, onOpenChange, onAppointmentCreated, in
         ...data,
         preferredProfessionalId: data.preferredProfessionalId === ANY_PROFESSIONAL_VALUE ? null : data.preferredProfessionalId,
         patientPhone: (data.existingPatientId && user?.role !== USER_ROLES.ADMIN) ? undefined : data.patientPhone,
+        isDiabetic: data.isDiabetic || false,
       };
       console.log("Submitting appointment data:", submitData);
       await addAppointment(submitData);
@@ -171,6 +180,7 @@ export function AppointmentForm({ isOpen, onOpenChange, onAppointmentCreated, in
         patientPhone: '',
         patientEmail: '',
         patientDateOfBirth: '',
+        isDiabetic: false,
         existingPatientId: null,
         bookingObservations: '',
       }); 
@@ -205,6 +215,7 @@ export function AppointmentForm({ isOpen, onOpenChange, onAppointmentCreated, in
           patientPhone: '',
           patientEmail: '',
           patientDateOfBirth: '',
+          isDiabetic: false,
           existingPatientId: null,
           bookingObservations: '',
         }); 
@@ -245,6 +256,7 @@ export function AppointmentForm({ isOpen, onOpenChange, onAppointmentCreated, in
                           form.setValue('patientPhone', '');
                           form.setValue('patientEmail', '');
                           form.setValue('patientDateOfBirth', '');
+                          form.setValue('isDiabetic', false);
                           setCurrentPatientForHistory(null);
                           setShowPatientHistory(false);
                         }}
@@ -307,6 +319,7 @@ export function AppointmentForm({ isOpen, onOpenChange, onAppointmentCreated, in
                     )}
                   />
                 </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 items-end">
                 <FormField
                   control={form.control}
                   name="patientDateOfBirth"
@@ -318,6 +331,28 @@ export function AppointmentForm({ isOpen, onOpenChange, onAppointmentCreated, in
                     </FormItem>
                   )}
                 />
+                 <FormField
+                    control={form.control}
+                    name="isDiabetic"
+                    render={({ field }) => (
+                    <FormItem className="flex flex-row items-center space-x-3 space-y-0 rounded-md border p-3 shadow-sm h-fit mb-1">
+                        <FormControl>
+                        <Checkbox
+                            checked={field.value}
+                            onCheckedChange={field.onChange}
+                            disabled={!!form.getValues("existingPatientId")}
+                        />
+                        </FormControl>
+                        <div className="space-y-1 leading-none">
+                        <FormLabel className={!!form.getValues("existingPatientId") ? "text-muted-foreground" : ""}>
+                            ¿Paciente diabético?
+                        </FormLabel>
+                        </div>
+                        <FormMessage />
+                    </FormItem>
+                    )}
+                />
+                </div>
 
 
                 {showPatientHistory && currentPatientForHistory && (
@@ -502,6 +537,7 @@ export function AppointmentForm({ isOpen, onOpenChange, onAppointmentCreated, in
                 patientPhone: '',
                 patientEmail: '',
                 patientDateOfBirth: '',
+                isDiabetic: false,
                 existingPatientId: null,
                 bookingObservations: '',
               }); 

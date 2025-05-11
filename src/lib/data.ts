@@ -33,13 +33,13 @@ LOCATIONS.forEach((location, locIndex) => {
 });
 
 let patients: Patient[] = [
-  { id: 'pat001', firstName: 'Ana', lastName: 'García', phone: '111222333', email: 'ana.garcia@example.com', preferredProfessionalId: professionals[0].id, notes: 'Paciente regular, prefiere citas por la mañana.', dateOfBirth: '1985-05-15' },
-  { id: 'pat002', firstName: 'Luis', lastName: 'Martínez', phone: '444555666', email: 'luis.martinez@example.com', notes: 'Primera visita.', dateOfBirth: '1992-11-20' },
-  { id: 'pat003', firstName: 'Sofía', lastName: 'Rodríguez', phone: '777888999', email: 'sofia.rodriguez@example.com', preferredProfessionalId: professionals[2].id, dateOfBirth: '1978-02-10' },
-  { id: 'pat004', firstName: 'Carlos', lastName: 'López', phone: '123123123', email: 'carlos.lopez@example.com', notes: 'Suele llegar 5 minutos tarde.', dateOfBirth: '2000-07-30' },
-  { id: 'pat005', firstName: 'Elena', lastName: 'Pérez', phone: '456456456', email: 'elena.perez@example.com', dateOfBirth: '1995-09-05' },
-  { id: 'pat006', firstName: 'Jorge', lastName: 'Sanchez', phone: '101010101', email: 'jorge.sanchez@example.com', dateOfBirth: '1988-03-22', notes: 'Alergico al latex.' },
-  { id: 'pat007', firstName: 'Laura', lastName: 'Gomez', phone: '202020202', email: 'laura.gomez@example.com', dateOfBirth: '1999-12-01', preferredProfessionalId: professionals[1].id },
+  { id: 'pat001', firstName: 'Ana', lastName: 'García', phone: '111222333', email: 'ana.garcia@example.com', preferredProfessionalId: professionals[0].id, notes: 'Paciente regular, prefiere citas por la mañana.', dateOfBirth: '1985-05-15', isDiabetic: false },
+  { id: 'pat002', firstName: 'Luis', lastName: 'Martínez', phone: '444555666', email: 'luis.martinez@example.com', notes: 'Primera visita.', dateOfBirth: '1992-11-20', isDiabetic: true },
+  { id: 'pat003', firstName: 'Sofía', lastName: 'Rodríguez', phone: '777888999', email: 'sofia.rodriguez@example.com', preferredProfessionalId: professionals[2].id, dateOfBirth: '1978-02-10', isDiabetic: false },
+  { id: 'pat004', firstName: 'Carlos', lastName: 'López', phone: '123123123', email: 'carlos.lopez@example.com', notes: 'Suele llegar 5 minutos tarde.', dateOfBirth: '2000-07-30', isDiabetic: true },
+  { id: 'pat005', firstName: 'Elena', lastName: 'Pérez', phone: '456456456', email: 'elena.perez@example.com', dateOfBirth: '1995-09-05', isDiabetic: false },
+  { id: 'pat006', firstName: 'Jorge', lastName: 'Sanchez', phone: '101010101', email: 'jorge.sanchez@example.com', dateOfBirth: '1988-03-22', notes: 'Alergico al latex.', isDiabetic: false },
+  { id: 'pat007', firstName: 'Laura', lastName: 'Gomez', phone: '202020202', email: 'laura.gomez@example.com', dateOfBirth: '1999-12-01', preferredProfessionalId: professionals[1].id, isDiabetic: true },
 ];
 
 // Initialize mockServices from SERVICES_CONSTANTS, making it the mutable source of truth
@@ -169,6 +169,7 @@ export const addPatient = async (data: Omit<Patient, 'id'>): Promise<Patient> =>
   const newPatient: Patient = {
     ...data,
     id: `pat-${Date.now()}`,
+    isDiabetic: data.isDiabetic || false,
   };
   patients.push(newPatient);
   return JSON.parse(JSON.stringify(newPatient));
@@ -308,6 +309,13 @@ export const addAppointment = async (data: AppointmentFormData): Promise<Appoint
     let existingPatient = await findPatient(data.patientFirstName, data.patientLastName);
     if (existingPatient) {
       patientId = existingPatient.id;
+      // Update existing patient's isDiabetic status if provided and different
+      if (data.isDiabetic !== undefined && existingPatient.isDiabetic !== data.isDiabetic) {
+        const patientIdx = patients.findIndex(p => p.id === patientId);
+        if (patientIdx !== -1) {
+          patients[patientIdx].isDiabetic = data.isDiabetic;
+        }
+      }
     } else {
       const newPatient = await addPatient({
         firstName: data.patientFirstName,
@@ -315,6 +323,7 @@ export const addAppointment = async (data: AppointmentFormData): Promise<Appoint
         phone: data.patientPhone,
         email: data.patientEmail,
         dateOfBirth: data.patientDateOfBirth, 
+        isDiabetic: data.isDiabetic || false,
       });
       patientId = newPatient.id;
     }
@@ -328,6 +337,9 @@ export const addAppointment = async (data: AppointmentFormData): Promise<Appoint
           if(data.patientDateOfBirth && data.patientDateOfBirth !== existingPatientDetails.dateOfBirth) updatedPatientInfo.dateOfBirth = data.patientDateOfBirth;
           if (data.patientPhone && data.patientPhone !== existingPatientDetails.phone) {
              updatedPatientInfo.phone = data.patientPhone;
+          }
+          if (data.isDiabetic !== undefined && data.isDiabetic !== existingPatientDetails.isDiabetic) {
+            updatedPatientInfo.isDiabetic = data.isDiabetic;
           }
 
           if(Object.keys(updatedPatientInfo).length > 0){
@@ -407,3 +419,4 @@ export const getPatientAppointmentHistory = async (patientId: string): Promise<A
     .filter(a => a.status === APPOINTMENT_STATUS.COMPLETED || a.status === APPOINTMENT_STATUS.NO_SHOW || a.status === APPOINTMENT_STATUS.CANCELLED_CLIENT || a.status === APPOINTMENT_STATUS.CANCELLED_STAFF)
     .sort((a,b) => parseISO(b.appointmentDateTime).getTime() - parseISO(a.appointmentDateTime).getTime());
 };
+

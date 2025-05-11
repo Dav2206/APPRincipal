@@ -31,6 +31,7 @@ export interface Patient extends BaseEntity {
   phone?: string;
   email?: string;
   dateOfBirth?: string; // YYYY-MM-DD
+  isDiabetic?: boolean; // New field
   // For "historial del paciente"
   preferredProfessionalId?: string;
   notes?: string; // General notes or observations about the patient
@@ -79,6 +80,7 @@ export type AppointmentFormData = {
   patientEmail?: string;
   patientDateOfBirth?: string; // YYYY-MM-DD
   existingPatientId?: string | null; // To link if patient exists
+  isDiabetic?: boolean; // New field for appointment form if creating new patient
   locationId: LocationId;
   serviceId: string; // Changed from ServiceId to string
   appointmentDate: Date;

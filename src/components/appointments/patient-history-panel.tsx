@@ -9,7 +9,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Badge } from '@/components/ui/badge';
 import { format, parseISO, differenceInDays, formatDistanceToNow, differenceInYears, addDays as dateAddDays, startOfDay } from 'date-fns';
 import { es } from 'date-fns/locale';
-import { UserSquare, CalendarDays, Stethoscope, TrendingUp, MessageSquare, AlertTriangle, Repeat, Cake, Paperclip, Camera, XIcon, ZoomIn, ZoomOut, RefreshCw } from 'lucide-react';
+import { UserSquare, CalendarDays, Stethoscope, TrendingUp, MessageSquare, AlertTriangle, Repeat, Cake, Paperclip, Camera, XIcon, ZoomIn, ZoomOut, RefreshCw, HeartPulse } from 'lucide-react';
 import { APPOINTMENT_STATUS, APPOINTMENT_STATUS_DISPLAY } from '@/lib/constants';
 import Image from 'next/image';
 import { Separator } from '../ui/separator';
@@ -183,6 +183,10 @@ export function PatientHistoryPanel({ patient }: PatientHistoryPanelProps) {
                 <p>{age} años</p>
               </div>
             )}
+            <div>
+                <p className="font-medium flex items-center gap-1"><HeartPulse size={16} /> Diabético:</p>
+                <p className={patient.isDiabetic ? "text-red-600 font-semibold" : ""}>{patient.isDiabetic ? 'Sí' : 'No'}</p>
+            </div>
             <div>
               <p className="font-medium flex items-center gap-1"><Stethoscope size={16} /> Profesional Preferido:</p>
               <p>{preferredProfessionalName || 'No especificado'}</p>

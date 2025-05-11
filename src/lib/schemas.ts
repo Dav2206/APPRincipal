@@ -16,6 +16,21 @@ const paymentMethodValues = PAYMENT_METHODS.map(pm => pm);
 const appointmentStatusKeys = Object.keys(APPOINTMENT_STATUS_DISPLAY) as (keyof typeof APPOINTMENT_STATUS_DISPLAY)[];
 
 
+export const PatientFormSchema = z.object({
+  id: z.string().optional(),
+  firstName: z.string().min(2, "Nombre es requerido."),
+  lastName: z.string().min(2, "Apellido es requerido."),
+  phone: z.string().optional(),
+  email: z.string().email("Email inválido.").optional().or(z.literal('')),
+  dateOfBirth: z.string().optional().refine(val => !val || /^\d{4}-\d{2}-\d{2}$/.test(val), {
+    message: "Formato de fecha debe ser YYYY-MM-DD",
+  }).or(z.literal('')),
+  isDiabetic: z.boolean().optional(),
+  notes: z.string().optional(),
+});
+export type PatientFormData = z.infer<typeof PatientFormSchema>;
+
+
 export const AppointmentFormSchema = z.object({
   patientFirstName: z.string().min(2, "Nombre del paciente es requerido (mínimo 2 caracteres)."),
   patientLastName: z.string().min(2, "Apellido del paciente es requerido (mínimo 2 caracteres)."),
@@ -25,6 +40,7 @@ export const AppointmentFormSchema = z.object({
     message: "Formato de fecha de nacimiento debe ser YYYY-MM-DD.",
   }).or(z.literal('')),
   existingPatientId: z.string().optional().nullable(),
+  isDiabetic: z.boolean().optional(), // Added for new patient creation via appointment form
   
   locationId: z.string().refine(val => locationIds.includes(val as any), { message: "Sede inválida."}),
   serviceId: z.string().min(1, "Servicio es requerido."), // Changed from refine with static list
