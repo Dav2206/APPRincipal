@@ -2,7 +2,7 @@
 "use client";
 
 import type { Appointment, Service, AppointmentStatus, Professional } from '@/types';
-import { APPOINTMENT_STATUS, PAYMENT_METHODS, SERVICES as ALL_SERVICES_CONSTANTS, USER_ROLES, APPOINTMENT_STATUS_DISPLAY, LOCATIONS } from '@/lib/constants';
+import { APPOINTMENT_STATUS, PAYMENT_METHODS, USER_ROLES, APPOINTMENT_STATUS_DISPLAY, LOCATIONS } from '@/lib/constants';
 import { format, parseISO } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { CameraIcon, Loader2, PlusCircle, Trash2, ShoppingBag } from 'lucide-react';
@@ -39,6 +39,8 @@ interface AppointmentEditDialogProps {
 type AppointmentUpdateFormData = Zod.infer<typeof AppointmentUpdateSchema>;
 
 const NO_SELECTION_PLACEHOLDER = "_no_selection_placeholder_";
+const DEFAULT_SERVICE_ID_PLACEHOLDER = "_default_service_id_placeholder_";
+
 
 const fileToDataUri = (file: File): Promise<string> => {
   return new Promise((resolve, reject) => {
@@ -54,7 +56,7 @@ export function AppointmentEditDialog({ appointment, isOpen, onOpenChange, onApp
   const { toast } = useToast();
   const [professionals, setProfessionals] = useState<Professional[]>([]);
   const [allServices, setAllServices] = useState<Service[]>([]);
-  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isSubmittingForm, setIsSubmittingForm] = useState(false); // Renamed from isSubmitting to avoid conflict
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const form = useForm<AppointmentUpdateFormData>({
@@ -83,13 +85,13 @@ export function AppointmentEditDialog({ appointment, isOpen, onOpenChange, onApp
         staffNotes: appointment.staffNotes || '',
         attachedPhotos: appointment.attachedPhotos?.filter(p => typeof p === 'string' && p.startsWith("data:image/")) || [],
         addedServices: appointment.addedServices?.map(as => ({
-          serviceId: as.serviceId,
+          serviceId: as.serviceId || (allServices.length > 0 ? allServices[0].id : DEFAULT_SERVICE_ID_PLACEHOLDER),
           professionalId: as.professionalId || NO_SELECTION_PLACEHOLDER,
           price: as.price ?? undefined,
         })) || [],
       });
     }
-  }, [appointment, form, isOpen]);
+  }, [appointment, form, isOpen, allServices]);
 
 
   useEffect(() => {
@@ -100,24 +102,34 @@ export function AppointmentEditDialog({ appointment, isOpen, onOpenChange, onApp
         if (locationForProfs){
             const profs = await getProfessionals(locationForProfs);
             setProfessionals(profs);
-        } else if (isAdminOrContador) { // Admin/Contador viewing "All Locations" or no specific location from appointment
+        } else if (isAdminOrContador) { 
              const allProfsPromises = LOCATIONS.map(loc => getProfessionals(loc.id));
              const allProfsResults = await Promise.all(allProfsPromises);
              setProfessionals(allProfsResults.flat());
         }
         const servicesData = await getServices();
         setAllServices(servicesData);
+
+        // Reset addedServices with proper default serviceId if needed after services are loaded
+        if (appointment && appointment.addedServices) {
+          form.setValue('addedServices', appointment.addedServices.map(as => ({
+            serviceId: as.serviceId || (servicesData.length > 0 ? servicesData[0].id : DEFAULT_SERVICE_ID_PLACEHOLDER),
+            professionalId: as.professionalId || NO_SELECTION_PLACEHOLDER,
+            price: as.price ?? undefined,
+          })));
+        }
+
       }
     }
     if (isOpen) {
       loadPrerequisites();
     }
-  }, [isOpen, user, appointment.locationId]);
+  }, [isOpen, user, appointment, form]); // Added form to dependencies
 
   const handleFileChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const files = event.target.files;
     if (files) {
-      setIsSubmitting(true); 
+      setIsSubmittingForm(true); 
       try {
         const currentPhotos = form.getValues("attachedPhotos") || [];
         const newPhotoPromises = Array.from(files).map(fileToDataUri);
@@ -127,14 +139,14 @@ export function AppointmentEditDialog({ appointment, isOpen, onOpenChange, onApp
       } catch (error) {
         toast({ title: "Error al cargar imagen", description: "No se pudo procesar la imagen.", variant: "destructive"});
       } finally {
-        setIsSubmitting(false);
+        setIsSubmittingForm(false);
         if(fileInputRef.current) fileInputRef.current.value = ""; 
       }
     }
   };
 
   const onSubmitUpdate = async (data: AppointmentUpdateFormData) => {
-    setIsSubmitting(true);
+    setIsSubmittingForm(true);
     try {
       const updatedData: Partial<Appointment> = {
         ...data,
@@ -144,6 +156,7 @@ export function AppointmentEditDialog({ appointment, isOpen, onOpenChange, onApp
         attachedPhotos: (data.attachedPhotos || []).filter(photo => typeof photo === 'string' && photo.startsWith("data:image/")),
         addedServices: data.addedServices?.map(as => ({
           ...as,
+          serviceId: as.serviceId === DEFAULT_SERVICE_ID_PLACEHOLDER ? (allServices.length > 0 ? allServices[0].id : '') : as.serviceId, // Ensure a valid serviceId
           professionalId: as.professionalId === NO_SELECTION_PLACEHOLDER ? null : as.professionalId,
           price: as.price ? parseFloat(String(as.price)) : null,
         })),
@@ -161,7 +174,7 @@ export function AppointmentEditDialog({ appointment, isOpen, onOpenChange, onApp
       console.error("Error updating appointment:", error);
       toast({ title: "Error", description: "Ocurrió un error inesperado.", variant: "destructive" });
     } finally {
-      setIsSubmitting(false);
+      setIsSubmittingForm(false);
     }
   };
   
@@ -329,9 +342,9 @@ export function AppointmentEditDialog({ appointment, isOpen, onOpenChange, onApp
                   onChange={handleFileChange}
                   ref={fileInputRef}
                   className="text-sm"
-                  disabled={isSubmitting}
+                  disabled={isSubmittingForm}
                />
-               {isSubmitting && <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />}
+               {isSubmittingForm && <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />}
                <FormField control={form.control} name="attachedPhotos" render={() => <FormMessage />} />
             </div>
           )}
@@ -340,7 +353,7 @@ export function AppointmentEditDialog({ appointment, isOpen, onOpenChange, onApp
             <div className="space-y-3 pt-3 mt-3 border-t">
               <div className="flex justify-between items-center">
                 <h4 className="text-md font-semibold flex items-center gap-2"><ShoppingBag/> Servicios Adicionales</h4>
-                <Button type="button" size="sm" variant="outline" onClick={() => appendAddedService({ serviceId: ALL_SERVICES_CONSTANTS[0].id, professionalId: NO_SELECTION_PLACEHOLDER, price: undefined })}>
+                <Button type="button" size="sm" variant="outline" onClick={() => appendAddedService({ serviceId: allServices.length > 0 ? allServices[0].id : DEFAULT_SERVICE_ID_PLACEHOLDER, professionalId: NO_SELECTION_PLACEHOLDER, price: undefined })}>
                   <PlusCircle className="mr-2 h-4 w-4" /> Agregar Servicio
                 </Button>
               </div>
@@ -355,9 +368,10 @@ export function AppointmentEditDialog({ appointment, isOpen, onOpenChange, onApp
                     render={({ field }) => (
                       <FormItem>
                         <FormLabel>Servicio Adicional</FormLabel>
-                        <Select onValueChange={field.onChange} value={field.value || ''}>
-                          <FormControl><SelectTrigger><SelectValue placeholder="Seleccionar servicio" /></SelectTrigger></FormControl>
+                        <Select onValueChange={field.onChange} value={field.value === DEFAULT_SERVICE_ID_PLACEHOLDER && allServices.length > 0 ? allServices[0].id : field.value } disabled={allServices.length === 0}>
+                          <FormControl><SelectTrigger><SelectValue placeholder={allServices.length > 0 ? "Seleccionar servicio" : "Cargando..."} /></SelectTrigger></FormControl>
                           <SelectContent>
+                             {allServices.length === 0 && <SelectItem value={DEFAULT_SERVICE_ID_PLACEHOLDER} disabled>Cargando...</SelectItem>}
                             {allServices.map(s => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}
                           </SelectContent>
                         </Select>
@@ -403,8 +417,8 @@ export function AppointmentEditDialog({ appointment, isOpen, onOpenChange, onApp
             <DialogClose asChild>
               <Button type="button" variant="outline">Cancelar</Button>
             </DialogClose>
-            <Button type="submit" disabled={isSubmitting}>
-              {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+            <Button type="submit" disabled={isSubmittingForm || allServices.length === 0}>
+              {isSubmittingForm && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
               Guardar Cambios
             </Button>
           </DialogFooter>
@@ -414,4 +428,3 @@ export function AppointmentEditDialog({ appointment, isOpen, onOpenChange, onApp
     </Dialog>
   );
 }
-

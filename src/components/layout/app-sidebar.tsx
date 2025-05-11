@@ -18,7 +18,8 @@ import {
   PanelLeft,
   X,
   CalendarClock,
-  Landmark, // Added for finances
+  Landmark, 
+  ClipboardList, // Icon for Services
 } from 'lucide-react';
 import { USER_ROLES } from '@/lib/constants';
 
@@ -29,6 +30,7 @@ const navItems = [
   { href: '/history', label: 'Historial', icon: History, roles: [USER_ROLES.ADMIN, USER_ROLES.LOCATION_STAFF, USER_ROLES.CONTADOR] },
   { href: '/patients', label: 'Pacientes', icon: Users, roles: [USER_ROLES.ADMIN, USER_ROLES.LOCATION_STAFF, USER_ROLES.CONTADOR] },
   { href: '/professionals', label: 'Profesionales', icon: Briefcase, roles: [USER_ROLES.ADMIN, USER_ROLES.CONTADOR] },
+  { href: '/services', label: 'Servicios', icon: ClipboardList, roles: [USER_ROLES.ADMIN] }, // New Services link
   { href: '/finances', label: 'Finanzas', icon: Landmark, roles: [USER_ROLES.CONTADOR] },
 ];
 
@@ -70,16 +72,19 @@ export function AppSidebar() {
         <ScrollArea className="flex-1">
           <nav className="grid items-start gap-1 px-2 py-4 text-sm font-medium">
             {filteredNavItems.map(({ href, label, icon: Icon }) => {
-              const isActive = pathname === href || (href !== '/dashboard' && pathname.startsWith(href) && href !== '/appointments' && href !=='/schedule' && href !== '/finances');
-              // Special handling for appointments, schedule and finances to avoid multiple being active if path is similar
+              const isActive = pathname === href || (href !== '/dashboard' && pathname.startsWith(href) && href !== '/appointments' && href !=='/schedule' && href !== '/finances' && href !== '/services');
+              // Special handling for specific pages to avoid multiple being active if path is similar
               const isAppointmentsActive = href === '/appointments' && (pathname === '/appointments' || pathname.startsWith('/appointments/'));
               const isScheduleActive = href === '/schedule' && (pathname === '/schedule' || pathname.startsWith('/schedule/'));
               const isFinancesActive = href === '/finances' && (pathname === '/finances' || pathname.startsWith('/finances/'));
+              const isServicesActive = href === '/services' && (pathname === '/services' || pathname.startsWith('/services/'));
               
               let finalIsActive = isActive;
               if (href === '/appointments') finalIsActive = isAppointmentsActive;
               if (href === '/schedule') finalIsActive = isScheduleActive;
               if (href === '/finances') finalIsActive = isFinancesActive;
+              if (href === '/services') finalIsActive = isServicesActive;
+
               // Ensure dashboard is only active for exact match
               if (href === '/dashboard' && pathname !== '/dashboard') finalIsActive = false;
 
@@ -108,4 +113,3 @@ export function AppSidebar() {
     </>
   );
 }
-

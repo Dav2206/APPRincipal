@@ -1,5 +1,5 @@
 
-import type { LocationId, UserRole, ServiceId, ProfessionalSpecialization, PaymentMethod, AppointmentStatus } from '@/lib/constants';
+import type { LocationId, UserRole, ProfessionalSpecialization, PaymentMethod, AppointmentStatus } from '@/lib/constants';
 
 export interface BaseEntity {
   id: string;
@@ -37,7 +37,7 @@ export interface Patient extends BaseEntity {
 }
 
 export interface Service {
-  id: ServiceId;
+  id: string; // Changed from ServiceId to string for dynamic services
   name: string;
   defaultDuration: number; // in minutes
   price?: number; // Optional: can be set per appointment
@@ -49,7 +49,7 @@ export interface Appointment extends BaseEntity {
   locationId: LocationId;
   professionalId?: string | null; // Attending professional, can be initially null
   professional?: Professional; // Populated for display
-  serviceId: ServiceId;
+  serviceId: string; // Changed from ServiceId to string
   service?: Service; // Populated for display
   appointmentDateTime: string; // ISO string for date and time
   durationMinutes: number; // Actual duration
@@ -61,7 +61,7 @@ export interface Appointment extends BaseEntity {
   // Post-booking / Confirmation details
   status: AppointmentStatus;
   actualArrivalTime?: string; // HH:MM
-  addedServices?: { serviceId: ServiceId; professionalId?: string | null; price?: number | null; service?: Service, professional?: Professional }[]; // Added service and professional for display
+  addedServices?: { serviceId: string; professionalId?: string | null; price?: number | null; service?: Service, professional?: Professional }[]; // Changed serviceId to string
   paymentMethod?: PaymentMethod;
   amountPaid?: number;
   staffNotes?: string; // Notes by staff after service
@@ -80,7 +80,7 @@ export type AppointmentFormData = {
   patientDateOfBirth?: string; // YYYY-MM-DD
   existingPatientId?: string | null; // To link if patient exists
   locationId: LocationId;
-  serviceId: ServiceId;
+  serviceId: string; // Changed from ServiceId to string
   appointmentDate: Date;
   appointmentTime: string; // e.g., "10:30"
   preferredProfessionalId?: string | null;
@@ -91,4 +91,11 @@ export type ProfessionalFormData = Omit<Professional, 'biWeeklyEarnings'>;
 
 // Export AppointmentStatus to be available for other modules if needed directly
 export type { AppointmentStatus };
+
+export type ServiceFormData = {
+  id?: string;
+  name: string;
+  defaultDuration: number;
+  price?: number;
+};
 

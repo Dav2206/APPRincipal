@@ -1,11 +1,11 @@
 
-import type { User, Professional, Patient, Service, Appointment, AppointmentFormData, ProfessionalFormData, AppointmentStatus } from '@/types';
-import { LOCATIONS, USER_ROLES, SERVICES, PROFESSIONAL_SPECIALIZATIONS, APPOINTMENT_STATUS, LocationId, ServiceId, APPOINTMENT_STATUS_DISPLAY } from './constants';
+import type { User, Professional, Patient, Service, Appointment, AppointmentFormData, ProfessionalFormData, AppointmentStatus, ServiceFormData } from '@/types';
+import { LOCATIONS, USER_ROLES, SERVICES as SERVICES_CONSTANTS, PROFESSIONAL_SPECIALIZATIONS, APPOINTMENT_STATUS, LocationId, ServiceId as ConstantServiceId, APPOINTMENT_STATUS_DISPLAY, PAYMENT_METHODS } from './constants';
 import { formatISO, parseISO, addDays, setHours, setMinutes, startOfDay, endOfDay, addMinutes } from 'date-fns';
 
 let users: User[] = [
   { id: 'admin001', username: 'Admin', password: 'admin', role: USER_ROLES.ADMIN, name: 'Administrator' },
-  { id: 'contador001', username: 'Contador', password: 'admin', role: USER_ROLES.CONTADOR, name: 'Contador Principal' }, // Added Contador user
+  { id: 'contador001', username: 'Contador', password: 'admin', role: USER_ROLES.CONTADOR, name: 'Contador Principal' },
   ...LOCATIONS.map(loc => ({
     id: `user-${loc.id}`,
     username: loc.name,
@@ -42,17 +42,19 @@ let patients: Patient[] = [
   { id: 'pat007', firstName: 'Laura', lastName: 'Gomez', phone: '202020202', email: 'laura.gomez@example.com', dateOfBirth: '1999-12-01', preferredProfessionalId: professionals[1].id },
 ];
 
-const mockServices: Service[] = SERVICES.map(s => ({
-    ...s,
-    price: Math.floor(Math.random() * 50) + 50, // Random price between 50-100
+// Initialize mockServices from SERVICES_CONSTANTS, making it the mutable source of truth
+let mockServices: Service[] = SERVICES_CONSTANTS.map(s_const => ({
+    id: s_const.id, // Keep original ID from constants
+    name: s_const.name,
+    defaultDuration: s_const.defaultDuration,
+    price: Math.floor(Math.random() * 50) + 50, // Random price between 50-100 for default services
 }));
 
 
 let appointments: Appointment[] = [];
 const today = new Date();
-const numDays = 30; // Generate appointments for a month around today for better revenue data
+const numDays = 30; 
 
-// Placeholder for a short base64 image for testing
 const placeholderPhotoDataUri = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=";
 
 
@@ -62,28 +64,27 @@ for (let dayOffset = -Math.floor(numDays / 2); dayOffset <= Math.floor(numDays /
     const locationProfessionals = professionals.filter(p => p.locationId === location.id);
     if (locationProfessionals.length === 0) return;
 
-    const appointmentsPerDay = Math.floor(Math.random() * 10) + 3; // 3 to 13 appts per day/location for demo
+    const appointmentsPerDay = Math.floor(Math.random() * 10) + 3; 
     for (let i = 0; i < appointmentsPerDay; i++) {
       const randomPatient = patients[Math.floor(Math.random() * patients.length)];
       const randomService = mockServices[Math.floor(Math.random() * mockServices.length)];
       const randomProfessional = locationProfessionals[Math.floor(Math.random() * locationProfessionals.length)];
       
-      const hour = 8 + Math.floor(Math.random() * 10); // 8 AM to 5 PM
+      const hour = 8 + Math.floor(Math.random() * 10); 
       const minute = Math.random() > 0.5 ? 30 : 0;
       const appointmentDateTime = setMinutes(setHours(currentDate, hour), minute);
       
       const statusKeys = Object.values(APPOINTMENT_STATUS);
       let randomStatus = statusKeys[Math.floor(Math.random() * statusKeys.length)];
 
-      // Ensure 'completed' appointments are generally in the past or today for realistic revenue
       if (randomStatus === APPOINTMENT_STATUS.COMPLETED && appointmentDateTime > today) {
         randomStatus = APPOINTMENT_STATUS.BOOKED;
       }
-      // Ensure 'booked' appointments are generally for today or future
       if (randomStatus === APPOINTMENT_STATUS.BOOKED && appointmentDateTime < startOfDay(today)) {
-         randomStatus = APPOINTMENT_STATUS.COMPLETED; // Or another past status
+         randomStatus = APPOINTMENT_STATUS.COMPLETED; 
       }
 
+      const addedServiceExample = mockServices.length > 1 ? mockServices[1] : undefined;
 
       appointments.push({
         id: `appt-${location.id}-${dayOffset}-${i}`,
@@ -95,14 +96,14 @@ for (let dayOffset = -Math.floor(numDays / 2); dayOffset <= Math.floor(numDays /
         durationMinutes: randomService.defaultDuration,
         status: randomStatus,
         bookingObservations: Math.random() > 0.7 ? 'Requiere atención especial.' : undefined,
-        attachedPhotos: Math.random() > 0.85 ? [placeholderPhotoDataUri] : undefined,
+        attachedPhotos: Math.random() > 0.85 ? [placeholderPhotoDataUri] : [],
         createdAt: formatISO(new Date()),
         updatedAt: formatISO(new Date()),
         ...(randomStatus === APPOINTMENT_STATUS.COMPLETED && {
-            actualArrivalTime: `${String(hour).padStart(2, '0')}:${String(minute + Math.floor(Math.random()*10-5)).padStart(2, '0')}`, // slight variation
-            amountPaid: randomService.price + (Math.random() > 0.5 ? (mockServices[1].price || 0) : 0), // Main service + potential added
-            paymentMethod: 'Efectivo',
-            addedServices: Math.random() > 0.8 ? [{ serviceId: mockServices[1].id, professionalId: locationProfessionals[0].id, price: mockServices[1].price }] : undefined,
+            actualArrivalTime: `${String(hour).padStart(2, '0')}:${String(minute + Math.floor(Math.random()*10-5)).padStart(2, '0')}`, 
+            amountPaid: (randomService.price || 0) + (Math.random() > 0.5 && addedServiceExample ? (addedServiceExample.price || 0) : 0),
+            paymentMethod: PAYMENT_METHODS[Math.floor(Math.random() * PAYMENT_METHODS.length)],
+            addedServices: Math.random() > 0.8 && addedServiceExample ? [{ serviceId: addedServiceExample.id, professionalId: locationProfessionals[0].id, price: addedServiceExample.price }] : undefined,
         })
       });
     }
@@ -135,7 +136,7 @@ export const addProfessional = async (data: Omit<ProfessionalFormData, 'id'>): P
   const newProfessional: Professional = {
     ...data,
     id: `prof-${Date.now()}`,
-    biWeeklyEarnings: 0, // Initialize earnings
+    biWeeklyEarnings: 0, 
   };
   professionals.push(newProfessional);
   return newProfessional;
@@ -151,15 +152,17 @@ export const updateProfessional = async (id: string, data: Partial<ProfessionalF
 
 // --- Patients ---
 export const getPatients = async (): Promise<Patient[]> => {
-  return patients;
+  return JSON.parse(JSON.stringify(patients)); // Deep copy
 };
 
 export const getPatientById = async (id: string): Promise<Patient | undefined> => {
-  return patients.find(p => p.id === id);
+  const patient = patients.find(p => p.id === id);
+  return patient ? JSON.parse(JSON.stringify(patient)) : undefined;
 };
 
 export const findPatient = async (firstName: string, lastName: string): Promise<Patient | undefined> => {
-  return patients.find(p => p.firstName.toLowerCase() === firstName.toLowerCase() && p.lastName.toLowerCase() === lastName.toLowerCase());
+  const patient = patients.find(p => p.firstName.toLowerCase() === firstName.toLowerCase() && p.lastName.toLowerCase() === lastName.toLowerCase());
+  return patient ? JSON.parse(JSON.stringify(patient)) : undefined;
 }
 
 export const addPatient = async (data: Omit<Patient, 'id'>): Promise<Patient> => {
@@ -168,17 +171,65 @@ export const addPatient = async (data: Omit<Patient, 'id'>): Promise<Patient> =>
     id: `pat-${Date.now()}`,
   };
   patients.push(newPatient);
-  return newPatient;
+  return JSON.parse(JSON.stringify(newPatient));
 }
 
 // --- Services ---
 export const getServices = async (): Promise<Service[]> => {
-  return mockServices;
+  // Return a deep copy to prevent direct modification of the mockServices array from outside
+  return JSON.parse(JSON.stringify(mockServices));
 };
 
-export const getServiceById = async (id: ServiceId): Promise<Service | undefined> => {
-  return mockServices.find(s => s.id === id);
+export const getServiceById = async (id: string): Promise<Service | undefined> => {
+  const service = mockServices.find(s => s.id === id);
+  return service ? JSON.parse(JSON.stringify(service)) : undefined;
 }
+
+// Function to generate a slug from a string
+const slugify = (text: string): string => {
+  return text
+    .toString()
+    .toLowerCase()
+    .trim()
+    .replace(/\s+/g, '-')           // Replace spaces with -
+    .replace(/[^\w-]+/g, '')       // Remove all non-word chars
+    .replace(/--+/g, '-');          // Replace multiple - with single -
+};
+
+export const addService = async (data: ServiceFormData): Promise<Service> => {
+  let id = data.id;
+  if (!id) {
+    let slug = slugify(data.name);
+    // Ensure ID is unique
+    if (mockServices.some(s => s.id === slug)) {
+      slug = `${slug}-${Date.now()}`;
+    }
+    id = slug;
+  }
+  
+  const newService: Service = {
+    id,
+    name: data.name,
+    defaultDuration: data.defaultDuration,
+    price: data.price,
+  };
+  mockServices.push(newService);
+  return JSON.parse(JSON.stringify(newService));
+};
+
+export const updateService = async (id: string, data: Partial<ServiceFormData>): Promise<Service | undefined> => {
+  const index = mockServices.findIndex(s => s.id === id);
+  if (index === -1) return undefined;
+  
+  // If name is being updated, and it's a slug-based ID that might change, handle ID regeneration or disallow ID change.
+  // For simplicity, we assume ID doesn't change during update here.
+  // If the original ID was a slug of the old name, and the name changes, the ID might become out of sync.
+  // This could be handled by ensuring IDs are immutable or by more complex logic if IDs should reflect names.
+  
+  mockServices[index] = { ...mockServices[index], ...data };
+  return JSON.parse(JSON.stringify(mockServices[index]));
+};
+
 
 // --- Appointments ---
 export const getAppointments = async (filters: { 
@@ -220,7 +271,6 @@ export const getAppointments = async (filters: {
     filteredAppointments = filteredAppointments.filter(a => statusesToFilter.includes(a.status));
   }
   
-  // Populate related data
   return filteredAppointments.map(appt => ({
     ...appt,
     patient: patients.find(p => p.id === appt.patientId),
@@ -231,7 +281,7 @@ export const getAppointments = async (filters: {
       service: mockServices.find(s => s.id === as.serviceId),
       professional: professionals.find(p => p.id === as.professionalId)
     })) || undefined,
-    attachedPhotos: appt.attachedPhotos || [], // Ensure it's an array
+    attachedPhotos: appt.attachedPhotos || [], 
   })).sort((a, b) => parseISO(a.appointmentDateTime).getTime() - parseISO(b.appointmentDateTime).getTime());
 };
 
@@ -248,7 +298,7 @@ export const getAppointmentById = async (id: string): Promise<Appointment | unde
       service: mockServices.find(s => s.id === as.serviceId),
       professional: professionals.find(p => p.id === as.professionalId)
     })) || undefined,
-    attachedPhotos: appt.attachedPhotos || [], // Ensure it's an array
+    attachedPhotos: appt.attachedPhotos || [], 
   };
 };
 
@@ -264,11 +314,11 @@ export const addAppointment = async (data: AppointmentFormData): Promise<Appoint
         lastName: data.patientLastName,
         phone: data.patientPhone,
         email: data.patientEmail,
-        dateOfBirth: data.patientDateOfBirth, // Add dateOfBirth from form data
+        dateOfBirth: data.patientDateOfBirth, 
       });
       patientId = newPatient.id;
     }
-  } else { // If patient exists, update their info if provided (admin can update, others cannot for phone)
+  } else { 
       const existingPatientDetails = patients.find(p=>p.id === patientId);
       if(existingPatientDetails) {
           const updatedPatientInfo: Partial<Patient> = {};
@@ -276,12 +326,7 @@ export const addAppointment = async (data: AppointmentFormData): Promise<Appoint
           if(data.patientLastName !== existingPatientDetails.lastName) updatedPatientInfo.lastName = data.patientLastName;
           if(data.patientEmail !== existingPatientDetails.email) updatedPatientInfo.email = data.patientEmail;
           if(data.patientDateOfBirth && data.patientDateOfBirth !== existingPatientDetails.dateOfBirth) updatedPatientInfo.dateOfBirth = data.patientDateOfBirth;
-          // Phone can only be updated by admin, or if it's a new patient entry flow (covered by !patientId block)
-          // For existing patient, if user is Admin and phone data is different, update it.
           if (data.patientPhone && data.patientPhone !== existingPatientDetails.phone) {
-             // This part is tricky as form might disable phone for non-admin.
-             // The form logic should handle whether to send patientPhone data or not based on role.
-             // For simplicity, assume if data.patientPhone is present, it's intended for update.
              updatedPatientInfo.phone = data.patientPhone;
           }
 
@@ -293,7 +338,6 @@ export const addAppointment = async (data: AppointmentFormData): Promise<Appoint
           }
       }
   }
-
 
   const service = await getServiceById(data.serviceId);
   const appointmentDateTime = setMinutes(setHours(data.appointmentDate, parseInt(data.appointmentTime.split(':')[0])), parseInt(data.appointmentTime.split(':')[1]));
@@ -307,8 +351,7 @@ export const addAppointment = async (data: AppointmentFormData): Promise<Appoint
     preferredProfessionalId: data.preferredProfessionalId === "_any_professional_placeholder_" ? undefined : data.preferredProfessionalId,
     bookingObservations: data.bookingObservations,
     status: APPOINTMENT_STATUS.BOOKED,
-    attachedPhotos: [], // Initialize with empty array
-    // addedServices is not part of initial booking form
+    attachedPhotos: [], 
   };
   
   const newAppointmentEntry: Appointment = {
@@ -336,7 +379,6 @@ export const updateAppointment = async (id: string, data: Partial<Appointment>):
       ...as,
       professionalId: as.professionalId === "NO_SELECTION_PLACEHOLDER" || as.professionalId === "" ? null : as.professionalId
     })),
-    // Ensure attachedPhotos is always an array, even if null/undefined is passed
     attachedPhotos: Array.isArray(data.attachedPhotos) ? data.attachedPhotos.filter(photo => photo && typeof photo === 'string' && photo.startsWith("data:image/")) : (appointments[index].attachedPhotos || []).filter(photo => photo && typeof photo === 'string' && photo.startsWith("data:image/")),
   };
   
@@ -360,10 +402,8 @@ export const updateAppointment = async (id: string, data: Partial<Appointment>):
   };
 };
 
-// Patient History specific functions
 export const getPatientAppointmentHistory = async (patientId: string): Promise<Appointment[]> => {
   return (await getAppointments({ patientId }))
     .filter(a => a.status === APPOINTMENT_STATUS.COMPLETED || a.status === APPOINTMENT_STATUS.NO_SHOW || a.status === APPOINTMENT_STATUS.CANCELLED_CLIENT || a.status === APPOINTMENT_STATUS.CANCELLED_STAFF)
     .sort((a,b) => parseISO(b.appointmentDateTime).getTime() - parseISO(a.appointmentDateTime).getTime());
 };
-

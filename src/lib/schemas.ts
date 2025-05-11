@@ -1,6 +1,6 @@
 
 import { z } from 'zod';
-import { LOCATIONS, SERVICES, TIME_SLOTS, PROFESSIONAL_SPECIALIZATIONS, PAYMENT_METHODS, APPOINTMENT_STATUS, APPOINTMENT_STATUS_DISPLAY } from './constants';
+import { LOCATIONS, TIME_SLOTS, PROFESSIONAL_SPECIALIZATIONS, PAYMENT_METHODS, APPOINTMENT_STATUS_DISPLAY } from './constants';
 
 export const LoginSchema = z.object({
   username: z.string().min(1, { message: 'El nombre de usuario es requerido.' }),
@@ -9,7 +9,8 @@ export const LoginSchema = z.object({
 export type LoginFormData = z.infer<typeof LoginSchema>;
 
 const locationIds = LOCATIONS.map(loc => loc.id);
-const serviceIds = SERVICES.map(s => s.id);
+// serviceIds will now be fetched dynamically for forms, so schema validation for specific IDs is removed here.
+// const serviceIds = SERVICES.map(s => s.id); 
 const professionalSpecializationValues = PROFESSIONAL_SPECIALIZATIONS.map(spec => spec);
 const paymentMethodValues = PAYMENT_METHODS.map(pm => pm);
 const appointmentStatusKeys = Object.keys(APPOINTMENT_STATUS_DISPLAY) as (keyof typeof APPOINTMENT_STATUS_DISPLAY)[];
@@ -26,7 +27,7 @@ export const AppointmentFormSchema = z.object({
   existingPatientId: z.string().optional().nullable(),
   
   locationId: z.string().refine(val => locationIds.includes(val as any), { message: "Sede inválida."}),
-  serviceId: z.string().refine(val => serviceIds.includes(val as any), { message: "Servicio inválido."}),
+  serviceId: z.string().min(1, "Servicio es requerido."), // Changed from refine with static list
   appointmentDate: z.date({ required_error: "Fecha de la cita es requerida."}),
   appointmentTime: z.string().refine(val => TIME_SLOTS.includes(val), { message: "Hora inválida."}),
   preferredProfessionalId: z.string().optional().nullable(),
@@ -55,9 +56,17 @@ export const AppointmentUpdateSchema = z.object({
   staffNotes: z.string().optional().nullable(),
   attachedPhotos: z.array(z.string().startsWith("data:image/", { message: "Debe ser un data URI de imagen válido." })).optional().nullable(),
   addedServices: z.array(z.object({
-    serviceId: z.string().refine(val => serviceIds.includes(val as any), { message: "Servicio adicional inválido."}),
+    serviceId: z.string().min(1, "Servicio adicional inválido."), // Changed from refine with static list
     professionalId: z.string().optional().nullable(),
     price: z.number().positive().optional().nullable(),
   })).optional().nullable(),
 });
+
+export const ServiceFormSchema = z.object({
+  id: z.string().optional(),
+  name: z.string().min(2, "Nombre del servicio es requerido."),
+  defaultDuration: z.coerce.number().int().positive("La duración debe ser un número positivo."),
+  price: z.coerce.number().positive("El precio debe ser un número positivo.").optional().nullable(),
+});
+export type ServiceFormData = z.infer<typeof ServiceFormSchema>;
 

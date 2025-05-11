@@ -5,11 +5,11 @@ import React, { useState, useEffect } from 'react';
 import { useForm, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { AppointmentFormSchema, type AppointmentFormData as FormSchemaType } from '@/lib/schemas';
-import type { LocationId, ServiceId } from '@/lib/constants';
+import type { LocationId } from '@/lib/constants';
 import type { Professional, Patient, Service } from '@/types';
 import { useAuth } from '@/contexts/auth-provider';
 import { useAppState } from '@/contexts/app-state-provider';
-import { USER_ROLES, LOCATIONS, SERVICES, TIME_SLOTS } from '@/lib/constants';
+import { USER_ROLES, LOCATIONS, TIME_SLOTS } from '@/lib/constants';
 import { getProfessionals, getServices, addAppointment, getPatientById } from '@/lib/data';
 
 import { Button } from '@/components/ui/button';
@@ -34,12 +34,13 @@ import { useToast } from '@/hooks/use-toast';
 interface AppointmentFormProps {
   isOpen: boolean;
   onOpenChange: (open: boolean) => void;
-  onAppointmentCreated: () => void; // Callback after successful creation
-  initialData?: Partial<FormSchemaType>; // For editing, not fully implemented yet
+  onAppointmentCreated: () => void; 
+  initialData?: Partial<FormSchemaType>; 
   defaultDate?: Date;
 }
 
 const ANY_PROFESSIONAL_VALUE = "_any_professional_placeholder_";
+const DEFAULT_SERVICE_ID_PLACEHOLDER = "_default_service_id_placeholder_"; // Placeholder for initial load
 
 export function AppointmentForm({ isOpen, onOpenChange, onAppointmentCreated, initialData, defaultDate }: AppointmentFormProps) {
   const { user } = useAuth();
@@ -47,7 +48,7 @@ export function AppointmentForm({ isOpen, onOpenChange, onAppointmentCreated, in
   const { toast } = useToast();
 
   const [professionals, setProfessionals] = useState<Professional[]>([]);
-  const [services, setServicesList] = useState<Service[]>([]);
+  const [servicesList, setServicesList] = useState<Service[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [showPatientHistory, setShowPatientHistory] = useState(false);
   const [currentPatientForHistory, setCurrentPatientForHistory] = useState<Patient | null>(null);
@@ -57,9 +58,8 @@ export function AppointmentForm({ isOpen, onOpenChange, onAppointmentCreated, in
     ? user.locationId 
     : (isAdminOrContador && adminSelectedLocation && adminSelectedLocation !== 'all' 
         ? adminSelectedLocation 
-        : (isAdminOrContador ? LOCATIONS[0].id : undefined) // if admin/contador & 'all' selected, default to first location
+        : (isAdminOrContador ? LOCATIONS[0].id : undefined) 
     );
-
 
   const form = useForm<FormSchemaType>({
     resolver: zodResolver(AppointmentFormSchema),
@@ -71,7 +71,7 @@ export function AppointmentForm({ isOpen, onOpenChange, onAppointmentCreated, in
       patientDateOfBirth: initialData?.patientDateOfBirth || '',
       existingPatientId: initialData?.existingPatientId || null,
       locationId: initialData?.locationId || defaultLocation || LOCATIONS[0].id,
-      serviceId: initialData?.serviceId || SERVICES[0].id,
+      serviceId: initialData?.serviceId || DEFAULT_SERVICE_ID_PLACEHOLDER, // Use placeholder initially
       appointmentDate: initialData?.appointmentDate || defaultDate || new Date(),
       appointmentTime: initialData?.appointmentTime || TIME_SLOTS[4], // Default to 10:00 AM
       preferredProfessionalId: initialData?.preferredProfessionalId || ANY_PROFESSIONAL_VALUE,
@@ -83,12 +83,16 @@ export function AppointmentForm({ isOpen, onOpenChange, onAppointmentCreated, in
   const watchExistingPatientId = form.watch('existingPatientId');
 
   useEffect(() => {
-    async function loadData() {
-      const servicesData = await getServices();
-      setServicesList(servicesData);
+    async function loadInitialServices() {
+      const fetchedServices = await getServices();
+      setServicesList(fetchedServices);
+      // Set default serviceId after services are loaded if it's still the placeholder
+      if (form.getValues('serviceId') === DEFAULT_SERVICE_ID_PLACEHOLDER && fetchedServices.length > 0) {
+        form.setValue('serviceId', fetchedServices[0].id);
+      }
     }
-    loadData();
-  }, []);
+    loadInitialServices();
+  }, [form]);
 
   useEffect(() => {
     async function loadProfessionals(location: LocationId) {
@@ -101,7 +105,6 @@ export function AppointmentForm({ isOpen, onOpenChange, onAppointmentCreated, in
   }, [watchLocationId]);
 
   useEffect(() => {
-    // When existingPatientId changes, fetch patient details for history panel
     async function fetchAndSetPatientForHistory(patientId: string) {
       const patient = await getPatientById(patientId);
       setCurrentPatientForHistory(patient || null);
@@ -145,7 +148,6 @@ export function AppointmentForm({ isOpen, onOpenChange, onAppointmentCreated, in
       const submitData = {
         ...data,
         preferredProfessionalId: data.preferredProfessionalId === ANY_PROFESSIONAL_VALUE ? null : data.preferredProfessionalId,
-        // Ensure 'Teléfono Restringido' is not sent if patient is existing and user is not admin
         patientPhone: (data.existingPatientId && user?.role !== USER_ROLES.ADMIN) ? undefined : data.patientPhone,
       };
       console.log("Submitting appointment data:", submitData);
@@ -160,8 +162,8 @@ export function AppointmentForm({ isOpen, onOpenChange, onAppointmentCreated, in
       form.reset({ 
         ...form.formState.defaultValues,
         appointmentDate: defaultDate || new Date(),
-        locationId: data.locationId, // Keep the selected location for the next booking in this session
-        serviceId: SERVICES[0].id, 
+        locationId: data.locationId, 
+        serviceId: servicesList.length > 0 ? servicesList[0].id : DEFAULT_SERVICE_ID_PLACEHOLDER, 
         appointmentTime: TIME_SLOTS[4], 
         preferredProfessionalId: ANY_PROFESSIONAL_VALUE,
         patientFirstName: '',
@@ -195,7 +197,7 @@ export function AppointmentForm({ isOpen, onOpenChange, onAppointmentCreated, in
           ...form.formState.defaultValues,
           appointmentDate: defaultDate || new Date(),
           locationId: initialData?.locationId || defaultLocation || LOCATIONS[0].id,
-          serviceId: SERVICES[0].id,
+          serviceId: servicesList.length > 0 ? servicesList[0].id : DEFAULT_SERVICE_ID_PLACEHOLDER,
           appointmentTime: TIME_SLOTS[4], 
           preferredProfessionalId: ANY_PROFESSIONAL_VALUE,
           patientFirstName: '',
@@ -334,7 +336,7 @@ export function AppointmentForm({ isOpen, onOpenChange, onAppointmentCreated, in
                   render={({ field }) => (
                     <FormItem>
                       <FormLabel className="flex items-center gap-1"><Building size={16}/>Sede</FormLabel>
-                      <Select onValueChange={field.onChange} value={field.value} disabled={user?.role === USER_ROLES.LOCATION_STAFF && !isAdminOrContador}>
+                      <Select onValueChange={field.onChange} value={field.value} disabled={(user?.role === USER_ROLES.LOCATION_STAFF && !isAdminOrContador) || servicesList.length === 0}>
                         <FormControl>
                           <SelectTrigger><SelectValue placeholder="Seleccionar sede" /></SelectTrigger>
                         </FormControl>
@@ -354,12 +356,15 @@ export function AppointmentForm({ isOpen, onOpenChange, onAppointmentCreated, in
                   render={({ field }) => (
                     <FormItem>
                       <FormLabel>Servicio</FormLabel>
-                      <Select onValueChange={field.onChange} value={field.value}>
+                      <Select onValueChange={field.onChange} value={field.value === DEFAULT_SERVICE_ID_PLACEHOLDER && servicesList.length > 0 ? servicesList[0].id : field.value} disabled={servicesList.length === 0}>
                         <FormControl>
-                          <SelectTrigger><SelectValue placeholder="Seleccionar servicio" /></SelectTrigger>
+                          <SelectTrigger>
+                            <SelectValue placeholder={servicesList.length > 0 ? "Seleccionar servicio" : "Cargando servicios..."} />
+                           </SelectTrigger>
                         </FormControl>
                         <SelectContent>
-                          {services.map(serv => (
+                          {servicesList.length === 0 && <SelectItem value={DEFAULT_SERVICE_ID_PLACEHOLDER} disabled>Cargando...</SelectItem>}
+                          {servicesList.map(serv => (
                             <SelectItem key={serv.id} value={serv.id}>{serv.name}</SelectItem>
                           ))}
                         </SelectContent>
@@ -384,6 +389,7 @@ export function AppointmentForm({ isOpen, onOpenChange, onAppointmentCreated, in
                                   "pl-3 text-left font-normal",
                                   !field.value && "text-muted-foreground"
                                 )}
+                                disabled={servicesList.length === 0}
                               >
                                 {field.value ? (
                                   format(field.value, "PPP", { locale: es })
@@ -414,7 +420,7 @@ export function AppointmentForm({ isOpen, onOpenChange, onAppointmentCreated, in
                     render={({ field }) => (
                       <FormItem>
                         <FormLabel className="flex items-center gap-1"><ClockIcon size={16}/>Hora de la Cita</FormLabel>
-                        <Select onValueChange={field.onChange} value={field.value}>
+                        <Select onValueChange={field.onChange} value={field.value} disabled={servicesList.length === 0}>
                           <FormControl>
                             <SelectTrigger><SelectValue placeholder="Seleccionar hora" /></SelectTrigger>
                           </FormControl>
@@ -441,10 +447,11 @@ export function AppointmentForm({ isOpen, onOpenChange, onAppointmentCreated, in
                       <FormLabel>Profesional Preferido (Opcional)</FormLabel>
                       <Select 
                         onValueChange={(value) => field.onChange(value === ANY_PROFESSIONAL_VALUE ? null : value)} 
-                        value={field.value || ANY_PROFESSIONAL_VALUE} 
+                        value={field.value || ANY_PROFESSIONAL_VALUE}
+                        disabled={servicesList.length === 0 || professionals.length === 0}
                       >
                         <FormControl>
-                          <SelectTrigger><SelectValue placeholder="Cualquier profesional" /></SelectTrigger>
+                          <SelectTrigger><SelectValue placeholder={professionals.length > 0 ? "Cualquier profesional" : "No hay profesionales"} /></SelectTrigger>
                         </FormControl>
                         <SelectContent>
                           <SelectItem value={ANY_PROFESSIONAL_VALUE}>Cualquier profesional</SelectItem>
@@ -468,6 +475,7 @@ export function AppointmentForm({ isOpen, onOpenChange, onAppointmentCreated, in
                           placeholder="Ej: El paciente tiene movilidad reducida, requiere un podólogo con experiencia en pie diabético, etc."
                           className="resize-none"
                           {...field}
+                          disabled={servicesList.length === 0}
                         />
                       </FormControl>
                       <FormMessage />
@@ -486,7 +494,7 @@ export function AppointmentForm({ isOpen, onOpenChange, onAppointmentCreated, in
                 ...form.formState.defaultValues,
                 appointmentDate: defaultDate || new Date(),
                 locationId: initialData?.locationId || defaultLocation || LOCATIONS[0].id,
-                serviceId: SERVICES[0].id,
+                serviceId: servicesList.length > 0 ? servicesList[0].id : DEFAULT_SERVICE_ID_PLACEHOLDER,
                 appointmentTime: TIME_SLOTS[4], 
                 preferredProfessionalId: ANY_PROFESSIONAL_VALUE,
                 patientFirstName: '',
@@ -502,7 +510,7 @@ export function AppointmentForm({ isOpen, onOpenChange, onAppointmentCreated, in
               onOpenChange(false);
             }}>Cancelar</Button>
           </DialogClose>
-          <Button type="submit" onClick={form.handleSubmit(onSubmit)} disabled={isLoading}>
+          <Button type="submit" onClick={form.handleSubmit(onSubmit)} disabled={isLoading || servicesList.length === 0}>
             {isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
             {initialData?.patientFirstName ? 'Actualizar Cita' : 'Agendar Cita'}
           </Button>
@@ -511,4 +519,3 @@ export function AppointmentForm({ isOpen, onOpenChange, onAppointmentCreated, in
     </Dialog>
   );
 }
-
