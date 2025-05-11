@@ -48,6 +48,7 @@ export const ProfessionalFormSchema = z.object({
 
 export const AppointmentUpdateSchema = z.object({
   status: z.string().refine(val => appointmentStatusKeys.includes(val as any), {message: "Estado inválido"}),
+  serviceId: z.string().min(1, "Servicio es requerido.").optional(), // Added serviceId for updates
   actualArrivalTime: z.string().optional().nullable(), // HH:MM
   professionalId: z.string().optional().nullable(), // Attending professional
   durationMinutes: z.number().int().positive().optional().nullable(),
@@ -56,7 +57,7 @@ export const AppointmentUpdateSchema = z.object({
   staffNotes: z.string().optional().nullable(),
   attachedPhotos: z.array(z.string().startsWith("data:image/", { message: "Debe ser un data URI de imagen válido." })).optional().nullable(),
   addedServices: z.array(z.object({
-    serviceId: z.string().min(1, "Servicio adicional inválido."), // Changed from refine with static list
+    serviceId: z.string().min(1, "Servicio adicional inválido."),
     professionalId: z.string().optional().nullable(),
     price: z.number().positive().optional().nullable(),
   })).optional().nullable(),

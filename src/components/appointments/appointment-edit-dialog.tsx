@@ -5,7 +5,7 @@ import type { Appointment, Service, AppointmentStatus, Professional } from '@/ty
 import { APPOINTMENT_STATUS, PAYMENT_METHODS, USER_ROLES, APPOINTMENT_STATUS_DISPLAY, LOCATIONS } from '@/lib/constants';
 import { format, parseISO } from 'date-fns';
 import { es } from 'date-fns/locale';
-import { CameraIcon, Loader2, PlusCircle, Trash2, ShoppingBag } from 'lucide-react';
+import { CameraIcon, Loader2, PlusCircle, Trash2, ShoppingBag, ConciergeBell } from 'lucide-react';
 import { useAuth } from '@/contexts/auth-provider';
 import {
   Dialog,
@@ -56,7 +56,7 @@ export function AppointmentEditDialog({ appointment, isOpen, onOpenChange, onApp
   const { toast } = useToast();
   const [professionals, setProfessionals] = useState<Professional[]>([]);
   const [allServices, setAllServices] = useState<Service[]>([]);
-  const [isSubmittingForm, setIsSubmittingForm] = useState(false); // Renamed from isSubmitting to avoid conflict
+  const [isSubmittingForm, setIsSubmittingForm] = useState(false); 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const form = useForm<AppointmentUpdateFormData>({
@@ -77,6 +77,7 @@ export function AppointmentEditDialog({ appointment, isOpen, onOpenChange, onApp
     if (isOpen && appointment) {
       form.reset({
         status: appointment.status,
+        serviceId: appointment.serviceId || (allServices.length > 0 ? allServices[0].id : DEFAULT_SERVICE_ID_PLACEHOLDER),
         actualArrivalTime: appointment.actualArrivalTime || format(new Date(), 'HH:mm'),
         professionalId: appointment.professionalId || NO_SELECTION_PLACEHOLDER,
         durationMinutes: appointment.durationMinutes || appointment.service?.defaultDuration,
@@ -110,21 +111,25 @@ export function AppointmentEditDialog({ appointment, isOpen, onOpenChange, onApp
         const servicesData = await getServices();
         setAllServices(servicesData);
 
-        // Reset addedServices with proper default serviceId if needed after services are loaded
-        if (appointment && appointment.addedServices) {
-          form.setValue('addedServices', appointment.addedServices.map(as => ({
-            serviceId: as.serviceId || (servicesData.length > 0 ? servicesData[0].id : DEFAULT_SERVICE_ID_PLACEHOLDER),
-            professionalId: as.professionalId || NO_SELECTION_PLACEHOLDER,
-            price: as.price ?? undefined,
-          })));
+        // Reset addedServices and main serviceId with proper default serviceId if needed after services are loaded
+        if (appointment) {
+          if (form.getValues('serviceId') === DEFAULT_SERVICE_ID_PLACEHOLDER && servicesData.length > 0) {
+            form.setValue('serviceId', appointment.serviceId || servicesData[0].id);
+          }
+          if (appointment.addedServices) {
+            form.setValue('addedServices', appointment.addedServices.map(as => ({
+              serviceId: as.serviceId || (servicesData.length > 0 ? servicesData[0].id : DEFAULT_SERVICE_ID_PLACEHOLDER),
+              professionalId: as.professionalId || NO_SELECTION_PLACEHOLDER,
+              price: as.price ?? undefined,
+            })));
+          }
         }
-
       }
     }
     if (isOpen) {
       loadPrerequisites();
     }
-  }, [isOpen, user, appointment, form]); // Added form to dependencies
+  }, [isOpen, user, appointment, form]); 
 
   const handleFileChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const files = event.target.files;
@@ -135,7 +140,9 @@ export function AppointmentEditDialog({ appointment, isOpen, onOpenChange, onApp
         const newPhotoPromises = Array.from(files).map(fileToDataUri);
         const newDataUris = await Promise.all(newPhotoPromises);
         const validNewDataUris = newDataUris.filter(uri => typeof uri === 'string' && uri.startsWith("data:image/"));
-        form.setValue("attachedPhotos", [...currentPhotos, ...validNewDataUris], { shouldValidate: true });
+        // Filter out any empty strings or invalid values before setting
+        const updatedPhotos = [...currentPhotos.filter(p => p && p.startsWith("data:image/")), ...validNewDataUris];
+        form.setValue("attachedPhotos", updatedPhotos, { shouldValidate: true });
       } catch (error) {
         toast({ title: "Error al cargar imagen", description: "No se pudo procesar la imagen.", variant: "destructive"});
       } finally {
@@ -150,13 +157,14 @@ export function AppointmentEditDialog({ appointment, isOpen, onOpenChange, onApp
     try {
       const updatedData: Partial<Appointment> = {
         ...data,
+        serviceId: data.serviceId === DEFAULT_SERVICE_ID_PLACEHOLDER && allServices.length > 0 ? allServices[0].id : data.serviceId,
         professionalId: data.professionalId === NO_SELECTION_PLACEHOLDER ? null : data.professionalId,
         durationMinutes: data.durationMinutes ? parseInt(String(data.durationMinutes), 10) : undefined,
         amountPaid: data.amountPaid ? parseFloat(String(data.amountPaid)) : undefined,
-        attachedPhotos: (data.attachedPhotos || []).filter(photo => typeof photo === 'string' && photo.startsWith("data:image/")),
+        attachedPhotos: (data.attachedPhotos || []).filter(photo => photo && typeof photo === 'string' && photo.startsWith("data:image/")),
         addedServices: data.addedServices?.map(as => ({
           ...as,
-          serviceId: as.serviceId === DEFAULT_SERVICE_ID_PLACEHOLDER ? (allServices.length > 0 ? allServices[0].id : '') : as.serviceId, // Ensure a valid serviceId
+          serviceId: as.serviceId === DEFAULT_SERVICE_ID_PLACEHOLDER ? (allServices.length > 0 ? allServices[0].id : '') : as.serviceId, 
           professionalId: as.professionalId === NO_SELECTION_PLACEHOLDER ? null : as.professionalId,
           price: as.price ? parseFloat(String(as.price)) : null,
         })),
@@ -213,6 +221,33 @@ export function AppointmentEditDialog({ appointment, isOpen, onOpenChange, onApp
               </FormItem>
             )}
           />
+          
+          <FormField
+            control={form.control}
+            name="serviceId"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel className="flex items-center gap-1"><ConciergeBell size={16}/>Motivo de la Reserva (Servicio Principal)</FormLabel>
+                <Select 
+                  onValueChange={field.onChange} 
+                  value={field.value === DEFAULT_SERVICE_ID_PLACEHOLDER && allServices.length > 0 ? allServices[0].id : field.value} 
+                  disabled={allServices.length === 0}
+                >
+                  <FormControl>
+                    <SelectTrigger>
+                      <SelectValue placeholder={allServices.length > 0 ? "Seleccionar servicio" : "Cargando servicios..."} />
+                    </SelectTrigger>
+                  </FormControl>
+                  <SelectContent>
+                    {allServices.length === 0 && <SelectItem value={DEFAULT_SERVICE_ID_PLACEHOLDER} disabled>Cargando...</SelectItem>}
+                    {allServices.map(s => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+
 
           {form.watch('status') === APPOINTMENT_STATUS.CONFIRMED && (
             <FormField
