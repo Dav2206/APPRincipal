@@ -269,7 +269,7 @@ export default function RegistryPage() {
         });
 
         LOCATIONS.forEach(loc => {
-          if (professionalsByLocation.has(loc.id) || locationTotals.has(loc.id)) { // Ensure location is added even if no profs but has totals (unlikely but defensive)
+          if (professionalsByLocation.has(loc.id) || locationTotals.has(loc.id)) { 
             const profsForLocation = professionalsByLocation.get(loc.id);
             groupedResult.push({
               type: 'biWeeklyGrouped',
@@ -332,9 +332,9 @@ export default function RegistryPage() {
       return (reportData as DailyActivityReportItem[]).reduce((sum, item) => sum + item.totalRevenue, 0);
     } else if (reportType === 'biWeekly') {
       if (isAdminOrContador && adminSelectedLocation === 'all') {
-        return (reportData as GroupedBiWeeklyReportItem[]).reduce((sum, group) => sum + group.locationTotalEarnings, 0);
+        return (reportData as GroupedBiWeeklyReportItem[]).reduce((sum, group) => sum + (group.locationTotalEarnings || 0), 0);
       } else {
-        return (reportData as BiWeeklyEarningsReportItem[]).reduce((sum, item) => sum + item.biWeeklyEarnings, 0);
+        return (reportData as BiWeeklyEarningsReportItem[]).reduce((sum, item) => sum + (item.biWeeklyEarnings || 0), 0);
       }
     }
     return 0;
@@ -607,10 +607,10 @@ export default function RegistryPage() {
                           <TableRow key={item.professionalId}>
                             <TableCell className="font-medium">{item.professionalName}</TableCell>
                             <TableCell>{item.locationName}</TableCell>
-                            <TableCell className="text-right">{item.biWeeklyEarnings.toFixed(2)}</TableCell>
+                            <TableCell className="text-right">{(item.biWeeklyEarnings || 0).toFixed(2)}</TableCell>
                           </TableRow>
                         ))}
-                        <TableRow className="bg-muted/50 font-semibold">
+                        <TableRow className="bg-muted/50 font-semibold" key={`total-row-${group.locationId}`}>
                           <TableCell colSpan={2}>Total {group.locationName}</TableCell>
                           <TableCell className="text-right">{(group.locationTotalEarnings || 0).toFixed(2)}</TableCell>
                         </TableRow>
@@ -647,7 +647,7 @@ export default function RegistryPage() {
                           </TableCell>
                         )}
                         <TableCell className="text-right">
-                          {item.type === 'daily' ? item.totalRevenue.toFixed(2) : (item as BiWeeklyEarningsReportItem).biWeeklyEarnings.toFixed(2)}
+                          {item.type === 'daily' ? (item.totalRevenue || 0).toFixed(2) : ((item as BiWeeklyEarningsReportItem).biWeeklyEarnings || 0).toFixed(2)}
                         </TableCell>
                       </TableRow>
                     ))
@@ -661,5 +661,6 @@ export default function RegistryPage() {
     </div>
   );
 }
+
 
 
