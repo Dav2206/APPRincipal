@@ -14,7 +14,7 @@ import { Calendar } from '@/components/ui/calendar';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow, TableCaption } from '@/components/ui/table';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { format, startOfDay, getMonth, getDate, startOfMonth, endOfMonth, addDays, getYear, subDays, setYear, setMonth, isSameDay, isBefore, isAfter } from 'date-fns';
+import { format, startOfDay, getMonth, getDate, startOfMonth, endOfMonth, addDays, getYear, subDays, setYear, setMonth, isSameDay, isAfter, subMonths } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { CalendarIcon, Loader2, AlertTriangle, FileText, DollarSign, ChevronLeft, ChevronRight } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -40,7 +40,7 @@ type ReportItem = DailyActivityReportItem | BiWeeklyEarningsReportItem;
 type ReportType = 'daily' | 'biWeekly';
 
 const currentSystemYear = getYear(new Date());
-const availableYears = [currentSystemYear, currentSystemYear - 1, currentSystemYear - 2];
+const availableYearsForAdmin = [currentSystemYear, currentSystemYear - 1, currentSystemYear - 2];
 const months = Array.from({ length: 12 }, (_, i) => ({
   value: i,
   label: format(new Date(currentSystemYear, i), 'MMMM', { locale: es }),
@@ -56,13 +56,13 @@ export default function RegistryPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [reportType, setReportType] = useState<ReportType>('daily');
 
-  // State for bi-weekly period selection
   const [selectedYear, setSelectedYear] = useState<number>(getYear(new Date()));
-  const [selectedMonth, setSelectedMonth] = useState<number>(getMonth(new Date())); // 0-11
+  const [selectedMonth, setSelectedMonth] = useState<number>(getMonth(new Date())); 
   const [selectedQuincena, setSelectedQuincena] = useState<1 | 2>(getDate(new Date()) <= 15 ? 1 : 2);
 
 
   const isAdminOrContador = user?.role === USER_ROLES.ADMIN || user?.role === USER_ROLES.CONTADOR;
+  const isStaffRestrictedView = useMemo(() => user?.role === USER_ROLES.LOCATION_STAFF, [user]);
 
   const effectiveLocationId = useMemo(() => {
     if (isAdminOrContador) {
@@ -196,7 +196,6 @@ export default function RegistryPage() {
         }
       });
 
-
       const finalReport: BiWeeklyEarningsReportItem[] = Array.from(biWeeklyReportMap.values()).map(item => {
         const professional = professionalsList.find(p => p.id === item.professionalId);
         const location = LOCATIONS.find(l => l.id === item.locationId);
@@ -266,6 +265,32 @@ export default function RegistryPage() {
     }
   };
   
+  const getBoundaryQuincenasForStaff = useCallback(() => {
+    const today = new Date();
+    const currentQYear = getYear(today);
+    const currentQMonth = getMonth(today);
+    const currentQDay = getDate(today);
+    const currentQNumber = (currentQDay <= 15 ? 1 : 2) as 1 | 2;
+
+    const latestAllowed = { year: currentQYear, month: currentQMonth, quincena: currentQNumber };
+
+    let earliestAllowedYear = currentQYear;
+    let earliestAllowedMonth = currentQMonth;
+    let earliestAllowedQuincena: 1 | 2 = 1;
+
+    if (currentQNumber === 2) {
+        earliestAllowedQuincena = 1;
+    } else { // currentQNumber === 1
+        earliestAllowedQuincena = 2;
+        const prevMonthDate = subMonths(today, 1);
+        earliestAllowedMonth = getMonth(prevMonthDate);
+        earliestAllowedYear = getYear(prevMonthDate);
+    }
+    const earliestAllowed = { year: earliestAllowedYear, month: earliestAllowedMonth, quincena: earliestAllowedQuincena };
+    return { earliestAllowed, latestAllowed };
+  }, []);
+
+
   const navigateQuincena = (direction: 'prev' | 'next') => {
     let newYear = selectedYear;
     let newMonth = selectedMonth;
@@ -274,45 +299,49 @@ export default function RegistryPage() {
     if (direction === 'next') {
       if (newQuincena === 1) {
         newQuincena = 2;
-      } else { // Was 2nd quincena
+      } else { 
         newQuincena = 1;
-        if (newMonth === 11) { // December
-          newMonth = 0; // January
+        if (newMonth === 11) { 
+          newMonth = 0; 
           newYear += 1;
         } else {
           newMonth += 1;
         }
       }
-    } else { // prev
+    } else { 
       if (newQuincena === 2) {
         newQuincena = 1;
-      } else { // Was 1st quincena
+      } else { 
         newQuincena = 2;
-        if (newMonth === 0) { // January
-          newMonth = 11; // December
+        if (newMonth === 0) { 
+          newMonth = 11; 
           newYear -= 1;
         } else {
           newMonth -= 1;
         }
       }
     }
-    // Prevent navigating to future quincenas beyond current system date
-    const today = new Date();
-    const firstDayOfNewQuincena = newQuincena === 1 ? startOfMonth(setMonth(setYear(new Date(),newYear), newMonth)) : addDays(startOfMonth(setMonth(setYear(new Date(),newYear), newMonth)),15);
     
-    if(isAfter(firstDayOfNewQuincena, today) && !isSameDay(firstDayOfNewQuincena, startOfDay(today))) {
-        // If navigating to a future quincena, revert to current system quincena
-        setSelectedYear(getYear(today));
-        setSelectedMonth(getMonth(today));
-        setSelectedQuincena(getDate(today) <= 15 ? 1 : 2);
-        return;
-    }
-    
-    // Prevent navigating to years before the available years
-    if (newYear < availableYears[availableYears.length -1]) {
-        return;
-    }
+    if (isStaffRestrictedView) {
+      const { earliestAllowed, latestAllowed } = getBoundaryQuincenasForStaff();
+      const targetValue = newYear * 1000 + newMonth * 10 + newQuincena;
+      const earliestValue = earliestAllowed.year * 1000 + earliestAllowed.month * 10 + earliestAllowed.quincena;
+      const latestValue = latestAllowed.year * 1000 + latestAllowed.month * 10 + latestAllowed.quincena;
 
+      if (targetValue < earliestValue || targetValue > latestValue) {
+        return; 
+      }
+    } else { // Admin/Contador logic
+      const today = new Date();
+      const firstDayOfNewQuincena = newQuincena === 1 ? startOfMonth(setMonth(setYear(new Date(),newYear), newMonth)) : addDays(startOfMonth(setMonth(setYear(new Date(),newYear), newMonth)),15);
+      
+      if(isAfter(firstDayOfNewQuincena, today) && !isSameDay(firstDayOfNewQuincena, startOfDay(today))) {
+          return; 
+      }
+      if (newYear < availableYearsForAdmin[availableYearsForAdmin.length -1]) {
+          return;
+      }
+    }
 
     setSelectedYear(newYear);
     setSelectedMonth(newMonth);
@@ -320,6 +349,15 @@ export default function RegistryPage() {
   };
   
   const isNextQuincenaDisabled = () => {
+    if (isStaffRestrictedView) {
+      const { latestAllowed } = getBoundaryQuincenasForStaff();
+      return (
+        selectedYear === latestAllowed.year &&
+        selectedMonth === latestAllowed.month &&
+        selectedQuincena === latestAllowed.quincena
+      );
+    }
+    // Admin/Contador logic
     let nextQYear = selectedYear;
     let nextQMonth = selectedMonth;
     let nextQQuincena = selectedQuincena;
@@ -332,10 +370,21 @@ export default function RegistryPage() {
   };
 
   const isPrevQuincenaDisabled = () => {
+     if (isStaffRestrictedView) {
+      const { earliestAllowed } = getBoundaryQuincenasForStaff();
+      return (
+        selectedYear === earliestAllowed.year &&
+        selectedMonth === earliestAllowed.month &&
+        selectedQuincena === earliestAllowed.quincena
+      );
+    }
+    // Admin/Contador logic
     let prevQYear = selectedYear;
-    if (selectedQuincena === 2) { /* no change to month/year needed */ }
-    else { if (selectedMonth === 0) { prevQYear -=1; } } // Check year boundary
-    return prevQYear < availableYears[availableYears.length-1];
+    // Determine the year of the previous quincena for comparison with availableYearsForAdmin
+    if (selectedQuincena === 1 && selectedMonth === 0) { // If 1st quincena of Jan, previous is 2nd quincena of Dec of prev year
+        prevQYear -= 1;
+    }
+    return prevQYear < availableYearsForAdmin[availableYearsForAdmin.length-1];
   };
 
 
@@ -400,15 +449,15 @@ export default function RegistryPage() {
                     <Button variant="outline" size="icon" onClick={() => navigateQuincena('prev')} disabled={isPrevQuincenaDisabled()}>
                         <ChevronLeft className="h-4 w-4" />
                     </Button>
-                    <Select value={String(selectedYear)} onValueChange={(val) => setSelectedYear(Number(val))}>
+                    <Select value={String(selectedYear)} onValueChange={(val) => setSelectedYear(Number(val))} disabled={isStaffRestrictedView}>
                         <SelectTrigger className="w-[100px]"><SelectValue /></SelectTrigger>
-                        <SelectContent>{availableYears.map(y => <SelectItem key={y} value={String(y)}>{y}</SelectItem>)}</SelectContent>
+                        <SelectContent>{(isStaffRestrictedView ? [getBoundaryQuincenasForStaff().earliestAllowed.year, getBoundaryQuincenasForStaff().latestAllowed.year] : availableYearsForAdmin).filter((y,i,self) => self.indexOf(y) === i).map(y => <SelectItem key={y} value={String(y)}>{y}</SelectItem>)}</SelectContent>
                     </Select>
-                    <Select value={String(selectedMonth)} onValueChange={(val) => setSelectedMonth(Number(val))}>
+                    <Select value={String(selectedMonth)} onValueChange={(val) => setSelectedMonth(Number(val))} disabled={isStaffRestrictedView}>
                         <SelectTrigger className="w-[150px]"><SelectValue /></SelectTrigger>
                         <SelectContent>{months.map(m => <SelectItem key={m.value} value={String(m.value)}>{m.label}</SelectItem>)}</SelectContent>
                     </Select>
-                    <Select value={String(selectedQuincena)} onValueChange={(val) => setSelectedQuincena(Number(val) as 1 | 2)}>
+                    <Select value={String(selectedQuincena)} onValueChange={(val) => setSelectedQuincena(Number(val) as 1 | 2)} disabled={isStaffRestrictedView}>
                         <SelectTrigger className="w-[150px]"><SelectValue /></SelectTrigger>
                         <SelectContent>
                             <SelectItem value="1">1ra Quincena</SelectItem>
