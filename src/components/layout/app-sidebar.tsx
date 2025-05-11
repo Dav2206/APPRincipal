@@ -19,7 +19,8 @@ import {
   X,
   CalendarClock,
   Landmark, 
-  ClipboardList, // Icon for Services
+  ClipboardList, 
+  FileText, // Added for Registry
 } from 'lucide-react';
 import { USER_ROLES } from '@/lib/constants';
 
@@ -29,8 +30,9 @@ const navItems = [
   { href: '/schedule', label: 'Agenda Horaria', icon: CalendarClock, roles: [USER_ROLES.ADMIN, USER_ROLES.LOCATION_STAFF, USER_ROLES.CONTADOR] },
   { href: '/history', label: 'Historial', icon: History, roles: [USER_ROLES.ADMIN, USER_ROLES.LOCATION_STAFF, USER_ROLES.CONTADOR] },
   { href: '/patients', label: 'Pacientes', icon: Users, roles: [USER_ROLES.ADMIN, USER_ROLES.LOCATION_STAFF, USER_ROLES.CONTADOR] },
+  { href: '/registry', label: 'Registro Diario', icon: FileText, roles: [USER_ROLES.ADMIN, USER_ROLES.LOCATION_STAFF, USER_ROLES.CONTADOR] },
   { href: '/professionals', label: 'Profesionales', icon: Briefcase, roles: [USER_ROLES.ADMIN, USER_ROLES.CONTADOR] },
-  { href: '/services', label: 'Servicios', icon: ClipboardList, roles: [USER_ROLES.ADMIN] }, // New Services link
+  { href: '/services', label: 'Servicios', icon: ClipboardList, roles: [USER_ROLES.ADMIN] }, 
   { href: '/finances', label: 'Finanzas', icon: Landmark, roles: [USER_ROLES.CONTADOR] },
 ];
 
@@ -54,7 +56,7 @@ export function AppSidebar() {
       {sidebarOpen && (
         <div 
           onClick={() => setSidebarOpen(false)}
-          className="fixed inset-0 top-16 z-30 bg-black/50 md:hidden" // Ensure it covers from top-16
+          className="fixed inset-0 top-16 z-30 bg-black/50 md:hidden" 
           aria-hidden="true"
         />
       )}
@@ -72,28 +74,36 @@ export function AppSidebar() {
         <ScrollArea className="flex-1">
           <nav className="grid items-start gap-1 px-2 py-4 text-sm font-medium">
             {filteredNavItems.map(({ href, label, icon: Icon }) => {
-              const isActive = pathname === href || (href !== '/dashboard' && pathname.startsWith(href) && href !== '/appointments' && href !=='/schedule' && href !== '/finances' && href !== '/services');
-              // Special handling for specific pages to avoid multiple being active if path is similar
-              const isAppointmentsActive = href === '/appointments' && (pathname === '/appointments' || pathname.startsWith('/appointments/'));
-              const isScheduleActive = href === '/schedule' && (pathname === '/schedule' || pathname.startsWith('/schedule/'));
-              const isFinancesActive = href === '/finances' && (pathname === '/finances' || pathname.startsWith('/finances/'));
-              const isServicesActive = href === '/services' && (pathname === '/services' || pathname.startsWith('/services/'));
-              
-              let finalIsActive = isActive;
-              if (href === '/appointments') finalIsActive = isAppointmentsActive;
-              if (href === '/schedule') finalIsActive = isScheduleActive;
-              if (href === '/finances') finalIsActive = isFinancesActive;
-              if (href === '/services') finalIsActive = isServicesActive;
+              // Base active check: exact match or starts with for parent routes
+              let finalIsActive = pathname === href || (pathname.startsWith(href) && href !== '/dashboard' && href !== '/');
 
               // Ensure dashboard is only active for exact match
-              if (href === '/dashboard' && pathname !== '/dashboard') finalIsActive = false;
+              if (href === '/dashboard' && pathname !== '/dashboard') {
+                finalIsActive = false;
+              }
+              
+              // For specific routes that might have sub-routes but should only be active for their specific page or direct children
+              // Example: /appointments, /schedule, /finances, /services, /registry
+              // The general startsWith check handles common cases like /patients/ID.
+              // If a route needs to be active ONLY for its exact path, use: `pathname === href`
+              // If it also needs to be active for children, current `finalIsActive` logic is generally good.
+
+              // The current logic: if /appointments is active, and user navigates to /appointments/new, it stays active.
+              // If user navigates to /dashboard, /appointments should not be active.
+              // The condition `href !== '/dashboard'` in `pathname.startsWith(href)` check helps avoid /dashboard being active for all other /d... routes.
+              
+              // Refined logic for specific non-parent-like routes:
+              const specificExactMatchRoutes = ['/appointments', '/schedule', '/finances', '/services', '/registry'];
+              if (specificExactMatchRoutes.includes(href)) {
+                finalIsActive = pathname === href || pathname.startsWith(`${href}/`);
+              }
 
 
               return (
                 <Link
                   key={href}
                   href={href}
-                  onClick={() => { if (window.innerWidth < 768) setSidebarOpen(false);}} // Close sidebar on mobile nav
+                  onClick={() => { if (window.innerWidth < 768) setSidebarOpen(false);}} 
                   className={cn(
                     'flex items-center gap-3 rounded-lg px-3 py-2 transition-all hover:bg-sidebar-accent hover:text-sidebar-accent-foreground',
                     finalIsActive ? 'bg-sidebar-accent text-sidebar-accent-foreground font-semibold' : 'text-sidebar-foreground'
@@ -113,3 +123,4 @@ export function AppSidebar() {
     </>
   );
 }
+
