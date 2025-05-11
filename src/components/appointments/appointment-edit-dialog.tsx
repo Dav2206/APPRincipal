@@ -5,7 +5,7 @@ import type { Appointment, Service, AppointmentStatus, Professional } from '@/ty
 import { APPOINTMENT_STATUS, PAYMENT_METHODS, USER_ROLES, APPOINTMENT_STATUS_DISPLAY, LOCATIONS } from '@/lib/constants';
 import { format, parseISO } from 'date-fns';
 import { es } from 'date-fns/locale';
-import { CameraIcon, Loader2, PlusCircle, Trash2, ShoppingBag, ConciergeBell } from 'lucide-react';
+import { CameraIcon, Loader2, PlusCircle, Trash2, ShoppingBag, ConciergeBell, Clock } from 'lucide-react';
 import { useAuth } from '@/contexts/auth-provider';
 import {
   Dialog,
@@ -75,12 +75,13 @@ export function AppointmentEditDialog({ appointment, isOpen, onOpenChange, onApp
   
   useEffect(() => {
     if (isOpen && appointment) {
+      const initialDurationMinutes = appointment.durationMinutes || appointment.service?.defaultDuration || 0;
       form.reset({
         status: appointment.status,
         serviceId: appointment.serviceId || (allServices.length > 0 ? allServices[0].id : DEFAULT_SERVICE_ID_PLACEHOLDER),
         actualArrivalTime: appointment.actualArrivalTime || format(new Date(), 'HH:mm'),
         professionalId: appointment.professionalId || NO_SELECTION_PLACEHOLDER,
-        durationMinutes: appointment.durationMinutes || appointment.service?.defaultDuration,
+        durationMinutes: initialDurationMinutes,
         paymentMethod: appointment.paymentMethod || undefined,
         amountPaid: appointment.amountPaid || undefined,
         staffNotes: appointment.staffNotes || '',
@@ -294,13 +295,60 @@ export function AppointmentEditDialog({ appointment, isOpen, onOpenChange, onApp
               <FormField
                 control={form.control}
                 name="durationMinutes"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel htmlFor="durationMinutes">Duración Real (minutos)</FormLabel>
-                    <FormControl><Input id="durationMinutes" type="number" {...field} value={field.value || ''} onChange={e => field.onChange(parseInt(e.target.value,10) || undefined)} /></FormControl>
-                     <FormMessage/>
-                  </FormItem>
-                )}
+                render={({ field }) => {
+                  const totalMinutes = field.value || 0;
+                  const currentHours = Math.floor(totalMinutes / 60);
+                  const currentMinutesInPart = totalMinutes % 60;
+
+                  const handleHoursChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+                    const newHours = parseInt(e.target.value, 10) || 0;
+                    field.onChange((newHours * 60) + currentMinutesInPart);
+                  };
+
+                  const handleMinutesChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+                    let newMinutes = parseInt(e.target.value, 10) || 0;
+                    if (newMinutes < 0) newMinutes = 0;
+                    if (newMinutes > 59) newMinutes = 59; // Cap minutes at 59
+                    field.onChange((currentHours * 60) + newMinutes);
+                  };
+
+                  return (
+                    <FormItem>
+                      <FormLabel htmlFor="durationHours">Duración Real</FormLabel>
+                      <div className="flex gap-2 items-center">
+                        <div className="flex-1">
+                          <FormControl>
+                            <Input
+                              id="durationHours"
+                              type="number"
+                              min="0"
+                              value={currentHours}
+                              onChange={handleHoursChange}
+                              placeholder="Horas"
+                            />
+                          </FormControl>
+                          <FormMessage className="text-xs">Horas</FormMessage>
+                        </div>
+                        <div className="flex-1">
+                           <FormControl>
+                            <Input
+                              id="durationMinutesPart"
+                              type="number"
+                              min="0"
+                              max="59"
+                              step="1"
+                              value={currentMinutesInPart}
+                              onChange={handleMinutesChange}
+                              placeholder="Minutos"
+                            />
+                          </FormControl>
+                          <FormMessage className="text-xs">Minutos</FormMessage>
+                        </div>
+                      </div>
+                       <FormMessage>{form.formState.errors.durationMinutes?.message}</FormMessage>
+                    </FormItem>
+                  );
+                }}
               />
               <FormField
                 control={form.control}
