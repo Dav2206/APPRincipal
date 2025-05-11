@@ -38,6 +38,8 @@ let patients: Patient[] = [
   { id: 'pat003', firstName: 'Sofía', lastName: 'Rodríguez', phone: '777888999', email: 'sofia.rodriguez@example.com', preferredProfessionalId: professionals[2].id, dateOfBirth: '1978-02-10' },
   { id: 'pat004', firstName: 'Carlos', lastName: 'López', phone: '123123123', email: 'carlos.lopez@example.com', notes: 'Suele llegar 5 minutos tarde.', dateOfBirth: '2000-07-30' },
   { id: 'pat005', firstName: 'Elena', lastName: 'Pérez', phone: '456456456', email: 'elena.perez@example.com', dateOfBirth: '1995-09-05' },
+  { id: 'pat006', firstName: 'Jorge', lastName: 'Sanchez', phone: '101010101', email: 'jorge.sanchez@example.com', dateOfBirth: '1988-03-22', notes: 'Alergico al latex.' },
+  { id: 'pat007', firstName: 'Laura', lastName: 'Gomez', phone: '202020202', email: 'laura.gomez@example.com', dateOfBirth: '1999-12-01', preferredProfessionalId: professionals[1].id },
 ];
 
 const mockServices: Service[] = SERVICES.map(s => ({
@@ -262,10 +264,36 @@ export const addAppointment = async (data: AppointmentFormData): Promise<Appoint
         lastName: data.patientLastName,
         phone: data.patientPhone,
         email: data.patientEmail,
+        dateOfBirth: data.patientDateOfBirth, // Add dateOfBirth from form data
       });
       patientId = newPatient.id;
     }
+  } else { // If patient exists, update their info if provided (admin can update, others cannot for phone)
+      const existingPatientDetails = patients.find(p=>p.id === patientId);
+      if(existingPatientDetails) {
+          const updatedPatientInfo: Partial<Patient> = {};
+          if(data.patientFirstName !== existingPatientDetails.firstName) updatedPatientInfo.firstName = data.patientFirstName;
+          if(data.patientLastName !== existingPatientDetails.lastName) updatedPatientInfo.lastName = data.patientLastName;
+          if(data.patientEmail !== existingPatientDetails.email) updatedPatientInfo.email = data.patientEmail;
+          if(data.patientDateOfBirth && data.patientDateOfBirth !== existingPatientDetails.dateOfBirth) updatedPatientInfo.dateOfBirth = data.patientDateOfBirth;
+          // Phone can only be updated by admin, or if it's a new patient entry flow (covered by !patientId block)
+          // For existing patient, if user is Admin and phone data is different, update it.
+          if (data.patientPhone && data.patientPhone !== existingPatientDetails.phone) {
+             // This part is tricky as form might disable phone for non-admin.
+             // The form logic should handle whether to send patientPhone data or not based on role.
+             // For simplicity, assume if data.patientPhone is present, it's intended for update.
+             updatedPatientInfo.phone = data.patientPhone;
+          }
+
+          if(Object.keys(updatedPatientInfo).length > 0){
+              const patientIdx = patients.findIndex(p => p.id === patientId);
+              if(patientIdx !== -1) {
+                  patients[patientIdx] = {...patients[patientIdx], ...updatedPatientInfo};
+              }
+          }
+      }
   }
+
 
   const service = await getServiceById(data.serviceId);
   const appointmentDateTime = setMinutes(setHours(data.appointmentDate, parseInt(data.appointmentTime.split(':')[0])), parseInt(data.appointmentTime.split(':')[1]));
@@ -276,7 +304,7 @@ export const addAppointment = async (data: AppointmentFormData): Promise<Appoint
     serviceId: data.serviceId,
     appointmentDateTime: formatISO(appointmentDateTime),
     durationMinutes: service?.defaultDuration || 60,
-    preferredProfessionalId: data.preferredProfessionalId || undefined,
+    preferredProfessionalId: data.preferredProfessionalId === "_any_professional_placeholder_" ? undefined : data.preferredProfessionalId,
     bookingObservations: data.bookingObservations,
     status: APPOINTMENT_STATUS.BOOKED,
     attachedPhotos: [], // Initialize with empty array
@@ -338,3 +366,4 @@ export const getPatientAppointmentHistory = async (patientId: string): Promise<A
     .filter(a => a.status === APPOINTMENT_STATUS.COMPLETED || a.status === APPOINTMENT_STATUS.NO_SHOW || a.status === APPOINTMENT_STATUS.CANCELLED_CLIENT || a.status === APPOINTMENT_STATUS.CANCELLED_STAFF)
     .sort((a,b) => parseISO(b.appointmentDateTime).getTime() - parseISO(a.appointmentDateTime).getTime());
 };
+

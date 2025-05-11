@@ -21,7 +21,7 @@ import { Calendar } from '@/components/ui/calendar';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter, DialogClose } from '@/components/ui/dialog';
-import { CalendarIcon, ClockIcon, UserPlus, Building, Briefcase, ConciergeBell, Edit3, Loader2 } from 'lucide-react';
+import { CalendarIcon, ClockIcon, UserPlus, Building, Briefcase, ConciergeBell, Edit3, Loader2, Cake } from 'lucide-react';
 import { format, parse } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { cn } from '@/lib/utils';
@@ -68,6 +68,7 @@ export function AppointmentForm({ isOpen, onOpenChange, onAppointmentCreated, in
       patientLastName: initialData?.patientLastName || '',
       patientPhone: initialData?.patientPhone || '',
       patientEmail: initialData?.patientEmail || '',
+      patientDateOfBirth: initialData?.patientDateOfBirth || '',
       existingPatientId: initialData?.existingPatientId || null,
       locationId: initialData?.locationId || defaultLocation || LOCATIONS[0].id,
       serviceId: initialData?.serviceId || SERVICES[0].id,
@@ -122,6 +123,7 @@ export function AppointmentForm({ isOpen, onOpenChange, onAppointmentCreated, in
       form.setValue('patientLastName', patient.lastName);
       form.setValue('patientPhone', (user?.role === USER_ROLES.ADMIN ? patient.phone : "Teléfono Restringido") || '');
       form.setValue('patientEmail', patient.email || '');
+      form.setValue('patientDateOfBirth', patient.dateOfBirth || '');
       setCurrentPatientForHistory(patient);
       setShowPatientHistory(true);
     } else {
@@ -130,6 +132,7 @@ export function AppointmentForm({ isOpen, onOpenChange, onAppointmentCreated, in
       form.setValue('patientLastName', '');
       form.setValue('patientPhone', '');
       form.setValue('patientEmail', '');
+      form.setValue('patientDateOfBirth', '');
       setCurrentPatientForHistory(null);
       setShowPatientHistory(false);
     }
@@ -165,6 +168,7 @@ export function AppointmentForm({ isOpen, onOpenChange, onAppointmentCreated, in
         patientLastName: '',
         patientPhone: '',
         patientEmail: '',
+        patientDateOfBirth: '',
         existingPatientId: null,
         bookingObservations: '',
       }); 
@@ -198,6 +202,7 @@ export function AppointmentForm({ isOpen, onOpenChange, onAppointmentCreated, in
           patientLastName: '',
           patientPhone: '',
           patientEmail: '',
+          patientDateOfBirth: '',
           existingPatientId: null,
           bookingObservations: '',
         }); 
@@ -237,6 +242,7 @@ export function AppointmentForm({ isOpen, onOpenChange, onAppointmentCreated, in
                           form.setValue('patientLastName', '');
                           form.setValue('patientPhone', '');
                           form.setValue('patientEmail', '');
+                          form.setValue('patientDateOfBirth', '');
                           setCurrentPatientForHistory(null);
                           setShowPatientHistory(false);
                         }}
@@ -299,6 +305,18 @@ export function AppointmentForm({ isOpen, onOpenChange, onAppointmentCreated, in
                     )}
                   />
                 </div>
+                <FormField
+                  control={form.control}
+                  name="patientDateOfBirth"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel className="flex items-center gap-1"><Cake size={16}/>Fecha de Nacimiento (YYYY-MM-DD)</FormLabel>
+                      <FormControl><Input type="text" placeholder="Ej: 1990-01-15" {...field} disabled={!!form.getValues("existingPatientId")} /></FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
 
                 {showPatientHistory && currentPatientForHistory && (
                   <div className="mt-4 space-y-2">
@@ -475,6 +493,7 @@ export function AppointmentForm({ isOpen, onOpenChange, onAppointmentCreated, in
                 patientLastName: '',
                 patientPhone: '',
                 patientEmail: '',
+                patientDateOfBirth: '',
                 existingPatientId: null,
                 bookingObservations: '',
               }); 

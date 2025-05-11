@@ -29,14 +29,14 @@ import {
   DialogClose,
 } from '@/components/ui/dialog';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
-import { PlusCircle, Edit2, Users, Search, Loader2, FileText, CalendarClock, ChevronsDown, AlertTriangle } from 'lucide-react';
+import { PlusCircle, Edit2, Users, Search, Loader2, FileText, CalendarClock, ChevronsDown, AlertTriangle, Cake } from 'lucide-react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { useToast } from '@/hooks/use-toast';
 import { PatientHistoryPanel } from '@/components/appointments/patient-history-panel';
 import { AttendancePredictionTool } from '@/components/appointments/attendance-prediction-tool';
-import { formatISO, startOfDay } from 'date-fns';
+import { formatISO, startOfDay, parseISO, differenceInYears } from 'date-fns';
 import { useAppState } from '@/contexts/app-state-provider';
 import { USER_ROLES } from '@/lib/constants';
 
@@ -221,6 +221,17 @@ export default function PatientsPage() {
     setCurrentPage(prevPage => prevPage + 1);
   };
 
+  const calculateAge = (dateOfBirth?: string): string => {
+    if (!dateOfBirth) return 'N/A';
+    try {
+      const dob = parseISO(dateOfBirth);
+      const age = differenceInYears(new Date(), dob);
+      return age.toString();
+    } catch {
+      return 'Inválida';
+    }
+  };
+
   const LoadingState = () => (
      <div className="flex flex-col items-center justify-center h-64 col-span-full">
         <Loader2 className="h-12 w-12 animate-spin text-primary" />
@@ -298,6 +309,7 @@ export default function PatientsPage() {
                     <TableHead>Nombre Completo</TableHead>
                     <TableHead className="hidden md:table-cell">Teléfono</TableHead>
                     <TableHead className="hidden lg:table-cell">Email</TableHead>
+                    <TableHead className="hidden sm:table-cell">Edad</TableHead>
                     <TableHead className="text-right">Acciones</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -311,6 +323,7 @@ export default function PatientsPage() {
                         {user?.role === USER_ROLES.ADMIN ? (patient.phone || 'N/A') : 'Restringido'}
                       </TableCell>
                       <TableCell className="hidden lg:table-cell">{patient.email || 'N/A'}</TableCell>
+                      <TableCell className="hidden sm:table-cell">{calculateAge(patient.dateOfBirth)}</TableCell>
                       <TableCell className="text-right">
                          <Button variant="ghost" size="sm" onClick={() => handleViewDetails(patient)} className="mr-2" title="Ver Detalles">
                           <FileText className="h-4 w-4" /> <span className="sr-only">Detalles</span>

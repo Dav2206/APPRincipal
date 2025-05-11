@@ -1,3 +1,4 @@
+
 import type { LocationId, UserRole, ServiceId, ProfessionalSpecialization, PaymentMethod, AppointmentStatus } from '@/lib/constants';
 
 export interface BaseEntity {
@@ -73,10 +74,10 @@ export interface Appointment extends BaseEntity {
 // For forms
 export type AppointmentFormData = {
   patientFirstName: string;
-  patientLastName:
-   string;
+  patientLastName: string;
   patientPhone?: string;
   patientEmail?: string;
+  patientDateOfBirth?: string; // YYYY-MM-DD
   existingPatientId?: string | null; // To link if patient exists
   locationId: LocationId;
   serviceId: ServiceId;
@@ -90,3 +91,4 @@ export type ProfessionalFormData = Omit<Professional, 'biWeeklyEarnings'>;
 
 // Export AppointmentStatus to be available for other modules if needed directly
 export type { AppointmentStatus };
+

@@ -1,3 +1,4 @@
+
 import { z } from 'zod';
 import { LOCATIONS, SERVICES, TIME_SLOTS, PROFESSIONAL_SPECIALIZATIONS, PAYMENT_METHODS, APPOINTMENT_STATUS, APPOINTMENT_STATUS_DISPLAY } from './constants';
 
@@ -19,6 +20,9 @@ export const AppointmentFormSchema = z.object({
   patientLastName: z.string().min(2, "Apellido del paciente es requerido (mínimo 2 caracteres)."),
   patientPhone: z.string().optional(),
   patientEmail: z.string().email("Email inválido.").optional().or(z.literal('')),
+  patientDateOfBirth: z.string().optional().refine(val => !val || /^\d{4}-\d{2}-\d{2}$/.test(val), { // YYYY-MM-DD format
+    message: "Formato de fecha de nacimiento debe ser YYYY-MM-DD.",
+  }).or(z.literal('')),
   existingPatientId: z.string().optional().nullable(),
   
   locationId: z.string().refine(val => locationIds.includes(val as any), { message: "Sede inválida."}),
@@ -28,6 +32,8 @@ export const AppointmentFormSchema = z.object({
   preferredProfessionalId: z.string().optional().nullable(),
   bookingObservations: z.string().optional(),
 });
+
+export type AppointmentFormData = z.infer<typeof AppointmentFormSchema>;
 
 export const ProfessionalFormSchema = z.object({
   id: z.string().optional(),
@@ -54,3 +60,4 @@ export const AppointmentUpdateSchema = z.object({
     price: z.number().positive().optional().nullable(),
   })).optional().nullable(),
 });
+
