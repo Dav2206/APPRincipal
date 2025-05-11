@@ -1,5 +1,5 @@
 
-import type { LocationId, UserRole, PaymentMethod, AppointmentStatus } from '@/lib/constants';
+import type { LocationId, UserRole, PaymentMethod, AppointmentStatus, ProfessionalSpecialization } from '@/lib/constants';
 
 export interface BaseEntity {
   id: string;
@@ -18,8 +18,9 @@ export interface Professional extends BaseEntity {
   firstName: string;
   lastName: string;
   locationId: LocationId;
+  email?: string; // Added back
   phone?: string;
-  // For "cuánto dinero están generando por quincena" - simplistic placeholder
+  specializations?: ProfessionalSpecialization[]; // Added back
   biWeeklyEarnings?: number; 
 }
 
@@ -36,7 +37,7 @@ export interface Patient extends BaseEntity {
 }
 
 export interface Service {
-  id: string; // Changed from ServiceId to string for dynamic services
+  id: string; 
   name: string;
   defaultDuration: number; // in minutes
   price?: number; // Optional: can be set per appointment
@@ -48,7 +49,7 @@ export interface Appointment extends BaseEntity {
   locationId: LocationId;
   professionalId?: string | null; // Attending professional, can be initially null
   professional?: Professional; // Populated for display
-  serviceId: string; // Changed from ServiceId to string
+  serviceId: string; 
   service?: Service; // Populated for display
   appointmentDateTime: string; // ISO string for date and time
   durationMinutes: number; // Actual duration
@@ -60,7 +61,7 @@ export interface Appointment extends BaseEntity {
   // Post-booking / Confirmation details
   status: AppointmentStatus;
   actualArrivalTime?: string; // HH:MM
-  addedServices?: { serviceId: string; professionalId?: string | null; price?: number | null; service?: Service, professional?: Professional }[]; // Changed serviceId to string
+  addedServices?: { serviceId: string; professionalId?: string | null; price?: number | null; service?: Service, professional?: Professional }[]; 
   paymentMethod?: PaymentMethod;
   amountPaid?: number;
   staffNotes?: string; // Notes by staff after service
@@ -78,9 +79,9 @@ export type AppointmentFormData = {
   patientEmail?: string;
   patientDateOfBirth?: string; // YYYY-MM-DD
   existingPatientId?: string | null; // To link if patient exists
-  isDiabetic?: boolean; // New field for appointment form if creating new patient
+  isDiabetic?: boolean; 
   locationId: LocationId;
-  serviceId: string; // Changed from ServiceId to string
+  serviceId: string; 
   appointmentDate: Date;
   appointmentTime: string; // e.g., "10:30"
   preferredProfessionalId?: string | null;

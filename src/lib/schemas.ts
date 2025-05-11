@@ -1,6 +1,6 @@
 
 import { z } from 'zod';
-import { LOCATIONS, TIME_SLOTS, PAYMENT_METHODS, APPOINTMENT_STATUS_DISPLAY } from './constants';
+import { LOCATIONS, TIME_SLOTS, PAYMENT_METHODS, APPOINTMENT_STATUS_DISPLAY, PROFESSIONAL_SPECIALIZATIONS } from './constants';
 
 export const LoginSchema = z.object({
   username: z.string().min(1, { message: 'El nombre de usuario es requerido.' }),
@@ -9,11 +9,9 @@ export const LoginSchema = z.object({
 export type LoginFormData = z.infer<typeof LoginSchema>;
 
 const locationIds = LOCATIONS.map(loc => loc.id);
-// serviceIds will now be fetched dynamically for forms, so schema validation for specific IDs is removed here.
-// const serviceIds = SERVICES.map(s => s.id); 
-// const professionalSpecializationValues = PROFESSIONAL_SPECIALIZATIONS.map(spec => spec); // No longer used for professional schema
 const paymentMethodValues = PAYMENT_METHODS.map(pm => pm);
 const appointmentStatusKeys = Object.keys(APPOINTMENT_STATUS_DISPLAY) as (keyof typeof APPOINTMENT_STATUS_DISPLAY)[];
+const professionalSpecializationValues = PROFESSIONAL_SPECIALIZATIONS.map(spec => spec);
 
 
 export const PatientFormSchema = z.object({
@@ -40,10 +38,10 @@ export const AppointmentFormSchema = z.object({
     message: "Formato de fecha de nacimiento debe ser YYYY-MM-DD.",
   }).or(z.literal('')),
   existingPatientId: z.string().optional().nullable(),
-  isDiabetic: z.boolean().optional(), // Added for new patient creation via appointment form
+  isDiabetic: z.boolean().optional(), 
   
   locationId: z.string().refine(val => locationIds.includes(val as any), { message: "Sede inválida."}),
-  serviceId: z.string().min(1, "Servicio es requerido."), // Changed from refine with static list
+  serviceId: z.string().min(1, "Servicio es requerido."), 
   appointmentDate: z.date({ required_error: "Fecha de la cita es requerida."}),
   appointmentTime: z.string().refine(val => TIME_SLOTS.includes(val), { message: "Hora inválida."}),
   preferredProfessionalId: z.string().optional().nullable(),
@@ -57,12 +55,14 @@ export const ProfessionalFormSchema = z.object({
   firstName: z.string().min(2, "Nombre es requerido."),
   lastName: z.string().min(2, "Apellido es requerido."),
   locationId: z.string().refine(val => locationIds.includes(val as any), { message: "Sede inválida."}),
+  email: z.string().email("Email inválido.").optional().or(z.literal('')),
   phone: z.string().optional(),
+  specializations: z.array(z.string().refine(val => professionalSpecializationValues.includes(val as any), { message: "Especialización inválida."})).optional().default([]),
 });
 
 export const AppointmentUpdateSchema = z.object({
   status: z.string().refine(val => appointmentStatusKeys.includes(val as any), {message: "Estado inválido"}),
-  serviceId: z.string().min(1, "Servicio es requerido.").optional(), // Added serviceId for updates
+  serviceId: z.string().min(1, "Servicio es requerido.").optional(), 
   actualArrivalTime: z.string().optional().nullable(), // HH:MM
   professionalId: z.string().optional().nullable(), // Attending professional
   durationMinutes: z.number().int().positive().optional().nullable(),
