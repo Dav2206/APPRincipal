@@ -3,18 +3,19 @@
 
 import type { Patient, Appointment, AppointmentStatus } from '@/types';
 import { getPatientAppointmentHistory, getProfessionalById } from '@/lib/data';
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Badge } from '@/components/ui/badge';
 import { format, parseISO, differenceInDays, formatDistanceToNow, differenceInYears, addDays as dateAddDays, startOfDay } from 'date-fns';
 import { es } from 'date-fns/locale';
-import { UserSquare, CalendarDays, Stethoscope, TrendingUp, MessageSquare, AlertTriangle, Repeat, Cake, Paperclip, Camera, XIcon } from 'lucide-react';
+import { UserSquare, CalendarDays, Stethoscope, TrendingUp, MessageSquare, AlertTriangle, Repeat, Cake, Paperclip, Camera, XIcon, ZoomIn, ZoomOut, RefreshCw } from 'lucide-react';
 import { APPOINTMENT_STATUS, APPOINTMENT_STATUS_DISPLAY } from '@/lib/constants';
 import Image from 'next/image';
 import { Separator } from '../ui/separator';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogClose } from '@/components/ui/dialog';
 import { Button } from '../ui/button';
+import { cn } from '@/lib/utils';
 
 interface PatientHistoryPanelProps {
   patient: Patient;
@@ -29,6 +30,13 @@ export function PatientHistoryPanel({ patient }: PatientHistoryPanelProps) {
   const [nextRecommendedVisit, setNextRecommendedVisit] = useState<string | null>(null);
   const [selectedImageForModal, setSelectedImageForModal] = useState<string | null>(null);
   const [isImageModalOpen, setIsImageModalOpen] = useState(false);
+
+  const [zoomLevel, setZoomLevel] = useState(1);
+  const [imagePosition, setImagePosition] = useState({ x: 0, y: 0 });
+  const [isDragging, setIsDragging] = useState(false);
+  const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
+  const imageRef = useRef<HTMLImageElement>(null);
+
 
   useEffect(() => {
     async function fetchData() {
@@ -81,10 +89,12 @@ export function PatientHistoryPanel({ patient }: PatientHistoryPanelProps) {
         }
       } else if (completedVisits.length === 1) {
         const lastCompletedVisitDate = parseISO(completedVisits[0].appointmentDateTime);
-        const recommendedNextDate = dateAddDays(lastCompletedVisitDate, 30);
+        // Default to 30 days if only one visit, can be adjusted
+        const recommendedNextDate = dateAddDays(lastCompletedVisitDate, 30); 
         setNextRecommendedVisit(format(recommendedNextDate, "PPP", { locale: es }));
-        setAverageDaysBetweenVisits(null);
-      } else {
+        setAverageDaysBetweenVisits(null); // Not enough data for average
+      }
+       else {
         setAverageDaysBetweenVisits(null);
         setNextRecommendedVisit(null);
       }
@@ -96,18 +106,54 @@ export function PatientHistoryPanel({ patient }: PatientHistoryPanelProps) {
 
   const handleImageClick = (imageUrl: string) => {
     setSelectedImageForModal(imageUrl);
+    setZoomLevel(1);
+    setImagePosition({ x: 0, y: 0 });
     setIsImageModalOpen(true);
   };
+
+  const handleWheel = (e: React.WheelEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    const zoomFactor = e.deltaY < 0 ? 1.1 : 0.9; // Zoom in or out
+    setZoomLevel(prevZoom => Math.max(0.5, Math.min(prevZoom * zoomFactor, 5))); // Clamp zoom level
+  };
+
+  const handleMouseDown = (e: React.MouseEvent<HTMLDivElement>) => {
+    if (zoomLevel <= 1) return; // Panning only makes sense when zoomed in
+    setIsDragging(true);
+    setDragStart({ x: e.clientX - imagePosition.x, y: e.clientY - imagePosition.y });
+    e.currentTarget.style.cursor = 'grabbing';
+  };
+
+  const handleMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
+    if (!isDragging || zoomLevel <= 1) return;
+    setImagePosition({
+      x: e.clientX - dragStart.x,
+      y: e.clientY - dragStart.y,
+    });
+  };
+
+  const handleMouseUp = (e: React.MouseEvent<HTMLDivElement>) => {
+    setIsDragging(false);
+     e.currentTarget.style.cursor = zoomLevel > 1 ? 'grab' : 'default';
+  };
+  
+  const resetZoomAndPosition = () => {
+    setZoomLevel(1);
+    setImagePosition({ x: 0, y: 0 });
+  }
+
 
   if (loading) {
     return <p className="text-muted-foreground">Cargando historial del paciente...</p>;
   }
 
   const totalVisits = history.filter(h => h.status === APPOINTMENT_STATUS.COMPLETED).length;
-  const lastVisit = history.length > 0 ? history[0] : null;
+  const lastVisit = history.length > 0 ? history.sort((a,b) => parseISO(b.appointmentDateTime).getTime() - parseISO(a.appointmentDateTime).getTime())[0] : null;
   const lastVisitDate = lastVisit ? parseISO(lastVisit.appointmentDateTime) : null;
 
-  const appointmentsWithPhotos = history.filter(appt => appt.attachedPhotos && appt.attachedPhotos.length > 0);
+
+  const appointmentsWithPhotos = history.filter(appt => appt.attachedPhotos && appt.attachedPhotos.length > 0)
+    .sort((a,b) => parseISO(b.appointmentDateTime).getTime() - parseISO(a.appointmentDateTime).getTime()); // Sort by most recent first
   const lastFourAppointmentsWithPhotos = appointmentsWithPhotos.slice(0, 4);
 
   return (
@@ -198,7 +244,7 @@ export function PatientHistoryPanel({ patient }: PatientHistoryPanelProps) {
                     <li key={appt.id} className="p-2 border-b last:border-b-0 text-xs">
                       <div className="flex justify-between items-center">
                         <span>{format(parseISO(appt.appointmentDateTime), "dd/MM/yy HH:mm", { locale: es })} - {appt.service?.name}</span>
-                        <Badge variant={appt.status === APPOINTMENT_STATUS.COMPLETED ? 'default' : 'destructive'} className={`capitalize text-xs ${APPOINTMENT_STATUS_DISPLAY[appt.status as AppointmentStatus] === APPOINTMENT_STATUS_DISPLAY.completado ? 'bg-green-600 text-white' : ''}`}>
+                        <Badge variant={appt.status === APPOINTMENT_STATUS.COMPLETED ? 'default' : 'destructive'} className={cn('capitalize text-xs', APPOINTMENT_STATUS_DISPLAY[appt.status as AppointmentStatus] === APPOINTMENT_STATUS_DISPLAY.completado ? 'bg-green-600 text-white' : '')}>
                           {APPOINTMENT_STATUS_DISPLAY[appt.status as AppointmentStatus] || appt.status}
                         </Badge>
                       </div>
@@ -243,23 +289,49 @@ export function PatientHistoryPanel({ patient }: PatientHistoryPanelProps) {
       </Card>
 
       {isImageModalOpen && selectedImageForModal && (
-        <Dialog open={isImageModalOpen} onOpenChange={setIsImageModalOpen}>
+        <Dialog open={isImageModalOpen} onOpenChange={(open) => { setIsImageModalOpen(open); if(!open) resetZoomAndPosition();}}>
           <DialogContent className="sm:max-w-3xl max-h-[90vh] flex flex-col p-2">
             <DialogHeader className="flex-row justify-between items-center p-2 border-b">
               <DialogTitle>Vista Previa de Imagen</DialogTitle>
-              <DialogClose asChild>
-                <Button variant="ghost" size="icon"><XIcon className="h-5 w-5"/></Button>
-              </DialogClose>
+              <div className="flex items-center gap-1">
+                <Button variant="ghost" size="icon" onClick={() => setZoomLevel(prev => Math.min(prev * 1.2, 5))} title="Acercar"> <ZoomIn /> </Button>
+                <Button variant="ghost" size="icon" onClick={() => setZoomLevel(prev => Math.max(prev * 0.8, 0.5))} title="Alejar"> <ZoomOut /> </Button>
+                <Button variant="ghost" size="icon" onClick={resetZoomAndPosition} title="Restaurar"> <RefreshCw /> </Button>
+                <DialogClose asChild>
+                  <Button variant="ghost" size="icon"><XIcon className="h-5 w-5"/></Button>
+                </DialogClose>
+              </div>
             </DialogHeader>
-            <div className="flex-grow overflow-auto p-2 flex items-center justify-center">
-              <Image 
-                src={selectedImageForModal} 
-                alt="Vista ampliada" 
-                width={800} 
-                height={600} 
-                className="max-w-full max-h-[80vh] object-contain rounded-md"
-                data-ai-hint="medical chart" 
-              />
+            <div 
+              className="flex-grow overflow-hidden p-2 flex items-center justify-center relative"
+              onWheel={handleWheel}
+              onMouseDown={handleMouseDown}
+              onMouseMove={handleMouseMove}
+              onMouseUp={handleMouseUp}
+              onMouseLeave={handleMouseUp} // Stop dragging if mouse leaves container
+              style={{ cursor: zoomLevel > 1 ? (isDragging ? 'grabbing' : 'grab') : 'default' }}
+            >
+              <div
+                style={{
+                  transform: `scale(${zoomLevel}) translate(${imagePosition.x}px, ${imagePosition.y}px)`,
+                  transition: isDragging ? 'none' : 'transform 0.1s ease-out',
+                  maxWidth: '100%',
+                  maxHeight: '100%',
+                  willChange: 'transform',
+                }}
+                className="flex items-center justify-center" 
+              >
+                <Image 
+                  ref={imageRef}
+                  src={selectedImageForModal} 
+                  alt="Vista ampliada" 
+                  width={800} // Intrinsic width for aspect ratio calculation
+                  height={600} // Intrinsic height
+                  className="max-w-full max-h-[calc(90vh-100px)] object-contain rounded-md select-none" // Prevent image selection during drag
+                  draggable="false" // Prevent browser default drag
+                  data-ai-hint="medical chart" 
+                />
+              </div>
             </div>
           </DialogContent>
         </Dialog>
@@ -267,4 +339,3 @@ export function PatientHistoryPanel({ patient }: PatientHistoryPanelProps) {
     </>
   );
 }
-
