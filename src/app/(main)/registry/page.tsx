@@ -14,9 +14,9 @@ import { Calendar } from '@/components/ui/calendar';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow, TableCaption } from '@/components/ui/table';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { format, startOfDay, getMonth, getDate, startOfMonth, endOfMonth, addDays } from 'date-fns';
+import { format, startOfDay, getMonth, getDate, startOfMonth, endOfMonth, addDays, getYear, subDays, setYear, setMonth, isSameDay, isBefore, isAfter } from 'date-fns';
 import { es } from 'date-fns/locale';
-import { CalendarIcon, Loader2, AlertTriangle, FileText, DollarSign } from 'lucide-react';
+import { CalendarIcon, Loader2, AlertTriangle, FileText, DollarSign, ChevronLeft, ChevronRight } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 interface DailyActivityReportItem {
@@ -37,8 +37,14 @@ interface BiWeeklyEarningsReportItem {
 }
 
 type ReportItem = DailyActivityReportItem | BiWeeklyEarningsReportItem;
-
 type ReportType = 'daily' | 'biWeekly';
+
+const currentSystemYear = getYear(new Date());
+const availableYears = [currentSystemYear, currentSystemYear - 1, currentSystemYear - 2];
+const months = Array.from({ length: 12 }, (_, i) => ({
+  value: i,
+  label: format(new Date(currentSystemYear, i), 'MMMM', { locale: es }),
+}));
 
 
 export default function RegistryPage() {
@@ -49,6 +55,12 @@ export default function RegistryPage() {
   const [reportData, setReportData] = useState<ReportItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [reportType, setReportType] = useState<ReportType>('daily');
+
+  // State for bi-weekly period selection
+  const [selectedYear, setSelectedYear] = useState<number>(getYear(new Date()));
+  const [selectedMonth, setSelectedMonth] = useState<number>(getMonth(new Date())); // 0-11
+  const [selectedQuincena, setSelectedQuincena] = useState<1 | 2>(getDate(new Date()) <= 15 ? 1 : 2);
+
 
   const isAdminOrContador = user?.role === USER_ROLES.ADMIN || user?.role === USER_ROLES.CONTADOR;
 
@@ -144,15 +156,56 @@ export default function RegistryPage() {
 
       const profContext = isAdminOrContador ? (adminSelectedLocation === 'all' ? 'all' : effectiveLocationId) : user?.locationId;
       const professionalsList = await fetchProfessionalsForReportContext(profContext);
+      
+      const baseDate = setMonth(setYear(new Date(), selectedYear), selectedMonth);
+      const startDate = selectedQuincena === 1 ? startOfMonth(baseDate) : addDays(startOfMonth(baseDate), 15);
+      const endDate = selectedQuincena === 1 ? addDays(startOfMonth(baseDate), 14) : endOfMonth(baseDate);
+      
+      let appointmentsForPeriod: Appointment[] = [];
+      if (isAdminOrContador && adminSelectedLocation === 'all') {
+         const promises = LOCATIONS.map(loc => 
+          getAppointments({ 
+            locationId: loc.id, 
+            status: APPOINTMENT_STATUS.COMPLETED,
+            dateRange: {start: startDate, end: endDate}
+          })
+        );
+        const results = await Promise.all(promises);
+        appointmentsForPeriod = results.flat();
+      } else if (effectiveLocationId) {
+        appointmentsForPeriod = await getAppointments({ 
+            locationId: effectiveLocationId, 
+            status: APPOINTMENT_STATUS.COMPLETED,
+            dateRange: {start: startDate, end: endDate} 
+        });
+      }
 
-      const finalReport: BiWeeklyEarningsReportItem[] = professionalsList.map(prof => {
-        const location = LOCATIONS.find(l => l.id === prof.locationId);
+      const biWeeklyReportMap = new Map<string, Omit<BiWeeklyEarningsReportItem, 'professionalName' | 'locationName' | 'type' > & { locationId: LocationId }>();
+
+      professionalsList.forEach(prof => {
+         biWeeklyReportMap.set(prof.id, { professionalId: prof.id, locationId: prof.locationId, biWeeklyEarnings: 0 });
+      });
+      
+      appointmentsForPeriod.forEach(appt => {
+        if (appt.professionalId && appt.status === APPOINTMENT_STATUS.COMPLETED) {
+            const entry = biWeeklyReportMap.get(appt.professionalId);
+            if (entry) {
+                entry.biWeeklyEarnings += appt.amountPaid || 0;
+                biWeeklyReportMap.set(appt.professionalId, entry);
+            }
+        }
+      });
+
+
+      const finalReport: BiWeeklyEarningsReportItem[] = Array.from(biWeeklyReportMap.values()).map(item => {
+        const professional = professionalsList.find(p => p.id === item.professionalId);
+        const location = LOCATIONS.find(l => l.id === item.locationId);
         return {
           type: 'biWeekly',
-          professionalId: prof.id,
-          professionalName: `${prof.firstName} ${prof.lastName}`,
+          professionalId: item.professionalId,
+          professionalName: professional ? `${professional.firstName} ${professional.lastName}` : 'Desconocido',
           locationName: location ? location.name : 'Desconocida',
-          biWeeklyEarnings: prof.biWeeklyEarnings || 0,
+          biWeeklyEarnings: item.biWeeklyEarnings,
         };
       }).sort((a,b) => {
          if (isAdminOrContador && adminSelectedLocation === 'all') {
@@ -172,7 +225,7 @@ export default function RegistryPage() {
       generateBiWeeklyReport();
     }
 
-  }, [user, selectedDate, effectiveLocationId, adminSelectedLocation, fetchProfessionalsForReportContext, isAdminOrContador, reportType]);
+  }, [user, selectedDate, effectiveLocationId, adminSelectedLocation, fetchProfessionalsForReportContext, isAdminOrContador, reportType, selectedYear, selectedMonth, selectedQuincena]);
 
   const handleDateChange = (date: Date | undefined) => {
     if (date && reportType === 'daily') {
@@ -201,17 +254,88 @@ export default function RegistryPage() {
   }, [reportData, reportType]);
   
   const getBiWeeklyPeriodDescription = () => {
-    const today = new Date(); // Or selectedDate if we want to tie it to the calendar
-    const dayOfMonth = getDate(today);
-    const monthName = format(today, "MMMM", { locale: es });
-    const year = format(today, "yyyy");
+    const dateForDescription = setMonth(setYear(new Date(), selectedYear), selectedMonth);
+    const monthName = format(dateForDescription, "MMMM", { locale: es });
+    const year = selectedYear;
 
-    if (dayOfMonth <= 15) {
+    if (selectedQuincena === 1) {
       return `Quincena: 1 al 15 de ${monthName}, ${year}`;
     } else {
-      const endDayOfMonth = format(endOfMonth(today), "d");
+      const endDayOfMonth = format(endOfMonth(dateForDescription), "d");
       return `Quincena: 16 al ${endDayOfMonth} de ${monthName}, ${year}`;
     }
+  };
+  
+  const navigateQuincena = (direction: 'prev' | 'next') => {
+    let newYear = selectedYear;
+    let newMonth = selectedMonth;
+    let newQuincena = selectedQuincena;
+
+    if (direction === 'next') {
+      if (newQuincena === 1) {
+        newQuincena = 2;
+      } else { // Was 2nd quincena
+        newQuincena = 1;
+        if (newMonth === 11) { // December
+          newMonth = 0; // January
+          newYear += 1;
+        } else {
+          newMonth += 1;
+        }
+      }
+    } else { // prev
+      if (newQuincena === 2) {
+        newQuincena = 1;
+      } else { // Was 1st quincena
+        newQuincena = 2;
+        if (newMonth === 0) { // January
+          newMonth = 11; // December
+          newYear -= 1;
+        } else {
+          newMonth -= 1;
+        }
+      }
+    }
+    // Prevent navigating to future quincenas beyond current system date
+    const today = new Date();
+    const firstDayOfNewQuincena = newQuincena === 1 ? startOfMonth(setMonth(setYear(new Date(),newYear), newMonth)) : addDays(startOfMonth(setMonth(setYear(new Date(),newYear), newMonth)),15);
+    
+    if(isAfter(firstDayOfNewQuincena, today) && !isSameDay(firstDayOfNewQuincena, startOfDay(today))) {
+        // If navigating to a future quincena, revert to current system quincena
+        setSelectedYear(getYear(today));
+        setSelectedMonth(getMonth(today));
+        setSelectedQuincena(getDate(today) <= 15 ? 1 : 2);
+        return;
+    }
+    
+    // Prevent navigating to years before the available years
+    if (newYear < availableYears[availableYears.length -1]) {
+        return;
+    }
+
+
+    setSelectedYear(newYear);
+    setSelectedMonth(newMonth);
+    setSelectedQuincena(newQuincena as 1 | 2);
+  };
+  
+  const isNextQuincenaDisabled = () => {
+    let nextQYear = selectedYear;
+    let nextQMonth = selectedMonth;
+    let nextQQuincena = selectedQuincena;
+
+    if (nextQQuincena === 1) nextQQuincena = 2;
+    else { nextQQuincena = 1; if (nextQMonth === 11) { nextQMonth = 0; nextQYear +=1; } else nextQMonth +=1; }
+    
+    const firstDayOfNextQ = nextQQuincena === 1 ? startOfMonth(setMonth(setYear(new Date(),nextQYear), nextQMonth)) : addDays(startOfMonth(setMonth(setYear(new Date(),nextQYear), nextQMonth)),15);
+    return isAfter(firstDayOfNextQ, new Date()) && !isSameDay(firstDayOfNextQ, startOfDay(new Date()));
+  };
+
+  const isPrevQuincenaDisabled = () => {
+    let prevQYear = selectedYear;
+    if (selectedQuincena === 2) { /* no change to month/year needed */ }
+    else { if (selectedMonth === 0) { prevQYear -=1; } } // Check year boundary
+    return prevQYear < availableYears[availableYears.length-1];
   };
 
 
@@ -224,9 +348,9 @@ export default function RegistryPage() {
 
   const NoDataState = () => (
      <TableRow>
-        <TableCell colSpan={isAdminOrContador && adminSelectedLocation === 'all' ? 4 : 3} className="h-24 text-center">
+        <TableCell colSpan={isAdminOrContador && adminSelectedLocation === 'all' && reportType === 'daily' ? 4 : (isAdminOrContador && adminSelectedLocation === 'all' && reportType === 'biWeekly' ? 3 : (reportType === 'daily' ? 3 : 2) ) } className="h-24 text-center">
           <AlertTriangle className="mx-auto h-8 w-8 text-muted-foreground mb-2" />
-           {reportType === 'daily' ? 'No hay actividad registrada para este día y selección.' : 'No hay datos de ingresos quincenales para esta selección.'}
+           {reportType === 'daily' ? 'No hay actividad registrada para este día y selección.' : 'No hay datos de ingresos quincenales para este periodo y selección.'}
         </TableCell>
       </TableRow>
   );
@@ -271,6 +395,31 @@ export default function RegistryPage() {
                   </PopoverContent>
                 </Popover>
               )}
+               {reportType === 'biWeekly' && (
+                <div className="flex items-center gap-2">
+                    <Button variant="outline" size="icon" onClick={() => navigateQuincena('prev')} disabled={isPrevQuincenaDisabled()}>
+                        <ChevronLeft className="h-4 w-4" />
+                    </Button>
+                    <Select value={String(selectedYear)} onValueChange={(val) => setSelectedYear(Number(val))}>
+                        <SelectTrigger className="w-[100px]"><SelectValue /></SelectTrigger>
+                        <SelectContent>{availableYears.map(y => <SelectItem key={y} value={String(y)}>{y}</SelectItem>)}</SelectContent>
+                    </Select>
+                    <Select value={String(selectedMonth)} onValueChange={(val) => setSelectedMonth(Number(val))}>
+                        <SelectTrigger className="w-[150px]"><SelectValue /></SelectTrigger>
+                        <SelectContent>{months.map(m => <SelectItem key={m.value} value={String(m.value)}>{m.label}</SelectItem>)}</SelectContent>
+                    </Select>
+                    <Select value={String(selectedQuincena)} onValueChange={(val) => setSelectedQuincena(Number(val) as 1 | 2)}>
+                        <SelectTrigger className="w-[150px]"><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                            <SelectItem value="1">1ra Quincena</SelectItem>
+                            <SelectItem value="2">2da Quincena</SelectItem>
+                        </SelectContent>
+                    </Select>
+                     <Button variant="outline" size="icon" onClick={() => navigateQuincena('next')} disabled={isNextQuincenaDisabled()}>
+                        <ChevronRight className="h-4 w-4" />
+                    </Button>
+                </div>
+              )}
             </div>
           </div>
           {isAdminOrContador && (
@@ -291,7 +440,7 @@ export default function RegistryPage() {
                         : `Resumen Quincenal (${getBiWeeklyPeriodDescription()}). Total Ingresos Quincenales: S/ ${totalRevenueOverall.toFixed(2)}`
                     : reportType === 'daily' 
                         ? `No hay datos para el ${format(selectedDate, "PPP", { locale: es })}.`
-                        : `No hay datos quincenales para el periodo actual.`
+                        : `No hay datos quincenales para el periodo ${getBiWeeklyPeriodDescription()}.`
                 }
               </TableCaption>
               <TableHeader>
@@ -306,7 +455,7 @@ export default function RegistryPage() {
               </TableHeader>
               <TableBody>
                 {reportData.length === 0 ? <NoDataState /> : reportData.map(item => (
-                  <TableRow key={item.professionalId + (item.type === 'daily' ? item.locationName : (item as BiWeeklyEarningsReportItem).locationName || '')}>
+                  <TableRow key={item.professionalId + (item.type === 'daily' ? item.locationName : (item as BiWeeklyEarningsReportItem).locationName || '') + (item.type === 'biWeekly' ? selectedYear +'-'+selectedMonth+'-'+selectedQuincena : '')}>
                     <TableCell className="font-medium">{item.professionalName}</TableCell>
                     {(isAdminOrContador && adminSelectedLocation === 'all') && <TableCell>{item.locationName}</TableCell>}
                     {item.type === 'daily' && <TableCell className="text-center">{item.servicesCount}</TableCell>}
