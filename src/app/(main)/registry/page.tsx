@@ -265,18 +265,18 @@ export default function RegistryPage() {
             locationTotals.set(item.locationId, 0);
           }
           professionalsByLocation.get(item.locationId)!.push(reportItem);
-          locationTotals.set(item.locationId, locationTotals.get(item.locationId)! + item.biWeeklyEarnings);
+          locationTotals.set(item.locationId, (locationTotals.get(item.locationId) || 0) + item.biWeeklyEarnings);
         });
 
         LOCATIONS.forEach(loc => {
-          if (professionalsByLocation.has(loc.id)) {
+          if (professionalsByLocation.has(loc.id) || locationTotals.has(loc.id)) { // Ensure location is added even if no profs but has totals (unlikely but defensive)
             const profsForLocation = professionalsByLocation.get(loc.id);
             groupedResult.push({
               type: 'biWeeklyGrouped',
               locationId: loc.id,
               locationName: loc.name,
               professionals: (profsForLocation || []).sort((a, b) => a.professionalName.localeCompare(b.professionalName)),
-              locationTotalEarnings: locationTotals.get(loc.id)!,
+              locationTotalEarnings: locationTotals.get(loc.id) || 0,
             });
           }
         });
@@ -612,7 +612,7 @@ export default function RegistryPage() {
                         ))}
                         <TableRow className="bg-muted/50 font-semibold">
                           <TableCell colSpan={2}>Total {group.locationName}</TableCell>
-                          <TableCell className="text-right">{group.locationTotalEarnings.toFixed(2)}</TableCell>
+                          <TableCell className="text-right">{(group.locationTotalEarnings || 0).toFixed(2)}</TableCell>
                         </TableRow>
                       </React.Fragment>
                     ))
@@ -661,4 +661,5 @@ export default function RegistryPage() {
     </div>
   );
 }
+
 
