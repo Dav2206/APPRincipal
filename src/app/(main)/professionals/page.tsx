@@ -6,12 +6,12 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '@/contexts/auth-provider';
 import { useAppState } from '@/contexts/app-state-provider';
 import { getProfessionals, addProfessional, updateProfessional } from '@/lib/data';
-import { LOCATIONS, PROFESSIONAL_SPECIALIZATIONS, USER_ROLES, LocationId } from '@/lib/constants';
+import { LOCATIONS, USER_ROLES, LocationId } from '@/lib/constants';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label'; // Keep for direct use outside FormField context if needed
-import { Checkbox } from '@/components/ui/checkbox';
+// import { Label } from '@/components/ui/label'; // No longer needed
+// import { Checkbox } from '@/components/ui/checkbox'; // No longer needed
 import {
   Table,
   TableBody,
@@ -35,7 +35,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { ProfessionalFormSchema } from '@/lib/schemas';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useToast } from '@/hooks/use-toast';
-import { Badge } from '@/components/ui/badge';
+// import { Badge } from '@/components/ui/badge'; // No longer needed
 
 export default function ProfessionalsPage() {
   const { user } = useAuth();
@@ -53,8 +53,6 @@ export default function ProfessionalsPage() {
       firstName: '',
       lastName: '',
       locationId: LOCATIONS[0].id,
-      specializations: [],
-      email: '',
       phone: '',
     }
   });
@@ -66,11 +64,16 @@ export default function ProfessionalsPage() {
 
 
   const fetchProfessionals = useCallback(async () => {
+    if(!user || (user.role !== USER_ROLES.ADMIN && user.role !== USER_ROLES.CONTADOR)) {
+      setIsLoading(false);
+      setProfessionals([]);
+      return;
+    }
     setIsLoading(true);
     const data = await getProfessionals(effectiveLocationId);
     setProfessionals(data);
     setIsLoading(false);
-  }, [effectiveLocationId]);
+  }, [effectiveLocationId, user]);
 
   useEffect(() => {
     fetchProfessionals();
@@ -85,9 +88,7 @@ export default function ProfessionalsPage() {
     form.reset({
       firstName: '',
       lastName: '',
-      locationId: defaultLoc,
-      specializations: [],
-      email: '',
+      locationId: defaultLoc as LocationId,
       phone: '',
     });
     setIsFormOpen(true);
@@ -125,8 +126,7 @@ export default function ProfessionalsPage() {
 
   const filteredProfessionals = professionals.filter(p =>
     `${p.firstName} ${p.lastName}`.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    (p.email && p.email.toLowerCase().includes(searchTerm.toLowerCase())) ||
-    p.specializations.some(s => s.toLowerCase().includes(searchTerm.toLowerCase()))
+    (p.phone && p.phone.includes(searchTerm))
   );
   
   const LoadingState = () => (
@@ -135,6 +135,14 @@ export default function ProfessionalsPage() {
         <p className="mt-4 text-muted-foreground">Cargando profesionales...</p>
       </div>
   );
+  
+  if (!user || (user.role !== USER_ROLES.ADMIN && user.role !== USER_ROLES.CONTADOR)) {
+    return (
+      <div className="flex h-screen items-center justify-center">
+        <p>Acceso no autorizado.</p>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -159,7 +167,7 @@ export default function ProfessionalsPage() {
               <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
               <Input
                 type="search"
-                placeholder="Buscar profesionales por nombre, email o especialización..."
+                placeholder="Buscar profesionales por nombre o teléfono..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
                 className="pl-8 w-full"
@@ -173,8 +181,7 @@ export default function ProfessionalsPage() {
                 <TableRow>
                   <TableHead>Nombre Completo</TableHead>
                   <TableHead className="hidden md:table-cell">Sede</TableHead>
-                  <TableHead>Especializaciones</TableHead>
-                  <TableHead className="hidden lg:table-cell">Email</TableHead>
+                  <TableHead className="hidden lg:table-cell">Teléfono</TableHead>
                    {isAdminOrContador && <TableHead className="hidden xl:table-cell text-right">Ingresos Quincena (S/)</TableHead> }
                   <TableHead className="text-right">Acciones</TableHead>
                 </TableRow>
@@ -184,12 +191,7 @@ export default function ProfessionalsPage() {
                   <TableRow key={prof.id}>
                     <TableCell className="font-medium">{prof.firstName} {prof.lastName}</TableCell>
                     <TableCell className="hidden md:table-cell">{LOCATIONS.find(l => l.id === prof.locationId)?.name}</TableCell>
-                    <TableCell>
-                      <div className="flex flex-wrap gap-1">
-                        {prof.specializations.map(spec => <Badge key={spec} variant="secondary" className="text-xs">{spec}</Badge>)}
-                      </div>
-                    </TableCell>
-                    <TableCell className="hidden lg:table-cell">{prof.email || 'N/A'}</TableCell>
+                    <TableCell className="hidden lg:table-cell">{prof.phone || 'N/A'}</TableCell>
                     {isAdminOrContador && <TableCell className="hidden xl:table-cell text-right">{prof.biWeeklyEarnings?.toFixed(2) || 'N/A'}</TableCell> }
                     <TableCell className="text-right">
                       <Button variant="ghost" size="sm" onClick={() => handleEditProfessional(prof)}>
@@ -199,7 +201,7 @@ export default function ProfessionalsPage() {
                   </TableRow>
                 )) : (
                   <TableRow>
-                    <TableCell colSpan={isAdminOrContador ? 6 : 5} className="h-24 text-center"> 
+                    <TableCell colSpan={isAdminOrContador ? 5 : 4} className="h-24 text-center"> 
                       No se encontraron profesionales.
                     </TableCell>
                   </TableRow>
@@ -244,7 +246,6 @@ export default function ProfessionalsPage() {
                     <Select 
                       onValueChange={field.onChange} 
                       value={field.value} 
-                      // Disable if staff and not editing, or if admin/contador and editing (should stick to professional's current location unless specifically changing)
                       disabled={user?.role === USER_ROLES.LOCATION_STAFF || (isAdminOrContador && !!editingProfessional)}
                     >
                       <FormControl>
@@ -260,41 +261,6 @@ export default function ProfessionalsPage() {
                   </FormItem>
                 )}
               />
-              <FormField
-                control={form.control}
-                name="specializations"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Especializaciones</FormLabel>
-                    <FormControl>
-                      <div className="grid grid-cols-2 md:grid-cols-3 gap-2 p-2 border rounded-md">
-                        {PROFESSIONAL_SPECIALIZATIONS.map(spec => (
-                          <div key={spec} className="flex items-center space-x-2">
-                            <Checkbox
-                              id={`spec-${spec}`}
-                              checked={field.value?.includes(spec)}
-                              onCheckedChange={(checked) => {
-                                return checked
-                                  ? field.onChange([...(field.value || []), spec])
-                                  : field.onChange((field.value || []).filter(value => value !== spec))
-                              }}
-                            />
-                            <Label htmlFor={`spec-${spec}`} className="text-sm font-normal cursor-pointer">{spec}</Label>
-                          </div>
-                        ))}
-                      </div>
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-               <FormField control={form.control} name="email" render={({ field }) => (
-                  <FormItem>
-                      <FormLabel>Email (Opcional)</FormLabel>
-                      <FormControl><Input type="email" placeholder="Ej: juan.perez@mail.com" {...field} /></FormControl>
-                      <FormMessage />
-                  </FormItem>
-               )}/>
                <FormField control={form.control} name="phone" render={({ field }) => (
                   <FormItem>
                       <FormLabel>Teléfono (Opcional)</FormLabel>

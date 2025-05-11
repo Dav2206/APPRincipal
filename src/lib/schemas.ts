@@ -1,6 +1,6 @@
 
 import { z } from 'zod';
-import { LOCATIONS, TIME_SLOTS, PROFESSIONAL_SPECIALIZATIONS, PAYMENT_METHODS, APPOINTMENT_STATUS_DISPLAY } from './constants';
+import { LOCATIONS, TIME_SLOTS, PAYMENT_METHODS, APPOINTMENT_STATUS_DISPLAY } from './constants';
 
 export const LoginSchema = z.object({
   username: z.string().min(1, { message: 'El nombre de usuario es requerido.' }),
@@ -11,7 +11,7 @@ export type LoginFormData = z.infer<typeof LoginSchema>;
 const locationIds = LOCATIONS.map(loc => loc.id);
 // serviceIds will now be fetched dynamically for forms, so schema validation for specific IDs is removed here.
 // const serviceIds = SERVICES.map(s => s.id); 
-const professionalSpecializationValues = PROFESSIONAL_SPECIALIZATIONS.map(spec => spec);
+// const professionalSpecializationValues = PROFESSIONAL_SPECIALIZATIONS.map(spec => spec); // No longer used for professional schema
 const paymentMethodValues = PAYMENT_METHODS.map(pm => pm);
 const appointmentStatusKeys = Object.keys(APPOINTMENT_STATUS_DISPLAY) as (keyof typeof APPOINTMENT_STATUS_DISPLAY)[];
 
@@ -57,8 +57,6 @@ export const ProfessionalFormSchema = z.object({
   firstName: z.string().min(2, "Nombre es requerido."),
   lastName: z.string().min(2, "Apellido es requerido."),
   locationId: z.string().refine(val => locationIds.includes(val as any), { message: "Sede inválida."}),
-  specializations: z.array(z.string().refine(val => professionalSpecializationValues.includes(val as any))).min(1, "Debe seleccionar al menos una especialización."),
-  email: z.string().email("Email inválido.").optional().or(z.literal('')),
   phone: z.string().optional(),
 });
 

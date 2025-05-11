@@ -1,5 +1,5 @@
 
-import type { LocationId, UserRole, ProfessionalSpecialization, PaymentMethod, AppointmentStatus } from '@/lib/constants';
+import type { LocationId, UserRole, PaymentMethod, AppointmentStatus } from '@/lib/constants';
 
 export interface BaseEntity {
   id: string;
@@ -18,8 +18,6 @@ export interface Professional extends BaseEntity {
   firstName: string;
   lastName: string;
   locationId: LocationId;
-  specializations: ProfessionalSpecialization[];
-  email?: string;
   phone?: string;
   // For "cuánto dinero están generando por quincena" - simplistic placeholder
   biWeeklyEarnings?: number; 
@@ -68,8 +66,8 @@ export interface Appointment extends BaseEntity {
   staffNotes?: string; // Notes by staff after service
   attachedPhotos?: string[]; // Array of data URIs for attached photos
 
-  createdAt: string; // ISO string
-  updatedAt: string; // ISO string
+  createdAt?: string; // ISO string - Optional as it will be set by Firestore
+  updatedAt?: string; // ISO string - Optional as it will be set by Firestore
 }
 
 // For forms
@@ -89,7 +87,8 @@ export type AppointmentFormData = {
   bookingObservations?: string;
 };
 
-export type ProfessionalFormData = Omit<Professional, 'biWeeklyEarnings'>;
+export type ProfessionalFormData = Omit<Professional, 'biWeeklyEarnings' | 'id'> & { id?: string };
+
 
 // Export AppointmentStatus to be available for other modules if needed directly
 export type { AppointmentStatus };
