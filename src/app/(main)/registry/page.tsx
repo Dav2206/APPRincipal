@@ -483,13 +483,21 @@ export default function RegistryPage() {
           ) : (
             <Table>
               <TableCaption>
-                {reportData.length > 0 
-                    ? reportType === 'daily' 
-                        ? `Resumen del ${format(selectedDate, "PPP", { locale: es })}. Total Servicios: ${totalServicesOverall}, Total Ingresos: S/ ${totalRevenueOverall.toFixed(2)}`
+                {reportData.length > 0
+                  ? reportType === 'daily'
+                    ? (
+                        isStaffRestrictedView
+                        ? `Resumen del ${format(selectedDate, "PPP", { locale: es })}. Total Servicios: ${totalServicesOverall}`
+                        : `Resumen del ${format(selectedDate, "PPP", { locale: es })}. Total Servicios: ${totalServicesOverall}, Total Ingresos: S/ ${totalRevenueOverall.toFixed(2)}`
+                      )
+                    : ( // reportType === 'biWeekly'
+                        isStaffRestrictedView
+                        ? `Resumen Quincenal (${getBiWeeklyPeriodDescription()}).`
                         : `Resumen Quincenal (${getBiWeeklyPeriodDescription()}). Total Ingresos Quincenales: S/ ${totalRevenueOverall.toFixed(2)}`
-                    : reportType === 'daily' 
-                        ? `No hay datos para el ${format(selectedDate, "PPP", { locale: es })}.`
-                        : `No hay datos quincenales para el periodo ${getBiWeeklyPeriodDescription()}.`
+                      )
+                  : reportType === 'daily' // No data part
+                    ? `No hay datos para el ${format(selectedDate, "PPP", { locale: es })}.`
+                    : `No hay datos quincenales para el periodo ${getBiWeeklyPeriodDescription()}.`
                 }
               </TableCaption>
               <TableHeader>
