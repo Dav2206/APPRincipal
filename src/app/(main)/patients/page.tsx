@@ -308,7 +308,7 @@ export default function PatientsPage() {
                   <TableRow>
                     <TableHead>Nombre Completo</TableHead>
                     <TableHead className="hidden md:table-cell">Teléfono</TableHead>
-                    <TableHead className="hidden lg:table-cell">Email</TableHead>
+                    {/* <TableHead className="hidden lg:table-cell">Email</TableHead> */}
                     <TableHead className="hidden sm:table-cell">Edad</TableHead>
                     <TableHead className="text-right">Acciones</TableHead>
                   </TableRow>
@@ -322,7 +322,7 @@ export default function PatientsPage() {
                       <TableCell className="hidden md:table-cell">
                         {user?.role === USER_ROLES.ADMIN ? (patient.phone || 'N/A') : 'Restringido'}
                       </TableCell>
-                      <TableCell className="hidden lg:table-cell">{patient.email || 'N/A'}</TableCell>
+                      {/* <TableCell className="hidden lg:table-cell">{patient.email || 'N/A'}</TableCell> */}
                       <TableCell className="hidden sm:table-cell">{calculateAge(patient.dateOfBirth)}</TableCell>
                       <TableCell className="text-right">
                          <Button variant="ghost" size="sm" onClick={() => handleViewDetails(patient)} className="mr-2" title="Ver Detalles">
