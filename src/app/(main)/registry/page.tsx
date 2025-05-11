@@ -2,11 +2,11 @@
 "use client";
 
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
-import type { Appointment, Professional, LocationId } from '@/types';
+import type { Appointment, Professional, LocationId, Service } from '@/types';
 import { useAuth } from '@/contexts/auth-provider';
 import { useAppState } from '@/contexts/app-state-provider';
-import { getAppointments, getProfessionals } from '@/lib/data';
-import { LOCATIONS, USER_ROLES, APPOINTMENT_STATUS } from '@/lib/constants';
+import { getAppointments, getProfessionals, getServices } from '@/lib/data';
+import { LOCATIONS, USER_ROLES, APPOINTMENT_STATUS, SERVICES as ALL_SERVICES_CONSTANTS } from '@/lib/constants';
 
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -16,15 +16,20 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow, TableCap
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { format, startOfDay, getMonth, getDate, startOfMonth, endOfMonth, addDays, getYear, subDays, setYear, setMonth, isSameDay, isAfter, subMonths } from 'date-fns';
 import { es } from 'date-fns/locale';
-import { CalendarIcon, Loader2, AlertTriangle, FileText, DollarSign, ChevronLeft, ChevronRight } from 'lucide-react';
+import { CalendarIcon, Loader2, AlertTriangle, FileText, DollarSign, ChevronLeft, ChevronRight, ListChecks } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { Badge } from '@/components/ui/badge';
+import { ScrollArea } from '@/components/ui/scroll-area';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+
 
 interface DailyActivityReportItem {
   type: 'daily';
   professionalId: string;
   professionalName: string;
   locationName: string;
-  servicesCount: number;
+  totalServicesCount: number;
+  servicesBreakdown: Array<{ serviceName: string; count: number }>;
   totalRevenue: number;
 }
 
@@ -55,6 +60,7 @@ export default function RegistryPage() {
   const [reportData, setReportData] = useState<ReportItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [reportType, setReportType] = useState<ReportType>('daily');
+  const [allServices, setAllServices] = useState<Service[]>([]);
 
   const [selectedYear, setSelectedYear] = useState<number>(getYear(new Date()));
   const [selectedMonth, setSelectedMonth] = useState<number>(getMonth(new Date())); 
@@ -70,6 +76,15 @@ export default function RegistryPage() {
     }
     return user?.locationId;
   }, [user, isAdminOrContador, adminSelectedLocation]);
+
+  useEffect(() => {
+    async function loadServices() {
+        const servicesData = await getServices();
+        setAllServices(servicesData);
+    }
+    loadServices();
+  }, []);
+
 
   const fetchProfessionalsForReportContext = useCallback(async (locationContext?: LocationId | 'all') => {
     if (!user) return [];
@@ -94,7 +109,7 @@ export default function RegistryPage() {
 
   useEffect(() => {
     const generateDailyReport = async () => {
-      if (!user) return;
+      if (!user || allServices.length === 0) return;
       setIsLoading(true);
 
       const profContext = isAdminOrContador ? (adminSelectedLocation === 'all' ? 'all' : effectiveLocationId) : user?.locationId;
@@ -111,20 +126,32 @@ export default function RegistryPage() {
         appointmentsForDate = await getAppointments({ date: selectedDate, locationId: effectiveLocationId, status: APPOINTMENT_STATUS.COMPLETED });
       }
 
-      const dailyReportMap = new Map<string, Omit<DailyActivityReportItem, 'professionalName' | 'locationName' | 'type' > & { locationId: LocationId }>();
+      const dailyReportMap = new Map<string, Omit<DailyActivityReportItem, 'professionalName' | 'locationName' | 'type' | 'servicesBreakdown' | 'totalServicesCount' > & { locationId: LocationId, services: Map<string, { serviceName: string, count: number }> }>();
 
       appointmentsForDate.forEach(appt => {
         if (appt.professionalId && appt.status === APPOINTMENT_STATUS.COMPLETED) {
           const reportEntry = dailyReportMap.get(appt.professionalId) || {
             professionalId: appt.professionalId,
             locationId: appt.locationId,
-            servicesCount: 0,
             totalRevenue: 0,
+            services: new Map<string, { serviceName: string, count: number }>(),
           };
           
-          reportEntry.servicesCount += 1 + (appt.addedServices?.length || 0);
-          reportEntry.totalRevenue += appt.amountPaid || 0;
+          // Main service
+          const mainServiceName = allServices.find(s => s.id === appt.serviceId)?.name || 'Servicio Desconocido';
+          const mainServiceEntry = reportEntry.services.get(appt.serviceId) || { serviceName: mainServiceName, count: 0 };
+          mainServiceEntry.count += 1;
+          reportEntry.services.set(appt.serviceId, mainServiceEntry);
+
+          // Added services
+          appt.addedServices?.forEach(added => {
+            const addedServiceName = allServices.find(s => s.id === added.serviceId)?.name || 'Servicio Adicional Desc.';
+            const addedServiceEntry = reportEntry.services.get(added.serviceId) || { serviceName: addedServiceName, count: 0 };
+            addedServiceEntry.count += 1;
+            reportEntry.services.set(added.serviceId, addedServiceEntry);
+          });
           
+          reportEntry.totalRevenue += appt.amountPaid || 0;
           dailyReportMap.set(appt.professionalId, reportEntry);
         }
       });
@@ -132,11 +159,18 @@ export default function RegistryPage() {
       const finalReport: DailyActivityReportItem[] = Array.from(dailyReportMap.values()).map(item => {
         const professional = currentProfessionals.find(p => p.id === item.professionalId);
         const location = LOCATIONS.find(l => l.id === item.locationId);
+        const servicesBreakdownArray = Array.from(item.services.values()).sort((a,b) => b.count - a.count);
+        const totalServicesCount = servicesBreakdownArray.reduce((sum, s) => sum + s.count, 0);
+        
         return {
           type: 'daily',
-          ...item,
+          professionalId: item.professionalId,
+          locationId: item.locationId,
+          totalRevenue: item.totalRevenue,
           professionalName: professional ? `${professional.firstName} ${professional.lastName}` : 'Desconocido',
           locationName: location ? location.name : 'Desconocida',
+          servicesBreakdown: servicesBreakdownArray,
+          totalServicesCount: totalServicesCount,
         };
       }).sort((a,b) => {
         if (isAdminOrContador && adminSelectedLocation === 'all') {
@@ -224,7 +258,7 @@ export default function RegistryPage() {
       generateBiWeeklyReport();
     }
 
-  }, [user, selectedDate, effectiveLocationId, adminSelectedLocation, fetchProfessionalsForReportContext, isAdminOrContador, reportType, selectedYear, selectedMonth, selectedQuincena]);
+  }, [user, selectedDate, effectiveLocationId, adminSelectedLocation, fetchProfessionalsForReportContext, isAdminOrContador, reportType, selectedYear, selectedMonth, selectedQuincena, allServices]);
 
   const handleDateChange = (date: Date | undefined) => {
     if (date && reportType === 'daily') {
@@ -238,7 +272,7 @@ export default function RegistryPage() {
 
   const totalServicesOverall = useMemo(() => {
     if (reportType === 'daily') {
-      return reportData.reduce((sum, item) => sum + (item.type === 'daily' ? item.servicesCount : 0), 0);
+      return reportData.reduce((sum, item) => sum + (item.type === 'daily' ? item.totalServicesCount : 0), 0);
     }
     return 0;
   }, [reportData, reportType]);
@@ -487,8 +521,8 @@ export default function RegistryPage() {
                   ? reportType === 'daily'
                     ? (
                         isStaffRestrictedView
-                        ? `Resumen del ${format(selectedDate, "PPP", { locale: es })}. Total Servicios: ${totalServicesOverall}`
-                        : `Resumen del ${format(selectedDate, "PPP", { locale: es })}. Total Servicios: ${totalServicesOverall}, Total Ingresos: S/ ${totalRevenueOverall.toFixed(2)}`
+                        ? `Resumen del ${format(selectedDate, "PPP", { locale: es })}. Total Servicios Atendidos: ${totalServicesOverall}`
+                        : `Resumen del ${format(selectedDate, "PPP", { locale: es })}. Total Servicios Atendidos: ${totalServicesOverall}, Total Ingresos: S/ ${totalRevenueOverall.toFixed(2)}`
                       )
                     : ( // reportType === 'biWeekly'
                         isStaffRestrictedView
@@ -504,7 +538,7 @@ export default function RegistryPage() {
                 <TableRow>
                   <TableHead>Profesional</TableHead>
                   {(isAdminOrContador && adminSelectedLocation === 'all') && <TableHead>Sede</TableHead>}
-                  {reportType === 'daily' && <TableHead className="text-center">Servicios Realizados</TableHead>}
+                  {reportType === 'daily' && <TableHead className="text-left">Servicios Realizados</TableHead>}
                   <TableHead className="text-right">
                     {reportType === 'daily' ? 'Ingresos Diarios (S/)' : 'Ingresos Quincenales (S/)'}
                   </TableHead>
@@ -515,7 +549,31 @@ export default function RegistryPage() {
                   <TableRow key={item.professionalId + (item.type === 'daily' ? item.locationName : (item as BiWeeklyEarningsReportItem).locationName || '') + (item.type === 'biWeekly' ? selectedYear +'-'+selectedMonth+'-'+selectedQuincena : '')}>
                     <TableCell className="font-medium">{item.professionalName}</TableCell>
                     {(isAdminOrContador && adminSelectedLocation === 'all') && <TableCell>{item.locationName}</TableCell>}
-                    {item.type === 'daily' && <TableCell className="text-center">{item.servicesCount}</TableCell>}
+                    {item.type === 'daily' && (
+                      <TableCell>
+                        <TooltipProvider>
+                           <Tooltip>
+                            <TooltipTrigger asChild>
+                                <Badge variant="secondary" className="cursor-default">
+                                    {item.totalServicesCount} servicio(s)
+                                </Badge>
+                            </TooltipTrigger>
+                            <TooltipContent className="max-w-xs">
+                                <ScrollArea className="max-h-40">
+                                <ul className="list-none p-0 m-0 space-y-1 text-xs">
+                                {item.servicesBreakdown.map(s => (
+                                    <li key={s.serviceName} className="flex justify-between">
+                                    <span>{s.serviceName}</span>
+                                    <Badge variant="outline" className="ml-2">{s.count}</Badge>
+                                    </li>
+                                ))}
+                                </ul>
+                                </ScrollArea>
+                            </TooltipContent>
+                           </Tooltip>
+                        </TooltipProvider>
+                      </TableCell>
+                    )}
                     <TableCell className="text-right">
                       {item.type === 'daily' ? item.totalRevenue.toFixed(2) : (item as BiWeeklyEarningsReportItem).biWeeklyEarnings.toFixed(2)}
                     </TableCell>
