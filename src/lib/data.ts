@@ -2,7 +2,7 @@
 import type { User, Professional, Patient, Service, Appointment, AppointmentFormData, ProfessionalFormData, AppointmentStatus, ServiceFormData } from '@/types';
 import { LOCATIONS, USER_ROLES, SERVICES as SERVICES_CONSTANTS, APPOINTMENT_STATUS, LocationId, ServiceId as ConstantServiceId, APPOINTMENT_STATUS_DISPLAY, PAYMENT_METHODS } from './constants';
 import { formatISO, parseISO, addDays, setHours, setMinutes, startOfDay, endOfDay, addMinutes, isSameDay as dateFnsIsSameDay, startOfMonth, endOfMonth } from 'date-fns';
-import { firestore } from '@/lib/firebase-config'; // Firebase setup - Corrected import path
+import { firestore } from './firebase/firebase-config'; // Firebase setup - Corrected import path
 import { collection, addDoc, getDocs, doc, getDoc, updateDoc, query, where, deleteDoc, writeBatch, serverTimestamp, Timestamp, runTransaction, setDoc, QueryConstraint, orderBy, limit, startAfter,getCountFromServer, CollectionReference, DocumentData, documentId } from 'firebase/firestore';
 
 // --- Helper to convert Firestore Timestamps to ISO strings and vice-versa ---
@@ -743,7 +743,7 @@ export const getPatientAppointmentHistory = async (
 // --- Data Seeding/Initialization ---
 export const seedInitialData = async () => {
   if (!firestore) {
-    console.error("Firestore is not initialized for seeding.");
+    console.warn("Firestore is not initialized. Skipping data seeding.");
     return;
   }
   console.log("Starting data seeding if collections are empty...");
@@ -773,7 +773,7 @@ export const seedInitialData = async () => {
       operationsCount++;
     });
   } else {
-    console.log("Users collection not empty. Skipping user seeding.");
+    // console.log("Users collection not empty. Skipping user seeding.");
   }
 
   const professionalsColRef = collection(firestore, "professionals");
@@ -793,12 +793,12 @@ export const seedInitialData = async () => {
       }
     });
     initialProfessionals.forEach(profData => {
-      const profDocRef = doc(professionalsColRef);
+      const profDocRef = doc(professionalsColRef); // Let Firestore auto-generate ID
       batch.set(profDocRef, {...profData, createdAt: serverTimestamp(), updatedAt: serverTimestamp() });
       operationsCount++;
     });
   } else {
-    console.log("Professionals collection not empty. Skipping professional seeding.");
+    // console.log("Professionals collection not empty. Skipping professional seeding.");
   }
 
   const patientsColRef = collection(firestore, "patients");
@@ -809,18 +809,20 @@ export const seedInitialData = async () => {
       { firstName: 'Ana', lastName: 'García', phone: '111222333', email: 'ana.garcia@example.com', notes: 'Paciente regular, prefiere citas por la mañana.', dateOfBirth: '1985-05-15', isDiabetic: false },
       { firstName: 'Luis', lastName: 'Martínez', phone: '444555666', email: 'luis.martinez@example.com', notes: 'Primera visita.', dateOfBirth: '1992-11-20', isDiabetic: true },
     ];
+     // Try to get a seeded professional to link
     const someProfSnapshot = await getDocs(query(professionalsColRef, limit(1)));
     if (!someProfSnapshot.empty) {
         initialPatientsData[0].preferredProfessionalId = someProfSnapshot.docs[0].id;
     }
 
+
     initialPatientsData.forEach(patientData => {
-      const patientDocRef = doc(patientsColRef);
+      const patientDocRef = doc(patientsColRef); // Let Firestore auto-generate ID
       batch.set(patientDocRef, processTimestampsForFirestore({...patientData, createdAt: serverTimestamp(), updatedAt: serverTimestamp() }));
       operationsCount++;
     });
   } else {
-    console.log("Patients collection not empty. Skipping patient seeding.");
+    // console.log("Patients collection not empty. Skipping patient seeding.");
   }
 
   const servicesColRef = collection(firestore, "services");
@@ -828,7 +830,7 @@ export const seedInitialData = async () => {
   if (servicesCountSnap.data().count === 0) {
     console.log("Seeding services...");
     SERVICES_CONSTANTS.forEach(s_const => {
-      const serviceDocRef = doc(servicesColRef, s_const.id);
+      const serviceDocRef = doc(servicesColRef, s_const.id); // Use predefined ID from constants
       batch.set(serviceDocRef, {
         name: s_const.name,
         defaultDuration: s_const.defaultDuration,
@@ -839,7 +841,7 @@ export const seedInitialData = async () => {
       operationsCount++;
     });
   } else {
-    console.log("Services collection not empty. Skipping service seeding.");
+    // console.log("Services collection not empty. Skipping service seeding.");
   }
 
   if (operationsCount > 0) {
@@ -850,17 +852,23 @@ export const seedInitialData = async () => {
       console.error("Error committing seed batch:", error);
     }
   } else {
-    console.log("No data seeding operations were performed.");
+    // console.log("No data seeding operations were performed.");
   }
 };
 
-if (process.env.NODE_ENV === 'development' && typeof window !== 'undefined' && firestore) {
-  // Run seed check only in browser development environment
+// This block ensures seeding check runs only client-side in development
+if (typeof window !== 'undefined' && process.env.NODE_ENV === 'development') {
   const runSeedCheck = async () => {
-    try {
-      const usersColRef = collection(firestore, "users");
-      // Ensure firestore is available before trying to use it
+    // Wait for Firestore to be available from firebase-config
+    // This is a simple polling mechanism, consider a more robust solution if needed
+    let attempts = 0;
+    const maxAttempts = 10;
+    const interval = setInterval(async () => {
+      attempts++;
       if (firestore) {
+        clearInterval(interval);
+        try {
+          const usersColRef = collection(firestore, "users");
           const usersCountSnap = await getCountFromServer(query(usersColRef));
           if (usersCountSnap.data().count === 0) {
             console.log("Attempting initial data seed in development (client-side check)...");
@@ -868,12 +876,14 @@ if (process.env.NODE_ENV === 'development' && typeof window !== 'undefined' && f
           } else {
             // console.log("Users collection not empty, skipping seed (client-side check).")
           }
-      } else {
-        // console.warn("Firestore instance not available for seed check (client-side).");
+        } catch (e) {
+          console.error("Error during seed check (client-side):", e);
+        }
+      } else if (attempts > maxAttempts) {
+        clearInterval(interval);
+        console.warn("Firestore instance not available after multiple attempts for seed check (client-side).");
       }
-    } catch (e) {
-      console.error("Error during seed check (client-side):", e);
-    }
+    }, 500); // Check every 500ms
   };
-  // runSeedCheck(); // Commented out to prevent automatic seeding on every dev load
+  // runSeedCheck(); // Auto-seeding commented out. Can be run manually or via a dev script.
 }
