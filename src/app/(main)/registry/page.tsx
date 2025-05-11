@@ -27,6 +27,7 @@ interface DailyActivityReportItem {
   type: 'daily';
   professionalId: string;
   professionalName: string;
+  locationId: LocationId; // Added to ensure consistency
   locationName: string;
   totalServicesCount: number;
   servicesBreakdown: Array<{ serviceName: string; count: number }>;
@@ -37,11 +38,21 @@ interface BiWeeklyEarningsReportItem {
   type: 'biWeekly';
   professionalId: string;
   professionalName: string;
+  locationId: LocationId;
   locationName: string;
   biWeeklyEarnings: number;
 }
 
-type ReportItem = DailyActivityReportItem | BiWeeklyEarningsReportItem;
+interface GroupedBiWeeklyReportItem {
+  type: 'biWeeklyGrouped';
+  locationId: LocationId;
+  locationName: string;
+  professionals: BiWeeklyEarningsReportItem[];
+  locationTotalEarnings: number;
+}
+
+
+type ReportItem = DailyActivityReportItem | BiWeeklyEarningsReportItem | GroupedBiWeeklyReportItem;
 type ReportType = 'daily' | 'biWeekly';
 
 const currentSystemYear = getYear(new Date());
@@ -214,7 +225,7 @@ export default function RegistryPage() {
         });
       }
 
-      const biWeeklyReportMap = new Map<string, Omit<BiWeeklyEarningsReportItem, 'professionalName' | 'locationName' | 'type' > & { locationId: LocationId }>();
+      const biWeeklyReportMap = new Map<string, { professionalId: string, locationId: LocationId, biWeeklyEarnings: number }>();
 
       professionalsList.forEach(prof => {
          biWeeklyReportMap.set(prof.id, { professionalId: prof.id, locationId: prof.locationId, biWeeklyEarnings: 0 });
@@ -229,26 +240,64 @@ export default function RegistryPage() {
             }
         }
       });
-
-      const finalReport: BiWeeklyEarningsReportItem[] = Array.from(biWeeklyReportMap.values()).map(item => {
-        const professional = professionalsList.find(p => p.id === item.professionalId);
-        const location = LOCATIONS.find(l => l.id === item.locationId);
-        return {
-          type: 'biWeekly',
-          professionalId: item.professionalId,
-          professionalName: professional ? `${professional.firstName} ${professional.lastName}` : 'Desconocido',
-          locationName: location ? location.name : 'Desconocida',
-          biWeeklyEarnings: item.biWeeklyEarnings,
-        };
-      }).sort((a,b) => {
-         if (isAdminOrContador && adminSelectedLocation === 'all') {
-          const locCompare = a.locationName.localeCompare(b.locationName);
-          if (locCompare !== 0) return locCompare;
-        }
-        return a.professionalName.localeCompare(b.professionalName);
-      });
       
-      setReportData(finalReport);
+      if (isAdminOrContador && adminSelectedLocation === 'all') {
+        const groupedResult: GroupedBiWeeklyReportItem[] = [];
+        const professionalsByLocation = new Map<LocationId, BiWeeklyEarningsReportItem[]>();
+        const locationTotals = new Map<LocationId, number>();
+
+        Array.from(biWeeklyReportMap.values()).forEach(item => {
+          const professional = professionalsList.find(p => p.id === item.professionalId);
+          const location = LOCATIONS.find(l => l.id === item.locationId);
+          if (!professional || !location) return;
+
+          const reportItem: BiWeeklyEarningsReportItem = {
+            type: 'biWeekly',
+            professionalId: item.professionalId,
+            professionalName: `${professional.firstName} ${professional.lastName}`,
+            locationId: item.locationId,
+            locationName: location.name,
+            biWeeklyEarnings: item.biWeeklyEarnings,
+          };
+
+          if (!professionalsByLocation.has(item.locationId)) {
+            professionalsByLocation.set(item.locationId, []);
+            locationTotals.set(item.locationId, 0);
+          }
+          professionalsByLocation.get(item.locationId)!.push(reportItem);
+          locationTotals.set(item.locationId, locationTotals.get(item.locationId)! + item.biWeeklyEarnings);
+        });
+
+        LOCATIONS.forEach(loc => {
+          if (professionalsByLocation.has(loc.id)) {
+            groupedResult.push({
+              type: 'biWeeklyGrouped',
+              locationId: loc.id,
+              locationName: loc.name,
+              professionals: professionalsByLocation.get(loc.id)!.sort((a, b) => a.professionalName.localeCompare(b.professionalName)),
+              locationTotalEarnings: locationTotals.get(loc.id)!,
+            });
+          }
+        });
+        
+        groupedResult.sort((a,b) => a.locationName.localeCompare(b.locationName));
+        setReportData(groupedResult);
+      } else {
+        const finalReport: BiWeeklyEarningsReportItem[] = Array.from(biWeeklyReportMap.values()).map(item => {
+            const professional = professionalsList.find(p => p.id === item.professionalId);
+            const location = LOCATIONS.find(l => l.id === item.locationId);
+            return {
+            type: 'biWeekly',
+            professionalId: item.professionalId,
+            professionalName: professional ? `${professional.firstName} ${professional.lastName}` : 'Desconocido',
+            locationId: item.locationId,
+            locationName: location ? location.name : 'Desconocida',
+            biWeeklyEarnings: item.biWeeklyEarnings,
+            };
+        }).sort((a,b) => a.professionalName.localeCompare(b.professionalName));
+        setReportData(finalReport);
+      }
+      
       setIsLoading(false);
     };
 
@@ -272,19 +321,23 @@ export default function RegistryPage() {
 
   const totalServicesOverall = useMemo(() => {
     if (reportType === 'daily') {
-      return reportData.reduce((sum, item) => sum + (item.type === 'daily' ? item.totalServicesCount : 0), 0);
+      return (reportData as DailyActivityReportItem[]).reduce((sum, item) => sum + item.totalServicesCount, 0);
     }
     return 0;
   }, [reportData, reportType]);
 
   const totalRevenueOverall = useMemo(() => {
     if (reportType === 'daily') {
-      return reportData.reduce((sum, item) => sum + (item.type === 'daily' ? item.totalRevenue : 0), 0);
+      return (reportData as DailyActivityReportItem[]).reduce((sum, item) => sum + item.totalRevenue, 0);
     } else if (reportType === 'biWeekly') {
-      return reportData.reduce((sum, item) => sum + (item.type === 'biWeekly' ? item.biWeeklyEarnings : 0), 0);
+      if (isAdminOrContador && adminSelectedLocation === 'all') {
+        return (reportData as GroupedBiWeeklyReportItem[]).reduce((sum, group) => sum + group.locationTotalEarnings, 0);
+      } else {
+        return (reportData as BiWeeklyEarningsReportItem[]).reduce((sum, item) => sum + item.biWeeklyEarnings, 0);
+      }
     }
     return 0;
-  }, [reportData, reportType]);
+  }, [reportData, reportType, isAdminOrContador, adminSelectedLocation]);
   
   const getBiWeeklyPeriodDescription = () => {
     const dateForDescription = setMonth(setYear(new Date(), selectedYear), selectedMonth);
@@ -431,7 +484,7 @@ export default function RegistryPage() {
 
   const NoDataState = () => (
      <TableRow>
-        <TableCell colSpan={isAdminOrContador && adminSelectedLocation === 'all' && reportType === 'daily' ? 4 : (isAdminOrContador && adminSelectedLocation === 'all' && reportType === 'biWeekly' ? 3 : (reportType === 'daily' ? 3 : 2) ) } className="h-24 text-center">
+        <TableCell colSpan={reportType === 'daily' && isAdminOrContador && adminSelectedLocation === 'all' ? 4 : (reportType === 'biWeekly' && isAdminOrContador && adminSelectedLocation === 'all' ? 3 : (reportType === 'daily' ? 3 : 2) ) } className="h-24 text-center">
           <AlertTriangle className="mx-auto h-8 w-8 text-muted-foreground mb-2" />
            {reportType === 'daily' ? 'No hay actividad registrada para este día y selección.' : 'No hay datos de ingresos quincenales para este periodo y selección.'}
         </TableCell>
@@ -545,40 +598,60 @@ export default function RegistryPage() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {reportData.length === 0 ? <NoDataState /> : reportData.map(item => (
-                  <TableRow key={item.professionalId + (item.type === 'daily' ? item.locationName : (item as BiWeeklyEarningsReportItem).locationName || '') + (item.type === 'biWeekly' ? selectedYear +'-'+selectedMonth+'-'+selectedQuincena : '')}>
-                    <TableCell className="font-medium">{item.professionalName}</TableCell>
-                    {(isAdminOrContador && adminSelectedLocation === 'all') && <TableCell>{item.locationName}</TableCell>}
-                    {item.type === 'daily' && (
-                      <TableCell>
-                        <TooltipProvider>
-                           <Tooltip>
-                            <TooltipTrigger asChild>
-                                <Badge variant="secondary" className="cursor-default">
-                                    {item.totalServicesCount} servicio(s)
-                                </Badge>
-                            </TooltipTrigger>
-                            <TooltipContent className="max-w-xs">
-                                <ScrollArea className="max-h-40">
-                                <ul className="list-none p-0 m-0 space-y-1 text-xs">
-                                {item.servicesBreakdown.map(s => (
-                                    <li key={s.serviceName} className="flex justify-between">
-                                    <span>{s.serviceName}</span>
-                                    <Badge variant="outline" className="ml-2">{s.count}</Badge>
-                                    </li>
-                                ))}
-                                </ul>
-                                </ScrollArea>
-                            </TooltipContent>
-                           </Tooltip>
-                        </TooltipProvider>
-                      </TableCell>
-                    )}
-                    <TableCell className="text-right">
-                      {item.type === 'daily' ? item.totalRevenue.toFixed(2) : (item as BiWeeklyEarningsReportItem).biWeeklyEarnings.toFixed(2)}
-                    </TableCell>
-                  </TableRow>
-                ))}
+                {reportData.length === 0 ? <NoDataState /> :
+                  (reportType === 'biWeekly' && isAdminOrContador && adminSelectedLocation === 'all') ? (
+                    (reportData as GroupedBiWeeklyReportItem[]).map(group => (
+                      <React.Fragment key={group.locationId}>
+                        {group.professionals.map(item => (
+                          <TableRow key={item.professionalId}>
+                            <TableCell className="font-medium">{item.professionalName}</TableCell>
+                            <TableCell>{item.locationName}</TableCell>
+                            <TableCell className="text-right">{item.biWeeklyEarnings.toFixed(2)}</TableCell>
+                          </TableRow>
+                        ))}
+                        <TableRow className="bg-muted/50 font-semibold">
+                          <TableCell colSpan={2}>Total {group.locationName}</TableCell>
+                          <TableCell className="text-right">{group.locationTotalEarnings.toFixed(2)}</TableCell>
+                        </TableRow>
+                      </React.Fragment>
+                    ))
+                  ) : (
+                    (reportData as (DailyActivityReportItem | BiWeeklyEarningsReportItem)[]).map(item => (
+                      <TableRow key={item.professionalId + (item.type === 'daily' ? item.locationName : (item as BiWeeklyEarningsReportItem).locationId || '') + (item.type === 'biWeekly' ? selectedYear +'-'+selectedMonth+'-'+selectedQuincena : '')}>
+                        <TableCell className="font-medium">{item.professionalName}</TableCell>
+                        {(isAdminOrContador && adminSelectedLocation === 'all' && item.type !== 'biWeeklyGrouped') && <TableCell>{item.locationName}</TableCell>}
+                        {item.type === 'daily' && (
+                          <TableCell>
+                            <TooltipProvider>
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                    <Badge variant="secondary" className="cursor-default">
+                                        {item.totalServicesCount} servicio(s)
+                                    </Badge>
+                                </TooltipTrigger>
+                                <TooltipContent className="max-w-xs">
+                                    <ScrollArea className="max-h-40">
+                                    <ul className="list-none p-0 m-0 space-y-1 text-xs">
+                                    {item.servicesBreakdown.map(s => (
+                                        <li key={s.serviceName} className="flex justify-between">
+                                        <span>{s.serviceName}</span>
+                                        <Badge variant="outline" className="ml-2">{s.count}</Badge>
+                                        </li>
+                                    ))}
+                                    </ul>
+                                    </ScrollArea>
+                                </TooltipContent>
+                              </Tooltip>
+                            </TooltipProvider>
+                          </TableCell>
+                        )}
+                        <TableCell className="text-right">
+                          {item.type === 'daily' ? item.totalRevenue.toFixed(2) : (item as BiWeeklyEarningsReportItem).biWeeklyEarnings.toFixed(2)}
+                        </TableCell>
+                      </TableRow>
+                    ))
+                  )
+                }
               </TableBody>
             </Table>
           )}
