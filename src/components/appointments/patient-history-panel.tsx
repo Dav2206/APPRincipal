@@ -7,7 +7,7 @@ import { useEffect, useState } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Badge } from '@/components/ui/badge';
-import { format, parseISO, differenceInDays, formatDistanceToNow, differenceInYears, addDays as dateAddDays } from 'date-fns';
+import { format, parseISO, differenceInDays, formatDistanceToNow, differenceInYears, addDays as dateAddDays, startOfDay } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { UserSquare, CalendarDays, Stethoscope, TrendingUp, MessageSquare, AlertTriangle, Repeat, Cake, Paperclip, Camera } from 'lucide-react';
 import { APPOINTMENT_STATUS, APPOINTMENT_STATUS_DISPLAY } from '@/lib/constants';
@@ -29,8 +29,13 @@ export function PatientHistoryPanel({ patient }: PatientHistoryPanelProps) {
   useEffect(() => {
     async function fetchData() {
       setLoading(true);
-      const appointmentHistory = await getPatientAppointmentHistory(patient.id);
-      setHistory(appointmentHistory); // Already sorted by most recent first
+      const rawAppointmentHistory = await getPatientAppointmentHistory(patient.id);
+      
+      // Filter for past appointments only
+      const today = startOfDay(new Date());
+      const pastAppointments = rawAppointmentHistory.filter(appt => parseISO(appt.appointmentDateTime) < today);
+      
+      setHistory(pastAppointments); // Already sorted by most recent first from data source
 
       if (patient.preferredProfessionalId) {
         const prof = await getProfessionalById(patient.preferredProfessionalId);
@@ -51,7 +56,7 @@ export function PatientHistoryPanel({ patient }: PatientHistoryPanelProps) {
         setAge(null);
       }
       
-      const completedVisits = appointmentHistory.filter(appt => appt.status === APPOINTMENT_STATUS.COMPLETED)
+      const completedVisits = pastAppointments.filter(appt => appt.status === APPOINTMENT_STATUS.COMPLETED)
         .sort((a,b) => parseISO(a.appointmentDateTime).getTime() - parseISO(b.appointmentDateTime).getTime()); // Sort oldest to newest for calculation
 
       if (completedVisits.length >= 2) {
@@ -153,6 +158,7 @@ export function PatientHistoryPanel({ patient }: PatientHistoryPanelProps) {
             <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2">
               {lastFourAppointmentsWithPhotos.map(appt =>
                 appt.attachedPhotos?.map((photoUri, index) => (
+                  photoUri && typeof photoUri === 'string' && photoUri.startsWith("data:image/") && (
                   <div key={`${appt.id}-photo-${index}`} className="relative group aspect-square">
                     <Image 
                         src={photoUri} 
@@ -166,6 +172,7 @@ export function PatientHistoryPanel({ patient }: PatientHistoryPanelProps) {
                         {format(parseISO(appt.appointmentDateTime), "dd/MM/yy", { locale: es })}
                     </div>
                   </div>
+                  )
                 ))
               )}
             </div>
@@ -195,7 +202,7 @@ export function PatientHistoryPanel({ patient }: PatientHistoryPanelProps) {
                          <p className="text-xs font-medium text-muted-foreground flex items-center gap-1"><Paperclip size={12}/> Fotos:</p>
                          <div className="flex flex-wrap gap-1 mt-0.5">
                            {appt.attachedPhotos.map((photoUri, index) => (
-                            photoUri ? (
+                            photoUri && typeof photoUri === 'string' && photoUri.startsWith("data:image/") ? (
                              <Image key={index} src={photoUri} alt={`Foto ${index + 1}`} width={24} height={24} className="rounded object-cover aspect-square" data-ai-hint="medical thumbnail" />
                             ) : null
                            ))}
@@ -218,6 +225,3 @@ export function PatientHistoryPanel({ patient }: PatientHistoryPanelProps) {
     </Card>
   );
 }
-
-
-    
