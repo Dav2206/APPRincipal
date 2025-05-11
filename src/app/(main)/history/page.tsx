@@ -2,7 +2,7 @@
 "use client";
 
 import type { Appointment, Patient } from '@/types';
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { useAuth } from '@/contexts/auth-provider';
 import { useAppState } from '@/contexts/app-state-provider';
 import { getAppointments, getPatients } from '@/lib/data';
@@ -55,7 +55,7 @@ export default function HistoryPage() {
 
       const baseHistory = await getAppointments({
         locationId: effectiveLocationId,
-        status: [APPOINTMENT_STATUS.COMPLETED, APPOINTMENT_STATUS.CANCELLED_CLIENT, APPOINTMENT_STATUS.CANCELLED_STAFF, APPOINTMENT_STATUS.NO_SHOW],
+        statuses: [APPOINTMENT_STATUS.COMPLETED, APPOINTMENT_STATUS.CANCELLED_CLIENT, APPOINTMENT_STATUS.CANCELLED_STAFF, APPOINTMENT_STATUS.NO_SHOW],
       });
       setAllLocationHistory(baseHistory.sort((a, b) => parseISO(b.appointmentDateTime).getTime() - parseISO(a.appointmentDateTime).getTime()));
       setIsLoading(false);
@@ -108,6 +108,11 @@ export default function HistoryPage() {
   const handleServiceFilterChange = (value: string) => {
     setFilterServiceId(value as ServiceId | typeof ALL_SERVICES_VALUE);
   };
+
+  const handleAppointmentCardUpdate = useCallback((updatedAppointment: Appointment) => {
+    setDisplayedAppointments(prev => prev.map(a => a.id === updatedAppointment.id ? updatedAppointment : a));
+    setAllLocationHistory(prev => prev.map(a => a.id === updatedAppointment.id ? updatedAppointment : a));
+  }, []);
 
   const NoHistoryCard = () => (
     <Card className="col-span-full mt-8 border-dashed border-2">
@@ -198,10 +203,7 @@ export default function HistoryPage() {
               </p>
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
                 {displayedAppointments.map(appt => (
-                  <AppointmentCard key={appt.id} appointment={appt} onUpdate={(updated) => {
-                      setDisplayedAppointments(prev => prev.map(a => a.id === updated.id ? updated : a));
-                      setAllLocationHistory(prev => prev.map(a => a.id === updated.id ? updated : a));
-                  }} />
+                  <AppointmentCard key={appt.id} appointment={appt} onUpdate={handleAppointmentCardUpdate} />
                 ))}
               </div>
               {displayedAppointments.length < totalFilteredCount && (
@@ -218,4 +220,3 @@ export default function HistoryPage() {
     </div>
   );
 }
-

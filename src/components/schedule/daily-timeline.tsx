@@ -2,6 +2,7 @@
 "use client";
 
 import type { Appointment, Professional } from '@/types';
+import React from 'react';
 import { parseISO, getHours, getMinutes, addMinutes } from 'date-fns';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { ScrollArea, ScrollBar } from '@/components/ui/scroll-area';
@@ -35,7 +36,7 @@ const isOverlapping = (apptA: Appointment, apptB: Appointment): boolean => {
 };
 
 
-export function DailyTimeline({ professionals, appointments, timeSlots, onAppointmentClick }: DailyTimelineProps) {
+const DailyTimelineComponent = ({ professionals, appointments, timeSlots, onAppointmentClick }: DailyTimelineProps) => {
   
   if (professionals.length === 0) {
     return <p className="text-muted-foreground text-center py-8">No hay profesionales para mostrar en esta sede.</p>;
@@ -179,3 +180,4 @@ export function DailyTimeline({ professionals, appointments, timeSlots, onAppoin
   );
 }
 
+export const DailyTimeline = React.memo(DailyTimelineComponent);

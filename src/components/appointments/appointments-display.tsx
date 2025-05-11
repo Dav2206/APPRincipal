@@ -27,7 +27,8 @@ export function AppointmentsDisplay() {
   const [isLoading, setIsLoading] = useState(true);
   const [isFormOpen, setIsFormOpen] = useState(false);
 
-  const effectiveLocationId = user?.role === USER_ROLES.ADMIN 
+  const isAdminOrContador = user?.role === USER_ROLES.ADMIN || user?.role === USER_ROLES.CONTADOR;
+  const effectiveLocationId = isAdminOrContador 
     ? (adminSelectedLocation === 'all' ? undefined : adminSelectedLocation as LocationId) 
     : user?.locationId;
 
@@ -35,12 +36,18 @@ export function AppointmentsDisplay() {
     if (!user) return;
     setIsLoading(true);
     
-    const fetchedAppointments = await getAppointments({
-      locationId: effectiveLocationId,
-      date: currentDate,
-    });
-    setAppointments(fetchedAppointments);
-    setIsLoading(false);
+    try {
+      const fetchedAppointments = await getAppointments({
+        locationId: effectiveLocationId,
+        date: currentDate,
+      });
+      setAppointments(fetchedAppointments);
+    } catch (error) {
+      console.error("Failed to fetch appointments:", error);
+      setAppointments([]); // Set to empty array on error
+    } finally {
+      setIsLoading(false);
+    }
   }, [user, effectiveLocationId, currentDate]);
 
   useEffect(() => {
@@ -53,13 +60,13 @@ export function AppointmentsDisplay() {
     }
   };
 
-  const handleAppointmentUpdate = (updatedAppointment: Appointment) => {
+  const handleAppointmentUpdate = useCallback((updatedAppointment: Appointment) => {
     setAppointments(prev => 
       prev.map(appt => appt.id === updatedAppointment.id ? updatedAppointment : appt)
     );
     // Optionally re-fetch if status change might affect sorting or filtering significantly
     // fetchAppointments(); 
-  };
+  }, []);
 
   const NoAppointmentsCard = () => (
     <Card className="col-span-full mt-8 border-dashed border-2">
@@ -69,7 +76,7 @@ export function AppointmentsDisplay() {
         <p className="text-muted-foreground mb-4">
           No se encontraron citas para {effectiveLocationId ? LOCATIONS.find(l=>l.id === effectiveLocationId)?.name : 'todas las sedes'} en la fecha seleccionada.
         </p>
-        {(user?.role === USER_ROLES.ADMIN || user?.role === USER_ROLES.LOCATION_STAFF) && (
+        {(user?.role === USER_ROLES.ADMIN || user?.role === USER_ROLES.LOCATION_STAFF || user?.role === USER_ROLES.CONTADOR) && (
           <Button onClick={() => setIsFormOpen(true)}>
             <PlusCircleIcon className="mr-2 h-4 w-4" /> Agendar Nueva Cita
           </Button>
@@ -120,14 +127,14 @@ export function AppointmentsDisplay() {
               </Button>
             </div>
           </div>
-           {user?.role === USER_ROLES.ADMIN && (
+           {isAdminOrContador && (
             <div className="mt-2 text-sm text-muted-foreground">
               Viendo: {adminSelectedLocation === 'all' ? 'Todas las sedes' : LOCATIONS.find(l => l.id === adminSelectedLocation)?.name || ''}
             </div>
           )}
         </CardHeader>
         <CardContent>
-          {(user?.role === USER_ROLES.ADMIN || user?.role === USER_ROLES.LOCATION_STAFF) && (
+          {(user?.role === USER_ROLES.ADMIN || user?.role === USER_ROLES.LOCATION_STAFF || user?.role === USER_ROLES.CONTADOR) && (
              <Button onClick={() => setIsFormOpen(true)} className="mb-6 w-full md:w-auto">
               <PlusCircleIcon className="mr-2 h-4 w-4" /> Agendar Nueva Cita
             </Button>
@@ -160,4 +167,3 @@ export function AppointmentsDisplay() {
     </div>
   );
 }
-

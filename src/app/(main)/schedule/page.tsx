@@ -68,22 +68,26 @@ export default function SchedulePage() {
     }
   };
 
-  const handleTimelineAppointmentClick = async (appointment: Appointment) => {
-    const fullAppointmentDetails = await getAppointmentById(appointment.id);
-    if (fullAppointmentDetails) {
-      setSelectedAppointmentForEdit(fullAppointmentDetails);
-      setIsEditModalOpen(true);
-    } else {
-      console.error("Could not fetch full appointment details for editing.");
+  const handleTimelineAppointmentClick = useCallback(async (appointment: Appointment) => {
+    try {
+      const fullAppointmentDetails = await getAppointmentById(appointment.id);
+      if (fullAppointmentDetails) {
+        setSelectedAppointmentForEdit(fullAppointmentDetails);
+        setIsEditModalOpen(true);
+      } else {
+        console.error("Could not fetch full appointment details for editing.");
+      }
+    } catch (error) {
+      console.error("Error fetching appointment details:", error);
     }
-  };
+  }, []);
 
-  const handleAppointmentUpdated = (updatedAppointment: Appointment) => {
+  const handleAppointmentUpdated = useCallback((updatedAppointment: Appointment) => {
     setAppointments(prev => 
       prev.map(appt => appt.id === updatedAppointment.id ? updatedAppointment : appt)
     );
     setIsEditModalOpen(false);
-  };
+  }, []);
   
   const NoDataCard = ({ title, message }: { title: string; message: string }) => (
     <Card className="col-span-full mt-8 border-dashed border-2">
@@ -180,4 +184,3 @@ export default function SchedulePage() {
     </div>
   );
 }
-

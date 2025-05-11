@@ -1,7 +1,7 @@
 
 "use client";
 
-import { useState } from 'react';
+import React, { useState } from 'react';
 import { predictPatientAttendance, type PredictPatientAttendanceOutput } from '@/ai/flows/predict-patient-attendance';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -14,7 +14,7 @@ interface AttendancePredictionToolProps {
   patientId: string;
 }
 
-export function AttendancePredictionTool({ patientId }: AttendancePredictionToolProps) {
+const AttendancePredictionToolComponent = ({ patientId }: AttendancePredictionToolProps) => {
   const [prediction, setPrediction] = useState<PredictPatientAttendanceOutput | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -88,3 +88,5 @@ export function AttendancePredictionTool({ patientId }: AttendancePredictionTool
     </div>
   );
 }
+
+export const AttendancePredictionTool = React.memo(AttendancePredictionToolComponent);

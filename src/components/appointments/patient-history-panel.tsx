@@ -3,11 +3,11 @@
 
 import type { Patient, Appointment, AppointmentStatus } from '@/types';
 import { getPatientAppointmentHistory, getProfessionalById } from '@/lib/data';
-import { useEffect, useState, useRef } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Badge } from '@/components/ui/badge';
-import { format, parseISO, differenceInDays, formatDistanceToNow, differenceInYears, addDays as dateAddDays, startOfDay } from 'date-fns';
+import { format, parseISO, differenceInDays, formatDistanceToNow, differenceInYears, addDays as dateFnsAddDays, startOfDay } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { UserSquare, CalendarDays, Stethoscope, TrendingUp, MessageSquare, AlertTriangle, Repeat, Cake, Paperclip, Camera, XIcon, ZoomIn, ZoomOut, RefreshCw, HeartPulse } from 'lucide-react';
 import { APPOINTMENT_STATUS, APPOINTMENT_STATUS_DISPLAY } from '@/lib/constants';
@@ -21,7 +21,7 @@ interface PatientHistoryPanelProps {
   patient: Patient;
 }
 
-export function PatientHistoryPanel({ patient }: PatientHistoryPanelProps) {
+const PatientHistoryPanelComponent = ({ patient }: PatientHistoryPanelProps) => {
   const [history, setHistory] = useState<Appointment[]>([]);
   const [loading, setLoading] = useState(true);
   const [preferredProfessionalName, setPreferredProfessionalName] = useState<string | null>(null);
@@ -49,8 +49,13 @@ export function PatientHistoryPanel({ patient }: PatientHistoryPanelProps) {
       setHistory(pastAppointments);
 
       if (patient.preferredProfessionalId) {
-        const prof = await getProfessionalById(patient.preferredProfessionalId);
-        setPreferredProfessionalName(prof ? `${prof.firstName} ${prof.lastName}` : 'No encontrado');
+        try {
+          const prof = await getProfessionalById(patient.preferredProfessionalId);
+          setPreferredProfessionalName(prof ? `${prof.firstName} ${prof.lastName}` : 'No encontrado');
+        } catch (error) {
+          console.error("Failed to fetch preferred professional:", error);
+          setPreferredProfessionalName('Error al cargar');
+        }
       } else {
         setPreferredProfessionalName(null);
       }
@@ -82,7 +87,7 @@ export function PatientHistoryPanel({ patient }: PatientHistoryPanelProps) {
         
         const lastCompletedVisitDate = parseISO(completedVisits[completedVisits.length - 1].appointmentDateTime);
         if (avgDays > 0) { 
-            const recommendedNextDate = dateAddDays(lastCompletedVisitDate, avgDays);
+            const recommendedNextDate = dateFnsAddDays(lastCompletedVisitDate, avgDays);
             setNextRecommendedVisit(format(recommendedNextDate, "PPP", { locale: es }));
         } else {
             setNextRecommendedVisit(null);
@@ -90,7 +95,7 @@ export function PatientHistoryPanel({ patient }: PatientHistoryPanelProps) {
       } else if (completedVisits.length === 1) {
         const lastCompletedVisitDate = parseISO(completedVisits[0].appointmentDateTime);
         // Default to 30 days if only one visit, can be adjusted
-        const recommendedNextDate = dateAddDays(lastCompletedVisitDate, 30); 
+        const recommendedNextDate = dateFnsAddDays(lastCompletedVisitDate, 30); 
         setNextRecommendedVisit(format(recommendedNextDate, "PPP", { locale: es }));
         setAverageDaysBetweenVisits(null); // Not enough data for average
       }
@@ -343,3 +348,5 @@ export function PatientHistoryPanel({ patient }: PatientHistoryPanelProps) {
     </>
   );
 }
+
+export const PatientHistoryPanel = React.memo(PatientHistoryPanelComponent);

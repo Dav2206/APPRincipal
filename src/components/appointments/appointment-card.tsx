@@ -23,7 +23,7 @@ interface AppointmentCardProps {
 }
 
 
-export function AppointmentCard({ appointment, onUpdate }: AppointmentCardProps) {
+const AppointmentCardComponent = ({ appointment, onUpdate }: AppointmentCardProps) => {
   const { user } = useAuth();
   const [isUpdateModalOpen, setIsUpdateModalOpen] = useState(false);
   const [professionalsForDisplay, setProfessionalsForDisplay] = useState<Professional[]>([]);
@@ -33,9 +33,13 @@ export function AppointmentCard({ appointment, onUpdate }: AppointmentCardProps)
     // Fetch professionals for display purposes (e.g., added services) if not already available
     // This is a simplified fetch; in a real app, this might be part of a broader context or initial load.
     async function loadProfessionals() {
-        if (user?.locationId || user?.role === USER_ROLES.ADMIN) {
-            const profs = await getProfessionals(appointment.locationId);
-            setProfessionalsForDisplay(profs);
+        if (user?.locationId || user?.role === USER_ROLES.ADMIN || user?.role === USER_ROLES.CONTADOR) {
+            try {
+                const profs = await getProfessionals(appointment.locationId);
+                setProfessionalsForDisplay(profs);
+            } catch (error) {
+                console.error("Failed to load professionals for appointment card:", error);
+            }
         }
     }
     loadProfessionals();
@@ -68,7 +72,7 @@ export function AppointmentCard({ appointment, onUpdate }: AppointmentCardProps)
 
   return (
     <>
-      <Card className="w-full shadow-lg hover:shadow-xl transition-shadow duration-300">
+      <Card className="w-full shadow-lg hover:shadow-xl transition-shadow duration-300 flex flex-col">
         <CardHeader>
           <div className="flex justify-between items-start">
             <div>
@@ -86,7 +90,7 @@ export function AppointmentCard({ appointment, onUpdate }: AppointmentCardProps)
             </Badge>
           </div>
         </CardHeader>
-        <CardContent className="space-y-3 text-sm">
+        <CardContent className="space-y-3 text-sm flex-grow">
           <div className="flex items-center gap-2 text-muted-foreground">
             <CalendarIcon className="h-4 w-4" />
             <span>{format(appointmentDate, "PPP", { locale: es })}</span>
@@ -151,7 +155,7 @@ export function AppointmentCard({ appointment, onUpdate }: AppointmentCardProps)
           )}
 
         </CardContent>
-        {user && (user.role === USER_ROLES.LOCATION_STAFF && user.locationId === appointment.locationId) || user.role === USER_ROLES.ADMIN ? (
+        {user && (user.role === USER_ROLES.LOCATION_STAFF && user.locationId === appointment.locationId) || user.role === USER_ROLES.ADMIN || user.role === USER_ROLES.CONTADOR ? (
           <CardFooter>
             <Button variant="outline" size="sm" onClick={handleOpenUpdateModal} className="w-full">
               <EditIcon className="mr-2 h-4 w-4" /> Actualizar Cita
@@ -171,3 +175,5 @@ export function AppointmentCard({ appointment, onUpdate }: AppointmentCardProps)
     </>
   );
 }
+
+export const AppointmentCard = React.memo(AppointmentCardComponent);
