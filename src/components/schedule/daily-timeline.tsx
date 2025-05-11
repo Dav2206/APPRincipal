@@ -2,10 +2,11 @@
 "use client";
 
 import type { Appointment, Professional } from '@/types';
-import { parseISO, getHours, getMinutes } from 'date-fns';
+import { parseISO, getHours, getMinutes, addMinutes } from 'date-fns';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { ScrollArea, ScrollBar } from '@/components/ui/scroll-area';
-import { User, Clock } from 'lucide-react';
+import { User, Clock, AlertTriangle } from 'lucide-react';
+import { cn } from '@/lib/utils';
 
 interface DailyTimelineProps {
   professionals: Professional[];
@@ -23,6 +24,16 @@ const timeToMinutesOffset = (timeStr: string): number => {
   const [hours, minutes] = timeStr.split(':').map(Number);
   return (hours - DAY_START_HOUR) * 60 + minutes;
 };
+
+const isOverlapping = (apptA: Appointment, apptB: Appointment): boolean => {
+  const startA = parseISO(apptA.appointmentDateTime);
+  const endA = addMinutes(startA, apptA.durationMinutes);
+  const startB = parseISO(apptB.appointmentDateTime);
+  const endB = addMinutes(startB, apptB.durationMinutes);
+  // Check if intervals [startA, endA) and [startB, endB) overlap
+  return startA < endB && endA > startB;
+};
+
 
 export function DailyTimeline({ professionals, appointments, timeSlots, onAppointmentClick }: DailyTimelineProps) {
   
@@ -77,11 +88,34 @@ export function DailyTimeline({ professionals, appointments, timeSlots, onAppoin
           {/* Professionals Columns */}
           <div className="flex flex-nowrap">
             {professionals.map(prof => {
-              const professionalAppointments = appointments.filter(appt => appt.professionalId === prof.id);
+              const professionalAppointments = appointments
+                .filter(appt => appt.professionalId === prof.id)
+                .sort((a, b) => parseISO(a.appointmentDateTime).getTime() - parseISO(b.appointmentDateTime).getTime());
+
+              const overlappingAppointmentIds = new Set<string>();
+              for (let i = 0; i < professionalAppointments.length; i++) {
+                for (let j = i + 1; j < professionalAppointments.length; j++) {
+                  if (isOverlapping(professionalAppointments[i], professionalAppointments[j])) {
+                    overlappingAppointmentIds.add(professionalAppointments[i].id);
+                    overlappingAppointmentIds.add(professionalAppointments[j].id);
+                  }
+                }
+              }
+
               return (
                 <div key={prof.id} className="min-w-[150px] md:min-w-[180px] border-r relative">
                   <div className="sticky top-0 z-10 h-16 flex items-center justify-center font-semibold border-b bg-background p-2 text-sm truncate" title={`${prof.firstName} ${prof.lastName}`}>
                     {prof.firstName} {prof.lastName.split(' ')[0]}
+                    {overlappingAppointmentIds.size > 0 && (
+                      <Tooltip delayDuration={100}>
+                        <TooltipTrigger asChild>
+                           <AlertTriangle className="h-4 w-4 text-destructive ml-1 shrink-0" />
+                        </TooltipTrigger>
+                        <TooltipContent>
+                          <p>Este profesional tiene citas superpuestas.</p>
+                        </TooltipContent>
+                      </Tooltip>
+                    )}
                   </div>
                   <div className="relative" style={{ height: `${totalTimelineHeight}px` }}>
                     {/* Grid lines for time slots (visual aid) */}
@@ -91,33 +125,45 @@ export function DailyTimeline({ professionals, appointments, timeSlots, onAppoin
                      <div className="border-b border-dashed border-muted/50" style={{ height: `${30 * PIXELS_PER_MINUTE}px` }}></div>
 
 
-                    {professionalAppointments.map(appt => (
+                    {professionalAppointments.map(appt => {
+                      const isApptOverlapping = overlappingAppointmentIds.has(appt.id);
+                      return (
                       <Tooltip key={appt.id} delayDuration={100}>
                         <TooltipTrigger asChild>
                           <div
-                            className="absolute left-1 right-1 rounded-md p-1.5 shadow-md text-xs overflow-hidden cursor-pointer hover:opacity-80 transition-opacity"
+                            className={cn(
+                              "absolute left-1 right-1 rounded-md p-1.5 shadow-md text-xs overflow-hidden cursor-pointer hover:opacity-80 transition-opacity flex items-start justify-between",
+                              isApptOverlapping && "ring-2 ring-destructive border-destructive"
+                            )}
                             style={{
                               ...getAppointmentStyle(appt),
                               backgroundColor: appt.service?.id ? `hsl(var(--chart-${(appt.service.id.charCodeAt(0) % 5) + 1}))` : 'hsl(var(--accent))',
                               color: 'hsl(var(--accent-foreground))',
-                              borderColor: `hsl(var(--chart-${(appt.service?.id.charCodeAt(0) % 5) + 1}))`,
-                              borderWidth: '1px',
+                              borderColor: isApptOverlapping ? 'hsl(var(--destructive))' : `hsl(var(--chart-${(appt.service?.id.charCodeAt(0) % 5) + 1}))`,
+                              borderWidth: isApptOverlapping ? '2px' : '1px',
                             }}
                             onClick={() => onAppointmentClick?.(appt)}
                           >
-                            <p className="font-semibold truncate leading-tight">{appt.patient?.firstName} {appt.patient?.lastName}</p>
-                            <p className="truncate text-[10px] leading-tight opacity-90">{appt.service?.name}</p>
-                            {appt.durationMinutes > 30 && <p className="text-[10px] leading-tight opacity-80 mt-0.5">({appt.durationMinutes} min)</p>}
+                            <div className="flex-grow overflow-hidden">
+                              <p className="font-semibold truncate leading-tight">{appt.patient?.firstName} {appt.patient?.lastName}</p>
+                              <p className="truncate text-[10px] leading-tight opacity-90">{appt.service?.name}</p>
+                              {appt.durationMinutes > 30 && <p className="text-[10px] leading-tight opacity-80 mt-0.5">({appt.durationMinutes} min)</p>}
+                            </div>
+                            {isApptOverlapping && (
+                               <AlertTriangle className="h-3 w-3 text-destructive-foreground bg-destructive rounded-full p-px shrink-0 ml-1" />
+                            )}
                           </div>
                         </TooltipTrigger>
                         <TooltipContent className="bg-popover text-popover-foreground p-2 rounded-md shadow-lg">
+                          {isApptOverlapping && <p className="text-destructive font-semibold text-xs flex items-center gap-1 mb-1"><AlertTriangle size={12} /> ¡Cita Superpuesta!</p>}
                           <p className="font-bold text-sm">{appt.patient?.firstName} {appt.patient?.lastName}</p>
                           <p><User size={12} className="inline mr-1"/> {appt.service?.name}</p>
                           <p><Clock size={12} className="inline mr-1"/> {parseISO(appt.appointmentDateTime).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})} ({appt.durationMinutes} min)</p>
                           {appt.bookingObservations && <p className="text-xs mt-1 italic">Obs: {appt.bookingObservations}</p>}
                         </TooltipContent>
                       </Tooltip>
-                    ))}
+                      )
+                    })}
                   </div>
                 </div>
               );
@@ -132,3 +178,4 @@ export function DailyTimeline({ professionals, appointments, timeSlots, onAppoin
     </TooltipProvider>
   );
 }
+
