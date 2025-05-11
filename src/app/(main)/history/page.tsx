@@ -21,7 +21,7 @@ import { CalendarIcon, FilterIcon, AlertTriangle, Loader2, RotateCcw, History as
 import { cn } from '@/lib/utils';
 
 const ALL_SERVICES_VALUE = "all_services_placeholder_value";
-const APPOINTMENTS_PER_PAGE = 12;
+const APPOINTMENTS_PER_PAGE = 8;
 
 export default function HistoryPage() {
   const { user } = useAuth();
