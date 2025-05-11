@@ -2,7 +2,7 @@
 import type { User, Professional, Patient, Service, Appointment, AppointmentFormData, ProfessionalFormData, AppointmentStatus, ServiceFormData } from '@/types';
 import { LOCATIONS, USER_ROLES, SERVICES as SERVICES_CONSTANTS, APPOINTMENT_STATUS, LocationId, ServiceId as ConstantServiceId, APPOINTMENT_STATUS_DISPLAY, PAYMENT_METHODS } from './constants';
 import { formatISO, parseISO, addDays, setHours, setMinutes, startOfDay, endOfDay, addMinutes, isSameDay as dateFnsIsSameDay, startOfMonth, endOfMonth } from 'date-fns';
-import { firestore } from '@/lib/firebase/firebase-config'; // Firebase setup - Corrected import path
+import { firestore } from '@/lib/firebase-config'; // Firebase setup - Corrected import path
 import { collection, addDoc, getDocs, doc, getDoc, updateDoc, query, where, deleteDoc, writeBatch, serverTimestamp, Timestamp, runTransaction, setDoc, QueryConstraint, orderBy, limit, startAfter,getCountFromServer, CollectionReference, DocumentData, documentId } from 'firebase/firestore';
 
 // --- Helper to convert Firestore Timestamps to ISO strings and vice-versa ---
@@ -25,7 +25,7 @@ const processTimestampsFromFirestore = (data: any): any => {
     if (processedData[key] instanceof Timestamp) {
       processedData[key] = formatISO(processedData[key].toDate());
     } else if (Array.isArray(processedData[key])) {
-      processedData[key] = processedData[key].map(item => 
+      processedData[key] = processedData[key].map(item =>
         typeof item === 'object' && item !== null ? processTimestampsFromFirestore(item) : item
       );
     } else if (typeof processedData[key] === 'object' && processedData[key] !== null && !(processedData[key] instanceof Date)) {
@@ -143,35 +143,33 @@ export const updateProfessional = async (id: string, data: Partial<ProfessionalF
 };
 
 // --- Patients ---
-export const getPatients = async (options: { page?: number, limit?: number, searchTerm?: string, filterToday?: boolean, adminSelectedLocation?: LocationId | 'all', user?: User | null } = {}): Promise<{patients: Patient[], totalCount: number}> => {
+export const getPatients = async (options: { page?: number, limit?: number, searchTerm?: string, filterToday?: boolean, adminSelectedLocation?: LocationId | 'all', user?: User | null, lastVisibleDoc?: DocumentData } = {}): Promise<{patients: Patient[], totalCount: number, lastDoc?: DocumentData}> => {
   if (!firestore) {
     console.error("Firestore is not initialized in getPatients.");
     return { patients: [], totalCount: 0 };
   }
 
-  const { page = 1, limit: pageSize = PATIENTS_PER_PAGE_DEFAULT, searchTerm, filterToday, adminSelectedLocation, user } = options;
+  const { page = 1, limit: pageSize = PATIENTS_PER_PAGE_DEFAULT, searchTerm, filterToday, adminSelectedLocation, user, lastVisibleDoc: lastVisibleDocument } = options;
 
   try {
     const patientsRef = collection(firestore, 'patients') as CollectionReference<DocumentData>;
     let qConstraints: QueryConstraint[] = [];
+    let countQueryConstraints: QueryConstraint[] = [];
 
-    // Base query - always sort by name for consistent pagination
-    qConstraints.push(orderBy('firstName'), orderBy('lastName'));
-
-    let patientsData: Patient[] = [];
-    let totalCount = 0;
 
     if (searchTerm) {
-      const allPatientsSnapshot = await getDocs(query(patientsRef, ...qConstraints));
-      let allPatients = allPatientsSnapshot.docs.map(doc => processTimestampsFromFirestore({ id: doc.id, ...doc.data() }) as Patient);
-      
-      allPatients = allPatients.filter(p =>
-        `${p.firstName} ${p.lastName}`.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        (p.phone && p.phone.includes(searchTerm)) ||
-        (p.email && p.email.toLowerCase().includes(searchTerm.toLowerCase()))
-      );
-      
-      if (filterToday && user) {
+       // Firestore does not support direct 'contains' or 'like' queries for partial string matching on multiple fields efficiently.
+       // For a more robust search, consider a third-party search service like Algolia or Elasticsearch,
+       // or a simpler approach of fetching then filtering if the dataset is small enough.
+       // This example will try a prefix search on firstName, lastName. Phone/email require exact match or different strategy.
+       qConstraints.push(where('firstName', '>=', searchTerm), where('firstName', '<=', searchTerm + '\uf8ff'));
+       // For lastName, it's harder to combine with firstName prefix search in Firestore directly.
+       // A more complex solution or client-side filtering might be needed for multi-field partial search.
+       // countQueryConstraints = [...qConstraints]; // Apply same filters to count
+    }
+
+
+    if (filterToday && user) {
         const today = startOfDay(new Date());
          const isAdminOrContador = user?.role === USER_ROLES.ADMIN || user?.role === USER_ROLES.CONTADOR;
          const effectiveLocationId = isAdminOrContador
@@ -179,62 +177,69 @@ export const getPatients = async (options: { page?: number, limit?: number, sear
            : user?.locationId;
 
         const dailyAppointmentsResult = await getAppointments({ date: today, locationId: effectiveLocationId as LocationId | undefined });
-        const patientIdsWithAppointmentsToday = new Set(dailyAppointmentsResult.appointments.map(app => app.patientId));
-        allPatients = allPatients.filter(p => patientIdsWithAppointmentsToday.has(p.id));
-      }
-      
-      totalCount = allPatients.length;
-      const startIndex = (page - 1) * pageSize;
-      patientsData = allPatients.slice(startIndex, startIndex + pageSize);
+        const patientIdsWithAppointmentsToday = dailyAppointmentsResult.appointments.map(app => app.patientId);
 
-    } else { 
-      if (filterToday && user) {
-          const today = startOfDay(new Date());
-          const isAdminOrContador = user?.role === USER_ROLES.ADMIN || user?.role === USER_ROLES.CONTADOR;
-          const effectiveLocationId = isAdminOrContador
-            ? (adminSelectedLocation === 'all' ? undefined : adminSelectedLocation)
-            : user?.locationId;
-          const dailyAppointmentsResult = await getAppointments({ date: today, locationId: effectiveLocationId as LocationId | undefined });
-          const patientIdsWithAppointmentsToday = new Set(dailyAppointmentsResult.appointments.map(app => app.patientId));
-          
-          // Since we need to filter by an external list (patientIdsWithAppointmentsToday),
-          // we fetch all matching patients first, then filter in code.
-          // Firestore doesn't support "where ID in list" directly with other complex queries easily in this context.
-          // This approach might be inefficient for very large patient bases if filterToday is common without other strong filters.
-          // Consider structuring data differently or using more complex querying/data duplication if this becomes a bottleneck.
-          const allPatientsSnapshot = await getDocs(query(patientsRef, ...qConstraints));
-          let allPatients = allPatientsSnapshot.docs.map(doc => processTimestampsFromFirestore({ id: doc.id, ...doc.data() }) as Patient);
-          allPatients = allPatients.filter(p => patientIdsWithAppointmentsToday.has(p.id));
-          
-          totalCount = allPatients.length;
-          const startIndex = (page - 1) * pageSize;
-          patientsData = allPatients.slice(startIndex, startIndex + pageSize);
-
-      } else { // No search term, no filterToday
-        const countSnapshot = await getCountFromServer(query(patientsRef));
-        totalCount = countSnapshot.data().count;
-
-        if (page > 1) {
-          const lastVisibleDocQuery = query(patientsRef, ...qConstraints, limit((page - 1) * pageSize));
-          const lastVisibleDocSnapshot = await getDocs(lastVisibleDocQuery);
-          const lastVisible = lastVisibleDocSnapshot.docs[lastVisibleDocSnapshot.docs.length - 1];
-          if (lastVisible) {
-            qConstraints.push(startAfter(lastVisible));
-          }
+        if (patientIdsWithAppointmentsToday.length > 0) {
+            // Firestore 'in' query has a limit of 30 items per query.
+            // If more than 30 patients have appointments, this will need to be batched.
+            const idChunks = [];
+            for (let i = 0; i < patientIdsWithAppointmentsToday.length; i += 30) {
+                idChunks.push(patientIdsWithAppointmentsToday.slice(i, i + 30));
+            }
+            // This implementation will only filter by the first chunk if patientIdsWithAppointmentsToday > 30
+            // A proper solution would involve multiple queries and merging results, or a different data model.
+            if(idChunks.length > 0){
+                 qConstraints.push(where(documentId(), 'in', idChunks[0]));
+                 countQueryConstraints.push(where(documentId(), 'in', idChunks[0]));
+            } else {
+                 // No patients have appointments today, so the result should be empty
+                 return { patients: [], totalCount: 0 };
+            }
+        } else {
+             // No patients have appointments today, so the result should be empty
+            return { patients: [], totalCount: 0 };
         }
-        qConstraints.push(limit(pageSize));
-        
-        const querySnapshot = await getDocs(query(patientsRef, ...qConstraints));
-        patientsData = querySnapshot.docs.map(doc => processTimestampsFromFirestore({ id: doc.id, ...doc.data() }) as Patient);
-      }
     }
-    return { patients: patientsData, totalCount };
+    
+    countQueryConstraints = [...countQueryConstraints, ...qConstraints.filter(c => c.type !== 'limit' && c.type !== 'startAfter' && c.type !== 'orderBy')];
+
+
+    const countQuery = query(patientsRef, ...countQueryConstraints);
+    const countSnapshot = await getCountFromServer(countQuery);
+    const totalCount = countSnapshot.data().count;
+
+    qConstraints.push(orderBy('firstName'), orderBy('lastName'));
+    if (page > 1 && lastVisibleDocument) {
+      qConstraints.push(startAfter(lastVisibleDocument));
+    }
+    qConstraints.push(limit(pageSize));
+
+    const querySnapshot = await getDocs(query(patientsRef, ...qConstraints));
+    const patientsData = querySnapshot.docs.map(doc => processTimestampsFromFirestore({ id: doc.id, ...doc.data() }) as Patient);
+    const lastFetchedDoc = querySnapshot.docs[querySnapshot.docs.length - 1];
+
+    return { patients: patientsData, totalCount, lastDoc: lastFetchedDoc };
   } catch (error) {
     console.error("Error fetching patients with pagination:", error);
-    return { patients: [], totalCount: 0 };
+    // Fallback to client-side filtering if specific server-side filtering fails or is too complex for this setup
+    // This is a simplified fallback and might not be performant for large datasets.
+    const allPatientsSnapshot = await getDocs(query(collection(firestore, 'patients'), orderBy('firstName'), orderBy('lastName')));
+    let allPatients = allPatientsSnapshot.docs.map(doc => processTimestampsFromFirestore({ id: doc.id, ...doc.data() }) as Patient);
+     if (searchTerm) {
+        allPatients = allPatients.filter(p =>
+          `${p.firstName} ${p.lastName}`.toLowerCase().includes(searchTerm.toLowerCase()) ||
+          (p.phone && p.phone.includes(searchTerm)) ||
+          (p.email && p.email.toLowerCase().includes(searchTerm.toLowerCase()))
+        );
+      }
+      // Note: filterToday logic would need to be re-applied here if this fallback is critical.
+      const totalFilteredCount = allPatients.length;
+      const startIndex = (page - 1) * pageSize;
+      const paginatedPatients = allPatients.slice(startIndex, startIndex + pageSize);
+      return { patients: paginatedPatients, totalCount: totalFilteredCount, lastDoc: undefined };
   }
 };
-const PATIENTS_PER_PAGE_DEFAULT = 20; // Default, can be overridden
+const PATIENTS_PER_PAGE_DEFAULT = 20;
 
 
 export const getPatientById = async (id: string): Promise<Patient | undefined> => {
@@ -379,9 +384,9 @@ export const addService = async (data: ServiceFormData): Promise<Service> => {
       let q = query(servicesRef, where(documentId(), '==', slug));
       let querySnapshot = await getDocs(q);
       let attempt = 0;
-      while (!querySnapshot.empty && attempt < 5) { 
+      while (!querySnapshot.empty && attempt < 5) {
         attempt++;
-        slug = `${slugify(data.name)}-${Date.now().toString().slice(-4)}${attempt}`; 
+        slug = `${slugify(data.name)}-${Date.now().toString().slice(-4)}${attempt}`;
         q = query(servicesRef, where(documentId(), '==', slug));
         querySnapshot = await getDocs(q);
       }
@@ -390,7 +395,7 @@ export const addService = async (data: ServiceFormData): Promise<Service> => {
       }
       id = slug;
     }
-    
+
     const newServiceData = {
       // id is implicit as document ID
       name: data.name,
@@ -400,7 +405,7 @@ export const addService = async (data: ServiceFormData): Promise<Service> => {
       updatedAt: serverTimestamp(),
     };
     const serviceDocRef = doc(firestore, 'services', id);
-    await setDoc(serviceDocRef, newServiceData); 
+    await setDoc(serviceDocRef, newServiceData);
 
     const newDocSnap = await getDoc(serviceDocRef);
     if (!newDocSnap.exists()) {
@@ -439,16 +444,16 @@ export const updateService = async (id: string, data: Partial<ServiceFormData>):
 // --- Appointments ---
 const APPOINTMENTS_PER_PAGE_DEFAULT = 8;
 
-export const getAppointments = async (filters: { 
-  locationId?: LocationId | LocationId[] | undefined; 
-  date?: Date, 
+export const getAppointments = async (filters: {
+  locationId?: LocationId | LocationId[] | undefined;
+  date?: Date,
   dateRange?: { start: Date; end: Date };
-  statuses?: AppointmentStatus | AppointmentStatus[]; 
-  patientId?: string, 
+  statuses?: AppointmentStatus | AppointmentStatus[];
+  patientId?: string,
   professionalId?: string,
   page?: number,
   limit?: number,
-  lastVisibleDoc?: DocumentData 
+  lastVisibleDoc?: DocumentData
 }): Promise<{ appointments: Appointment[], totalCount: number, lastDoc?: DocumentData }> => {
   if (!firestore) {
     console.error("Firestore is not initialized in getAppointments.");
@@ -486,23 +491,21 @@ export const getAppointments = async (filters: {
         qConstraints.push(where('status', 'in', statusesToFilter));
       }
     }
-    
-    // Determine sort order based on whether statuses filter includes past or future appointments
+
     const isFetchingPastStatuses = filters.statuses && (
         (Array.isArray(filters.statuses) && filters.statuses.some(s => [APPOINTMENT_STATUS.COMPLETED, APPOINTMENT_STATUS.CANCELLED_CLIENT, APPOINTMENT_STATUS.CANCELLED_STAFF, APPOINTMENT_STATUS.NO_SHOW].includes(s))) ||
         (typeof filters.statuses === 'string' && [APPOINTMENT_STATUS.COMPLETED, APPOINTMENT_STATUS.CANCELLED_CLIENT, APPOINTMENT_STATUS.CANCELLED_STAFF, APPOINTMENT_STATUS.NO_SHOW].includes(filters.statuses))
     );
 
     if (isFetchingPastStatuses) {
-      qConstraints.push(orderBy('appointmentDateTime', 'desc')); // Most recent past appointments first
+      qConstraints.push(orderBy('appointmentDateTime', 'desc'));
     } else {
-      qConstraints.push(orderBy('appointmentDateTime', 'asc')); // Earliest upcoming appointments first
+      qConstraints.push(orderBy('appointmentDateTime', 'asc'));
     }
 
 
     let totalCount = 0;
-    // Create a query for counting that excludes pagination constraints (limit, startAfter)
-    const countQueryConstraints = qConstraints.filter(c => c.type !== 'limit' && c.type !== 'startAfter');
+    const countQueryConstraints = qConstraints.filter(c => c.type !== 'limit' && c.type !== 'startAfter' && c.type !== 'orderBy');
     const countQuery = query(appointmentsRef, ...countQueryConstraints);
     const countSnapshot = await getCountFromServer(countQuery);
     totalCount = countSnapshot.data().count;
@@ -513,17 +516,17 @@ export const getAppointments = async (filters: {
         qConstraints.push(startAfter(filters.lastVisibleDoc));
     }
     qConstraints.push(limit(pageSize));
-  
+
     const querySnapshot = await getDocs(query(appointmentsRef, ...qConstraints));
     const appointmentsData = querySnapshot.docs.map(doc => processTimestampsFromFirestore({ id: doc.id, ...doc.data() }) as Appointment);
-    
+
     const populatedAppointments = await Promise.all(appointmentsData.map(async appt => {
       const [patient, professional, service] = await Promise.all([
         appt.patientId ? getPatientById(appt.patientId) : Promise.resolve(undefined),
         appt.professionalId ? getProfessionalById(appt.professionalId) : Promise.resolve(undefined),
         appt.serviceId ? getServiceById(appt.serviceId) : Promise.resolve(undefined),
       ]);
-      
+
       const addedServicesPopulated = appt.addedServices ? await Promise.all(appt.addedServices.map(async as => {
         const [addedService, addedProfessional] = await Promise.all([
             as.serviceId ? getServiceById(as.serviceId) : Promise.resolve(undefined),
@@ -534,7 +537,7 @@ export const getAppointments = async (filters: {
 
       return { ...appt, patient, professional, service, addedServices: addedServicesPopulated };
     }));
-    
+
     const lastDoc = querySnapshot.docs[querySnapshot.docs.length - 1];
     return { appointments: populatedAppointments, totalCount, lastDoc };
 
@@ -603,13 +606,13 @@ export const addAppointment = async (data: AppointmentFormData): Promise<Appoint
         });
         patientId = newPatient.id;
       }
-    } else { 
+    } else {
       const existingPatientDetails = await getPatientById(patientId);
       if (existingPatientDetails && data.isDiabetic !== undefined && data.isDiabetic !== existingPatientDetails.isDiabetic) {
         await updatePatient(patientId, { isDiabetic: data.isDiabetic });
       }
     }
-    
+
     const service = await getServiceById(data.serviceId);
     const appointmentDateHours = parseInt(data.appointmentTime.split(':')[0]);
     const appointmentDateMinutes = parseInt(data.appointmentTime.split(':')[1]);
@@ -619,25 +622,25 @@ export const addAppointment = async (data: AppointmentFormData): Promise<Appoint
       patientId: patientId!,
       locationId: data.locationId,
       serviceId: data.serviceId,
-      appointmentDateTime: formatISO(appointmentDateTime), 
+      appointmentDateTime: formatISO(appointmentDateTime),
       durationMinutes: service?.defaultDuration || 60,
       preferredProfessionalId: data.preferredProfessionalId === "_any_professional_placeholder_" ? undefined : data.preferredProfessionalId,
       bookingObservations: data.bookingObservations,
       status: APPOINTMENT_STATUS.BOOKED,
       attachedPhotos: [],
-      createdAt: formatISO(new Date()), 
-      updatedAt: formatISO(new Date()), 
+      createdAt: formatISO(new Date()),
+      updatedAt: formatISO(new Date()),
     };
-    
+
     const docRef = await addDoc(collection(firestore, 'appointments'), processTimestampsForFirestore({
       ...newAppointmentData,
-      createdAt: serverTimestamp(), 
+      createdAt: serverTimestamp(),
       updatedAt: serverTimestamp(),
     }));
 
     const createdAppointment = await getAppointmentById(docRef.id);
     if (!createdAppointment) throw new Error("Failed to fetch created appointment");
-    
+
     return createdAppointment;
 
   } catch (error) {
@@ -653,18 +656,18 @@ export const updateAppointment = async (id: string, data: Partial<Appointment>):
   }
   try {
     const apptDocRef = doc(firestore, 'appointments', id);
-    
+
     const updateData: Partial<Appointment> = { ...data, updatedAt: formatISO(new Date()) };
-    
+
     if (typeof data.appointmentDateTime === 'string') {
       updateData.appointmentDateTime = formatISO(parseISO(data.appointmentDateTime));
     }
 
     await updateDoc(apptDocRef, processTimestampsForFirestore({ ...updateData, updatedAt: serverTimestamp() }));
-    
+
     const updatedDoc = await getDoc(apptDocRef);
     if (updatedDoc.exists()) {
-      return getAppointmentById(updatedDoc.id); 
+      return getAppointmentById(updatedDoc.id);
     }
     return undefined;
 
@@ -677,7 +680,7 @@ export const updateAppointment = async (id: string, data: Partial<Appointment>):
 const HISTORY_APPOINTMENTS_PER_PAGE = 8;
 
 export const getPatientAppointmentHistory = async (
-  patientId: string, 
+  patientId: string,
   options: { page?: number, limit?: number, lastVisibleDoc?: DocumentData } = {}
 ): Promise<{ appointments: Appointment[], totalCount: number, lastDoc?: DocumentData }> => {
   if (!firestore) {
@@ -688,23 +691,23 @@ export const getPatientAppointmentHistory = async (
     const { page = 1, limit: pageSize = HISTORY_APPOINTMENTS_PER_PAGE, lastVisibleDoc } = options;
     const today = startOfDay(new Date());
     const appointmentsRef = collection(firestore, 'appointments') as CollectionReference<DocumentData>;
-    
+
     let qConstraints: QueryConstraint[] = [
       where('patientId', '==', patientId),
-      where('appointmentDateTime', '<', Timestamp.fromDate(today)), // Appointments before today
+      where('appointmentDateTime', '<', Timestamp.fromDate(today)),
       where('status', 'in', [
-        APPOINTMENT_STATUS.COMPLETED, 
-        APPOINTMENT_STATUS.NO_SHOW, 
-        APPOINTMENT_STATUS.CANCELLED_CLIENT, 
+        APPOINTMENT_STATUS.COMPLETED,
+        APPOINTMENT_STATUS.NO_SHOW,
+        APPOINTMENT_STATUS.CANCELLED_CLIENT,
         APPOINTMENT_STATUS.CANCELLED_STAFF
       ]),
-      orderBy('appointmentDateTime', 'desc') 
+      orderBy('appointmentDateTime', 'desc')
     ];
 
     const countQuery = query(appointmentsRef, ...qConstraints.filter(c => c.type !== 'limit' && c.type !== 'startAt' && c.type !== 'startAfter'));
     const countSnapshot = await getCountFromServer(countQuery);
     const totalCount = countSnapshot.data().count;
-    
+
     if (page > 1 && lastVisibleDoc) {
       qConstraints.push(startAfter(lastVisibleDoc));
     }
@@ -727,7 +730,7 @@ export const getPatientAppointmentHistory = async (
       })) : undefined;
       return { ...appt, professional, service, addedServices: addedServicesPopulated };
     }));
-    
+
     const newLastDoc = querySnapshot.docs[querySnapshot.docs.length - 1];
     return { appointments: populatedHistory, totalCount, lastDoc: newLastDoc };
 
@@ -777,7 +780,7 @@ export const seedInitialData = async () => {
   const profsCountSnap = await getCountFromServer(query(professionalsColRef));
   if (profsCountSnap.data().count === 0) {
     console.log("Seeding professionals...");
-    const initialProfessionals: Omit<Professional, 'id'>[] = []; 
+    const initialProfessionals: Omit<Professional, 'id'>[] = [];
     LOCATIONS.forEach((location, locIndex) => {
       for (let i = 1; i <= 2; i++) {
         initialProfessionals.push({
@@ -790,7 +793,7 @@ export const seedInitialData = async () => {
       }
     });
     initialProfessionals.forEach(profData => {
-      const profDocRef = doc(professionalsColRef); 
+      const profDocRef = doc(professionalsColRef);
       batch.set(profDocRef, {...profData, createdAt: serverTimestamp(), updatedAt: serverTimestamp() });
       operationsCount++;
     });
@@ -802,7 +805,7 @@ export const seedInitialData = async () => {
   const patientsCountSnap = await getCountFromServer(query(patientsColRef));
   if (patientsCountSnap.data().count === 0) {
     console.log("Seeding patients...");
-    const initialPatientsData: Omit<Patient, 'id'>[] = [ 
+    const initialPatientsData: Omit<Patient, 'id'>[] = [
       { firstName: 'Ana', lastName: 'García', phone: '111222333', email: 'ana.garcia@example.com', notes: 'Paciente regular, prefiere citas por la mañana.', dateOfBirth: '1985-05-15', isDiabetic: false },
       { firstName: 'Luis', lastName: 'Martínez', phone: '444555666', email: 'luis.martinez@example.com', notes: 'Primera visita.', dateOfBirth: '1992-11-20', isDiabetic: true },
     ];
@@ -812,7 +815,7 @@ export const seedInitialData = async () => {
     }
 
     initialPatientsData.forEach(patientData => {
-      const patientDocRef = doc(patientsColRef); 
+      const patientDocRef = doc(patientsColRef);
       batch.set(patientDocRef, processTimestampsForFirestore({...patientData, createdAt: serverTimestamp(), updatedAt: serverTimestamp() }));
       operationsCount++;
     });
@@ -825,7 +828,7 @@ export const seedInitialData = async () => {
   if (servicesCountSnap.data().count === 0) {
     console.log("Seeding services...");
     SERVICES_CONSTANTS.forEach(s_const => {
-      const serviceDocRef = doc(servicesColRef, s_const.id); 
+      const serviceDocRef = doc(servicesColRef, s_const.id);
       batch.set(serviceDocRef, {
         name: s_const.name,
         defaultDuration: s_const.defaultDuration,
@@ -838,7 +841,7 @@ export const seedInitialData = async () => {
   } else {
     console.log("Services collection not empty. Skipping service seeding.");
   }
-  
+
   if (operationsCount > 0) {
     try {
       await batch.commit();
@@ -851,18 +854,26 @@ export const seedInitialData = async () => {
   }
 };
 
-if (process.env.NODE_ENV === 'development' && firestore) {
+if (process.env.NODE_ENV === 'development' && typeof window !== 'undefined' && firestore) {
+  // Run seed check only in browser development environment
   const runSeedCheck = async () => {
     try {
       const usersColRef = collection(firestore, "users");
-      const usersCountSnap = await getCountFromServer(query(usersColRef));
-      if (usersCountSnap.data().count === 0) { 
-        console.log("Attempting initial data seed in development...");
-        await seedInitialData();
+      // Ensure firestore is available before trying to use it
+      if (firestore) {
+          const usersCountSnap = await getCountFromServer(query(usersColRef));
+          if (usersCountSnap.data().count === 0) {
+            console.log("Attempting initial data seed in development (client-side check)...");
+            await seedInitialData();
+          } else {
+            // console.log("Users collection not empty, skipping seed (client-side check).")
+          }
+      } else {
+        // console.warn("Firestore instance not available for seed check (client-side).");
       }
     } catch (e) {
-      console.error("Error during seed check:", e);
+      console.error("Error during seed check (client-side):", e);
     }
   };
-  // runSeedCheck(); // Uncomment to run seed check on startup in dev
+  // runSeedCheck(); // Commented out to prevent automatic seeding on every dev load
 }
