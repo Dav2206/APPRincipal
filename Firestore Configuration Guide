@@ -1,0 +1,198 @@
+Entiendo que no estés familiarizado con la programación y necesites una guía clara. ¡No te preocupes! Te ayudaré con los aspectos más comunes que necesitas configurar en Firestore después de crearlo.
+
+**1. Configurar las Reglas de Seguridad de Firestore**
+
+Las reglas de seguridad son muy importantes para proteger tus datos. Determinan quién puede leer y escribir en tu base de datos.
+
+**¿Dónde se configuran?**
+
+*   En la consola de Firebase ([https://console.firebase.google.com/](https://console.firebase.google.com/)).
+*   Selecciona tu proyecto (`footprints-scheduler-ywrwg`).
+*   En el menú de la izquierda, ve a **Compilación > Firestore Database**.
+*   Haz clic en la pestaña **Reglas**.
+
+**Código para copiar y pegar:**
+
+Verás un editor de texto. Borra lo que haya y pega el siguiente código. Este es un conjunto de reglas básicas y comunes para empezar:
+
+```javascript
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // REGLAS GENERALES:
+    // Por defecto, nadie puede leer ni escribir nada a menos que se permita explícitamente.
+
+    // COLECCIÓN 'users':
+    // - Cualquier usuario autenticado puede leer su propio documento de usuario.
+    // - Solo el usuario autenticado puede escribir/actualizar su propio documento.
+    // - Nadie puede crear o eliminar usuarios directamente desde el cliente (esto se maneja desde el backend o con funciones de Firebase si es necesario).
+    match /users/{userId} {
+      allow read: if request.auth != null && request.auth.uid == userId;
+      allow write: if request.auth != null && request.auth.uid == userId;
+      // Para mayor seguridad, podrías restringir qué campos se pueden escribir.
+      // allow create, delete: if false; // Deshabilitar creación/eliminación desde el cliente
+    }
+
+    // COLECCIÓN 'professionals':
+    // - Cualquier usuario autenticado puede leer la lista de profesionales y sus detalles.
+    // - Solo un usuario con el rol de 'admin' o 'contador' puede crear, actualizar o eliminar profesionales.
+    match /professionals/{professionalId} {
+      allow read: if request.auth != null;
+      allow write: if request.auth != null && (
+                       request.auth.token.role == 'admin' ||
+                       request.auth.token.role == 'contador'
+                     );
+      // Aquí 'request.auth.token.role' asume que estás guardando el rol del usuario
+      // en los "custom claims" del token de autenticación de Firebase.
+      // Si no es así, necesitarás una forma diferente de verificar el rol,
+      // por ejemplo, leyendo el documento del usuario actual:
+      // allow write: if request.auth != null && (
+      //                  get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin' ||
+      //                  get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'contador'
+      //                );
+    }
+
+    // COLECCIÓN 'patients':
+    // - Cualquier usuario autenticado puede leer pacientes.
+    // - Cualquier usuario autenticado puede crear pacientes (al agendar una cita).
+    // - Solo usuarios con rol 'admin', 'contador' o 'location_staff' pueden actualizar pacientes (esta es una regla amplia, podrías querer refinarla).
+    match /patients/{patientId} {
+      allow read: if request.auth != null;
+      allow create: if request.auth != null;
+      allow update: if request.auth != null && (
+                        request.auth.token.role == 'admin' ||
+                        request.auth.token.role == 'contador' ||
+                        request.auth.token.role == 'location_staff'
+                      );
+      // allow delete: if request.auth.token.role == 'admin'; // Solo admin podría borrar
+    }
+
+    // COLECCIÓN 'services':
+    // - Cualquier usuario autenticado puede leer la lista de servicios.
+    // - Solo un usuario con el rol de 'admin' puede crear, actualizar o eliminar servicios.
+    match /services/{serviceId} {
+      allow read: if request.auth != null;
+      allow write: if request.auth != null && request.auth.token.role == 'admin';
+    }
+
+    // COLECCIÓN 'appointments':
+    // - Los usuarios pueden leer citas si:
+    //   - Son 'admin' o 'contador' (pueden ver todas).
+    //   - Son 'location_staff' y la cita pertenece a su sede.
+    // - Los usuarios pueden crear citas si están autenticados.
+    // - Los usuarios pueden actualizar citas si:
+    //   - Son 'admin' o 'contador'.
+    //   - Son 'location_staff' y la cita pertenece a su sede.
+    match /appointments/{appointmentId} {
+      allow read: if request.auth != null && (
+                      request.auth.token.role == 'admin' ||
+                      request.auth.token.role == 'contador' ||
+                      (request.auth.token.role == 'location_staff' && resource.data.locationId == request.auth.token.locationId)
+                    );
+      allow create: if request.auth != null; // Asumiendo que la lógica de la app valida quién puede crear
+      allow update: if request.auth != null && (
+                        request.auth.token.role == 'admin' ||
+                        request.auth.token.role == 'contador' ||
+                        (request.auth.token.role == 'location_staff' && resource.data.locationId == request.auth.token.locationId)
+                      );
+      // allow delete: if request.auth.token.role == 'admin'; // Solo admin podría borrar
+    }
+
+    // --- NOTA IMPORTANTE sobre request.auth.token.role y request.auth.token.locationId ---
+    // Para que `request.auth.token.role` y `request.auth.token.locationId` funcionen,
+    // necesitas configurar "Custom Claims" en Firebase Authentication cuando un usuario se loguea
+    // o cuando creas/actualizas un usuario desde un backend (como Firebase Functions).
+    // Si no estás usando Custom Claims, necesitarás obtener el rol/locationId del usuario
+    // leyendo su documento en la colección 'users', como se muestra en el ejemplo comentado
+    // para la colección 'professionals'. Esto implica una lectura adicional a Firestore por cada
+    // operación de escritura que necesite verificar el rol.
+    //
+    // Ejemplo de cómo se vería la comprobación de rol leyendo el documento del usuario:
+    // function isUserAdmin() {
+    //   return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
+    // }
+    // allow write: if request.auth != null && isUserAdmin();
+  }
+}
+```
+
+**Explicación de estas reglas básicas:**
+
+*   `rules_version = '2';`: Usa la versión más reciente de las reglas.
+*   `service cloud.firestore { ... }`: Define que estas reglas son para Firestore.
+*   `match /databases/{database}/documents { ... }`: Aplica a todos los documentos en tu base de datos.
+*   `match /users/{userId} { ... }`: Reglas específicas para la colección `users`.
+    *   `allow read: if request.auth != null && request.auth.uid == userId;`: Permite leer un documento de usuario solo si el usuario está autenticado (`request.auth != null`) y el `uid` del usuario autenticado (`request.auth.uid`) es el mismo que el `userId` del documento que se intenta leer. Es decir, un usuario solo puede leer su propia información.
+    *   `allow write: if request.auth != null && request.auth.uid == userId;`: Similar al anterior, pero para escribir (crear o actualizar). Un usuario solo puede modificar su propia información.
+*   `match /professionals/{professionalId} { ... }`, `match /patients/{patientId} { ... }`, etc.: Definen reglas para otras colecciones.
+    *   `request.auth.token.role == 'admin'`: Esto asume que tienes "Custom Claims" configurados en Firebase Authentication para asignar roles a tus usuarios. Si un usuario tiene el claim `role` con valor `admin`, se le permitirá la operación.
+    *   `resource.data.locationId == request.auth.token.locationId`: Esto asume que también tienes un custom claim `locationId` para los usuarios de `location_staff`, y que los documentos de citas tienen un campo `locationId`.
+
+**¿Cómo usar Custom Claims (para roles)?**
+Esto es un poco más avanzado y generalmente se hace desde un backend (como Firebase Functions) después de que un usuario se registra o cuando un administrador asigna un rol. No es algo que se configure directamente en las reglas de Firestore, pero las reglas *leen* estos claims. Si no usas custom claims, la alternativa es leer el documento del usuario desde las reglas para verificar su rol, lo cual es menos eficiente.
+
+**¡Importante!**
+Estas son reglas **básicas**. A medida que tu aplicación crezca, necesitarás ajustarlas para que se adapten a tus necesidades específicas de seguridad y lógica de negocio. Por ejemplo, podrías querer que solo ciertos roles puedan actualizar ciertos campos de un documento.
+
+**Después de pegar el código, haz clic en "Publicar".**
+
+**2. Crear Índices (si es necesario)**
+
+Firestore crea automáticamente índices para consultas simples (por ejemplo, buscar por un solo campo). Sin embargo, para consultas más complejas (ordenar por un campo y filtrar por otro, o filtrar por múltiples campos), podrías necesitar crear índices compuestos manualmente.
+
+**¿Cómo saber si necesitas un índice?**
+
+*   Cuando ejecutes una consulta desde tu aplicación que requiera un índice compuesto que no existe, **Firestore mostrará un error en la consola de tu navegador o en los logs de tu backend**.
+*   Este mensaje de error **generalmente incluye un enlace directo** a la consola de Firebase para crear el índice faltante con la configuración correcta.
+
+**¿Cómo crear un índice (generalmente guiado por Firestore)?**
+
+1.  Ve a la consola de Firebase > Firestore Database > Pestaña **Índices**.
+2.  Si Firestore detectó una consulta que necesita un índice, a menudo te lo sugerirá aquí o te dará un enlace en el mensaje de error.
+3.  Si necesitas crear uno manualmente (menos común para empezar):
+    *   Haz clic en "Añadir índice".
+    *   Especifica la "Ruta de la colección".
+    *   Añade los "Campos" por los que quieres indexar, especificando el "Modo de índice" (Ascendente o Descendente).
+    *   Haz clic en "Crear".
+
+**La creación de índices puede tardar un poco.**
+
+Para tu aplicación, ejemplos de consultas que podrían necesitar índices compuestos son:
+
+*   En la página de "Historial": filtrar citas por `locationId`, `status` y `appointmentDateTime` (rango).
+*   En la página de "Pacientes": buscar pacientes por `firstName` y `lastName` (si haces búsquedas que combinen ambos).
+
+**Mi recomendación:** No te preocupes demasiado por crear índices manualmente desde el principio. Desarrolla tu aplicación y, si Firestore te indica que falta un índice a través de un mensaje de error, sigue el enlace que te proporciona para crearlo. Es la forma más fácil.
+
+**3. Habilitar el Almacenamiento en Caché Sin Conexión (Persistencia)**
+
+La buena noticia es que el SDK de Firebase para la web (que estás usando en tu Next.js app) **habilita la persistencia sin conexión por defecto**.
+
+Esto significa que:
+
+*   Firestore guardará una copia local de los datos a los que tu aplicación accede.
+*   Si el usuario pierde la conexión a Internet, tu aplicación podrá seguir leyendo los datos que ya tiene en caché.
+*   Las escrituras que haga el usuario sin conexión se guardarán localmente y se sincronizarán con el servidor de Firestore automáticamente cuando se restablezca la conexión.
+
+**No necesitas escribir ningún código adicional para habilitar esta funcionalidad básica de persistencia.**
+
+Si quisieras deshabilitarla (lo cual no es común para aplicaciones web que se benefician de ella), tendrías que hacerlo explícitamente al inicializar Firestore, pero para tu caso, el comportamiento por defecto es el deseado.
+
+**Resumen de lo que necesitas hacer tú:**
+
+1.  **Reglas de Seguridad:**
+    *   Ve a la Consola de Firebase > Firestore Database > Pestaña "Reglas".
+    *   Copia y pega el código de reglas que te proporcioné.
+    *   Haz clic en "Publicar".
+    *   **Importante:** Si no usas "Custom Claims" para los roles (`admin`, `contador`, `location_staff`) y `locationId`, las partes de las reglas que dicen `request.auth.token.role` o `request.auth.token.locationId` no funcionarán como se espera. Deberás adaptar esas partes para leer el rol/locationId desde el documento del usuario en la colección `users`, como se muestra en el ejemplo comentado dentro de las reglas. Esto es crucial para que los permisos funcionen.
+
+2.  **Índices:**
+    *   Por ahora, no hagas nada proactivamente.
+    *   Mientras desarrollas y pruebas tu aplicación, si ves errores en la consola del navegador que mencionan "Firestore necesita un índice..." y proporcionan un enlace, haz clic en ese enlace y créalo en la consola de Firebase.
+
+3.  **Persistencia Sin Conexión:**
+    *   No necesitas hacer nada. Ya está habilitada por defecto.
+
+Espero que esto te sea de gran ayuda. Recuerda que la configuración de roles (preferiblemente mediante Custom Claims) es un paso importante para que las reglas de seguridad funcionen correctamente. Si tienes dudas sobre cómo implementar los Custom Claims, puedo darte una idea general, aunque suele implicar algo de código en Firebase Functions.
