@@ -41,10 +41,13 @@ const PatientHistoryPanelComponent = ({ patient }: PatientHistoryPanelProps) => 
   useEffect(() => {
     async function fetchData() {
       setLoading(true);
-      const rawAppointmentHistory = await getPatientAppointmentHistory(patient.id);
+      const historyData = await getPatientAppointmentHistory(patient.id);
+      const rawAppointmentHistory = historyData.appointments;
       
       const today = startOfDay(new Date());
-      const pastAppointments = rawAppointmentHistory.filter(appt => parseISO(appt.appointmentDateTime) < today);
+      const pastAppointments = Array.isArray(rawAppointmentHistory)
+        ? rawAppointmentHistory.filter(appt => parseISO(appt.appointmentDateTime) < today)
+        : [];
       
       setHistory(pastAppointments);
 
@@ -317,7 +320,7 @@ const PatientHistoryPanelComponent = ({ patient }: PatientHistoryPanelProps) => 
               onMouseDown={handleMouseDown}
               onMouseMove={handleMouseMove}
               onMouseUp={handleMouseUp}
-              onMouseLeave={handleMouseUp} // Stop dragging if mouse leaves container
+              onMouseLeave={handleMouseUp} 
               style={{ cursor: zoomLevel > 1 ? (isDragging ? 'grabbing' : 'grab') : 'default' }}
             >
               <div
@@ -334,10 +337,10 @@ const PatientHistoryPanelComponent = ({ patient }: PatientHistoryPanelProps) => 
                   ref={imageRef}
                   src={selectedImageForModal} 
                   alt="Vista ampliada" 
-                  width={800} // Intrinsic width for aspect ratio calculation
-                  height={600} // Intrinsic height
-                  className="max-w-full max-h-[calc(90vh-100px)] object-contain rounded-md select-none" // Prevent image selection during drag
-                  draggable="false" // Prevent browser default drag
+                  width={800} 
+                  height={600} 
+                  className="max-w-full max-h-[calc(90vh-100px)] object-contain rounded-md select-none" 
+                  draggable="false" 
                   data-ai-hint="medical chart" 
                 />
               </div>
@@ -350,3 +353,4 @@ const PatientHistoryPanelComponent = ({ patient }: PatientHistoryPanelProps) => 
 }
 
 export const PatientHistoryPanel = React.memo(PatientHistoryPanelComponent);
+
