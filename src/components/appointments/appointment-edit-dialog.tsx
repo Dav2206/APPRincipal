@@ -59,7 +59,7 @@ export function AppointmentEditDialog({ appointment, isOpen, onOpenChange, onApp
   const { toast } = useToast();
   const [professionals, setProfessionals] = useState<Professional[]>([]);
   const [allServices, setAllServices] = useState<Service[]>([]);
-  const [isSubmittingForm, setIsSubmittingForm] = useState(false); 
+  const [isUploadingImage, setIsUploadingImage] = useState(false); 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const form = useForm<AppointmentUpdateFormData>({
@@ -116,9 +116,8 @@ export function AppointmentEditDialog({ appointment, isOpen, onOpenChange, onApp
              setProfessionals(allProfsResults.flat());
         }
         const servicesData = await getServices();
-        setAllServices(servicesData?.services || []); // Ensure allServices is always an array
+        setAllServices(servicesData?.services || []); 
 
-        // Reset addedServices and main serviceId with proper default serviceId if needed after services are loaded
         if (appointment) {
           const currentServices = servicesData?.services || [];
           if (form.getValues('serviceId') === DEFAULT_SERVICE_ID_PLACEHOLDER && currentServices.length > 0) {
@@ -142,33 +141,31 @@ export function AppointmentEditDialog({ appointment, isOpen, onOpenChange, onApp
   const handleFileChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const files = event.target.files;
     if (files) {
-      setIsSubmittingForm(true); 
+      setIsUploadingImage(true); 
       try {
         const currentPhotos = form.getValues("attachedPhotos") || [];
         const newPhotoPromises = Array.from(files).map(fileToDataUri);
         const newDataUris = await Promise.all(newPhotoPromises);
         const validNewDataUris = newDataUris.filter(uri => typeof uri === 'string' && uri.startsWith("data:image/"));
-        // Filter out any empty strings or invalid values before setting
         const updatedPhotos = [...currentPhotos.filter(p => p && p.startsWith("data:image/")), ...validNewDataUris];
         form.setValue("attachedPhotos", updatedPhotos, { shouldValidate: true });
       } catch (error) {
         toast({ title: "Error al cargar imagen", description: "No se pudo procesar la imagen.", variant: "destructive"});
       } finally {
-        setIsSubmittingForm(false);
+        setIsUploadingImage(false);
         if(fileInputRef.current) fileInputRef.current.value = ""; 
       }
     }
   };
 
   const onSubmitUpdate = async (data: AppointmentUpdateFormData) => {
-    setIsSubmittingForm(true);
+    // isSubmitting is handled by form.formState.isSubmitting
     try {
       let finalAppointmentDateTime = parseISO(appointment.appointmentDateTime);
       if (data.appointmentDate && data.appointmentTime) {
         const [hours, minutes] = data.appointmentTime.split(':').map(Number);
         finalAppointmentDateTime = setMinutes(setHours(data.appointmentDate, hours), minutes);
       } else if (data.appointmentDate) {
-        // Keep original time if only date is changed
         const originalTime = parseISO(appointment.appointmentDateTime);
         finalAppointmentDateTime = setMinutes(setHours(data.appointmentDate, originalTime.getHours()), originalTime.getMinutes());
       }
@@ -201,8 +198,6 @@ export function AppointmentEditDialog({ appointment, isOpen, onOpenChange, onApp
     } catch (error) {
       console.error("Error updating appointment:", error);
       toast({ title: "Error", description: "Ocurrió un error inesperado.", variant: "destructive" });
-    } finally {
-      setIsSubmittingForm(false);
     }
   };
   
@@ -389,7 +384,7 @@ export function AppointmentEditDialog({ appointment, isOpen, onOpenChange, onApp
                   const handleMinutesChange = (e: React.ChangeEvent<HTMLInputElement>) => {
                     let newMinutes = parseInt(e.target.value, 10) || 0;
                     if (newMinutes < 0) newMinutes = 0;
-                    if (newMinutes > 59) newMinutes = 59; // Cap minutes at 59
+                    if (newMinutes > 59) newMinutes = 59; 
                     field.onChange((currentHours * 60) + newMinutes);
                   };
 
@@ -506,9 +501,9 @@ export function AppointmentEditDialog({ appointment, isOpen, onOpenChange, onApp
                   onChange={handleFileChange}
                   ref={fileInputRef}
                   className="text-sm"
-                  disabled={isSubmittingForm}
+                  disabled={isUploadingImage || form.formState.isSubmitting}
                />
-               {isSubmittingForm && <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />}
+               {isUploadingImage && <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />}
                <FormField control={form.control} name="attachedPhotos" render={() => <FormMessage />} />
             </div>
           )}
@@ -581,8 +576,8 @@ export function AppointmentEditDialog({ appointment, isOpen, onOpenChange, onApp
             <DialogClose asChild>
               <Button type="button" variant="outline">Cancelar</Button>
             </DialogClose>
-            <Button type="submit" disabled={isSubmittingForm || (allServices && allServices.length === 0)}>
-              {isSubmittingForm && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+            <Button type="submit" disabled={form.formState.isSubmitting || isUploadingImage || (allServices && allServices.length === 0)}>
+              {(form.formState.isSubmitting || isUploadingImage) && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
               Guardar Cambios
             </Button>
           </DialogFooter>

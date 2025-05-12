@@ -49,7 +49,7 @@ export default function ServicesPage() {
     defaultValues: {
       name: '',
       defaultDuration: 30,
-      price: undefined, // Keep as undefined for react-hook-form state
+      price: undefined, 
     }
   });
 
@@ -63,9 +63,10 @@ export default function ServicesPage() {
     setIsLoading(true);
     try {
       const data = await getServices();
-      setServices(data.services);
+      setServices(data.services || []); // Ensure it's an array
     } catch (error) {
       toast({ title: "Error", description: "No se pudieron cargar los servicios.", variant: "destructive" });
+      setServices([]); // Ensure it's an array on error
     } finally {
       setIsLoading(false);
     }
@@ -87,13 +88,12 @@ export default function ServicesPage() {
     setEditingService(service);
     form.reset({
       ...service,
-      price: service.price ?? undefined, // Ensure undefined if null for reset
+      price: service.price ?? undefined, 
     });
     setIsFormOpen(true);
   };
 
   const onSubmit = async (data: ServiceFormData) => {
-    form.formState.isSubmitting;
     try {
       if (editingService && editingService.id) {
         const result = await updateService(editingService.id, data);
@@ -224,11 +224,11 @@ export default function ServicesPage() {
                       step="0.01" 
                       placeholder="Ej: 80.00" 
                       {...field} 
-                      value={field.value ?? ''} // Ensure value is not undefined
+                      value={field.value ?? ''} 
                       onChange={e => {
                         const value = e.target.value;
                         if (value === '') {
-                          field.onChange(undefined); // Set to undefined if input is empty
+                          field.onChange(undefined); 
                         } else {
                           const parsedValue = parseFloat(value);
                           field.onChange(isNaN(parsedValue) ? undefined : parsedValue);

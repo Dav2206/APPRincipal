@@ -10,11 +10,16 @@ import { format, parseISO } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { CalendarIcon, ClockIcon, UserIcon, StethoscopeIcon, DollarSignIcon, EditIcon, Info, Paperclip, ShoppingBag } from 'lucide-react';
 import { useAuth } from '@/contexts/auth-provider';
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import Image from 'next/image';
-import { AppointmentEditDialog } from './appointment-edit-dialog'; // Import the new dialog
+import { AppointmentEditDialog } from './appointment-edit-dialog';
 import type { Professional } from '@/types';
 import { getProfessionals } from '@/lib/data';
+import { useForm } from 'react-hook-form';
+import { zodResolver } from '@hookform/resolvers/zod';
+import { AppointmentUpdateSchema } from '@/lib/schemas';
+import { useToast } from '@/hooks/use-toast';
+import { Loader2, CameraIcon, PlusCircle, Trash2 } from 'lucide-react';
 
 
 interface AppointmentCardProps {
@@ -22,23 +27,46 @@ interface AppointmentCardProps {
   onUpdate: (updatedAppointment: Appointment) => void;
 }
 
+type AppointmentUpdateFormData = Zod.infer<typeof AppointmentUpdateSchema>;
 
 const AppointmentCardComponent = ({ appointment, onUpdate }: AppointmentCardProps) => {
   const { user } = useAuth();
   const [isUpdateModalOpen, setIsUpdateModalOpen] = useState(false);
   const [professionalsForDisplay, setProfessionalsForDisplay] = useState<Professional[]>([]);
+  const [isLoadingProfessionals, setIsLoadingProfessionals] = useState(false);
+  const { toast } = useToast();
+
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [isUploadingImage, setIsUploadingImage] = useState(false);
+
+
+  const form = useForm<AppointmentUpdateFormData>({
+    resolver: zodResolver(AppointmentUpdateSchema),
+  });
+
+  const { fields: addedServiceFields, append: appendAddedService, remove: removeAddedService } = useForm({
+    control: form.control,
+    name: "addedServices",
+  }).control._fields // Directly accessing control._fields is not standard, prefer useFieldArray
+
+   const { fields: attachedPhotoFields, append: appendAttachedPhoto, remove: removeAttachedPhoto } = useForm({
+    control: form.control,
+    name: "attachedPhotos",
+  }).control._fields;
 
 
   useEffect(() => {
-    // Fetch professionals for display purposes (e.g., added services) if not already available
-    // This is a simplified fetch; in a real app, this might be part of a broader context or initial load.
     async function loadProfessionals() {
         if (user?.locationId || user?.role === USER_ROLES.ADMIN || user?.role === USER_ROLES.CONTADOR) {
+            setIsLoadingProfessionals(true);
             try {
                 const profs = await getProfessionals(appointment.locationId);
                 setProfessionalsForDisplay(profs);
             } catch (error) {
                 console.error("Failed to load professionals for appointment card:", error);
+                setProfessionalsForDisplay([]); // Ensure it's an array on error
+            } finally {
+                setIsLoadingProfessionals(false);
             }
         }
     }
@@ -65,10 +93,39 @@ const AppointmentCardComponent = ({ appointment, onUpdate }: AppointmentCardProp
   };
 
   const handleAppointmentUpdated = (updatedAppointment: Appointment) => {
-    onUpdate(updatedAppointment); // Propagate update to parent
-    setIsUpdateModalOpen(false); // Close modal
+    onUpdate(updatedAppointment); 
+    setIsUpdateModalOpen(false); 
   };
   
+  const fileToDataUri = (file: File): Promise<string> => {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result as string);
+      reader.onerror = reject;
+      reader.readAsDataURL(file);
+    });
+  };
+
+  const handleFileChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const files = event.target.files;
+    if (files) {
+      setIsUploadingImage(true);
+      try {
+        const currentPhotos = form.getValues("attachedPhotos") || [];
+        const newPhotoPromises = Array.from(files).map(fileToDataUri);
+        const newDataUris = await Promise.all(newPhotoPromises);
+        const validNewDataUris = newDataUris.filter(uri => typeof uri === 'string' && uri.startsWith("data:image/"));
+        const updatedPhotos = [...currentPhotos.filter(p => p && p.startsWith("data:image/")), ...validNewDataUris];
+        form.setValue("attachedPhotos", updatedPhotos, { shouldValidate: true });
+      } catch (error) {
+        toast({ title: "Error al cargar imagen", description: "No se pudo procesar la imagen.", variant: "destructive"});
+      } finally {
+        setIsUploadingImage(false);
+        if(fileInputRef.current) fileInputRef.current.value = ""; 
+      }
+    }
+  };
+
 
   return (
     <>
@@ -148,7 +205,9 @@ const AppointmentCardComponent = ({ appointment, onUpdate }: AppointmentCardProp
               <p className="text-xs font-medium text-muted-foreground flex items-center gap-1 mb-1"><Paperclip size={14}/> Fotos Adjuntas:</p>
               <div className="flex flex-wrap gap-2">
                 {appointment.attachedPhotos.filter(photoUri => photoUri && typeof photoUri === 'string' && photoUri.startsWith("data:image/")).map((photoUri, index) => (
-                  <Image key={index} src={photoUri} alt={`Foto adjunta ${index + 1}`} width={40} height={40} className="rounded object-cover aspect-square" data-ai-hint="patient record" />
+                  photoUri ? (
+                    <Image key={index} src={photoUri} alt={`Foto adjunta ${index + 1}`} width={40} height={40} className="rounded object-cover aspect-square" data-ai-hint="patient record" />
+                  ): null
                 ))}
               </div>
             </div>
