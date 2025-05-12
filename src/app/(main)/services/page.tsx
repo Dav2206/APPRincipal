@@ -49,7 +49,7 @@ export default function ServicesPage() {
     defaultValues: {
       name: '',
       defaultDuration: 30,
-      price: undefined,
+      price: undefined, // Keep as undefined for react-hook-form state
     }
   });
 
@@ -63,7 +63,7 @@ export default function ServicesPage() {
     setIsLoading(true);
     try {
       const data = await getServices();
-      setServices(data);
+      setServices(data.services);
     } catch (error) {
       toast({ title: "Error", description: "No se pudieron cargar los servicios.", variant: "destructive" });
     } finally {
@@ -85,7 +85,10 @@ export default function ServicesPage() {
 
   const handleEditService = (service: Service) => {
     setEditingService(service);
-    form.reset(service);
+    form.reset({
+      ...service,
+      price: service.price ?? undefined, // Ensure undefined if null for reset
+    });
     setIsFormOpen(true);
   };
 
@@ -215,7 +218,24 @@ export default function ServicesPage() {
               <FormField control={form.control} name="price" render={({ field }) => (
                 <FormItem>
                   <FormLabel>Precio (S/) (Opcional)</FormLabel>
-                  <FormControl><Input type="number" step="0.01" placeholder="Ej: 80.00" {...field} onChange={e => field.onChange(parseFloat(e.target.value) || undefined)} /></FormControl>
+                  <FormControl>
+                    <Input 
+                      type="number" 
+                      step="0.01" 
+                      placeholder="Ej: 80.00" 
+                      {...field} 
+                      value={field.value ?? ''} // Ensure value is not undefined
+                      onChange={e => {
+                        const value = e.target.value;
+                        if (value === '') {
+                          field.onChange(undefined); // Set to undefined if input is empty
+                        } else {
+                          const parsedValue = parseFloat(value);
+                          field.onChange(isNaN(parsedValue) ? undefined : parsedValue);
+                        }
+                      }} 
+                    />
+                  </FormControl>
                   <FormMessage />
                 </FormItem>
               )}/>
@@ -233,3 +253,4 @@ export default function ServicesPage() {
     </div>
   );
 }
+
