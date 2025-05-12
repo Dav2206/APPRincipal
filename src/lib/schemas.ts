@@ -1,4 +1,3 @@
-
 import { z } from 'zod';
 import { LOCATIONS, TIME_SLOTS, PAYMENT_METHODS, APPOINTMENT_STATUS_DISPLAY, PROFESSIONAL_SPECIALIZATIONS } from './constants';
 
@@ -11,7 +10,6 @@ export type LoginFormData = z.infer<typeof LoginSchema>;
 const locationIds = LOCATIONS.map(loc => loc.id);
 const paymentMethodValues = PAYMENT_METHODS.map(pm => pm);
 const appointmentStatusKeys = Object.keys(APPOINTMENT_STATUS_DISPLAY) as (keyof typeof APPOINTMENT_STATUS_DISPLAY)[];
-const professionalSpecializationValues = PROFESSIONAL_SPECIALIZATIONS.map(spec => spec);
 
 
 export const PatientFormSchema = z.object({
@@ -54,7 +52,6 @@ export const ProfessionalFormSchema = z.object({
   lastName: z.string().min(2, "Apellido es requerido."),
   locationId: z.string().refine(val => locationIds.includes(val as any), { message: "Sede inválida."}),
   phone: z.string().optional(),
-  specializations: z.array(z.string().refine(val => professionalSpecializationValues.includes(val as any), { message: "Especialización inválida."})).optional().default([]),
 });
 export type ProfessionalFormData = z.infer<typeof ProfessionalFormSchema>;
 
@@ -62,6 +59,8 @@ export type ProfessionalFormData = z.infer<typeof ProfessionalFormSchema>;
 export const AppointmentUpdateSchema = z.object({
   status: z.string().refine(val => appointmentStatusKeys.includes(val as any), {message: "Estado inválido"}),
   serviceId: z.string().min(1, "Servicio es requerido.").optional(), 
+  appointmentDate: z.date({ required_error: "Fecha de la cita es requerida."}).optional(),
+  appointmentTime: z.string().refine(val => TIME_SLOTS.includes(val), { message: "Hora inválida."}).optional(),
   actualArrivalTime: z.string().optional().nullable(), // HH:MM
   professionalId: z.string().optional().nullable(), // Attending professional
   durationMinutes: z.number().int().positive().optional().nullable(),
@@ -83,4 +82,3 @@ export const ServiceFormSchema = z.object({
   price: z.coerce.number().positive("El precio debe ser un número positivo.").optional().nullable(),
 });
 export type ServiceFormData = z.infer<typeof ServiceFormSchema>;
-

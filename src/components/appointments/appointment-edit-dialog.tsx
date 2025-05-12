@@ -1,11 +1,10 @@
-
 "use client";
 
 import type { Appointment, Service, AppointmentStatus, Professional } from '@/types';
-import { APPOINTMENT_STATUS, PAYMENT_METHODS, USER_ROLES, APPOINTMENT_STATUS_DISPLAY, LOCATIONS } from '@/lib/constants';
-import { format, parseISO } from 'date-fns';
+import { APPOINTMENT_STATUS, PAYMENT_METHODS, USER_ROLES, APPOINTMENT_STATUS_DISPLAY, LOCATIONS, TIME_SLOTS } from '@/lib/constants';
+import { format, parseISO, setHours, setMinutes } from 'date-fns';
 import { es } from 'date-fns/locale';
-import { CameraIcon, Loader2, PlusCircle, Trash2, ShoppingBag, ConciergeBell, Clock } from 'lucide-react';
+import { CameraIcon, Loader2, PlusCircle, Trash2, ShoppingBag, ConciergeBell, Clock, CalendarIcon as CalendarIconLucide } from 'lucide-react';
 import { useAuth } from '@/contexts/auth-provider';
 import {
   Dialog,
@@ -20,6 +19,8 @@ import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
 import { Button } from '@/components/ui/button';
+import { Calendar } from '@/components/ui/calendar';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { useForm, useFieldArray } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { AppointmentUpdateSchema } from '@/lib/schemas';
@@ -28,6 +29,7 @@ import { getProfessionals, updateAppointment as updateAppointmentData, getServic
 import React, { useState, useEffect, useRef } from 'react';
 import { useToast } from '@/hooks/use-toast';
 import Image from 'next/image';
+import { cn } from '@/lib/utils';
 
 interface AppointmentEditDialogProps {
   appointment: Appointment;
@@ -76,9 +78,12 @@ export function AppointmentEditDialog({ appointment, isOpen, onOpenChange, onApp
   useEffect(() => {
     if (isOpen && appointment) {
       const initialDurationMinutes = appointment.durationMinutes || appointment.service?.defaultDuration || 0;
+      const appointmentDateTime = parseISO(appointment.appointmentDateTime);
       form.reset({
         status: appointment.status,
         serviceId: appointment.serviceId || (allServices.length > 0 ? allServices[0].id : DEFAULT_SERVICE_ID_PLACEHOLDER),
+        appointmentDate: appointmentDateTime,
+        appointmentTime: format(appointmentDateTime, 'HH:mm'),
         actualArrivalTime: appointment.actualArrivalTime || format(new Date(), 'HH:mm'),
         professionalId: appointment.professionalId || NO_SELECTION_PLACEHOLDER,
         durationMinutes: initialDurationMinutes,
@@ -110,16 +115,16 @@ export function AppointmentEditDialog({ appointment, isOpen, onOpenChange, onApp
              setProfessionals(allProfsResults.flat());
         }
         const servicesData = await getServices();
-        setAllServices(servicesData);
+        setAllServices(servicesData.services);
 
         // Reset addedServices and main serviceId with proper default serviceId if needed after services are loaded
         if (appointment) {
-          if (form.getValues('serviceId') === DEFAULT_SERVICE_ID_PLACEHOLDER && servicesData.length > 0) {
-            form.setValue('serviceId', appointment.serviceId || servicesData[0].id);
+          if (form.getValues('serviceId') === DEFAULT_SERVICE_ID_PLACEHOLDER && servicesData.services.length > 0) {
+            form.setValue('serviceId', appointment.serviceId || servicesData.services[0].id);
           }
           if (appointment.addedServices) {
             form.setValue('addedServices', appointment.addedServices.map(as => ({
-              serviceId: as.serviceId || (servicesData.length > 0 ? servicesData[0].id : DEFAULT_SERVICE_ID_PLACEHOLDER),
+              serviceId: as.serviceId || (servicesData.services.length > 0 ? servicesData.services[0].id : DEFAULT_SERVICE_ID_PLACEHOLDER),
               professionalId: as.professionalId || NO_SELECTION_PLACEHOLDER,
               price: as.price ?? undefined,
             })));
@@ -156,8 +161,20 @@ export function AppointmentEditDialog({ appointment, isOpen, onOpenChange, onApp
   const onSubmitUpdate = async (data: AppointmentUpdateFormData) => {
     setIsSubmittingForm(true);
     try {
+      let finalAppointmentDateTime = parseISO(appointment.appointmentDateTime);
+      if (data.appointmentDate && data.appointmentTime) {
+        const [hours, minutes] = data.appointmentTime.split(':').map(Number);
+        finalAppointmentDateTime = setMinutes(setHours(data.appointmentDate, hours), minutes);
+      } else if (data.appointmentDate) {
+        // Keep original time if only date is changed
+        const originalTime = parseISO(appointment.appointmentDateTime);
+        finalAppointmentDateTime = setMinutes(setHours(data.appointmentDate, originalTime.getHours()), originalTime.getMinutes());
+      }
+
+
       const updatedData: Partial<Appointment> = {
         ...data,
+        appointmentDateTime: format(finalAppointmentDateTime, "yyyy-MM-dd'T'HH:mm:ss'Z'"),
         serviceId: data.serviceId === DEFAULT_SERVICE_ID_PLACEHOLDER && allServices.length > 0 ? allServices[0].id : data.serviceId,
         professionalId: data.professionalId === NO_SELECTION_PLACEHOLDER ? null : data.professionalId,
         durationMinutes: data.durationMinutes ? parseInt(String(data.durationMinutes), 10) : undefined,
@@ -222,6 +239,68 @@ export function AppointmentEditDialog({ appointment, isOpen, onOpenChange, onApp
               </FormItem>
             )}
           />
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <FormField
+              control={form.control}
+              name="appointmentDate"
+              render={({ field }) => (
+                <FormItem className="flex flex-col">
+                  <FormLabel className="flex items-center gap-1"><CalendarIconLucide size={16}/>Fecha de la Cita</FormLabel>
+                  <Popover>
+                    <PopoverTrigger asChild>
+                      <FormControl>
+                        <Button
+                          variant={"outline"}
+                          className={cn(
+                            "pl-3 text-left font-normal",
+                            !field.value && "text-muted-foreground"
+                          )}
+                        >
+                          {field.value ? (
+                            format(field.value, "PPP", { locale: es })
+                          ) : (
+                            <span>Seleccionar fecha</span>
+                          )}
+                          <CalendarIconLucide className="ml-auto h-4 w-4 opacity-50" />
+                        </Button>
+                      </FormControl>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-auto p-0" align="start">
+                      <Calendar
+                        mode="single"
+                        selected={field.value}
+                        onSelect={field.onChange}
+                        disabled={(date) => date < new Date(new Date().setHours(0,0,0,0))} 
+                        initialFocus
+                      />
+                    </PopoverContent>
+                  </Popover>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+            <FormField
+              control={form.control}
+              name="appointmentTime"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel className="flex items-center gap-1"><Clock size={16}/>Hora de la Cita</FormLabel>
+                  <Select onValueChange={field.onChange} value={field.value}>
+                    <FormControl>
+                      <SelectTrigger><SelectValue placeholder="Seleccionar hora" /></SelectTrigger>
+                    </FormControl>
+                    <SelectContent>
+                      {TIME_SLOTS.map(slot => (
+                        <SelectItem key={slot} value={slot}>{slot}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+          </div>
           
           <FormField
             control={form.control}
