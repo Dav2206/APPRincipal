@@ -159,7 +159,6 @@ export function AppointmentEditDialog({ appointment, isOpen, onOpenChange, onApp
   };
 
   const onSubmitUpdate = async (data: AppointmentUpdateFormData) => {
-    // isSubmitting is handled by form.formState.isSubmitting
     try {
       let finalAppointmentDateTime = parseISO(appointment.appointmentDateTime);
       if (data.appointmentDate && data.appointmentTime) {
