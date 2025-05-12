@@ -1,8 +1,6 @@
-
 import type { User, Professional, Patient, Service, Appointment, AppointmentFormData, ProfessionalFormData, AppointmentStatus, ServiceFormData } from '@/types';
-import { LOCATIONS, USER_ROLES, SERVICES as SERVICES_CONSTANTS, APPOINTMENT_STATUS, LocationId, ServiceId as ConstantServiceId, APPOINTMENT_STATUS_DISPLAY, PAYMENT_METHODS } from './constants';
-import { formatISO, parseISO, addDays, setHours, setMinutes, startOfDay, endOfDay, addMinutes, isSameDay as dateFnsIsSameDay, startOfMonth, endOfMonth } from 'date-fns';
-// Removed Firestore imports as we are reverting to mock
+import { LOCATIONS, USER_ROLES, SERVICES as SERVICES_CONSTANTS, APPOINTMENT_STATUS, LocationId, ServiceId as ConstantServiceId, APPOINTMENT_STATUS_DISPLAY, PAYMENT_METHODS, PROFESSIONAL_SPECIALIZATIONS } from './constants';
+import { formatISO, parseISO, addDays, subDays, setHours, setMinutes, startOfDay, endOfDay, addMinutes, isSameDay as dateFnsIsSameDay, startOfMonth, endOfMonth } from 'date-fns';
 
 // --- Mock Data Storage ---
 let mockUsers: User[] = [
@@ -25,6 +23,8 @@ let mockProfessionals: Professional[] = LOCATIONS.flatMap((location, locIndex) =
     lastName: location.name.split(' ')[0],
     locationId: location.id,
     phone: `9876543${locIndex}${i + 1}`,
+    // specializations: i % 2 === 0 ? [PROFESSIONAL_SPECIALIZATIONS[0], PROFESSIONAL_SPECIALIZATIONS[2]] : [PROFESSIONAL_SPECIALIZATIONS[1]],
+    // email: `prof${locIndex}${i+1}@example.com`,
     biWeeklyEarnings: Math.floor(Math.random() * 1500) + 300,
   }))
 );
@@ -33,6 +33,8 @@ let mockPatients: Patient[] = [
   { id: 'pat001', firstName: 'Ana', lastName: 'García', phone: '111222333', email: 'ana.garcia@example.com', preferredProfessionalId: mockProfessionals[0]?.id, notes: 'Paciente regular, prefiere citas por la mañana.', dateOfBirth: '1985-05-15', isDiabetic: false },
   { id: 'pat002', firstName: 'Luis', lastName: 'Martínez', phone: '444555666', email: 'luis.martinez@example.com', notes: 'Primera visita.', dateOfBirth: '1992-11-20', isDiabetic: true },
   { id: 'pat003', firstName: 'Elena', lastName: 'Ruiz', phone: '777888999', email: 'elena.ruiz@example.com', dateOfBirth: '2000-07-01', isDiabetic: false },
+  { id: 'pat004', firstName: 'Carlos', lastName: 'Vargas', phone: '222333444', email: 'carlos.vargas@example.com', dateOfBirth: '1970-03-25', isDiabetic: true, notes: "Sensibilidad en el pie izquierdo." },
+  { id: 'pat005', firstName: 'Sofía', lastName: 'Chávez', phone: '555666777', email: 'sofia.chavez@example.com', dateOfBirth: '1998-12-05', isDiabetic: false, preferredProfessionalId: mockProfessionals[1]?.id },
 ];
 
 let mockServices: Service[] = SERVICES_CONSTANTS.map(s_const => ({
@@ -42,22 +44,30 @@ let mockServices: Service[] = SERVICES_CONSTANTS.map(s_const => ({
   price: Math.floor(Math.random() * 50) + 50,
 }));
 
-let mockAppointments: Appointment[] = [
+let mockAppointments: Appointment[] = []; // Declare mockAppointments here
+
+const today = new Date();
+const yesterday = subDays(today, 1);
+const twoDaysAgo = subDays(today, 2);
+const tomorrow = addDays(today,1);
+
+mockAppointments = [
   {
     id: 'appt001',
     patientId: 'pat001',
     locationId: LOCATIONS[0].id,
     professionalId: mockProfessionals.find(p => p.locationId === LOCATIONS[0].id)?.id || mockProfessionals[0]?.id,
     serviceId: mockServices[0].id,
-    appointmentDateTime: formatISO(addDays(startOfDay(new Date()), -1)), // Yesterday
+    appointmentDateTime: formatISO(setHours(setMinutes(yesterday, 0), 10)), // Yesterday 10:00
     durationMinutes: mockServices[0].defaultDuration,
     status: APPOINTMENT_STATUS.COMPLETED,
     amountPaid: mockServices[0].price,
     paymentMethod: PAYMENT_METHODS[0],
-    createdAt: formatISO(new Date()),
-    updatedAt: formatISO(new Date()),
-    attachedPhotos: [],
-    addedServices: [],
+    staffNotes: "Tratamiento exitoso, paciente refiere mejoría.",
+    attachedPhotos: ["https://picsum.photos/seed/appt001_1/200/200"],
+    addedServices: [{ serviceId: mockServices[2].id, price: mockServices[2].price, service: mockServices[2] }],
+    createdAt: formatISO(subDays(yesterday,1)), // Created before appointment
+    updatedAt: formatISO(yesterday), // Updated at appointment time
   },
   {
     id: 'appt002',
@@ -65,14 +75,139 @@ let mockAppointments: Appointment[] = [
     locationId: LOCATIONS[1].id,
     professionalId: mockProfessionals.find(p => p.locationId === LOCATIONS[1].id)?.id || mockProfessionals[1]?.id,
     serviceId: mockServices[1].id,
-    appointmentDateTime: formatISO(startOfDay(new Date())), // Today
+    appointmentDateTime: formatISO(setHours(setMinutes(today, 30), 9)), // Today 09:30
     durationMinutes: mockServices[1].defaultDuration,
     status: APPOINTMENT_STATUS.BOOKED,
-    createdAt: formatISO(new Date()),
-    updatedAt: formatISO(new Date()),
+    bookingObservations: "Paciente refiere dolor agudo.",
+    createdAt: formatISO(subDays(today,1)),
+    updatedAt: formatISO(subDays(today,1)),
     attachedPhotos: [],
     addedServices: [],
-  }
+  },
+  {
+    id: 'appt003',
+    patientId: 'pat003',
+    locationId: LOCATIONS[0].id,
+    professionalId: mockProfessionals.find(p => p.locationId === LOCATIONS[0].id && p.id !== (mockProfessionals.find(pr => pr.locationId === LOCATIONS[0].id)?.id || mockProfessionals[0]?.id))?.id || mockProfessionals[0]?.id,
+    serviceId: mockServices[2].id,
+    appointmentDateTime: formatISO(setHours(setMinutes(today, 0), 14)), // Today 14:00
+    durationMinutes: mockServices[2].defaultDuration,
+    status: APPOINTMENT_STATUS.CONFIRMED,
+    actualArrivalTime: "13:55",
+    createdAt: formatISO(subDays(today,2)),
+    updatedAt: formatISO(today), // Updated today when confirmed
+    attachedPhotos: ["https://picsum.photos/seed/appt003_1/200/200"],
+    addedServices: [],
+  },
+  {
+    id: 'appt004',
+    patientId: 'pat004',
+    locationId: LOCATIONS[2].id,
+    professionalId: mockProfessionals.find(p => p.locationId === LOCATIONS[2].id)?.id || mockProfessionals[2]?.id,
+    serviceId: mockServices[3].id,
+    appointmentDateTime: formatISO(setHours(setMinutes(twoDaysAgo, 0), 11)), // Two days ago 11:00
+    durationMinutes: mockServices[3].defaultDuration,
+    status: APPOINTMENT_STATUS.COMPLETED,
+    amountPaid: mockServices[3].price,
+    paymentMethod: PAYMENT_METHODS[1],
+    staffNotes: "Todo en orden. Próxima revisión en 1 mes.",
+    createdAt: formatISO(subDays(twoDaysAgo,1)),
+    updatedAt: formatISO(twoDaysAgo),
+    attachedPhotos: ["https://picsum.photos/seed/appt004_1/200/200", "https://picsum.photos/seed/appt004_2/200/200"],
+    addedServices: [],
+  },
+  {
+    id: 'appt005',
+    patientId: 'pat005',
+    locationId: LOCATIONS[1].id,
+    professionalId: mockProfessionals.find(p => p.locationId === LOCATIONS[1].id && p.id !== (mockProfessionals.find(pr => pr.locationId === LOCATIONS[1].id)?.id || mockProfessionals[1]?.id))?.id || mockProfessionals[1]?.id,
+    serviceId: mockServices[0].id,
+    appointmentDateTime: formatISO(setHours(setMinutes(tomorrow, 0), 16)), // Tomorrow 16:00
+    durationMinutes: mockServices[0].defaultDuration,
+    status: APPOINTMENT_STATUS.BOOKED,
+    createdAt: formatISO(today),
+    updatedAt: formatISO(today),
+    attachedPhotos: [],
+    addedServices: [],
+  },
+  {
+    id: 'appt006',
+    patientId: 'pat001',
+    locationId: LOCATIONS[0].id,
+    professionalId: mockProfessionals.find(p => p.locationId === LOCATIONS[0].id)?.id || mockProfessionals[0]?.id,
+    serviceId: mockServices[4].id,
+    appointmentDateTime: formatISO(setHours(setMinutes(today, 30), 11)), // Today 11:30
+    durationMinutes: mockServices[4].defaultDuration,
+    status: APPOINTMENT_STATUS.BOOKED,
+    bookingObservations: "Estudio de pisada solicitado por el Dr. Pérez.",
+    createdAt: formatISO(today),
+    updatedAt: formatISO(today),
+    attachedPhotos: [],
+    addedServices: [],
+  },
+  {
+    id: 'appt007',
+    patientId: 'pat002',
+    locationId: LOCATIONS[3].id, // Carpaccio
+    professionalId: mockProfessionals.find(p => p.locationId === LOCATIONS[3].id)?.id,
+    serviceId: mockServices[0].id,
+    appointmentDateTime: formatISO(setHours(setMinutes(subDays(today, 3), 0), 15)), // 3 days ago 15:00
+    durationMinutes: mockServices[0].defaultDuration,
+    status: APPOINTMENT_STATUS.COMPLETED,
+    amountPaid: mockServices[0].price,
+    paymentMethod: PAYMENT_METHODS[2],
+    staffNotes: "Paciente nuevo, buena primera impresión.",
+    createdAt: formatISO(subDays(today, 4)),
+    updatedAt: formatISO(subDays(today, 3)),
+    attachedPhotos: ["https://picsum.photos/seed/appt007_1/200/200"],
+    addedServices: [],
+    },
+    {
+    id: 'appt008',
+    patientId: 'pat003',
+    locationId: LOCATIONS[4].id, // Vista Alegre
+    professionalId: mockProfessionals.find(p => p.locationId === LOCATIONS[4].id)?.id,
+    serviceId: mockServices[1].id,
+    appointmentDateTime: formatISO(setHours(setMinutes(today, 0), 10)), // Today 10:00
+    durationMinutes: mockServices[1].defaultDuration,
+    status: APPOINTMENT_STATUS.BOOKED,
+    createdAt: formatISO(subDays(today, 1)),
+    updatedAt: formatISO(subDays(today, 1)),
+    attachedPhotos: [],
+    addedServices: [],
+    },
+    {
+    id: 'appt009',
+    patientId: 'pat004',
+    locationId: LOCATIONS[5].id, // San Antonio
+    professionalId: mockProfessionals.find(p => p.locationId === LOCATIONS[5].id)?.id,
+    serviceId: mockServices[2].id,
+    appointmentDateTime: formatISO(setHours(setMinutes(subDays(today, 5), 30), 14)), // 5 days ago 14:30
+    durationMinutes: mockServices[2].defaultDuration,
+    status: APPOINTMENT_STATUS.COMPLETED,
+    amountPaid: mockServices[2].price ? mockServices[2].price + 20 : 70, // Example of added service cost
+    paymentMethod: PAYMENT_METHODS[3],
+    staffNotes: "Se realizó quiropodia y tratamiento adicional para uña encarnada.",
+    addedServices: [{ serviceId: mockServices[1].id, price: 20, service: mockServices[1] }],
+    attachedPhotos: ["https://picsum.photos/seed/appt009_1/200/200"],
+    createdAt: formatISO(subDays(today, 6)),
+    updatedAt: formatISO(subDays(today, 5)),
+    },
+    {
+    id: 'appt010',
+    patientId: 'pat005',
+    locationId: LOCATIONS[0].id, // Higuereta
+    serviceId: mockServices[3].id,
+    appointmentDateTime: formatISO(setHours(setMinutes(addDays(today, 2), 0), 17)), // In 2 days 17:00
+    durationMinutes: mockServices[3].defaultDuration,
+    status: APPOINTMENT_STATUS.BOOKED,
+    preferredProfessionalId: mockProfessionals.find(p => p.locationId === LOCATIONS[0].id && p.lastName.includes('Higuereta'))?.id, // Prefers a prof from Higuereta
+    bookingObservations: "Solo puede por la tarde.",
+    createdAt: formatISO(today),
+    updatedAt: formatISO(today),
+    attachedPhotos: [],
+    addedServices: [],
+    }
 ];
 
 const generateId = () => Math.random().toString(36).substr(2, 9);
@@ -97,8 +232,13 @@ export const getProfessionalById = async (id: string): Promise<Professional | un
 export const addProfessional = async (data: Omit<ProfessionalFormData, 'id'>): Promise<Professional> => {
   const newProfessional: Professional = {
     id: generateId(),
-    ...data,
-    biWeeklyEarnings: 0,
+    firstName: data.firstName,
+    lastName: data.lastName,
+    locationId: data.locationId,
+    phone: data.phone,
+    // specializations: data.specializations,
+    // email: data.email,
+    biWeeklyEarnings: 0, // Initial value
   };
   mockProfessionals.push(newProfessional);
   return newProfessional;
@@ -114,26 +254,28 @@ export const updateProfessional = async (id: string, data: Partial<ProfessionalF
 };
 
 // --- Patients ---
-export const getPatients = async (options: { page?: number, limit?: number, searchTerm?: string, filterToday?: boolean, adminSelectedLocation?: LocationId | 'all', user?: User | null, lastVisibleDoc?: any } = {}): Promise<{patients: Patient[], totalCount: number, lastDoc?: any}> => {
+export const getPatients = async (options: { page?: number, limit?: number, searchTerm?: string, filterToday?: boolean, adminSelectedLocation?: LocationId | 'all', user?: User | null } = {}): Promise<{patients: Patient[], totalCount: number}> => {
   const { page = 1, limit = 8, searchTerm, filterToday, adminSelectedLocation, user } = options;
   let filteredPatients = [...mockPatients];
 
   if (searchTerm) {
+    const lowerSearchTerm = searchTerm.toLowerCase();
     filteredPatients = filteredPatients.filter(p =>
-      `${p.firstName} ${p.lastName}`.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      (p.phone && p.phone.includes(searchTerm))
+      `${p.firstName} ${p.lastName}`.toLowerCase().includes(lowerSearchTerm) ||
+      (p.phone && p.phone.includes(searchTerm)) ||
+      (p.email && p.email.toLowerCase().includes(lowerSearchTerm))
     );
   }
-
+  
   if (filterToday && user) {
-    const today = startOfDay(new Date());
+    const todayIsoDate = startOfDay(new Date());
     const isAdminOrContador = user.role === USER_ROLES.ADMIN || user.role === USER_ROLES.CONTADOR;
     const effectiveLocationId = isAdminOrContador
        ? (adminSelectedLocation === 'all' ? undefined : adminSelectedLocation)
        : user.locationId;
 
     const dailyAppointments = mockAppointments.filter(appt =>
-      dateFnsIsSameDay(parseISO(appt.appointmentDateTime), today) &&
+      dateFnsIsSameDay(parseISO(appt.appointmentDateTime), todayIsoDate) &&
       (effectiveLocationId ? appt.locationId === effectiveLocationId : true)
     );
     const patientIdsWithAppointmentsToday = new Set(dailyAppointments.map(app => app.patientId));
@@ -146,7 +288,7 @@ export const getPatients = async (options: { page?: number, limit?: number, sear
   const startIndex = (page - 1) * limit;
   const paginatedPatients = filteredPatients.slice(startIndex, startIndex + limit);
   
-  return { patients: paginatedPatients, totalCount, lastDoc: undefined }; // lastDoc not really applicable for mock
+  return { patients: paginatedPatients, totalCount };
 };
 
 export const getPatientById = async (id: string): Promise<Patient | undefined> => {
@@ -154,14 +296,14 @@ export const getPatientById = async (id: string): Promise<Patient | undefined> =
 };
 
 export const findPatient = async (firstName: string, lastName: string): Promise<Patient | undefined> => {
-  return mockPatients.find(p => p.firstName === firstName && p.lastName === lastName);
+  return mockPatients.find(p => p.firstName.toLowerCase() === firstName.toLowerCase() && p.lastName.toLowerCase() === lastName.toLowerCase());
 }
 
 export const addPatient = async (data: Omit<Patient, 'id'>): Promise<Patient> => {
   const newPatient: Patient = {
     id: generateId(),
     ...data,
-    isDiabetic: data.isDiabetic || false,
+    isDiabetic: data.isDiabetic || false, // Ensure default
   };
   mockPatients.push(newPatient);
   return newPatient;
@@ -213,8 +355,7 @@ export const getAppointments = async (filters: {
   professionalId?: string;
   page?: number;
   limit?: number;
-  lastVisibleDoc?: any;
-}): Promise<{ appointments: Appointment[], totalCount: number, lastDoc?: any }> => {
+}): Promise<{ appointments: Appointment[], totalCount: number }> => {
   let filteredAppointments = [...mockAppointments];
 
   if (filters.locationId) {
@@ -261,22 +402,22 @@ export const getAppointments = async (filters: {
   const populatedAppointments = filteredAppointments.map(appt => ({
     ...appt,
     patient: mockPatients.find(p => p.id === appt.patientId),
-    professional: mockProfessionals.find(prof => prof.id === appt.professionalId),
+    professional: appt.professionalId ? mockProfessionals.find(prof => prof.id === appt.professionalId) : undefined,
     service: mockServices.find(s => s.id === appt.serviceId),
     addedServices: appt.addedServices?.map(as => ({
       ...as,
       service: mockServices.find(s => s.id === as.serviceId),
-      professional: mockProfessionals.find(p => p.id === as.professionalId),
+      professional: as.professionalId ? mockProfessionals.find(p => p.id === as.professionalId) : undefined,
     }))
   }));
 
   const totalCount = populatedAppointments.length;
   const page = filters.page || 1;
-  const limit = filters.limit || (isFetchingPastStatuses ? 8 : Infinity); // Limit for history, otherwise all for current day view
+  const limit = filters.limit || (isFetchingPastStatuses ? 8 : Infinity); 
   const startIndex = (page - 1) * limit;
   const paginatedAppointments = populatedAppointments.slice(startIndex, startIndex + limit);
 
-  return { appointments: paginatedAppointments, totalCount, lastDoc: undefined };
+  return { appointments: paginatedAppointments, totalCount };
 };
 
 export const getAppointmentById = async (id: string): Promise<Appointment | undefined> => {
@@ -285,12 +426,12 @@ export const getAppointmentById = async (id: string): Promise<Appointment | unde
     return {
       ...appt,
       patient: mockPatients.find(p => p.id === appt.patientId),
-      professional: mockProfessionals.find(prof => prof.id === appt.professionalId),
+      professional: appt.professionalId ? mockProfessionals.find(prof => prof.id === appt.professionalId) : undefined,
       service: mockServices.find(s => s.id === appt.serviceId),
       addedServices: appt.addedServices?.map(as => ({
         ...as,
         service: mockServices.find(s => s.id === as.serviceId),
-        professional: mockProfessionals.find(p => p.id === as.professionalId),
+        professional: as.professionalId ? mockProfessionals.find(p => p.id === as.professionalId) : undefined,
       }))
     };
   }
@@ -345,7 +486,7 @@ export const addAppointment = async (data: AppointmentFormData): Promise<Appoint
     addedServices: [],
   };
   mockAppointments.push(newAppointment);
-  return getAppointmentById(newAppointment.id) as Promise<Appointment>; // Ensure full population
+  return getAppointmentById(newAppointment.id) as Promise<Appointment>; 
 };
 
 export const updateAppointment = async (id: string, data: Partial<Appointment>): Promise<Appointment | undefined> => {
@@ -370,32 +511,32 @@ export const updateAppointment = async (id: string, data: Partial<Appointment>):
             professional: as.professionalId ? await getProfessionalById(as.professionalId) : undefined
         })));
     }
-    mockAppointments[index] = updatedAppointment as Appointment;
-    return getAppointmentById(id); // return populated one
+    mockAppointments[index] = updatedAppointment as Appointment; // This might be problematic if updatedAppointment doesn't match Appointment structure due to partials
+    return getAppointmentById(id);
   }
   return undefined;
 };
 
 export const getPatientAppointmentHistory = async (
   patientId: string,
-  options: { page?: number, limit?: number, lastVisibleDoc?: any } = {}
-): Promise<{ appointments: Appointment[], totalCount: number, lastDoc?: any }> => {
-  const today = startOfDay(new Date());
+  options: { page?: number, limit?: number } = {}
+): Promise<{ appointments: Appointment[], totalCount: number }> => {
+  const todayDate = startOfDay(new Date());
   const historyAppointments = mockAppointments.filter(appt =>
     appt.patientId === patientId &&
-    parseISO(appt.appointmentDateTime) < today &&
+    parseISO(appt.appointmentDateTime) < todayDate &&
     [APPOINTMENT_STATUS.COMPLETED, APPOINTMENT_STATUS.NO_SHOW, APPOINTMENT_STATUS.CANCELLED_CLIENT, APPOINTMENT_STATUS.CANCELLED_STAFF].includes(appt.status)
   ).sort((a, b) => parseISO(b.appointmentDateTime).getTime() - parseISO(a.appointmentDateTime).getTime());
 
   const populatedHistory = historyAppointments.map(appt => ({
     ...appt,
     patient: mockPatients.find(p => p.id === appt.patientId),
-    professional: mockProfessionals.find(prof => prof.id === appt.professionalId),
+    professional: appt.professionalId ? mockProfessionals.find(prof => prof.id === appt.professionalId) : undefined,
     service: mockServices.find(s => s.id === appt.serviceId),
      addedServices: appt.addedServices?.map(as => ({
         ...as,
         service: mockServices.find(s => s.id === as.serviceId),
-        professional: mockProfessionals.find(p => p.id === as.professionalId),
+        professional: as.professionalId ? mockProfessionals.find(p => p.id === as.professionalId) : undefined,
     }))
   }));
   
@@ -405,25 +546,11 @@ export const getPatientAppointmentHistory = async (
   const startIndex = (page - 1) * limit;
   const paginatedAppointments = populatedHistory.slice(startIndex, startIndex + limit);
 
-  return { appointments: paginatedAppointments, totalCount, lastDoc: undefined };
+  return { appointments: paginatedAppointments, totalCount };
 };
 
 
-// --- Data Seeding/Initialization (Example - for development) ---
-// This function is just for demonstration or initial setup in a dev environment.
-// In a real app, this would be handled differently or not at all for production.
 export const seedInitialData = async () => {
-  // Seeding is done by initializing the mock arrays above.
-  // No further action needed here for the mock setup.
-  console.log("Mock data is initialized.");
+  console.log("Mock data is initialized via direct array definitions.");
 };
 
-// If running in a Node.js-like environment for development, you might call seedInitialData.
-// For a browser environment (Next.js client/server components), this typically isn't called directly like this.
-// if (typeof process !== 'undefined' && process.env.NODE_ENV === 'development') {
-//   // Check if DB is "empty" (mock arrays are empty)
-//   if (mockProfessionals.length === 0) { // Example check
-//     // seedInitialData(); // Not strictly necessary as arrays are initialized above.
-//     console.log("Mock data was initialized (or re-initialized if arrays were cleared).");
-//   }
-// }
