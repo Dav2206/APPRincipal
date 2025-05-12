@@ -1,3 +1,4 @@
+
 "use client";
 
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
@@ -70,7 +71,7 @@ export default function RegistryPage() {
   const [reportData, setReportData] = useState<ReportItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [reportType, setReportType] = useState<ReportType>('daily');
-  const [allServices, setAllServices] = useState<Service[]>([]);
+  const [allServices, setAllServices] = useState<Service[] | null>(null);
 
   const [selectedYear, setSelectedYear] = useState<number>(getYear(new Date()));
   const [selectedMonth, setSelectedMonth] = useState<number>(getMonth(new Date())); 
@@ -90,7 +91,7 @@ export default function RegistryPage() {
   useEffect(() => {
     async function loadServices() {
         const servicesData = await getServices();
-        setAllServices(servicesData.services); // Ensure using the services array
+        setAllServices(servicesData.services || []); 
     }
     loadServices();
   }, []);
@@ -105,15 +106,15 @@ export default function RegistryPage() {
     if (isAdminOrContador) {
       if (targetLocation) { 
         const result = await getProfessionals(targetLocation);
-        profs = result.professionals;
+        profs = result.professionals || [];
       } else { 
         const allProfsPromises = LOCATIONS.map(loc => getProfessionals(loc.id));
         const results = await Promise.all(allProfsPromises);
-        profs = results.map(r => r.professionals).flat();
+        profs = results.map(r => r.professionals || []).flat();
       }
     } else if (user?.locationId) { 
       const result = await getProfessionals(user.locationId);
-      profs = result.professionals;
+      profs = result.professionals || [];
     }
     return profs;
   }, [user, isAdminOrContador]);
@@ -121,23 +122,28 @@ export default function RegistryPage() {
 
   useEffect(() => {
     const generateDailyReport = async () => {
-      if (!user || allServices.length === 0) return;
+      if (!user || !allServices || allServices.length === 0) return;
       setIsLoading(true);
 
       const profContext = isAdminOrContador ? (adminSelectedLocation === 'all' ? 'all' : effectiveLocationId) : user?.locationId;
       const currentProfessionals = await fetchProfessionalsForReportContext(profContext);
 
-      let appointmentsForDate: Appointment[] = [];
+      let appointmentsForDateResponse: { appointments: Appointment[] };
       if (isAdminOrContador && adminSelectedLocation === 'all') {
         const promises = LOCATIONS.map(loc => 
           getAppointments({ date: selectedDate, locationId: loc.id, statuses: [APPOINTMENT_STATUS.COMPLETED] })
         );
         const results = await Promise.all(promises);
-        appointmentsForDate = results.map(r => r.appointments).flat();
+        const flatAppointments = results.map(r => r.appointments || []).flat();
+        appointmentsForDateResponse = { appointments: flatAppointments };
+
       } else if (effectiveLocationId) {
-        const result = await getAppointments({ date: selectedDate, locationId: effectiveLocationId, statuses: [APPOINTMENT_STATUS.COMPLETED] });
-        appointmentsForDate = result.appointments;
+        appointmentsForDateResponse = await getAppointments({ date: selectedDate, locationId: effectiveLocationId, statuses: [APPOINTMENT_STATUS.COMPLETED] });
+      } else {
+        appointmentsForDateResponse = { appointments: [] };
       }
+      
+      const appointmentsForDate = appointmentsForDateResponse.appointments || [];
 
       const dailyReportMap = new Map<string, Omit<DailyActivityReportItem, 'professionalName' | 'locationName' | 'type' | 'servicesBreakdown' | 'totalServicesCount' > & { locationId: LocationId, services: Map<string, { serviceName: string, count: number }> }>();
 
@@ -208,7 +214,7 @@ export default function RegistryPage() {
       const startDate = selectedQuincena === 1 ? startOfMonth(baseDate) : addDays(startOfMonth(baseDate), 15);
       const endDate = selectedQuincena === 1 ? addDays(startOfMonth(baseDate), 14) : endOfMonth(baseDate);
       
-      let appointmentsForPeriod: Appointment[] = [];
+      let appointmentsForPeriodResponse: { appointments: Appointment[] };
       if (isAdminOrContador && adminSelectedLocation === 'all') {
          const promises = LOCATIONS.map(loc => 
           getAppointments({ 
@@ -218,15 +224,19 @@ export default function RegistryPage() {
           })
         );
         const results = await Promise.all(promises);
-        appointmentsForPeriod = results.map(r => r.appointments).flat();
+        const flatAppointments = results.map(r => r.appointments || []).flat();
+        appointmentsForPeriodResponse = { appointments: flatAppointments };
       } else if (effectiveLocationId) {
-        const result = await getAppointments({ 
+        appointmentsForPeriodResponse = await getAppointments({ 
             locationId: effectiveLocationId, 
             statuses: [APPOINTMENT_STATUS.COMPLETED],
             dateRange: {start: startDate, end: endDate} 
         });
-        appointmentsForPeriod = result.appointments;
+      } else {
+         appointmentsForPeriodResponse = { appointments: [] };
       }
+      
+      const appointmentsForPeriod = appointmentsForPeriodResponse.appointments || [];
 
       const biWeeklyReportMap = new Map<string, { professionalId: string, locationId: LocationId, biWeeklyEarnings: number }>();
 
@@ -607,7 +617,7 @@ export default function RegistryPage() {
                     (reportData as GroupedBiWeeklyReportItem[]).map((group, index) => (
                       <React.Fragment key={`${group.locationId}-grouped-report-${index}`}>
                         {(group.professionals || []).map(item => (
-                          <TableRow key={item.professionalId}>
+                          <TableRow key={`${item.professionalId}-${group.locationId}-biWeekly`}>
                             <TableCell className="font-medium">{item.professionalName}</TableCell>
                             <TableCell>{item.locationName}</TableCell>
                             <TableCell className="text-right">{(item.biWeeklyEarnings || 0).toFixed(2)}</TableCell>
