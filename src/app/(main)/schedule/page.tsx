@@ -40,14 +40,14 @@ export default function SchedulePage() {
     setIsLoading(true);
     
     try {
-      const [fetchedAppointments, fetchedProfessionals] = await Promise.all([
+      const [fetchedAppointmentsData, fetchedProfessionals] = await Promise.all([
         getAppointments({
           locationId: effectiveLocationId,
           date: currentDate,
         }),
         getProfessionals(effectiveLocationId)
       ]);
-      setAppointments(fetchedAppointments);
+      setAppointments(fetchedAppointmentsData.appointments); // Correctly access the appointments array
       setProfessionals(fetchedProfessionals);
     } catch (error) {
       console.error("Error fetching schedule data:", error);
@@ -184,3 +184,4 @@ export default function SchedulePage() {
     </div>
   );
 }
+
