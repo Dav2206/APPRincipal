@@ -1,4 +1,3 @@
-
 "use client";
 
 import type { Appointment, Professional } from '@/types';
@@ -14,9 +13,10 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { format, addDays, subDays, startOfDay, isEqual } from 'date-fns';
 import { es } from 'date-fns/locale';
-import { CalendarIcon, ChevronLeftIcon, ChevronRightIcon, AlertTriangle, Loader2, CalendarClock } from 'lucide-react';
+import { CalendarIcon, ChevronLeftIcon, ChevronRightIcon, AlertTriangle, Loader2, CalendarClock, PlusCircleIcon } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { AppointmentEditDialog } from '@/components/appointments/appointment-edit-dialog';
+import { AppointmentForm } from '@/components/appointments/appointment-form';
 
 const timeSlotsForView = TIME_SLOTS.filter(slot => slot >= "09:00"); 
 
@@ -29,6 +29,7 @@ export default function SchedulePage() {
   const [isLoading, setIsLoading] = useState(true);
   const [selectedAppointmentForEdit, setSelectedAppointmentForEdit] = useState<Appointment | null>(null);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+  const [isNewAppointmentFormOpen, setIsNewAppointmentFormOpen] = useState(false); 
 
   const isAdminOrContador = user?.role === USER_ROLES.ADMIN || user?.role === USER_ROLES.CONTADOR;
   const effectiveLocationId = isAdminOrContador
@@ -47,8 +48,8 @@ export default function SchedulePage() {
         }),
         getProfessionals(effectiveLocationId)
       ]);
-      setAppointments(fetchedAppointmentsData.appointments); // Correctly access the appointments array
-      setProfessionals(fetchedProfessionals);
+      setAppointments(fetchedAppointmentsData.appointments || []);
+      setProfessionals(fetchedProfessionals || []);
     } catch (error) {
       console.error("Error fetching schedule data:", error);
       setAppointments([]);
@@ -76,18 +77,22 @@ export default function SchedulePage() {
         setIsEditModalOpen(true);
       } else {
         console.error("Could not fetch full appointment details for editing.");
+        // Fallback or error toast
       }
     } catch (error) {
       console.error("Error fetching appointment details:", error);
     }
   }, []);
 
-  const handleAppointmentUpdated = useCallback((updatedAppointment: Appointment) => {
-    setAppointments(prev => 
-      prev.map(appt => appt.id === updatedAppointment.id ? updatedAppointment : appt)
-    );
+  const handleAppointmentUpdated = useCallback(() => {
+    fetchData(); // Re-fetch all appointments for the current day and location
     setIsEditModalOpen(false);
-  }, []);
+  }, [fetchData]);
+  
+  const handleNewAppointmentCreated = useCallback(() => {
+    fetchData(); // Re-fetch data when a new appointment is created
+    setIsNewAppointmentFormOpen(false); // Close the form
+  }, [fetchData]);
   
   const NoDataCard = ({ title, message }: { title: string; message: string }) => (
     <Card className="col-span-full mt-8 border-dashed border-2">
@@ -120,13 +125,13 @@ export default function SchedulePage() {
                 Vista de la agenda en formato de línea de tiempo por profesional.
               </CardDescription>
             </div>
-            <div className="flex items-center gap-2 w-full md:w-auto">
+            <div className="flex items-center gap-2 w-full md:w-auto flex-wrap">
               <Button variant="outline" size="icon" onClick={() => handleDateChange(subDays(currentDate, 1))}>
                 <ChevronLeftIcon className="h-4 w-4" />
               </Button>
               <Popover>
                 <PopoverTrigger asChild>
-                  <Button variant="outline" className={cn("w-full md:w-[200px] justify-start text-left font-normal", !currentDate && "text-muted-foreground")}>
+                  <Button variant="outline" className={cn("w-full sm:w-[200px] justify-start text-left font-normal", !currentDate && "text-muted-foreground")}>
                     <CalendarIcon className="mr-2 h-4 w-4" />
                     {format(currentDate, "PPP", { locale: es })}
                   </Button>
@@ -145,6 +150,11 @@ export default function SchedulePage() {
               >
                 Hoy
               </Button>
+               {(user?.role === USER_ROLES.ADMIN || user?.role === USER_ROLES.LOCATION_STAFF || user?.role === USER_ROLES.CONTADOR) && (
+                <Button onClick={() => setIsNewAppointmentFormOpen(true)} className="w-full sm:w-auto">
+                  <PlusCircleIcon className="mr-2 h-4 w-4" /> Nueva Cita
+                </Button>
+              )}
             </div>
           </div>
           {isAdminOrContador && (
@@ -181,7 +191,15 @@ export default function SchedulePage() {
           onAppointmentUpdated={handleAppointmentUpdated}
         />
       )}
+
+      {isNewAppointmentFormOpen && (
+        <AppointmentForm
+          isOpen={isNewAppointmentFormOpen}
+          onOpenChange={setIsNewAppointmentFormOpen}
+          onAppointmentCreated={handleNewAppointmentCreated}
+          defaultDate={currentDate}
+        />
+      )}
     </div>
   );
 }
-
