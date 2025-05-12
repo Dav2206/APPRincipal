@@ -7,7 +7,7 @@ import { getFirestore, connectFirestoreEmulator } from 'firebase/firestore'; // 
 const firebaseConfig = {
   apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
   authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN,
-  projectId: "footprints-scheduler-ywrwg", // Hardcoded as per user's last instruction on this
+  projectId: "footprints-scheduler-ywrwg",
   storageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET,
   messagingSenderId: process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID,
   appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID,
@@ -17,11 +17,11 @@ const firebaseConfig = {
 let app: FirebaseApp | undefined;
 let firestoreInstance: Firestore | undefined = undefined; // Explicitly undefined
 
-const useMockDatabase = process.env.NEXT_PUBLIC_USE_MOCK_DATABASE === 'true' || true; // Default to true to ensure mock is used
+const useMockDatabase = true; // FORCE MOCK DATABASE
 
 console.log("Firebase Config Module: Starting initialization attempt...");
-console.log("Firebase Config Module: NEXT_PUBLIC_USE_MOCK_DATABASE:", process.env.NEXT_PUBLIC_USE_MOCK_DATABASE);
-console.log("Firebase Config Module: Using mock database:", useMockDatabase);
+console.log("Firebase Config Module: NEXT_PUBLIC_USE_MOCK_DATABASE from env (ignored, forced true):", process.env.NEXT_PUBLIC_USE_MOCK_DATABASE);
+console.log("Firebase Config Module: Using mock database (forced):", useMockDatabase);
 
 if (!useMockDatabase) {
   console.log("Firebase Config Module: Attempting to connect to Firebase (not using mock database).");
@@ -66,6 +66,8 @@ if (!useMockDatabase) {
             console.log("Firebase Config Module: Attempting to connect Firestore to emulator at localhost:8080.");
             try {
               // Ensure this is called only ONCE
+              // Check if emulator is already connected by inspecting a private property (this is a hack, use with caution)
+              // A more robust way might be to set a flag after successful connection.
               if (!(firestoreInstance as any)._settings?.host?.includes('localhost')) {
                    connectFirestoreEmulator(firestoreInstance, 'localhost', 8080);
                    console.log("Firebase Config Module: SUCCESS - Firestore emulator connection CONFIGURED for localhost:8080.");
@@ -93,18 +95,18 @@ if (!useMockDatabase) {
     }
   }
 } else {
-  console.log("Firebase Config Module: Using MOCK database. Firebase App and Firestore instance will not be initialized.");
+  console.log("Firebase Config Module: Using MOCK database (forced). Firebase App and Firestore instance will be undefined.");
   app = undefined;
   firestoreInstance = undefined;
 }
 
 
 if (!firestoreInstance && !useMockDatabase) {
-    console.warn("Firebase Config Module: Firestore instance is NOT available at the end of configuration (and not using mock). Data operations will likely fail.");
+    console.warn("Firebase Config Module: Firestore instance is NOT available at the end of configuration (and not using mock database). Data operations will likely fail.");
 } else if (firestoreInstance && !useMockDatabase) {
     console.log("Firebase Config Module: Firestore instance IS available for export (not using mock).");
 } else if (useMockDatabase) {
-    console.log("Firebase Config Module: Firestore instance is UNDEFINED because mock database is in use.");
+    console.log("Firebase Config Module: Firestore instance is UNDEFINED because mock database is in use (forced).");
 }
 
 export { firestoreInstance as firestore, app };
