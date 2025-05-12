@@ -1,4 +1,3 @@
-
 "use client";
 
 import type { Appointment, Professional } from '@/types';
@@ -99,29 +98,10 @@ export default function SchedulePage() {
   
   const handleNewAppointmentCreated = useCallback(async () => {
     setIsNewAppointmentFormOpen(false); // Close the form
-
-    if (!user) return;
-    setIsLoading(true);
-    console.log("handleNewAppointmentCreated: Fetching new data for date:", currentDate.toISOString(), "and location:", effectiveLocationId);
-    try {
-      const [fetchedAppointmentsData, fetchedProfessionalsData] = await Promise.all([
-        getAppointments({
-          locationId: effectiveLocationId,
-          date: currentDate,
-        }),
-        getProfessionals(effectiveLocationId)
-      ]);
-      setAppointments(fetchedAppointmentsData.appointments || []);
-      setProfessionals(fetchedProfessionalsData || []);
-      console.log("handleNewAppointmentCreated: Data fetched and state updated. Appointments count:", (fetchedAppointmentsData.appointments || []).length);
-    } catch (error) {
-      console.error("Error fetching schedule data in handleNewAppointmentCreated:", error);
-      setAppointments([]);
-      setProfessionals([]);
-    } finally {
-      setIsLoading(false);
-    }
-  }, [user, effectiveLocationId, currentDate, setIsLoading, setAppointments, setProfessionals, setIsNewAppointmentFormOpen]);
+    // After a new appointment is created, fetchData will be called,
+    // which re-fetches appointments for the currentDate and updates the timeline.
+    await fetchData();
+  }, [fetchData, setIsNewAppointmentFormOpen]);
   
   const NoDataCard = ({ title, message }: { title: string; message: string }) => (
     <Card className="col-span-full mt-8 border-dashed border-2">
