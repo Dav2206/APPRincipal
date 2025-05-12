@@ -14,6 +14,7 @@ const fromDateToTimestamp = (date: Date | string | undefined): Timestamp | undef
   return Timestamp.fromDate(typeof date === 'string' ? parseISO(date) : date);
 }
 
+const ANY_PROFESSIONAL_VALUE = "_any_professional_placeholder_";
 
 // --- Mock Data Storage (Used if firestore is not available or useMockDatabase is true) ---
 let mockUsers: User[] = [
@@ -87,7 +88,7 @@ const initialMockAppointments: Appointment[] = [
     locationId: LOCATIONS[1].id,
     professionalId: mockProfessionals.find(p => p.locationId === LOCATIONS[1].id)?.id || mockProfessionals[1]?.id,
     serviceId: mockServices[1].id,
-    appointmentDateTime: formatISO(setHours(setMinutes(today, 30), 9)), // Today 09:30
+    appointmentDateTime: formatISO(setHours(setMinutes(startOfDay(today), 30), 9)), // Today 09:30
     durationMinutes: mockServices[1].defaultDuration,
     status: APPOINTMENT_STATUS.BOOKED,
     bookingObservations: "Paciente refiere dolor agudo.",
@@ -102,12 +103,12 @@ const initialMockAppointments: Appointment[] = [
     locationId: LOCATIONS[0].id,
     professionalId: mockProfessionals.find(p => p.locationId === LOCATIONS[0].id && p.id !== (mockProfessionals.find(pr => pr.locationId === LOCATIONS[0].id)?.id || mockProfessionals[0]?.id))?.id || mockProfessionals[0]?.id,
     serviceId: mockServices[2].id,
-    appointmentDateTime: formatISO(setHours(setMinutes(today, 0), 14)), // Today 14:00
+    appointmentDateTime: formatISO(setHours(setMinutes(startOfDay(today), 0), 14)), // Today 14:00
     durationMinutes: mockServices[2].defaultDuration,
     status: APPOINTMENT_STATUS.CONFIRMED,
     actualArrivalTime: "13:55",
     createdAt: formatISO(subDays(today,2)),
-    updatedAt: formatISO(today), // Updated today when confirmed
+    updatedAt: formatISO(startOfDay(today)), // Updated today when confirmed
     attachedPhotos: ["https://picsum.photos/seed/appt003_1/200/200"],
     addedServices: [],
   },
@@ -132,13 +133,14 @@ const initialMockAppointments: Appointment[] = [
     id: 'appt005',
     patientId: 'pat005',
     locationId: LOCATIONS[1].id,
-    professionalId: mockProfessionals.find(p => p.locationId === LOCATIONS[1].id && p.id !== (mockProfessionals.find(pr => pr.locationId === LOCATIONS[1].id)?.id || mockProfessionals[1]?.id))?.id || mockProfessionals[1]?.id,
+    // professionalId: mockProfessionals.find(p => p.locationId === LOCATIONS[1].id && p.id !== (mockProfessionals.find(pr => pr.locationId === LOCATIONS[1].id)?.id || mockProfessionals[1]?.id))?.id || mockProfessionals[1]?.id,
+    professionalId: null, // Test unassigned
     serviceId: mockServices[0].id,
-    appointmentDateTime: formatISO(setHours(setMinutes(tomorrow, 0), 16)), // Tomorrow 16:00
+    appointmentDateTime: formatISO(setHours(setMinutes(startOfDay(tomorrow), 0), 16)), // Tomorrow 16:00
     durationMinutes: mockServices[0].defaultDuration,
     status: APPOINTMENT_STATUS.BOOKED,
-    createdAt: formatISO(today),
-    updatedAt: formatISO(today),
+    createdAt: formatISO(startOfDay(today)),
+    updatedAt: formatISO(startOfDay(today)),
     attachedPhotos: [],
     addedServices: [],
   },
@@ -148,12 +150,12 @@ const initialMockAppointments: Appointment[] = [
     locationId: LOCATIONS[0].id,
     professionalId: mockProfessionals.find(p => p.locationId === LOCATIONS[0].id)?.id || mockProfessionals[0]?.id,
     serviceId: mockServices[4].id,
-    appointmentDateTime: formatISO(setHours(setMinutes(today, 30), 11)), // Today 11:30
+    appointmentDateTime: formatISO(setHours(setMinutes(startOfDay(today), 30), 11)), // Today 11:30
     durationMinutes: mockServices[4].defaultDuration,
     status: APPOINTMENT_STATUS.BOOKED,
     bookingObservations: "Estudio de pisada solicitado por el Dr. Pérez.",
-    createdAt: formatISO(today),
-    updatedAt: formatISO(today),
+    createdAt: formatISO(startOfDay(today)),
+    updatedAt: formatISO(startOfDay(today)),
     attachedPhotos: [],
     addedServices: [],
   },
@@ -163,14 +165,14 @@ const initialMockAppointments: Appointment[] = [
     locationId: LOCATIONS[3].id, // Carpaccio
     professionalId: mockProfessionals.find(p => p.locationId === LOCATIONS[3].id)?.id,
     serviceId: mockServices[0].id,
-    appointmentDateTime: formatISO(setHours(setMinutes(subDays(today, 3), 0), 15)), // 3 days ago 15:00
+    appointmentDateTime: formatISO(setHours(setMinutes(subDays(startOfDay(today), 3), 0), 15)), // 3 days ago 15:00
     durationMinutes: mockServices[0].defaultDuration,
     status: APPOINTMENT_STATUS.COMPLETED,
     amountPaid: mockServices[0].price,
     paymentMethod: PAYMENT_METHODS[2],
     staffNotes: "Paciente nuevo, buena primera impresión.",
-    createdAt: formatISO(subDays(today, 4)),
-    updatedAt: formatISO(subDays(today, 3)),
+    createdAt: formatISO(subDays(startOfDay(today), 4)),
+    updatedAt: formatISO(subDays(startOfDay(today), 3)),
     attachedPhotos: ["https://picsum.photos/seed/appt007_1/200/200"],
     addedServices: [],
     },
@@ -180,11 +182,11 @@ const initialMockAppointments: Appointment[] = [
     locationId: LOCATIONS[4].id, // Vista Alegre
     professionalId: mockProfessionals.find(p => p.locationId === LOCATIONS[4].id)?.id,
     serviceId: mockServices[1].id,
-    appointmentDateTime: formatISO(setHours(setMinutes(today, 0), 10)), // Today 10:00
+    appointmentDateTime: formatISO(setHours(setMinutes(startOfDay(today), 0), 10)), // Today 10:00
     durationMinutes: mockServices[1].defaultDuration,
     status: APPOINTMENT_STATUS.BOOKED,
-    createdAt: formatISO(subDays(today, 1)),
-    updatedAt: formatISO(subDays(today, 1)),
+    createdAt: formatISO(subDays(startOfDay(today), 1)),
+    updatedAt: formatISO(subDays(startOfDay(today), 1)),
     attachedPhotos: [],
     addedServices: [],
     },
@@ -194,7 +196,7 @@ const initialMockAppointments: Appointment[] = [
     locationId: LOCATIONS[5].id, // San Antonio
     professionalId: mockProfessionals.find(p => p.locationId === LOCATIONS[5].id)?.id,
     serviceId: mockServices[2].id,
-    appointmentDateTime: formatISO(setHours(setMinutes(subDays(today, 5), 30), 14)), // 5 days ago 14:30
+    appointmentDateTime: formatISO(setHours(setMinutes(subDays(startOfDay(today), 5), 30), 14)), // 5 days ago 14:30
     durationMinutes: mockServices[2].defaultDuration,
     status: APPOINTMENT_STATUS.COMPLETED,
     amountPaid: mockServices[2].price ? mockServices[2].price + 20 : 70, // Example of added service cost
@@ -202,21 +204,21 @@ const initialMockAppointments: Appointment[] = [
     staffNotes: "Se realizó quiropodia y tratamiento adicional para uña encarnada.",
     addedServices: [{ serviceId: mockServices[1].id, price: 20, service: mockServices[1] }],
     attachedPhotos: ["https://picsum.photos/seed/appt009_1/200/200"],
-    createdAt: formatISO(subDays(today, 6)),
-    updatedAt: formatISO(subDays(today, 5)),
+    createdAt: formatISO(subDays(startOfDay(today), 6)),
+    updatedAt: formatISO(subDays(startOfDay(today), 5)),
     },
     {
     id: 'appt010',
     patientId: 'pat005',
     locationId: LOCATIONS[0].id, // Higuereta
     serviceId: mockServices[3].id,
-    appointmentDateTime: formatISO(setHours(setMinutes(addDays(today, 2), 0), 17)), // In 2 days 17:00
+    appointmentDateTime: formatISO(setHours(setMinutes(addDays(startOfDay(today), 2), 0), 17)), // In 2 days 17:00
     durationMinutes: mockServices[3].defaultDuration,
     status: APPOINTMENT_STATUS.BOOKED,
     preferredProfessionalId: mockProfessionals.find(p => p.locationId === LOCATIONS[0].id && p.lastName.includes('Higuereta'))?.id, // Prefers a prof from Higuereta
     bookingObservations: "Solo puede por la tarde.",
-    createdAt: formatISO(today),
-    updatedAt: formatISO(today),
+    createdAt: formatISO(startOfDay(today)),
+    updatedAt: formatISO(startOfDay(today)),
     attachedPhotos: [],
     addedServices: [],
   },
@@ -346,19 +348,20 @@ export const getProfessionalById = async (id: string): Promise<Professional | un
 };
 
 export const addProfessional = async (data: Omit<ProfessionalFormData, 'id'>): Promise<Professional> => {
-  const newProfessionalData: Omit<Professional, 'id'> = {
+  const newProfessionalData: Omit<Professional, 'id' | 'biWeeklyEarnings'> = {
     firstName: data.firstName,
     lastName: data.lastName,
     locationId: data.locationId,
     phone: data.phone,
-    biWeeklyEarnings: 0, // Initial value
+    // Removed specializations & email
   };
 
   // Ensure useMockDatabase is checked correctly
   if (!firestore || useMockDatabase) {
     const newProfessional: Professional = {
       id: generateId(),
-      ...newProfessionalData
+      ...newProfessionalData,
+      biWeeklyEarnings: 0, // Initial value
     };
     mockProfessionals.push(newProfessional);
     return newProfessional;
@@ -366,7 +369,7 @@ export const addProfessional = async (data: Omit<ProfessionalFormData, 'id'>): P
 
   try {
     const docRef = await addDoc(collection(firestore, 'professionals'), newProfessionalData);
-    return { id: docRef.id, ...newProfessionalData };
+    return { id: docRef.id, ...newProfessionalData, biWeeklyEarnings: 0 };
   } catch (error) {
     console.error("Error adding professional:", error);
     throw error;
@@ -675,14 +678,14 @@ export const updateService = async (id: string, data: Partial<ServiceFormData>):
 const populateAppointment = async (apptData: DocumentData): Promise<Appointment> => {
     const patient = apptData.patientId ? await getPatientById(apptData.patientId) : undefined;
     const professional = apptData.professionalId ? await getProfessionalById(apptData.professionalId) : undefined;
-    const service = apptData.serviceId ? await getServiceById(apptData.serviceId) : undefined;
+    const service = apptData.serviceId ? await getServiceById(apptData.serviceId as ConstantServiceId) : undefined;
 
     let addedServicesPopulated = [];
     if (apptData.addedServices && Array.isArray(apptData.addedServices)) {
         addedServicesPopulated = await Promise.all(
             apptData.addedServices.map(async (as: any) => ({
                 ...as,
-                service: as.serviceId ? await getServiceById(as.serviceId) : undefined,
+                service: as.serviceId ? await getServiceById(as.serviceId as ConstantServiceId) : undefined,
                 professional: as.professionalId ? await getProfessionalById(as.professionalId) : undefined,
             }))
         );
@@ -732,16 +735,22 @@ export const getAppointments = async (filters: {
             filteredMockAppointments = filteredMockAppointments.filter(appt => appt.professionalId === restFilters.professionalId);
         }
         if (restFilters.date) {
-            filteredMockAppointments = filteredMockAppointments.filter(appt => 
-                dateFnsIsSameDay(parseISO(appt.appointmentDateTime), restFilters.date!)
-            );
+          filteredMockAppointments = filteredMockAppointments.filter(appt => {
+              if (!appt.appointmentDateTime || typeof appt.appointmentDateTime !== 'string') return false;
+              try {
+                  return dateFnsIsSameDay(parseISO(appt.appointmentDateTime), startOfDay(restFilters.date!));
+              } catch (e) { return false; }
+          });
         }
         if (restFilters.dateRange) {
             const start = startOfDay(restFilters.dateRange.start);
             const end = endOfDay(restFilters.dateRange.end);
             filteredMockAppointments = filteredMockAppointments.filter(appt => {
-                const apptDate = parseISO(appt.appointmentDateTime);
-                return apptDate >= start && apptDate <= end;
+                if (!appt.appointmentDateTime || typeof appt.appointmentDateTime !== 'string') return false;
+                try {
+                    const apptDate = parseISO(appt.appointmentDateTime);
+                    return apptDate >= start && apptDate <= end;
+                } catch (e) { return false; }
             });
         }
         if (restFilters.statuses) {
@@ -909,13 +918,27 @@ export const addAppointment = async (data: AppointmentFormData): Promise<Appoint
   const appointmentDateHours = parseInt(data.appointmentTime.split(':')[0]);
   const appointmentDateMinutes = parseInt(data.appointmentTime.split(':')[1]);
   
+  let actualProfessionalId: string | undefined | null = undefined;
+  if (data.preferredProfessionalId && data.preferredProfessionalId !== ANY_PROFESSIONAL_VALUE) {
+    const preferredProf = mockProfessionals.find(p => p.id === data.preferredProfessionalId && p.locationId === data.locationId);
+    if (preferredProf) {
+      actualProfessionalId = preferredProf.id;
+    } else {
+      console.warn(`Preferred professional ${data.preferredProfessionalId} not found or not in location ${data.locationId}. Appointment will be unassigned.`);
+      actualProfessionalId = null; 
+    }
+  } else {
+    actualProfessionalId = null; 
+  }
+
   const newAppointmentData: Omit<Appointment, 'id' | 'createdAt' | 'updatedAt' | 'patient' | 'service' | 'professional'> = {
     patientId: patientId!,
     locationId: data.locationId,
     serviceId: data.serviceId,
+    professionalId: actualProfessionalId,
     appointmentDateTime: formatISO(setMinutes(setHours(data.appointmentDate, appointmentDateHours), appointmentDateMinutes)),
     durationMinutes: service?.defaultDuration || 60,
-    preferredProfessionalId: data.preferredProfessionalId === "_any_professional_placeholder_" ? undefined : data.preferredProfessionalId,
+    preferredProfessionalId: data.preferredProfessionalId === ANY_PROFESSIONAL_VALUE ? undefined : data.preferredProfessionalId,
     bookingObservations: data.bookingObservations,
     status: APPOINTMENT_STATUS.BOOKED,
     attachedPhotos: [],
@@ -930,9 +953,13 @@ export const addAppointment = async (data: AppointmentFormData): Promise<Appoint
       ...newAppointmentData,
       createdAt: formatISO(new Date()),
       updatedAt: formatISO(new Date()),
+       // Populate patient, service for immediate use if needed, professionalId is already set in newAppointmentData
+      patient: mockPatients.find(p => p.id === patientId),
+      service: mockServices.find(s => s.id === data.serviceId),
+      professional: actualProfessionalId ? mockProfessionals.find(p => p.id === actualProfessionalId) : undefined,
     };
-    mockAppointments.push(newAppointment);
-    return getAppointmentById(newAppointment.id) as Promise<Appointment>;
+    mockAppointments.push(newAppointment); // Add to the global mock array
+    return newAppointment; // Return the fully populated new appointment
   }
 
   try {
