@@ -17,7 +17,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { format, parseISO } from 'date-fns';
 import { es } from 'date-fns/locale';
-import { CalendarIcon, FilterIcon, AlertTriangle, Loader2, RotateCcw, History as HistoryIconLucide, ChevronsDown } from 'lucide-react';
+import { CalendarIcon, FilterIcon, AlertTriangle, Loader2, RotateCcw, HistoryIcon, ChevronsDown } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 const ALL_SERVICES_VALUE = "all_services_placeholder_value";
@@ -51,13 +51,13 @@ export default function HistoryPage() {
       setDisplayedAppointments([]); 
 
       const patientsData = await getPatients();
-      setAllPatients(patientsData);
+      setAllPatients(patientsData.patients); // Ensure we're using the patients array
 
-      const baseHistory = await getAppointments({
+      const baseHistoryResult = await getAppointments({
         locationId: effectiveLocationId,
         statuses: [APPOINTMENT_STATUS.COMPLETED, APPOINTMENT_STATUS.CANCELLED_CLIENT, APPOINTMENT_STATUS.CANCELLED_STAFF, APPOINTMENT_STATUS.NO_SHOW],
       });
-      setAllLocationHistory(baseHistory.sort((a, b) => parseISO(b.appointmentDateTime).getTime() - parseISO(a.appointmentDateTime).getTime()));
+      setAllLocationHistory((baseHistoryResult.appointments || []).sort((a, b) => parseISO(b.appointmentDateTime).getTime() - parseISO(a.appointmentDateTime).getTime()));
       setIsLoading(false);
     }
     loadBaseData();
@@ -140,7 +140,7 @@ export default function HistoryPage() {
     <div className="space-y-6">
       <Card className="shadow-md">
         <CardHeader>
-          <CardTitle className="text-2xl flex items-center gap-2"><HistoryIconLucide className="text-primary"/> Historial de Citas</CardTitle>
+          <CardTitle className="text-2xl flex items-center gap-2"><HistoryIcon className="text-primary"/> Historial de Citas</CardTitle>
           <CardDescription>Consulta citas pasadas. Utiliza los filtros para refinar tu búsqueda.</CardDescription>
            {isAdminOrContador && (
             <div className="mt-2 text-sm text-muted-foreground">
@@ -220,3 +220,4 @@ export default function HistoryPage() {
     </div>
   );
 }
+

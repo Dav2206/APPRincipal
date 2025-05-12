@@ -37,11 +37,11 @@ export function AppointmentsDisplay() {
     setIsLoading(true);
     
     try {
-      const fetchedAppointments = await getAppointments({
+      const fetchedData = await getAppointments({
         locationId: effectiveLocationId,
         date: currentDate,
       });
-      setAppointments(fetchedAppointments);
+      setAppointments(fetchedData.appointments || []);
     } catch (error) {
       console.error("Failed to fetch appointments:", error);
       setAppointments([]); // Set to empty array on error
@@ -167,3 +167,4 @@ export function AppointmentsDisplay() {
     </div>
   );
 }
+
