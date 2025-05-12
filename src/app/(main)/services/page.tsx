@@ -63,10 +63,10 @@ export default function ServicesPage() {
     setIsLoading(true);
     try {
       const data = await getServices();
-      setServices(data.services || []); // Ensure it's an array
+      setServices(data); 
     } catch (error) {
       toast({ title: "Error", description: "No se pudieron cargar los servicios.", variant: "destructive" });
-      setServices([]); // Ensure it's an array on error
+      setServices([]); 
     } finally {
       setIsLoading(false);
     }

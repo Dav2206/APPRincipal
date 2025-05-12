@@ -1,3 +1,4 @@
+
 "use client";
 
 import type { Appointment, Service, AppointmentStatus, Professional } from '@/types';
@@ -57,7 +58,7 @@ export function AppointmentEditDialog({ appointment, isOpen, onOpenChange, onApp
   const { user } = useAuth();
   const { toast } = useToast();
   const [professionals, setProfessionals] = useState<Professional[]>([]);
-  const [allServices, setAllServices] = useState<Service[]>([]);
+  const [allServices, setAllServices] = useState<Service[] | null>(null); // Initialize as null to track loading state
   const [isUploadingImage, setIsUploadingImage] = useState(false);
   const [isSubmittingForm, setIsSubmittingForm] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -76,8 +77,26 @@ export function AppointmentEditDialog({ appointment, isOpen, onOpenChange, onApp
     name: "attachedPhotos",
   });
 
+  // Effect to load services and professionals when dialog opens
   useEffect(() => {
-    if (isOpen && appointment) {
+    if (isOpen) {
+      async function loadData() {
+        const locationForProfs = appointment.locationId || ( (user?.role === USER_ROLES.ADMIN || user?.role === USER_ROLES.CONTADOR) ? undefined : user?.locationId);
+        
+        const [profsData, servicesDataFromApi] = await Promise.all([
+          getProfessionals(locationForProfs),
+          getServices()
+        ]);
+        setProfessionals(profsData);
+        setAllServices(servicesDataFromApi || []);
+      }
+      loadData();
+    }
+  }, [isOpen, appointment.locationId, user]);
+
+  // Effect to reset form when dialog opens or critical data (appointment, services) changes
+   useEffect(() => {
+    if (isOpen && appointment && allServices) { // Ensure allServices is loaded before reset
       const initialDurationMinutes = appointment.durationMinutes || appointment.service?.defaultDuration || 0;
       const appointmentDateTime = parseISO(appointment.appointmentDateTime);
       form.reset({
@@ -99,44 +118,8 @@ export function AppointmentEditDialog({ appointment, isOpen, onOpenChange, onApp
         })) || [],
       });
     }
-  }, [appointment, form, isOpen, allServices]);
+  }, [isOpen, appointment, allServices, form]);
 
-
-  useEffect(() => {
-    async function loadPrerequisites() {
-      const isAdminOrContador = user?.role === USER_ROLES.ADMIN || user?.role === USER_ROLES.CONTADOR;
-      if (user?.locationId || isAdminOrContador) {
-        const locationForProfs = appointment.locationId || (isAdminOrContador ? undefined : user.locationId);
-        if (locationForProfs){
-            const profs = await getProfessionals(locationForProfs);
-            setProfessionals(profs);
-        } else if (isAdminOrContador) {
-             const allProfsPromises = LOCATIONS.map(loc => getProfessionals(loc.id));
-             const allProfsResults = await Promise.all(allProfsPromises);
-             setProfessionals(allProfsResults.flat());
-        }
-        const { services: servicesData } = await getServices(); // Adjusted to access services array
-        setAllServices(servicesData || []);
-
-        if (appointment) {
-          const currentServices = servicesData || [];
-          if (form.getValues('serviceId') === DEFAULT_SERVICE_ID_PLACEHOLDER && currentServices.length > 0) {
-            form.setValue('serviceId', appointment.serviceId || currentServices[0].id);
-          }
-          if (appointment.addedServices) {
-            form.setValue('addedServices', appointment.addedServices.map(as => ({
-              serviceId: as.serviceId || (currentServices.length > 0 ? currentServices[0].id : DEFAULT_SERVICE_ID_PLACEHOLDER),
-              professionalId: as.professionalId || NO_SELECTION_PLACEHOLDER,
-              price: as.price ?? undefined,
-            })));
-          }
-        }
-      }
-    }
-    if (isOpen) {
-      loadPrerequisites();
-    }
-  }, [isOpen, user, appointment, form]);
 
   const handleFileChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const files = event.target.files;
@@ -159,6 +142,10 @@ export function AppointmentEditDialog({ appointment, isOpen, onOpenChange, onApp
   };
 
   const onSubmitUpdate = async (data: AppointmentUpdateFormData) => {
+    if (!allServices) {
+        toast({ title: "Error", description: "Servicios aún no cargados.", variant: "destructive" });
+        return;
+    }
     setIsSubmittingForm(true);
     try {
       let finalAppointmentDateTime = parseISO(appointment.appointmentDateTime);
@@ -309,17 +296,17 @@ export function AppointmentEditDialog({ appointment, isOpen, onOpenChange, onApp
                 <FormLabel className="flex items-center gap-1"><ConciergeBell size={16}/>Motivo de la Reserva (Servicio Principal)</FormLabel>
                 <Select
                   onValueChange={field.onChange}
-                  value={field.value === DEFAULT_SERVICE_ID_PLACEHOLDER && allServices.length > 0 ? allServices[0].id : field.value}
-                  disabled={allServices.length === 0}
+                  value={field.value === DEFAULT_SERVICE_ID_PLACEHOLDER && allServices && allServices.length > 0 ? allServices[0].id : field.value}
+                  disabled={!allServices || allServices.length === 0}
                 >
                   <FormControl>
                     <SelectTrigger>
-                      <SelectValue placeholder={allServices.length > 0 ? "Seleccionar servicio" : "Cargando servicios..."} />
+                      <SelectValue placeholder={allServices && allServices.length > 0 ? "Seleccionar servicio" : "Cargando servicios..."} />
                     </SelectTrigger>
                   </FormControl>
                   <SelectContent>
-                    {allServices.length === 0 && <SelectItem value={DEFAULT_SERVICE_ID_PLACEHOLDER} disabled>Cargando...</SelectItem>}
-                    {allServices.map(s => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}
+                    {(!allServices || allServices.length === 0) && <SelectItem value={DEFAULT_SERVICE_ID_PLACEHOLDER} disabled>Cargando...</SelectItem>}
+                    {allServices && allServices.map(s => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}
                   </SelectContent>
                 </Select>
                 <FormMessage />
@@ -479,10 +466,10 @@ export function AppointmentEditDialog({ appointment, isOpen, onOpenChange, onApp
             <div className="space-y-3 pt-3 mt-3 border-t">
               <h4 className="text-md font-semibold flex items-center gap-2"><CameraIcon/> Fotos Adjuntas</h4>
               <div className="grid grid-cols-3 sm:grid-cols-4 gap-2">
-                {attachedPhotoFields.map((item, index) => (
-                  item.value && typeof item.value === 'string' && item.value.startsWith("data:image/") ? (
-                    <div key={item.id} className="relative group">
-                      <Image src={item.value} alt={`Foto adjunta ${index + 1}`} width={80} height={80} className="rounded object-cover aspect-square border" data-ai-hint="medical image" />
+                {attachedPhotoFields.map((fieldItem, index) => ( // Renamed item to fieldItem to avoid conflict
+                  fieldItem.value && typeof fieldItem.value === 'string' && fieldItem.value.startsWith("data:image/") ? (
+                    <div key={fieldItem.id} className="relative group">
+                      <Image src={fieldItem.value} alt={`Foto adjunta ${index + 1}`} width={80} height={80} className="rounded object-cover aspect-square border" data-ai-hint="medical image" />
                       <Button
                         type="button"
                         variant="destructive"
@@ -510,7 +497,7 @@ export function AppointmentEditDialog({ appointment, isOpen, onOpenChange, onApp
             </div>
           )}
 
-          {(form.watch('status') === APPOINTMENT_STATUS.CONFIRMED || form.watch('status') === APPOINTMENT_STATUS.COMPLETED) && (
+          {(form.watch('status') === APPOINTMENT_STATUS.CONFIRMED || form.watch('status') === APPOINTMENT_STATUS.COMPLETED) && allServices && (
             <div className="space-y-3 pt-3 mt-3 border-t">
               <div className="flex justify-between items-center">
                 <h4 className="text-md font-semibold flex items-center gap-2"><ShoppingBag/> Servicios Adicionales</h4>
@@ -578,7 +565,7 @@ export function AppointmentEditDialog({ appointment, isOpen, onOpenChange, onApp
             <DialogClose asChild>
               <Button type="button" variant="outline">Cancelar</Button>
             </DialogClose>
-            <Button type="submit" disabled={isSubmittingForm || isUploadingImage || (allServices && allServices.length === 0)}>
+            <Button type="submit" disabled={isSubmittingForm || isUploadingImage || !allServices || (allServices && allServices.length === 0)}>
               {(isSubmittingForm || isUploadingImage) && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
               Guardar Cambios
             </Button>
