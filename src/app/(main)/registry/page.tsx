@@ -1,4 +1,3 @@
-
 "use client";
 
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
@@ -91,7 +90,7 @@ export default function RegistryPage() {
   useEffect(() => {
     async function loadServices() {
         const servicesData = await getServices();
-        setAllServices(servicesData);
+        setAllServices(servicesData.services); // Ensure using the services array
     }
     loadServices();
   }, []);
@@ -105,14 +104,16 @@ export default function RegistryPage() {
 
     if (isAdminOrContador) {
       if (targetLocation) { 
-        profs = await getProfessionals(targetLocation);
+        const result = await getProfessionals(targetLocation);
+        profs = result.professionals;
       } else { 
         const allProfsPromises = LOCATIONS.map(loc => getProfessionals(loc.id));
         const results = await Promise.all(allProfsPromises);
-        profs = results.flat();
+        profs = results.map(r => r.professionals).flat();
       }
     } else if (user?.locationId) { 
-      profs = await getProfessionals(user.locationId);
+      const result = await getProfessionals(user.locationId);
+      profs = result.professionals;
     }
     return profs;
   }, [user, isAdminOrContador]);
@@ -603,8 +604,8 @@ export default function RegistryPage() {
               <TableBody>
                 {reportData.length === 0 ? <NoDataState /> :
                   (reportType === 'biWeekly' && isAdminOrContador && adminSelectedLocation === 'all') ? (
-                    (reportData as GroupedBiWeeklyReportItem[]).map(group => (
-                      <React.Fragment key={`${group.locationId}-${group.type}`}>
+                    (reportData as GroupedBiWeeklyReportItem[]).map((group, index) => (
+                      <React.Fragment key={`${group.locationId}-grouped-report-${index}`}>
                         {(group.professionals || []).map(item => (
                           <TableRow key={item.professionalId}>
                             <TableCell className="font-medium">{item.professionalName}</TableCell>
@@ -612,7 +613,7 @@ export default function RegistryPage() {
                             <TableCell className="text-right">{(item.biWeeklyEarnings || 0).toFixed(2)}</TableCell>
                           </TableRow>
                         ))}
-                        <TableRow className="bg-muted/50 font-semibold" key={`total-row-${group.locationId}`}>
+                        <TableRow className="bg-muted/50 font-semibold" key={`total-row-${group.locationId}-${index}`}>
                           <TableCell colSpan={2}>Total {group.locationName}</TableCell>
                           <TableCell className="text-right">{(group.locationTotalEarnings || 0).toFixed(2)}</TableCell>
                         </TableRow>
@@ -663,7 +664,3 @@ export default function RegistryPage() {
     </div>
   );
 }
-
-
-
-
