@@ -60,6 +60,8 @@ const today = new Date();
 const yesterday = subDays(today, 1);
 const twoDaysAgo = subDays(today, 2);
 const tomorrow = addDays(today,1);
+const fixedFutureDateForRegistry = new Date(2025, 4, 9); // May 9, 2025 (Month is 0-indexed)
+
 
 const initialMockAppointments: Appointment[] = [
   {
@@ -217,7 +219,56 @@ const initialMockAppointments: Appointment[] = [
     updatedAt: formatISO(today),
     attachedPhotos: [],
     addedServices: [],
-    }
+  },
+  // Add some completed appointments for May 9, 2025 for registry testing
+  {
+    id: 'appt_registry_test_1',
+    patientId: mockPatients[0].id, // Ana García
+    locationId: LOCATIONS[0].id, // Higuereta
+    professionalId: mockProfessionals.find(p => p.locationId === LOCATIONS[0].id && p.firstName === 'Profesional 1')?.id,
+    serviceId: mockServices[0].id, // Consulta General
+    appointmentDateTime: formatISO(setHours(setMinutes(fixedFutureDateForRegistry, 0), 10)), // May 9, 2025, 10:00
+    durationMinutes: mockServices[0].defaultDuration,
+    status: APPOINTMENT_STATUS.COMPLETED,
+    amountPaid: mockServices[0].price,
+    paymentMethod: PAYMENT_METHODS[0],
+    createdAt: formatISO(fixedFutureDateForRegistry),
+    updatedAt: formatISO(fixedFutureDateForRegistry),
+    addedServices: [],
+    attachedPhotos: []
+  },
+  {
+    id: 'appt_registry_test_2',
+    patientId: mockPatients[1].id, // Luis Martínez
+    locationId: LOCATIONS[1].id, // Edén Benavides
+    professionalId: mockProfessionals.find(p => p.locationId === LOCATIONS[1].id && p.firstName === 'Profesional 1')?.id,
+    serviceId: mockServices[1].id, // Tratamiento de Uñas
+    appointmentDateTime: formatISO(setHours(setMinutes(fixedFutureDateForRegistry, 30), 11)), // May 9, 2025, 11:30
+    durationMinutes: mockServices[1].defaultDuration,
+    status: APPOINTMENT_STATUS.COMPLETED,
+    amountPaid: mockServices[1].price,
+    paymentMethod: PAYMENT_METHODS[1],
+    createdAt: formatISO(fixedFutureDateForRegistry),
+    updatedAt: formatISO(fixedFutureDateForRegistry),
+    addedServices: [],
+    attachedPhotos: []
+  },
+   {
+    id: 'appt_registry_test_3',
+    patientId: mockPatients[2].id, // Elena Ruiz
+    locationId: LOCATIONS[0].id, // Higuereta
+    professionalId: mockProfessionals.find(p => p.locationId === LOCATIONS[0].id && p.firstName === 'Profesional 2')?.id,
+    serviceId: mockServices[2].id, // Quiropodia
+    appointmentDateTime: formatISO(setHours(setMinutes(fixedFutureDateForRegistry, 0), 14)), // May 9, 2025, 14:00
+    durationMinutes: mockServices[2].defaultDuration,
+    status: APPOINTMENT_STATUS.COMPLETED,
+    amountPaid: mockServices[2].price,
+    paymentMethod: PAYMENT_METHODS[2],
+    createdAt: formatISO(fixedFutureDateForRegistry),
+    updatedAt: formatISO(fixedFutureDateForRegistry),
+    addedServices: [],
+    attachedPhotos: []
+  }
 ];
 
 let mockAppointments: Appointment[] = [...initialMockAppointments];
@@ -235,6 +286,7 @@ const generateId = () => {
 
 // --- Auth ---
 export const getUserByUsername = async (username: string): Promise<User | undefined> => {
+  // Ensure useMockDatabase is checked correctly, or remove if always true for this context
   if (!firestore || useMockDatabase) {
     return mockUsers.find(u => u.username === username);
   }
@@ -255,6 +307,7 @@ export const getUserByUsername = async (username: string): Promise<User | undefi
 
 // --- Professionals ---
 export const getProfessionals = async (locationId?: LocationId): Promise<Professional[]> => {
+   // Ensure useMockDatabase is checked correctly
    if (!firestore || useMockDatabase) {
     if (locationId) {
       return mockProfessionals.filter(p => p.locationId === locationId);
@@ -278,6 +331,7 @@ export const getProfessionals = async (locationId?: LocationId): Promise<Profess
 };
 
 export const getProfessionalById = async (id: string): Promise<Professional | undefined> => {
+  // Ensure useMockDatabase is checked correctly
   if (!firestore || useMockDatabase) {
     return mockProfessionals.find(p => p.id === id);
   }
@@ -300,6 +354,7 @@ export const addProfessional = async (data: Omit<ProfessionalFormData, 'id'>): P
     biWeeklyEarnings: 0, // Initial value
   };
 
+  // Ensure useMockDatabase is checked correctly
   if (!firestore || useMockDatabase) {
     const newProfessional: Professional = {
       id: generateId(),
@@ -319,6 +374,7 @@ export const addProfessional = async (data: Omit<ProfessionalFormData, 'id'>): P
 };
 
 export const updateProfessional = async (id: string, data: Partial<ProfessionalFormData>): Promise<Professional | undefined> => {
+  // Ensure useMockDatabase is checked correctly
   if (!firestore || useMockDatabase) {
     const index = mockProfessionals.findIndex(p => p.id === id);
     if (index !== -1) {
@@ -342,6 +398,7 @@ export const updateProfessional = async (id: string, data: Partial<ProfessionalF
 export const getPatients = async (options: { page?: number, limit?: number, searchTerm?: string, filterToday?: boolean, adminSelectedLocation?: LocationId | 'all', user?: User | null, lastVisiblePatientId?: string | null } = {}): Promise<{patients: Patient[], totalCount: number, lastVisiblePatientId?: string | null}> => {
   const { page = 1, limit: queryLimit = PATIENTS_PER_PAGE, searchTerm, filterToday, adminSelectedLocation, user, lastVisiblePatientId } = options;
 
+  // Ensure useMockDatabase is checked correctly
   if (!firestore || useMockDatabase) {
     let filteredMockPatients = [...mockPatients];
     if (searchTerm) {
@@ -456,6 +513,7 @@ const PATIENTS_PER_PAGE = 8;
 
 
 export const getPatientById = async (id: string): Promise<Patient | undefined> => {
+  // Ensure useMockDatabase is checked correctly
   if (!firestore || useMockDatabase) {
     return mockPatients.find(p => p.id === id);
   }
@@ -470,7 +528,8 @@ export const getPatientById = async (id: string): Promise<Patient | undefined> =
 };
 
 export const findPatient = async (firstName: string, lastName: string): Promise<Patient | undefined> => {
-   if (!firestore || useMockDatabase) {
+  // Ensure useMockDatabase is checked correctly
+  if (!firestore || useMockDatabase) {
     return mockPatients.find(p => p.firstName.toLowerCase() === firstName.toLowerCase() && p.lastName.toLowerCase() === lastName.toLowerCase());
   }
   try {
@@ -494,6 +553,7 @@ export const addPatient = async (data: Omit<Patient, 'id'>): Promise<Patient> =>
     isDiabetic: data.isDiabetic || false,
   };
 
+  // Ensure useMockDatabase is checked correctly
   if (!firestore || useMockDatabase) {
     const newPatient: Patient = {
       id: generateId(),
@@ -513,6 +573,7 @@ export const addPatient = async (data: Omit<Patient, 'id'>): Promise<Patient> =>
 };
 
 export const updatePatient = async (id: string, data: Partial<Patient>): Promise<Patient | undefined> => {
+  // Ensure useMockDatabase is checked correctly
   if (!firestore || useMockDatabase) {
     const index = mockPatients.findIndex(p => p.id === id);
     if (index !== -1) {
@@ -534,6 +595,7 @@ export const updatePatient = async (id: string, data: Partial<Patient>): Promise
 
 // --- Services ---
 export const getServices = async (): Promise<Service[]> => {
+  // Ensure useMockDatabase is checked correctly
   if (!firestore || useMockDatabase) {
     return [...mockServices].sort((a, b) => a.name.localeCompare(b.name));
   }
@@ -548,7 +610,8 @@ export const getServices = async (): Promise<Service[]> => {
   }
 };
 
-export const getServiceById = async (id: string): Promise<Service | undefined> => {
+export const getServiceById = async (id: ConstantServiceId): Promise<Service | undefined> => {
+  // Ensure useMockDatabase is checked correctly
   if (!firestore || useMockDatabase) {
     return mockServices.find(s => s.id === id);
   }
@@ -569,6 +632,7 @@ export const addService = async (data: ServiceFormData): Promise<Service> => {
     price: data.price,
   };
 
+  // Ensure useMockDatabase is checked correctly
   if (!firestore || useMockDatabase) {
     const newService: Service = {
       id: data.id || generateId(),
@@ -587,6 +651,7 @@ export const addService = async (data: ServiceFormData): Promise<Service> => {
 };
 
 export const updateService = async (id: string, data: Partial<ServiceFormData>): Promise<Service | undefined> => {
+  // Ensure useMockDatabase is checked correctly
   if (!firestore || useMockDatabase) {
     const index = mockServices.findIndex(s => s.id === id);
     if (index !== -1) {
@@ -650,6 +715,7 @@ export const getAppointments = async (filters: {
 }): Promise<{ appointments: Appointment[], totalCount: number, lastVisibleAppointmentId?: string | null }> => {
     const { page = 1, limit: queryLimit = APPOINTMENTS_PER_PAGE, lastVisibleAppointmentId, ...restFilters } = filters;
 
+    // Ensure useMockDatabase is checked correctly
     if (!firestore || useMockDatabase) {
         let filteredMockAppointments = [...mockAppointments];
 
@@ -785,6 +851,7 @@ const APPOINTMENTS_PER_PAGE = 8;
 
 
 export const getAppointmentById = async (id: string): Promise<Appointment | undefined> => {
+  // Ensure useMockDatabase is checked correctly
   if (!firestore || useMockDatabase) {
     const appt = mockAppointments.find(a => a.id === id);
     if (appt) {
@@ -838,7 +905,7 @@ export const addAppointment = async (data: AppointmentFormData): Promise<Appoint
       }
   }
 
-  const service = await getServiceById(data.serviceId);
+  const service = await getServiceById(data.serviceId as ConstantServiceId);
   const appointmentDateHours = parseInt(data.appointmentTime.split(':')[0]);
   const appointmentDateMinutes = parseInt(data.appointmentTime.split(':')[1]);
   
@@ -856,6 +923,7 @@ export const addAppointment = async (data: AppointmentFormData): Promise<Appoint
   };
 
 
+  // Ensure useMockDatabase is checked correctly
   if (!firestore || useMockDatabase) {
     const newAppointment: Appointment = {
       id: generateId(),
@@ -896,6 +964,7 @@ export const updateAppointment = async (id: string, data: Partial<Appointment>):
   dataToUpdate.updatedAt = serverTimestamp();
 
 
+  // Ensure useMockDatabase is checked correctly
   if (!firestore || useMockDatabase) {
     const index = mockAppointments.findIndex(a => a.id === id);
     if (index !== -1) {
@@ -927,6 +996,7 @@ export const getPatientAppointmentHistory = async (
 ): Promise<{ appointments: Appointment[], totalCount: number, lastVisibleAppointmentId?: string | null }> => {
     const { page = 1, limit: queryLimit = APPOINTMENTS_PER_PAGE, lastVisibleAppointmentId } = options;
 
+    // Ensure useMockDatabase is checked correctly
     if (!firestore || useMockDatabase) {
         const todayDate = startOfDay(new Date());
         const historyAppointments = mockAppointments.filter(appt =>
@@ -1054,7 +1124,6 @@ export const seedInitialData = async () => {
                         // Re-initialize batch for next set of operations
                         // batch = writeBatch(firestore); // This line is incorrect, re-assigning `batch` is not how it works.
                         // Instead, create a new batch after committing.
-                        // Correct approach would be to manage batches outside or in a loop.
                         // For simplicity, this seed will stop if it hits the limit once.
                         // A more robust seeder would handle multiple batches.
                         console.warn("Firestore batch limit reached during seeding. Not all data might have been seeded if total operations exceed 500.");
@@ -1087,3 +1156,5 @@ if (process.env.NODE_ENV === 'development' && !useMockDatabase) { // Only seed i
     // Temporarily disable auto-seeding to avoid issues if collections exist
     console.log("Automatic seeding in development is currently commented out in data.ts. Uncomment to enable.");
 }
+
+    
