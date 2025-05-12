@@ -52,7 +52,6 @@ export default function ProfessionalsPage() {
       firstName: '',
       lastName: '',
       locationId: LOCATIONS[0].id,
-      email: '',
       phone: '',
       specializations: [],
     }
@@ -90,7 +89,6 @@ export default function ProfessionalsPage() {
       firstName: '',
       lastName: '',
       locationId: defaultLoc as LocationId,
-      email: '',
       phone: '',
       specializations: [],
     });
@@ -102,7 +100,6 @@ export default function ProfessionalsPage() {
     form.reset({
         ...professional,
         locationId: professional.locationId as LocationId, 
-        email: professional.email || '',
         specializations: professional.specializations || [],
     });
     setIsFormOpen(true);
@@ -131,8 +128,7 @@ export default function ProfessionalsPage() {
 
   const filteredProfessionals = professionals.filter(p =>
     `${p.firstName} ${p.lastName}`.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    (p.phone && p.phone.includes(searchTerm)) ||
-    (p.email && p.email.toLowerCase().includes(searchTerm.toLowerCase()))
+    (p.phone && p.phone.includes(searchTerm))
   );
   
   const LoadingState = () => (
@@ -173,7 +169,7 @@ export default function ProfessionalsPage() {
               <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
               <Input
                 type="search"
-                placeholder="Buscar profesionales por nombre, teléfono o email..."
+                placeholder="Buscar profesionales por nombre o teléfono..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
                 className="pl-8 w-full"
@@ -188,7 +184,6 @@ export default function ProfessionalsPage() {
                   <TableHead>Nombre Completo</TableHead>
                   <TableHead className="hidden md:table-cell">Sede</TableHead>
                   <TableHead className="hidden md:table-cell">Especializaciones</TableHead>
-                  <TableHead className="hidden lg:table-cell">Email</TableHead>
                   <TableHead className="hidden lg:table-cell">Teléfono</TableHead>
                    {isAdminOrContador && <TableHead className="hidden xl:table-cell text-right">Ingresos Quincena (S/)</TableHead> }
                   <TableHead className="text-right">Acciones</TableHead>
@@ -204,7 +199,6 @@ export default function ProfessionalsPage() {
                         ? prof.specializations.map(spec => <Badge key={spec} variant="outline" className="mr-1 mb-1 text-xs">{spec}</Badge>)
                         : 'N/A'}
                     </TableCell>
-                    <TableCell className="hidden lg:table-cell">{prof.email || 'N/A'}</TableCell>
                     <TableCell className="hidden lg:table-cell">{prof.phone || 'N/A'}</TableCell>
                     {isAdminOrContador && <TableCell className="hidden xl:table-cell text-right">{prof.biWeeklyEarnings?.toFixed(2) || 'N/A'}</TableCell> }
                     <TableCell className="text-right">
@@ -215,7 +209,7 @@ export default function ProfessionalsPage() {
                   </TableRow>
                 )) : (
                   <TableRow>
-                    <TableCell colSpan={isAdminOrContador ? 7 : 6} className="h-24 text-center"> 
+                    <TableCell colSpan={isAdminOrContador ? 6 : 5} className="h-24 text-center"> 
                       No se encontraron profesionales.
                     </TableCell>
                   </TableRow>
@@ -275,13 +269,6 @@ export default function ProfessionalsPage() {
                   </FormItem>
                 )}
               />
-              <FormField control={form.control} name="email" render={({ field }) => (
-                <FormItem>
-                    <FormLabel>Email (Opcional)</FormLabel>
-                    <FormControl><Input type="email" placeholder="Ej: juan.perez@mail.com" {...field} /></FormControl>
-                    <FormMessage />
-                </FormItem>
-              )}/>
                <FormField control={form.control} name="phone" render={({ field }) => (
                   <FormItem>
                       <FormLabel>Teléfono (Opcional)</FormLabel>

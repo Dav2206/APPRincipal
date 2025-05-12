@@ -19,7 +19,6 @@ export const PatientFormSchema = z.object({
   firstName: z.string().min(2, "Nombre es requerido."),
   lastName: z.string().min(2, "Apellido es requerido."),
   phone: z.string().optional(),
-  email: z.string().email("Email inválido.").optional().or(z.literal('')),
   dateOfBirth: z.string().optional().refine(val => !val || /^\d{4}-\d{2}-\d{2}$/.test(val), {
     message: "Formato de fecha debe ser YYYY-MM-DD",
   }).or(z.literal('')),
@@ -33,7 +32,6 @@ export const AppointmentFormSchema = z.object({
   patientFirstName: z.string().min(2, "Nombre del paciente es requerido (mínimo 2 caracteres)."),
   patientLastName: z.string().min(2, "Apellido del paciente es requerido (mínimo 2 caracteres)."),
   patientPhone: z.string().optional(),
-  patientEmail: z.string().email("Email inválido.").optional().or(z.literal('')),
   patientDateOfBirth: z.string().optional().refine(val => !val || /^\d{4}-\d{2}-\d{2}$/.test(val), { // YYYY-MM-DD format
     message: "Formato de fecha de nacimiento debe ser YYYY-MM-DD.",
   }).or(z.literal('')),
@@ -55,10 +53,11 @@ export const ProfessionalFormSchema = z.object({
   firstName: z.string().min(2, "Nombre es requerido."),
   lastName: z.string().min(2, "Apellido es requerido."),
   locationId: z.string().refine(val => locationIds.includes(val as any), { message: "Sede inválida."}),
-  email: z.string().email("Email inválido.").optional().or(z.literal('')),
   phone: z.string().optional(),
   specializations: z.array(z.string().refine(val => professionalSpecializationValues.includes(val as any), { message: "Especialización inválida."})).optional().default([]),
 });
+export type ProfessionalFormData = z.infer<typeof ProfessionalFormSchema>;
+
 
 export const AppointmentUpdateSchema = z.object({
   status: z.string().refine(val => appointmentStatusKeys.includes(val as any), {message: "Estado inválido"}),

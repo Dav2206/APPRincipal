@@ -18,9 +18,8 @@ export interface Professional extends BaseEntity {
   firstName: string;
   lastName: string;
   locationId: LocationId;
-  email?: string; // Added back
   phone?: string;
-  specializations?: ProfessionalSpecialization[]; // Added back
+  specializations?: ProfessionalSpecialization[]; 
   biWeeklyEarnings?: number; 
 }
 
@@ -28,7 +27,6 @@ export interface Patient extends BaseEntity {
   firstName: string;
   lastName: string;
   phone?: string;
-  email?: string;
   dateOfBirth?: string; // YYYY-MM-DD
   isDiabetic?: boolean; // New field
   // For "historial del paciente"
@@ -76,7 +74,6 @@ export type AppointmentFormData = {
   patientFirstName: string;
   patientLastName: string;
   patientPhone?: string;
-  patientEmail?: string;
   patientDateOfBirth?: string; // YYYY-MM-DD
   existingPatientId?: string | null; // To link if patient exists
   isDiabetic?: boolean; 
@@ -88,7 +85,7 @@ export type AppointmentFormData = {
   bookingObservations?: string;
 };
 
-export type ProfessionalFormData = Omit<Professional, 'biWeeklyEarnings' | 'id'> & { id?: string };
+export type ProfessionalFormData = Omit<Professional, 'biWeeklyEarnings' | 'id' | 'email'> & { id?: string };
 
 
 // Export AppointmentStatus to be available for other modules if needed directly

@@ -51,6 +51,7 @@ export default function PatientsPage() {
   const [displayedPatients, setDisplayedPatients] = useState<Patient[]>([]);
   const [currentPage, setCurrentPage] = useState(1);
   const [totalPatientCount, setTotalPatientCount] = useState(0);
+  const [lastVisiblePatientId, setLastVisiblePatientId] = useState<string | null>(null);
 
 
   const [isLoading, setIsLoading] = useState(true);
@@ -68,38 +69,36 @@ export default function PatientsPage() {
       firstName: '',
       lastName: '',
       phone: '',
-      email: '',
       dateOfBirth: '',
       isDiabetic: false,
       notes: ''
     }
   });
 
-  const fetchPatientsData = useCallback(async (pageToFetch = 1, currentSearchTerm = searchTerm, currentFilterToday = filterPatientsWithAppointmentsToday) => {
+  const fetchPatientsData = useCallback(async (pageToFetch = 1, currentSearchTerm = searchTerm, currentFilterToday = filterPatientsWithAppointmentsToday, lastVisibleId: string | null = null) => {
     setIsLoading(true);
+    if (pageToFetch === 1) { // Reset list for new search/filter or initial load
+        setDisplayedPatients([]);
+        setLastVisiblePatientId(null);
+    }
     try {
-      const { patients: fetchedPatients, totalCount } = await getPatients({
+      const { patients: fetchedPatients, totalCount, lastVisiblePatientId: newLastVisibleId } = await getPatients({
         page: pageToFetch,
         limit: PATIENTS_PER_PAGE,
         searchTerm: currentSearchTerm,
         filterToday: currentFilterToday,
         adminSelectedLocation: adminSelectedLocation,
         user: user,
+        lastVisiblePatientId: pageToFetch > 1 ? lastVisibleId : null,
       });
       
       const sortedPatients = fetchedPatients.sort((a,b) => `${a.firstName} ${a.lastName}`.localeCompare(`${b.firstName} ${b.lastName}`));
 
-      if (pageToFetch === 1) {
-        setAllPatients(sortedPatients);
-        setDisplayedPatients(sortedPatients);
-      } else {
-        // For loading more, append to allPatients and then re-derive displayedPatients if needed, or just set displayed.
-        // For simplicity with current structure, we'll just set displayed patients based on all fetched pages
-        setAllPatients(prev => [...prev, ...sortedPatients].sort((a,b) => `${a.firstName} ${a.lastName}`.localeCompare(`${b.firstName} ${b.lastName}`)));
-        setDisplayedPatients(prev => [...prev, ...sortedPatients].sort((a,b) => `${a.firstName} ${a.lastName}`.localeCompare(`${b.firstName} ${b.lastName}`)));
-      }
+      setDisplayedPatients(prev => pageToFetch === 1 ? sortedPatients : [...prev, ...sortedPatients]);
+      setAllPatients(prev => pageToFetch === 1 ? sortedPatients : [...prev, ...sortedPatients].sort((a,b) => `${a.firstName} ${a.lastName}`.localeCompare(`${b.firstName} ${b.lastName}`)));
       setTotalPatientCount(totalCount);
       setCurrentPage(pageToFetch);
+      setLastVisiblePatientId(newLastVisibleId);
 
     } catch (error) {
       console.error("Error fetching patients:", error);
@@ -111,15 +110,14 @@ export default function PatientsPage() {
 
 
   useEffect(() => {
-    fetchPatientsData(1); // Initial load
-  }, [fetchPatientsData]);
+    fetchPatientsData(1, searchTerm, filterPatientsWithAppointmentsToday, null); // Initial load
+  }, [fetchPatientsData, searchTerm, filterPatientsWithAppointmentsToday]);
 
 
   const fetchPatientsWithAppointmentsToday = useCallback(async () => {
     if (!filterPatientsWithAppointmentsToday) {
       setPatientsWithAppointmentsTodayIds(new Set());
-      // If unchecking, re-fetch all patients based on current filters
-      fetchPatientsData(1, searchTerm, false);
+      fetchPatientsData(1, searchTerm, false, null);
       return;
     }
     setIsLoadingTodayAppointments(true);
@@ -130,14 +128,13 @@ export default function PatientsPage() {
         ? (adminSelectedLocation === 'all' ? undefined : adminSelectedLocation) 
         : user?.locationId;
 
-      const { appointments: dailyAppointments } = await getAppointments({ // Destructure appointments from result
+      const { appointments: dailyAppointments } = await getAppointments({ 
         date: today,
         locationId: effectiveLocationId 
       });
       const patientIds = new Set(dailyAppointments.map(app => app.patientId));
       setPatientsWithAppointmentsTodayIds(patientIds);
-      // After setting IDs, re-fetch patients with this filter active
-      fetchPatientsData(1, searchTerm, true); 
+      fetchPatientsData(1, searchTerm, true, null); 
     } catch (error) {
       console.error("Error fetching patients with appointments today:", error);
       toast({ title: "Error", description: "No se pudo cargar pacientes con citas hoy.", variant: "destructive" });
@@ -146,22 +143,20 @@ export default function PatientsPage() {
     }
   }, [filterPatientsWithAppointmentsToday, user, adminSelectedLocation, toast, fetchPatientsData, searchTerm]);
 
-  // This effect runs when filterPatientsWithAppointmentsToday changes
+ 
   useEffect(() => {
-    // Only call if filter is being turned on/off, initial load is handled by fetchPatientsData
      if (filterPatientsWithAppointmentsToday) {
         fetchPatientsWithAppointmentsToday();
      } else {
-        // If filter is turned off, reset and fetch all matching searchTerm
         setPatientsWithAppointmentsTodayIds(new Set());
-        fetchPatientsData(1, searchTerm, false);
+        fetchPatientsData(1, searchTerm, false, null);
      }
-  }, [filterPatientsWithAppointmentsToday]); // Removed fetchPatientsWithAppointmentsToday from deps to avoid loop, managed inside
+  }, [filterPatientsWithAppointmentsToday]); 
 
 
   const handleAddPatient = () => {
     setEditingPatient(null);
-    form.reset({ firstName: '', lastName: '', phone: '', email: '', dateOfBirth: '', isDiabetic: false, notes: '' });
+    form.reset({ firstName: '', lastName: '', phone: '', dateOfBirth: '', isDiabetic: false, notes: '' });
     setIsFormOpen(true);
   };
 
@@ -200,7 +195,7 @@ export default function PatientsPage() {
         toast({ title: "Paciente Agregado", description: `${data.firstName} ${data.lastName} agregado.` });
       }
       setIsFormOpen(false);
-      fetchPatientsData(1, searchTerm, filterPatientsWithAppointmentsToday); // Refresh list
+      fetchPatientsData(1, searchTerm, filterPatientsWithAppointmentsToday, null); // Refresh list
 
     } catch (error) {
       toast({ title: "Error", description: "No se pudo guardar el paciente.", variant: "destructive" });
@@ -211,16 +206,16 @@ export default function PatientsPage() {
   const handleSearchTermChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const newSearchTerm = e.target.value;
     setSearchTerm(newSearchTerm);
-    fetchPatientsData(1, newSearchTerm, filterPatientsWithAppointmentsToday);
+    // fetchPatientsData will be called by its own useEffect due to searchTerm change
   };
 
   const handleFilterTodayChange = (checked: boolean) => {
     setFilterPatientsWithAppointmentsToday(checked);
-    // The useEffect for filterPatientsWithAppointmentsToday will handle re-fetching
+    // fetchPatientsData will be called by its own useEffect due to filterPatientsWithAppointmentsToday change
   };
   
   const handleLoadMore = () => {
-    fetchPatientsData(currentPage + 1, searchTerm, filterPatientsWithAppointmentsToday);
+    fetchPatientsData(currentPage + 1, searchTerm, filterPatientsWithAppointmentsToday, lastVisiblePatientId);
   };
 
   const calculateAge = (dateOfBirth?: string): string => {
@@ -252,7 +247,7 @@ export default function PatientsPage() {
            (searchTerm !== '' ? "No hay pacientes que coincidan con la búsqueda." : "No hay pacientes registrados.")}
         </p>
         { (searchTerm || filterPatientsWithAppointmentsToday) &&
-          <Button onClick={() => { setSearchTerm(''); setFilterPatientsWithAppointmentsToday(false); fetchPatientsData(1, '', false);}} variant="outline">
+          <Button onClick={() => { setSearchTerm(''); setFilterPatientsWithAppointmentsToday(false);}} variant="outline">
             Limpiar Filtros
           </Button>
         }
@@ -279,7 +274,7 @@ export default function PatientsPage() {
               <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
               <Input
                 type="search"
-                placeholder="Buscar pacientes por nombre, teléfono o email..."
+                placeholder="Buscar pacientes por nombre o teléfono..."
                 value={searchTerm}
                 onChange={handleSearchTermChange}
                 className="pl-8 w-full"
@@ -386,13 +381,6 @@ export default function PatientsPage() {
                       ) : (
                         <p className="pt-2 text-sm text-muted-foreground">Restringido</p>
                       )}
-                      <FormMessage />
-                  </FormItem>
-               )}/>
-               <FormField control={form.control} name="email" render={({ field }) => (
-                  <FormItem>
-                      <FormLabel>Email</FormLabel>
-                      <FormControl><Input type="email" placeholder="Ej: ana.garcia@mail.com" {...field} /></FormControl>
                       <FormMessage />
                   </FormItem>
                )}/>
