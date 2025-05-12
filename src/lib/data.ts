@@ -2,7 +2,7 @@
 import type { User, Professional, Patient, Service, Appointment, AppointmentFormData, ProfessionalFormData, AppointmentStatus, ServiceFormData } from '@/types';
 import { LOCATIONS, USER_ROLES, SERVICES as SERVICES_CONSTANTS, APPOINTMENT_STATUS, LocationId, ServiceId as ConstantServiceId, APPOINTMENT_STATUS_DISPLAY, PAYMENT_METHODS } from './constants';
 import { formatISO, parseISO, addDays, subDays, setHours, setMinutes, startOfDay, endOfDay, addMinutes, isSameDay as dateFnsIsSameDay, startOfMonth, endOfMonth, differenceInDays } from 'date-fns';
-import { firestore } from './firebase-config'; // Firebase setup - Corrected import path
+import { firestore } from '@/lib/firebase-config'; // Firebase setup - Corrected import path
 import { collection, addDoc, getDocs, doc, getDoc, updateDoc, query, where, deleteDoc, writeBatch, serverTimestamp, Timestamp, runTransaction, setDoc, QueryConstraint, orderBy, limit, startAfter,getCountFromServer, CollectionReference, DocumentData, documentId } from 'firebase/firestore';
 
 // --- Helper to convert Firestore Timestamps to ISO strings and vice-versa ---
@@ -350,6 +350,7 @@ export const addProfessional = async (data: Omit<ProfessionalFormData, 'id'>): P
     lastName: data.lastName,
     locationId: data.locationId,
     phone: data.phone,
+    specializations: data.specializations,
   };
 
   if (useMockDatabase) {
@@ -364,8 +365,9 @@ export const addProfessional = async (data: Omit<ProfessionalFormData, 'id'>): P
 
   try {
     if (!firestore) throw new Error("Firestore is not initialized.");
-    const docRef = await addDoc(collection(firestore, 'professionals'), newProfessionalData);
-    return { id: docRef.id, ...newProfessionalData, biWeeklyEarnings: 0 };
+    const dataToSave = { ...newProfessionalData, biWeeklyEarnings: 0 };
+    const docRef = await addDoc(collection(firestore, 'professionals'), dataToSave);
+    return { id: docRef.id, ...dataToSave };
   } catch (error) {
     console.error("Error adding professional:", error);
     throw error;
@@ -384,7 +386,9 @@ export const updateProfessional = async (id: string, data: Partial<ProfessionalF
   try {
     if (!firestore) throw new Error("Firestore is not initialized.");
     const docRef = doc(firestore, 'professionals', id);
-    await updateDoc(docRef, data);
+    // Ensure data does not contain 'id' which should not be updated.
+    const { id: dataId, ...updateData } = data;
+    await updateDoc(docRef, updateData);
     const updatedDoc = await getDoc(docRef);
     return updatedDoc.exists() ? { id: updatedDoc.id, ...updatedDoc.data() } as Professional : undefined;
   } catch (error) {
@@ -575,7 +579,8 @@ export const updatePatient = async (id: string, data: Partial<Patient>): Promise
   try {
     if (!firestore) throw new Error("Firestore is not initialized.");
     const docRef = doc(firestore, 'patients', id);
-    await updateDoc(docRef, data);
+    const { id: dataId, ...updateData } = data; // Exclude 'id' from data being sent to Firestore
+    await updateDoc(docRef, updateData);
     const updatedDoc = await getDoc(docRef);
     return updatedDoc.exists() ? { id: updatedDoc.id, ...updatedDoc.data() } as Patient : undefined;
   } catch (error) {
@@ -653,7 +658,8 @@ export const updateService = async (id: string, data: Partial<ServiceFormData>):
   try {
     if (!firestore) throw new Error("Firestore is not initialized.");
     const docRef = doc(firestore, 'services', id);
-    await updateDoc(docRef, data);
+    const { id: dataId, ...updateData } = data; // Exclude 'id'
+    await updateDoc(docRef, updateData);
     const updatedDoc = await getDoc(docRef);
     return updatedDoc.exists() ? { id: updatedDoc.id, ...updatedDoc.data() } as Service : undefined;
   } catch (error) {
@@ -1173,7 +1179,6 @@ export const seedInitialData = async () => {
                         // copy operations from old batch to new batch or re-evaluate how batching is done for >500
                         // For simplicity, the current seeder doesn't handle >500 ops correctly after first commit.
                         // This part needs a more robust implementation if seeding >500 items.
-                        // This example will just log a warning and stop adding to the *original* batch.
                         console.error("Seeding more than 500 items requires handling multiple batches. Current seeder version is simplified.");
                         return; 
                     }
