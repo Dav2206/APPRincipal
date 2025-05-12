@@ -3,7 +3,7 @@
 
 import type { Appointment, Service, AppointmentStatus, Professional } from '@/types';
 import { APPOINTMENT_STATUS, PAYMENT_METHODS, USER_ROLES, APPOINTMENT_STATUS_DISPLAY, LOCATIONS, TIME_SLOTS } from '@/lib/constants';
-import { format, parseISO, setHours, setMinutes } from 'date-fns';
+import { format, parseISO, setHours, setMinutes, formatISO } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { CameraIcon, Loader2, PlusCircle, Trash2, ShoppingBag, ConciergeBell, Clock, CalendarIcon as CalendarIconLucide } from 'lucide-react';
 import { useAuth } from '@/contexts/auth-provider';
@@ -58,7 +58,7 @@ export function AppointmentEditDialog({ appointment, isOpen, onOpenChange, onApp
   const { user } = useAuth();
   const { toast } = useToast();
   const [professionals, setProfessionals] = useState<Professional[]>([]);
-  const [allServices, setAllServices] = useState<Service[] | null>(null); // Initialize as null to track loading state
+  const [allServices, setAllServices] = useState<Service[] | null>(null);
   const [isUploadingImage, setIsUploadingImage] = useState(false);
   const [isSubmittingForm, setIsSubmittingForm] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -77,7 +77,6 @@ export function AppointmentEditDialog({ appointment, isOpen, onOpenChange, onApp
     name: "attachedPhotos",
   });
 
-  // Effect to load services and professionals when dialog opens
   useEffect(() => {
     if (isOpen) {
       async function loadData() {
@@ -87,16 +86,15 @@ export function AppointmentEditDialog({ appointment, isOpen, onOpenChange, onApp
           getProfessionals(locationForProfs),
           getServices()
         ]);
-        setProfessionals(profsData);
-        setAllServices(servicesDataFromApi || []);
+        setProfessionals(profsData.professionals || []);
+        setAllServices(servicesDataFromApi.services || []);
       }
       loadData();
     }
   }, [isOpen, appointment.locationId, user]);
 
-  // Effect to reset form when dialog opens or critical data (appointment, services) changes
    useEffect(() => {
-    if (isOpen && appointment && allServices) { // Ensure allServices is loaded before reset
+    if (isOpen && appointment && allServices) { 
       const initialDurationMinutes = appointment.durationMinutes || appointment.service?.defaultDuration || 0;
       const appointmentDateTime = parseISO(appointment.appointmentDateTime);
       form.reset({
@@ -148,19 +146,17 @@ export function AppointmentEditDialog({ appointment, isOpen, onOpenChange, onApp
     }
     setIsSubmittingForm(true);
     try {
-      let finalAppointmentDateTime = parseISO(appointment.appointmentDateTime);
-      if (data.appointmentDate && data.appointmentTime) {
-        const [hours, minutes] = data.appointmentTime.split(':').map(Number);
-        finalAppointmentDateTime = setMinutes(setHours(data.appointmentDate, hours), minutes);
-      } else if (data.appointmentDate) {
-        const originalTime = parseISO(appointment.appointmentDateTime);
-        finalAppointmentDateTime = setMinutes(setHours(data.appointmentDate, originalTime.getHours()), originalTime.getMinutes());
-      }
+      // Use the date part from form.appointmentDate and time part from form.appointmentTime
+      // These should always be present in `data` if the form was correctly initialized.
+      const datePart = data.appointmentDate || parseISO(appointment.appointmentDateTime); // Fallback to original if somehow not in form
+      const timePart = data.appointmentTime || format(parseISO(appointment.appointmentDateTime), 'HH:mm'); // Fallback
 
+      const [hours, minutes] = timePart.split(':').map(Number);
+      const finalDateObject = setMinutes(setHours(datePart, hours), minutes);
 
       const updatedData: Partial<Appointment> = {
         ...data,
-        appointmentDateTime: format(finalAppointmentDateTime, "yyyy-MM-dd'T'HH:mm:ss'Z'"),
+        appointmentDateTime: formatISO(finalDateObject), // Use formatISO for consistent ISO string
         serviceId: data.serviceId === DEFAULT_SERVICE_ID_PLACEHOLDER && allServices.length > 0 ? allServices[0].id : data.serviceId,
         professionalId: data.professionalId === NO_SELECTION_PLACEHOLDER ? null : data.professionalId,
         durationMinutes: data.durationMinutes,
@@ -466,7 +462,7 @@ export function AppointmentEditDialog({ appointment, isOpen, onOpenChange, onApp
             <div className="space-y-3 pt-3 mt-3 border-t">
               <h4 className="text-md font-semibold flex items-center gap-2"><CameraIcon/> Fotos Adjuntas</h4>
               <div className="grid grid-cols-3 sm:grid-cols-4 gap-2">
-                {attachedPhotoFields.map((fieldItem, index) => ( // Renamed item to fieldItem to avoid conflict
+                {attachedPhotoFields.map((fieldItem, index) => ( 
                   fieldItem.value && typeof fieldItem.value === 'string' && fieldItem.value.startsWith("data:image/") ? (
                     <div key={fieldItem.id} className="relative group">
                       <Image src={fieldItem.value} alt={`Foto adjunta ${index + 1}`} width={80} height={80} className="rounded object-cover aspect-square border" data-ai-hint="medical image" />
