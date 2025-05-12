@@ -132,9 +132,10 @@ export default function RegistryPage() {
           getAppointments({ date: selectedDate, locationId: loc.id, statuses: [APPOINTMENT_STATUS.COMPLETED] })
         );
         const results = await Promise.all(promises);
-        appointmentsForDate = results.flat();
+        appointmentsForDate = results.map(r => r.appointments).flat();
       } else if (effectiveLocationId) {
-        appointmentsForDate = await getAppointments({ date: selectedDate, locationId: effectiveLocationId, statuses: [APPOINTMENT_STATUS.COMPLETED] });
+        const result = await getAppointments({ date: selectedDate, locationId: effectiveLocationId, statuses: [APPOINTMENT_STATUS.COMPLETED] });
+        appointmentsForDate = result.appointments;
       }
 
       const dailyReportMap = new Map<string, Omit<DailyActivityReportItem, 'professionalName' | 'locationName' | 'type' | 'servicesBreakdown' | 'totalServicesCount' > & { locationId: LocationId, services: Map<string, { serviceName: string, count: number }> }>();
@@ -216,13 +217,14 @@ export default function RegistryPage() {
           })
         );
         const results = await Promise.all(promises);
-        appointmentsForPeriod = results.flat();
+        appointmentsForPeriod = results.map(r => r.appointments).flat();
       } else if (effectiveLocationId) {
-        appointmentsForPeriod = await getAppointments({ 
+        const result = await getAppointments({ 
             locationId: effectiveLocationId, 
             statuses: [APPOINTMENT_STATUS.COMPLETED],
             dateRange: {start: startDate, end: endDate} 
         });
+        appointmentsForPeriod = result.appointments;
       }
 
       const biWeeklyReportMap = new Map<string, { professionalId: string, locationId: LocationId, biWeeklyEarnings: number }>();
@@ -602,7 +604,7 @@ export default function RegistryPage() {
                 {reportData.length === 0 ? <NoDataState /> :
                   (reportType === 'biWeekly' && isAdminOrContador && adminSelectedLocation === 'all') ? (
                     (reportData as GroupedBiWeeklyReportItem[]).map(group => (
-                      <React.Fragment key={group.locationId}>
+                      <React.Fragment key={`${group.locationId}-${group.type}`}>
                         {(group.professionals || []).map(item => (
                           <TableRow key={item.professionalId}>
                             <TableCell className="font-medium">{item.professionalName}</TableCell>
@@ -661,6 +663,7 @@ export default function RegistryPage() {
     </div>
   );
 }
+
 
 
 
