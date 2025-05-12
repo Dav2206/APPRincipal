@@ -56,13 +56,13 @@ export default function DashboardPage() {
           if (selectedLocationId === 'all' && (isAdminOrContador)) {
             const allLocationsAppointmentsPromises = LOCATIONS.map(loc => getAppointments({ date: today, locationId: loc.id }));
             const allLocationsAppointmentsResults = await Promise.all(allLocationsAppointmentsPromises);
-            todayAppointmentsCount = allLocationsAppointmentsResults.reduce((sum, result) => sum + result.length, 0);
-          } else if (selectedLocationId && selectedLocationId !== 'all' && (isAdminOrContador)) {
+            todayAppointmentsCount = allLocationsAppointmentsResults.reduce((sum, result) => sum + (result.appointments ? result.appointments.length : 0), 0);
+          } else if (selectedLocationId && selectedLocationId !== 'all' && (isAdminOrContador || user.locationId === selectedLocationId)) {
             const locationAppointments = await getAppointments({ date: today, locationId: selectedLocationId as LocationId });
-            todayAppointmentsCount = locationAppointments.length;
+            todayAppointmentsCount = locationAppointments.appointments ? locationAppointments.appointments.length : 0;
           } else if (user.role === USER_ROLES.LOCATION_STAFF && user.locationId) {
             const locationAppointments = await getAppointments({ date: today, locationId: user.locationId });
-            todayAppointmentsCount = locationAppointments.length;
+            todayAppointmentsCount = locationAppointments.appointments ? locationAppointments.appointments.length : 0;
           }
         }
 
@@ -72,13 +72,13 @@ export default function DashboardPage() {
           if (selectedLocationId === 'all' && (isAdminOrContador)) {
              const allLocationsPendingPromises = LOCATIONS.map(loc => getAppointments({ statuses: [APPOINTMENT_STATUS.BOOKED], locationId: loc.id }));
              const allLocationsPendingResults = await Promise.all(allLocationsPendingPromises);
-             pendingConfirmationsCount = allLocationsPendingResults.reduce((sum, result) => sum + result.length, 0);
-          } else if (selectedLocationId && selectedLocationId !== 'all' && (isAdminOrContador)) {
+             pendingConfirmationsCount = allLocationsPendingResults.reduce((sum, result) => sum + (result.appointments ? result.appointments.length : 0), 0);
+          } else if (selectedLocationId && selectedLocationId !== 'all' && (isAdminOrContador || user.locationId === selectedLocationId)) {
             const bookedAppointments = await getAppointments({ statuses: [APPOINTMENT_STATUS.BOOKED], locationId: selectedLocationId as LocationId });
-            pendingConfirmationsCount = bookedAppointments.length;
+            pendingConfirmationsCount = bookedAppointments.appointments ? bookedAppointments.appointments.length : 0;
           } else if (user.role === USER_ROLES.LOCATION_STAFF && user.locationId) {
             const bookedAppointments = await getAppointments({ statuses: [APPOINTMENT_STATUS.BOOKED], locationId: user.locationId });
-            pendingConfirmationsCount = bookedAppointments.length;
+            pendingConfirmationsCount = bookedAppointments.appointments ? bookedAppointments.appointments.length : 0;
           }
         }
         
@@ -92,7 +92,7 @@ export default function DashboardPage() {
             }));
             const allLocationsCompletedResults = await Promise.all(allLocationsCompletedPromises);
             totalRevenueMonthValue = allLocationsCompletedResults.reduce((totalSum, locationResults) => 
-              totalSum + locationResults.reduce((locationSum, appt) => locationSum + (appt.amountPaid || 0), 0), 
+              totalSum + (locationResults.appointments ? locationResults.appointments.reduce((locationSum, appt) => locationSum + (appt.amountPaid || 0), 0) : 0), 
             0);
           } else if (selectedLocationId && selectedLocationId !== 'all') {
             const completedAppointmentsMonth = await getAppointments({
@@ -100,7 +100,7 @@ export default function DashboardPage() {
               locationId: selectedLocationId as LocationId,
               dateRange: { start: currentMonthStart, end: currentMonthEnd },
             });
-            totalRevenueMonthValue = completedAppointmentsMonth.reduce((sum, appt) => sum + (appt.amountPaid || 0), 0);
+            totalRevenueMonthValue = completedAppointmentsMonth.appointments ? completedAppointmentsMonth.appointments.reduce((sum, appt) => sum + (appt.amountPaid || 0), 0) : 0;
           }
         }
 
@@ -111,7 +111,7 @@ export default function DashboardPage() {
                 const allProfessionalsPromises = LOCATIONS.map(loc => getProfessionals(loc.id));
                 const allProfessionalsResults = await Promise.all(allProfessionalsPromises);
                 activeProfessionalsCount = allProfessionalsResults.reduce((sum, result) => sum + result.length, 0);
-            } else if (selectedLocationId && selectedLocationId !== 'all' && (isAdminOrContador)) {
+            } else if (selectedLocationId && selectedLocationId !== 'all' && (isAdminOrContador || user.locationId === selectedLocationId)) {
                 const locationProfessionals = await getProfessionals(selectedLocationId as LocationId);
                 activeProfessionalsCount = locationProfessionals.length;
             } else if (user.role === USER_ROLES.LOCATION_STAFF && user.locationId) {
@@ -249,3 +249,4 @@ export default function DashboardPage() {
     </div>
   );
 }
+
