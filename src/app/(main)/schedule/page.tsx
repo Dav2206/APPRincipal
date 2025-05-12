@@ -1,3 +1,4 @@
+
 "use client";
 
 import type { Appointment, Professional } from '@/types';
@@ -37,7 +38,12 @@ export default function SchedulePage() {
     : user?.locationId;
 
   const fetchData = useCallback(async () => {
-    if (!user) return;
+    if (!user) {
+      setIsLoading(false);
+      setAppointments([]);
+      setProfessionals([]); // Ensure professionals are also cleared
+      return;
+    }
     setIsLoading(true);
     
     try {
@@ -48,12 +54,12 @@ export default function SchedulePage() {
         }),
         getProfessionals(effectiveLocationId)
       ]);
-      setAppointments(fetchedAppointmentsData.appointments || []);
-      setProfessionals(fetchedProfessionalsResult || []);
+      setAppointments(fetchedAppointmentsData.appointments || []); // Ensure it's an array
+      setProfessionals(fetchedProfessionalsResult || []); // Ensure it's an array
     } catch (error) {
       console.error("Error fetching schedule data:", error);
       setAppointments([]);
-      setProfessionals([]);
+      setProfessionals([]); // Ensure professionals are also cleared on error
     } finally {
       setIsLoading(false);
     }
@@ -98,10 +104,8 @@ export default function SchedulePage() {
   
   const handleNewAppointmentCreated = useCallback(async () => {
     setIsNewAppointmentFormOpen(false); // Close the form
-    // After a new appointment is created, fetchData will be called,
-    // which re-fetches appointments for the currentDate and updates the timeline.
-    await fetchData();
-  }, [fetchData, setIsNewAppointmentFormOpen]);
+    await fetchData(); // Re-fetch data after new appointment is created
+  }, [fetchData]);
   
   const NoDataCard = ({ title, message }: { title: string; message: string }) => (
     <Card className="col-span-full mt-8 border-dashed border-2">
