@@ -1,6 +1,6 @@
 
 import type { User, Professional, Patient, Service, Appointment, AppointmentFormData, ProfessionalFormData, AppointmentStatus, ServiceFormData } from '@/types';
-import { LOCATIONS, USER_ROLES, SERVICES as SERVICES_CONSTANTS, APPOINTMENT_STATUS, LocationId, ServiceId as ConstantServiceId, APPOINTMENT_STATUS_DISPLAY, PAYMENT_METHODS, PROFESSIONAL_SPECIALIZATIONS } from './constants';
+import { LOCATIONS, USER_ROLES, SERVICES as SERVICES_CONSTANTS, APPOINTMENT_STATUS, LocationId, ServiceId as ConstantServiceId, APPOINTMENT_STATUS_DISPLAY, PAYMENT_METHODS } from './constants';
 import { formatISO, parseISO, addDays, subDays, setHours, setMinutes, startOfDay, endOfDay, addMinutes, isSameDay as dateFnsIsSameDay, startOfMonth, endOfMonth } from 'date-fns';
 import { firestore } from './firebase-config'; // Firebase setup - Corrected import path
 import { collection, addDoc, getDocs, doc, getDoc, updateDoc, query, where, deleteDoc, writeBatch, serverTimestamp, Timestamp, runTransaction, setDoc, QueryConstraint, orderBy, limit, startAfter,getCountFromServer, CollectionReference, DocumentData, documentId } from 'firebase/firestore';
@@ -36,7 +36,6 @@ let mockProfessionals: Professional[] = LOCATIONS.flatMap((location, locIndex) =
     lastName: location.name.split(' ')[0],
     locationId: location.id,
     phone: `9876543${locIndex}${i + 1}`,
-    specializations: i % 2 === 0 ? [PROFESSIONAL_SPECIALIZATIONS[0], PROFESSIONAL_SPECIALIZATIONS[2]] : [PROFESSIONAL_SPECIALIZATIONS[1]],
     biWeeklyEarnings: Math.floor(Math.random() * 1500) + 300,
   }))
 );
@@ -57,14 +56,12 @@ let mockServices: Service[] = SERVICES_CONSTANTS.map(s_const => ({
   price: Math.floor(Math.random() * 50) + 50,
 }));
 
-let initialMockAppointments: Appointment[] = [];
-
 const today = new Date();
 const yesterday = subDays(today, 1);
 const twoDaysAgo = subDays(today, 2);
 const tomorrow = addDays(today,1);
 
-initialMockAppointments = [
+const initialMockAppointments: Appointment[] = [
   {
     id: 'appt001',
     patientId: 'pat001',
@@ -225,7 +222,6 @@ initialMockAppointments = [
 
 let mockAppointments: Appointment[] = [...initialMockAppointments];
 
-
 const useMockDatabase = true; // Set to false to use Firestore
 
 const generateId = () => {
@@ -301,7 +297,6 @@ export const addProfessional = async (data: Omit<ProfessionalFormData, 'id'>): P
     lastName: data.lastName,
     locationId: data.locationId,
     phone: data.phone,
-    specializations: data.specializations,
     biWeeklyEarnings: 0, // Initial value
   };
 
@@ -657,6 +652,7 @@ export const getAppointments = async (filters: {
 
     if (!firestore || useMockDatabase) {
         let filteredMockAppointments = [...mockAppointments];
+
         if (restFilters.locationId) {
             const locationsToFilter = Array.isArray(restFilters.locationId) ? restFilters.locationId : [restFilters.locationId];
             if (locationsToFilter.length > 0) {
@@ -666,16 +662,40 @@ export const getAppointments = async (filters: {
         if (restFilters.patientId) {
             filteredMockAppointments = filteredMockAppointments.filter(appt => appt.patientId === restFilters.patientId);
         }
-        // ... other mock filters
+        if (restFilters.professionalId) {
+            filteredMockAppointments = filteredMockAppointments.filter(appt => appt.professionalId === restFilters.professionalId);
+        }
+        if (restFilters.date) {
+            filteredMockAppointments = filteredMockAppointments.filter(appt => 
+                dateFnsIsSameDay(parseISO(appt.appointmentDateTime), restFilters.date!)
+            );
+        }
+        if (restFilters.dateRange) {
+            const start = startOfDay(restFilters.dateRange.start);
+            const end = endOfDay(restFilters.dateRange.end);
+            filteredMockAppointments = filteredMockAppointments.filter(appt => {
+                const apptDate = parseISO(appt.appointmentDateTime);
+                return apptDate >= start && apptDate <= end;
+            });
+        }
+        if (restFilters.statuses) {
+            const statusesToFilter = Array.isArray(restFilters.statuses) ? restFilters.statuses : [restFilters.statuses];
+            if (statusesToFilter.length > 0) {
+                filteredMockAppointments = filteredMockAppointments.filter(appt => statusesToFilter.includes(appt.status));
+            }
+        }
+        
         const isFetchingPastStatuses = restFilters.statuses && (
             (Array.isArray(restFilters.statuses) && restFilters.statuses.some(s => [APPOINTMENT_STATUS.COMPLETED, APPOINTMENT_STATUS.CANCELLED_CLIENT, APPOINTMENT_STATUS.CANCELLED_STAFF, APPOINTMENT_STATUS.NO_SHOW].includes(s))) ||
             (typeof restFilters.statuses === 'string' && [APPOINTMENT_STATUS.COMPLETED, APPOINTMENT_STATUS.CANCELLED_CLIENT, APPOINTMENT_STATUS.CANCELLED_STAFF, APPOINTMENT_STATUS.NO_SHOW].includes(restFilters.statuses as string))
         );
+
         filteredMockAppointments.sort((a, b) => {
             const dateA = parseISO(a.appointmentDateTime).getTime();
             const dateB = parseISO(b.appointmentDateTime).getTime();
             return isFetchingPastStatuses ? dateB - dateA : dateA - dateB;
         });
+
         const populatedAppointments = filteredMockAppointments.map(appt => ({
             ...appt,
             patient: mockPatients.find(p => p.id === appt.patientId),
