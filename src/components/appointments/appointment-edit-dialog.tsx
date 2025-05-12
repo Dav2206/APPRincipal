@@ -1,3 +1,4 @@
+
 "use client";
 
 import type { Appointment, Service, AppointmentStatus, Professional } from '@/types';
@@ -115,16 +116,17 @@ export function AppointmentEditDialog({ appointment, isOpen, onOpenChange, onApp
              setProfessionals(allProfsResults.flat());
         }
         const servicesData = await getServices();
-        setAllServices(servicesData.services);
+        setAllServices(servicesData?.services || []); // Ensure allServices is always an array
 
         // Reset addedServices and main serviceId with proper default serviceId if needed after services are loaded
         if (appointment) {
-          if (form.getValues('serviceId') === DEFAULT_SERVICE_ID_PLACEHOLDER && servicesData.services.length > 0) {
-            form.setValue('serviceId', appointment.serviceId || servicesData.services[0].id);
+          const currentServices = servicesData?.services || [];
+          if (form.getValues('serviceId') === DEFAULT_SERVICE_ID_PLACEHOLDER && currentServices.length > 0) {
+            form.setValue('serviceId', appointment.serviceId || currentServices[0].id);
           }
           if (appointment.addedServices) {
             form.setValue('addedServices', appointment.addedServices.map(as => ({
-              serviceId: as.serviceId || (servicesData.services.length > 0 ? servicesData.services[0].id : DEFAULT_SERVICE_ID_PLACEHOLDER),
+              serviceId: as.serviceId || (currentServices.length > 0 ? currentServices[0].id : DEFAULT_SERVICE_ID_PLACEHOLDER),
               professionalId: as.professionalId || NO_SELECTION_PLACEHOLDER,
               price: as.price ?? undefined,
             })));
@@ -579,7 +581,7 @@ export function AppointmentEditDialog({ appointment, isOpen, onOpenChange, onApp
             <DialogClose asChild>
               <Button type="button" variant="outline">Cancelar</Button>
             </DialogClose>
-            <Button type="submit" disabled={isSubmittingForm || allServices.length === 0}>
+            <Button type="submit" disabled={isSubmittingForm || (allServices && allServices.length === 0)}>
               {isSubmittingForm && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
               Guardar Cambios
             </Button>
@@ -590,3 +592,4 @@ export function AppointmentEditDialog({ appointment, isOpen, onOpenChange, onApp
     </Dialog>
   );
 }
+
