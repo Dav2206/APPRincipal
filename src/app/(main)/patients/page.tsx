@@ -4,7 +4,7 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import type { Patient, Appointment } from '@/types';
 import { useAuth } from '@/contexts/auth-provider';
-import { getPatients, addPatient, findPatient, getAppointments, updateProfessional, getPatientById } from '@/lib/data'; 
+import { getPatients, addPatient, findPatient, getAppointments, updatePatient, getPatientById } from '@/lib/data';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -40,7 +40,7 @@ import { formatISO, startOfDay, parseISO, differenceInYears } from 'date-fns';
 import { useAppState } from '@/contexts/app-state-provider';
 import { USER_ROLES } from '@/lib/constants';
 
-const PATIENTS_PER_PAGE = 20;
+const PATIENTS_PER_PAGE = 8; // Changed from 20 to 8 for optimization
 
 export default function PatientsPage() {
   const { user } = useAuth();
@@ -50,6 +50,8 @@ export default function PatientsPage() {
   const [allPatients, setAllPatients] = useState<Patient[]>([]);
   const [displayedPatients, setDisplayedPatients] = useState<Patient[]>([]);
   const [currentPage, setCurrentPage] = useState(1);
+  const [totalPatientCount, setTotalPatientCount] = useState(0);
+
 
   const [isLoading, setIsLoading] = useState(true);
   const [isFormOpen, setIsFormOpen] = useState(false);
@@ -73,22 +75,51 @@ export default function PatientsPage() {
     }
   });
 
-  const fetchAllPatients = useCallback(async () => {
+  const fetchPatientsData = useCallback(async (pageToFetch = 1, currentSearchTerm = searchTerm, currentFilterToday = filterPatientsWithAppointmentsToday) => {
     setIsLoading(true);
-    setCurrentPage(1);
-    setDisplayedPatients([]);
-    const data = await getPatients();
-    setAllPatients(data.sort((a,b) => `${a.firstName} ${a.lastName}`.localeCompare(`${b.firstName} ${b.lastName}`)));
-    setIsLoading(false);
-  }, []);
+    try {
+      const { patients: fetchedPatients, totalCount } = await getPatients({
+        page: pageToFetch,
+        limit: PATIENTS_PER_PAGE,
+        searchTerm: currentSearchTerm,
+        filterToday: currentFilterToday,
+        adminSelectedLocation: adminSelectedLocation,
+        user: user,
+      });
+      
+      const sortedPatients = fetchedPatients.sort((a,b) => `${a.firstName} ${a.lastName}`.localeCompare(`${b.firstName} ${b.lastName}`));
+
+      if (pageToFetch === 1) {
+        setAllPatients(sortedPatients);
+        setDisplayedPatients(sortedPatients);
+      } else {
+        // For loading more, append to allPatients and then re-derive displayedPatients if needed, or just set displayed.
+        // For simplicity with current structure, we'll just set displayed patients based on all fetched pages
+        setAllPatients(prev => [...prev, ...sortedPatients].sort((a,b) => `${a.firstName} ${a.lastName}`.localeCompare(`${b.firstName} ${b.lastName}`)));
+        setDisplayedPatients(prev => [...prev, ...sortedPatients].sort((a,b) => `${a.firstName} ${a.lastName}`.localeCompare(`${b.firstName} ${b.lastName}`)));
+      }
+      setTotalPatientCount(totalCount);
+      setCurrentPage(pageToFetch);
+
+    } catch (error) {
+      console.error("Error fetching patients:", error);
+      toast({ title: "Error", description: "No se pudo cargar la lista de pacientes.", variant: "destructive" });
+    } finally {
+      setIsLoading(false);
+    }
+  }, [searchTerm, filterPatientsWithAppointmentsToday, adminSelectedLocation, user, toast]);
+
 
   useEffect(() => {
-    fetchAllPatients();
-  }, [fetchAllPatients]);
+    fetchPatientsData(1); // Initial load
+  }, [fetchPatientsData]);
+
 
   const fetchPatientsWithAppointmentsToday = useCallback(async () => {
     if (!filterPatientsWithAppointmentsToday) {
       setPatientsWithAppointmentsTodayIds(new Set());
+      // If unchecking, re-fetch all patients based on current filters
+      fetchPatientsData(1, searchTerm, false);
       return;
     }
     setIsLoadingTodayAppointments(true);
@@ -99,48 +130,33 @@ export default function PatientsPage() {
         ? (adminSelectedLocation === 'all' ? undefined : adminSelectedLocation) 
         : user?.locationId;
 
-      const dailyAppointments = await getAppointments({ 
+      const { appointments: dailyAppointments } = await getAppointments({ // Destructure appointments from result
         date: today,
         locationId: effectiveLocationId 
       });
       const patientIds = new Set(dailyAppointments.map(app => app.patientId));
       setPatientsWithAppointmentsTodayIds(patientIds);
+      // After setting IDs, re-fetch patients with this filter active
+      fetchPatientsData(1, searchTerm, true); 
     } catch (error) {
       console.error("Error fetching patients with appointments today:", error);
       toast({ title: "Error", description: "No se pudo cargar pacientes con citas hoy.", variant: "destructive" });
     } finally {
       setIsLoadingTodayAppointments(false);
     }
-  }, [filterPatientsWithAppointmentsToday, user, adminSelectedLocation, toast]);
+  }, [filterPatientsWithAppointmentsToday, user, adminSelectedLocation, toast, fetchPatientsData, searchTerm]);
 
+  // This effect runs when filterPatientsWithAppointmentsToday changes
   useEffect(() => {
-    fetchPatientsWithAppointmentsToday();
-  }, [fetchPatientsWithAppointmentsToday]);
-
-
-  const { totalFilteredPatientList, totalFilteredCount } = useMemo(() => {
-    let filtered = [...allPatients];
-    
-    if (searchTerm) {
-      filtered = filtered.filter(p =>
-        `${p.firstName} ${p.lastName}`.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        (p.phone && p.phone.includes(searchTerm)) ||
-        (p.email && p.email.toLowerCase().includes(searchTerm.toLowerCase()))
-      );
-    }
-
-    if (filterPatientsWithAppointmentsToday) {
-      filtered = filtered.filter(p => patientsWithAppointmentsTodayIds.has(p.id));
-    }
-    
-    return { totalFilteredPatientList: filtered, totalFilteredCount: filtered.length };
-  }, [allPatients, searchTerm, filterPatientsWithAppointmentsToday, patientsWithAppointmentsTodayIds]);
-
-  useEffect(() => {
-    const startIndex = 0; 
-    const endIndex = currentPage * PATIENTS_PER_PAGE;
-    setDisplayedPatients(totalFilteredPatientList.slice(startIndex, endIndex));
-  }, [totalFilteredPatientList, currentPage]);
+    // Only call if filter is being turned on/off, initial load is handled by fetchPatientsData
+     if (filterPatientsWithAppointmentsToday) {
+        fetchPatientsWithAppointmentsToday();
+     } else {
+        // If filter is turned off, reset and fetch all matching searchTerm
+        setPatientsWithAppointmentsTodayIds(new Set());
+        fetchPatientsData(1, searchTerm, false);
+     }
+  }, [filterPatientsWithAppointmentsToday]); // Removed fetchPatientsWithAppointmentsToday from deps to avoid loop, managed inside
 
 
   const handleAddPatient = () => {
@@ -153,7 +169,7 @@ export default function PatientsPage() {
     setEditingPatient(patient);
     form.reset({
         ...patient,
-        phone: (user?.role === USER_ROLES.ADMIN) ? patient.phone : undefined, // only admin sees/edits phone
+        phone: (user?.role === USER_ROLES.ADMIN) ? patient.phone : undefined, 
         isDiabetic: patient.isDiabetic || false,
     });
     setIsFormOpen(true);
@@ -165,23 +181,13 @@ export default function PatientsPage() {
 
   const onSubmit = async (data: PatientFormData) => {
     try {
-      let updatedPatient: Patient | undefined;
       if (editingPatient && editingPatient.id) {
         const patientToUpdate = { ...editingPatient, ...data };
-        // Ensure phone is only updated by admin
         if(user?.role !== USER_ROLES.ADMIN) {
             const originalPatient = await getPatientById(editingPatient.id);
             patientToUpdate.phone = originalPatient?.phone;
         }
-        // Call a hypothetical updatePatient function
-        // For now, update in local state for demo. Replace with actual DB call.
-        // updatedPatient = await updatePatientInDb(patientToUpdate.id, patientToUpdate); 
-         const index = allPatients.findIndex(p => p.id === patientToUpdate.id);
-         if (index !== -1) {
-           allPatients[index] = patientToUpdate;
-           updatedPatient = patientToUpdate;
-           setAllPatients([...allPatients].sort((a,b) => `${a.firstName} ${a.lastName}`.localeCompare(`${b.firstName} ${b.lastName}`)));
-         }
+        await updatePatient(editingPatient.id, patientToUpdate);
         toast({ title: "Paciente Actualizado", description: `${data.firstName} ${data.lastName} actualizado.` });
       } else {
         const existing = await findPatient(data.firstName, data.lastName);
@@ -190,19 +196,11 @@ export default function PatientsPage() {
             return;
         }
         const newPatientData = { ...data, isDiabetic: data.isDiabetic || false };
-        const newPatient = await addPatient(newPatientData as Omit<Patient, 'id'>);
-        updatedPatient = newPatient;
-        setAllPatients(prev => [newPatient, ...prev].sort((a,b) => `${a.firstName} ${a.lastName}`.localeCompare(`${b.firstName} ${b.lastName}`)));
-        toast({ title: "Paciente Agregado", description: `${newPatient.firstName} ${newPatient.lastName} agregado.` });
+        await addPatient(newPatientData as Omit<Patient, 'id'>);
+        toast({ title: "Paciente Agregado", description: `${data.firstName} ${data.lastName} agregado.` });
       }
       setIsFormOpen(false);
-      // If there was an update, refresh displayed patients
-      if (updatedPatient) {
-         const startIndex = 0; 
-         const endIndex = currentPage * PATIENTS_PER_PAGE;
-         const currentFilteredList = totalFilteredPatientList.map(p => p.id === updatedPatient!.id ? updatedPatient! : p);
-         setDisplayedPatients(currentFilteredList.slice(startIndex, endIndex));
-      }
+      fetchPatientsData(1, searchTerm, filterPatientsWithAppointmentsToday); // Refresh list
 
     } catch (error) {
       toast({ title: "Error", description: "No se pudo guardar el paciente.", variant: "destructive" });
@@ -211,17 +209,18 @@ export default function PatientsPage() {
   };
 
   const handleSearchTermChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setSearchTerm(e.target.value);
-    setCurrentPage(1);
+    const newSearchTerm = e.target.value;
+    setSearchTerm(newSearchTerm);
+    fetchPatientsData(1, newSearchTerm, filterPatientsWithAppointmentsToday);
   };
 
   const handleFilterTodayChange = (checked: boolean) => {
     setFilterPatientsWithAppointmentsToday(checked);
-    setCurrentPage(1);
+    // The useEffect for filterPatientsWithAppointmentsToday will handle re-fetching
   };
   
   const handleLoadMore = () => {
-    setCurrentPage(prevPage => prevPage + 1);
+    fetchPatientsData(currentPage + 1, searchTerm, filterPatientsWithAppointmentsToday);
   };
 
   const calculateAge = (dateOfBirth?: string): string => {
@@ -250,10 +249,10 @@ export default function PatientsPage() {
         <p className="text-muted-foreground mb-4">
           {filterPatientsWithAppointmentsToday && searchTerm === '' ? "No hay pacientes con citas hoy." : 
            filterPatientsWithAppointmentsToday && searchTerm !== '' ? "No hay pacientes con citas hoy que coincidan con la búsqueda." :
-           "No se encontraron pacientes que coincidan con los filtros aplicados."}
+           (searchTerm !== '' ? "No hay pacientes que coincidan con la búsqueda." : "No hay pacientes registrados.")}
         </p>
         { (searchTerm || filterPatientsWithAppointmentsToday) &&
-          <Button onClick={() => { setSearchTerm(''); setFilterPatientsWithAppointmentsToday(false); setCurrentPage(1);}} variant="outline">
+          <Button onClick={() => { setSearchTerm(''); setFilterPatientsWithAppointmentsToday(false); fetchPatientsData(1, '', false);}} variant="outline">
             Limpiar Filtros
           </Button>
         }
@@ -299,11 +298,11 @@ export default function PatientsPage() {
             </div>
           </div>
 
-          {isLoading && displayedPatients.length === 0 ? <LoadingState /> : 
-           totalFilteredCount === 0 && !isLoading ? <NoPatientsCard /> : (
+          {isLoading && displayedPatients.length === 0 && currentPage === 1 ? <LoadingState /> : 
+           displayedPatients.length === 0 && !isLoading ? <NoPatientsCard /> : (
           <>
             <p className="text-sm text-muted-foreground mb-4">
-              Mostrando {displayedPatients.length} de {totalFilteredCount} pacientes.
+              Mostrando {displayedPatients.length} de {totalPatientCount} pacientes.
             </p>
             <div className="rounded-md border">
               <Table>
@@ -342,13 +341,15 @@ export default function PatientsPage() {
                 </TableBody>
               </Table>
             </div>
-             {displayedPatients.length < totalFilteredCount && (
+             {displayedPatients.length < totalPatientCount && !isLoading && (
               <div className="mt-8 text-center">
-                <Button onClick={handleLoadMore} variant="outline">
-                  <ChevronsDown className="mr-2 h-4 w-4" /> Cargar Más Pacientes
+                <Button onClick={handleLoadMore} variant="outline" disabled={isLoading}>
+                  {isLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <ChevronsDown className="mr-2 h-4 w-4" />}
+                   Cargar Más Pacientes
                 </Button>
               </div>
             )}
+             {isLoading && currentPage > 1 && <div className="text-center mt-4"><Loader2 className="h-6 w-6 animate-spin text-primary" /></div>}
           </>
           )}
         </CardContent>
@@ -431,7 +432,7 @@ export default function PatientsPage() {
                )}/>
               <DialogFooter className="pt-4">
                 <DialogClose asChild><Button type="button" variant="outline">Cancelar</Button></DialogClose>
-                <Button type="submit">{form.formState.isSubmitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : (editingPatient ? 'Guardar Cambios' : 'Agregar Paciente')}</Button>
+                <Button type="submit" disabled={form.formState.isSubmitting}>{form.formState.isSubmitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : (editingPatient ? 'Guardar Cambios' : 'Agregar Paciente')}</Button>
               </DialogFooter>
             </form>
           </Form>
