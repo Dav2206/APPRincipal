@@ -14,7 +14,7 @@ import { Calendar } from '@/components/ui/calendar';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { format, addDays, subDays, startOfDay, isEqual } from 'date-fns';
+import { format, addDays, subDays, startOfDay, isEqual, parseISO } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { CalendarIcon, ChevronLeftIcon, ChevronRightIcon, PlusCircleIcon, AlertTriangle, Loader2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -41,10 +41,14 @@ export function AppointmentsDisplay() {
         locationId: effectiveLocationId,
         date: currentDate,
       });
-      setAppointments(fetchedData.appointments || []);
+      // Ensure appointments are sorted by time for consistent display
+      const sortedAppointments = (fetchedData.appointments || []).sort(
+        (a, b) => parseISO(a.appointmentDateTime).getTime() - parseISO(b.appointmentDateTime).getTime()
+      );
+      setAppointments(sortedAppointments);
     } catch (error) {
       console.error("Failed to fetch appointments:", error);
-      setAppointments([]); // Set to empty array on error
+      setAppointments([]); 
     } finally {
       setIsLoading(false);
     }
@@ -63,10 +67,10 @@ export function AppointmentsDisplay() {
   const handleAppointmentUpdate = useCallback((updatedAppointment: Appointment) => {
     setAppointments(prev => 
       prev.map(appt => appt.id === updatedAppointment.id ? updatedAppointment : appt)
+        .sort((a, b) => parseISO(a.appointmentDateTime).getTime() - parseISO(b.appointmentDateTime).getTime())
     );
-    // Optionally re-fetch if status change might affect sorting or filtering significantly
-    // fetchAppointments(); 
-  }, []);
+    fetchAppointments(); // Refresh list after local update
+  }, [fetchAppointments]);
 
   const NoAppointmentsCard = () => (
     <Card className="col-span-full mt-8 border-dashed border-2">
@@ -158,7 +162,7 @@ export function AppointmentsDisplay() {
           isOpen={isFormOpen}
           onOpenChange={setIsFormOpen}
           onAppointmentCreated={() => {
-            fetchAppointments(); // Refresh list after creation
+            fetchAppointments(); 
             setIsFormOpen(false);
           }}
           defaultDate={currentDate}
@@ -167,4 +171,3 @@ export function AppointmentsDisplay() {
     </div>
   );
 }
-
