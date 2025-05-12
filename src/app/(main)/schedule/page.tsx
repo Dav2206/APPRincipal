@@ -1,3 +1,4 @@
+
 "use client";
 
 import type { Appointment, Professional } from '@/types';
@@ -41,7 +42,7 @@ export default function SchedulePage() {
     setIsLoading(true);
     
     try {
-      const [fetchedAppointmentsData, fetchedProfessionals] = await Promise.all([
+      const [fetchedAppointmentsData, fetchedProfessionalsResult] = await Promise.all([
         getAppointments({
           locationId: effectiveLocationId,
           date: currentDate,
@@ -49,7 +50,7 @@ export default function SchedulePage() {
         getProfessionals(effectiveLocationId)
       ]);
       setAppointments(fetchedAppointmentsData.appointments || []);
-      setProfessionals(fetchedProfessionals || []);
+      setProfessionals(fetchedProfessionalsResult || []);
     } catch (error) {
       console.error("Error fetching schedule data:", error);
       setAppointments([]);
@@ -71,28 +72,56 @@ export default function SchedulePage() {
 
   const handleTimelineAppointmentClick = useCallback(async (appointment: Appointment) => {
     try {
+      // Ensure we fetch the full appointment details if the one from timeline is partial
       const fullAppointmentDetails = await getAppointmentById(appointment.id);
       if (fullAppointmentDetails) {
         setSelectedAppointmentForEdit(fullAppointmentDetails);
         setIsEditModalOpen(true);
       } else {
-        console.error("Could not fetch full appointment details for editing.");
-        // Fallback or error toast
+        // Fallback to the potentially partial appointment from the timeline if full fetch fails
+        setSelectedAppointmentForEdit(appointment);
+        setIsEditModalOpen(true);
+        console.warn("Could not fetch full appointment details for editing, using timeline data.");
       }
     } catch (error) {
       console.error("Error fetching appointment details:", error);
+      // Fallback to the potentially partial appointment from the timeline on error
+      setSelectedAppointmentForEdit(appointment);
+      setIsEditModalOpen(true);
     }
   }, []);
+
 
   const handleAppointmentUpdated = useCallback(() => {
     fetchData(); // Re-fetch all appointments for the current day and location
     setIsEditModalOpen(false);
   }, [fetchData]);
   
-  const handleNewAppointmentCreated = useCallback(() => {
-    fetchData(); // Re-fetch data when a new appointment is created
+  const handleNewAppointmentCreated = useCallback(async () => {
     setIsNewAppointmentFormOpen(false); // Close the form
-  }, [fetchData]);
+
+    if (!user) return;
+    setIsLoading(true);
+    console.log("handleNewAppointmentCreated: Fetching new data for date:", currentDate.toISOString(), "and location:", effectiveLocationId);
+    try {
+      const [fetchedAppointmentsData, fetchedProfessionalsData] = await Promise.all([
+        getAppointments({
+          locationId: effectiveLocationId,
+          date: currentDate,
+        }),
+        getProfessionals(effectiveLocationId)
+      ]);
+      setAppointments(fetchedAppointmentsData.appointments || []);
+      setProfessionals(fetchedProfessionalsData || []);
+      console.log("handleNewAppointmentCreated: Data fetched and state updated. Appointments count:", (fetchedAppointmentsData.appointments || []).length);
+    } catch (error) {
+      console.error("Error fetching schedule data in handleNewAppointmentCreated:", error);
+      setAppointments([]);
+      setProfessionals([]);
+    } finally {
+      setIsLoading(false);
+    }
+  }, [user, effectiveLocationId, currentDate, setIsLoading, setAppointments, setProfessionals, setIsNewAppointmentFormOpen]);
   
   const NoDataCard = ({ title, message }: { title: string; message: string }) => (
     <Card className="col-span-full mt-8 border-dashed border-2">
@@ -203,3 +232,4 @@ export default function SchedulePage() {
     </div>
   );
 }
+
