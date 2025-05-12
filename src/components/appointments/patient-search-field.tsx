@@ -3,7 +3,7 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
 import type { Patient } from '@/types';
-import { getPatients } from '@/lib/data'; 
+import { getPatients } from '@/lib/data';
 import { Input } from '@/components/ui/input';
 import { Command, CommandInput, CommandItem, CommandList, CommandEmpty, CommandGroup } from '@/components/ui/command';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
@@ -27,11 +27,12 @@ export function PatientSearchField({ onPatientSelect, selectedPatientId, onClear
   const [popoverOpen, setPopoverOpen] = useState(false);
 
   useEffect(() => {
-    async function fetchPatients() {
-      const allPatients = await getPatients();
-      setPatients(allPatients);
+    async function fetchPatientsData() {
+      // Fetch all patients without pagination for the search field
+      const result = await getPatients({ limit: 1000 }); // Fetch a large number or implement specific search endpoint
+      setPatients(result.patients);
     }
-    fetchPatients();
+    fetchPatientsData();
   }, []);
   
   useEffect(() => {
@@ -141,4 +142,3 @@ export function PatientSearchField({ onPatientSelect, selectedPatientId, onClear
     </Popover>
   );
 }
-
