@@ -98,9 +98,9 @@ export function AppointmentForm({ isOpen, onOpenChange, onAppointmentCreated, in
       setIsLoadingServices(true);
       try {
         const fetchedServices = await getServices();
-        setServicesList(fetchedServices || []);
-        if (form.getValues('serviceId') === DEFAULT_SERVICE_ID_PLACEHOLDER && fetchedServices && fetchedServices.length > 0) {
-          form.setValue('serviceId', fetchedServices[0].id);
+        setServicesList(fetchedServices.services || []);
+        if (form.getValues('serviceId') === DEFAULT_SERVICE_ID_PLACEHOLDER && fetchedServices.services && fetchedServices.services.length > 0) {
+          form.setValue('serviceId', fetchedServices.services[0].id);
         }
       } catch (error) {
         console.error("Failed to load services for form:", error);
@@ -198,7 +198,7 @@ export function AppointmentForm({ isOpen, onOpenChange, onAppointmentCreated, in
 
       const submitData = {
         ...data,
-        patientDateOfBirth: patientDateOfBirth, // This field is not directly in AppointmentFormSchema, but constructed for addAppointment
+        patientDateOfBirth: patientDateOfBirth, 
         preferredProfessionalId: data.preferredProfessionalId === ANY_PROFESSIONAL_VALUE ? null : data.preferredProfessionalId,
         patientPhone: (data.existingPatientId && user?.role !== USER_ROLES.ADMIN) ? undefined : data.patientPhone,
         isDiabetic: data.isDiabetic || false,
@@ -362,7 +362,7 @@ export function AppointmentForm({ isOpen, onOpenChange, onAppointmentCreated, in
                     render={({ field }) => (
                       <FormItem>
                         <FormLabel className="flex items-center gap-1"><UserRound size={16}/>Edad (Opcional)</FormLabel>
-                        <FormControl><Input type="number" placeholder="Ej: 30" {...field} onChange={e => field.onChange(e.target.value === '' ? null : parseInt(e.target.value,10) || null)} disabled={!!form.getValues("existingPatientId")} /></FormControl>
+                        <FormControl><Input type="number" placeholder="Ej: 30" {...field} onChange={e => field.onChange(e.target.value === '' ? null : parseInt(e.target.value,10) || null)} disabled={!!form.getValues("existingPatientId")} value={field.value ?? ''} /></FormControl>
                         <FormMessage />
                       </FormItem>
                     )}
@@ -380,7 +380,6 @@ export function AppointmentForm({ isOpen, onOpenChange, onAppointmentCreated, in
                             <SelectTrigger><SelectValue placeholder="Día" /></SelectTrigger>
                         </FormControl>
                         <SelectContent>
-                            <SelectItem value="">-- Día --</SelectItem>
                             {days.map(d => <SelectItem key={`day-${d}`} value={d}>{d}</SelectItem>)}
                         </SelectContent>
                         </Select>
@@ -399,7 +398,6 @@ export function AppointmentForm({ isOpen, onOpenChange, onAppointmentCreated, in
                             <SelectTrigger><SelectValue placeholder="Mes" /></SelectTrigger>
                         </FormControl>
                         <SelectContent>
-                             <SelectItem value="">-- Mes --</SelectItem>
                             {months.map(m => <SelectItem key={`month-${m.value}`} value={m.value}>{m.label}</SelectItem>)}
                         </SelectContent>
                         </Select>
