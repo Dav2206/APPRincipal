@@ -14,6 +14,7 @@ const paymentMethodValues = PAYMENT_METHODS.map(pm => pm);
 const appointmentStatusKeys = Object.keys(APPOINTMENT_STATUS_DISPLAY) as (keyof typeof APPOINTMENT_STATUS_DISPLAY)[];
 const dayOfWeekIds = DAYS_OF_WEEK.map(day => day.id);
 
+const COMPENSATORY_DAY_OFF_PLACEHOLDER_VALUE = "--none--";
 
 export const PatientFormSchema = z.object({
   id: z.string().optional(),
@@ -73,15 +74,15 @@ export const ProfessionalFormSchema = z.object({
   workSchedule: z.object(
     DAYS_OF_WEEK.filter(day => day.id !== 'sunday') // Base schedule for Mon-Sat
       .reduce((acc, day) => {
-        acc[day.id as DayOfWeekId] = DayScheduleSchema.optional();
+        acc[day.id as Exclude<DayOfWeekId, 'sunday'>] = DayScheduleSchema.optional();
         return acc;
       }, {} as Record<Exclude<DayOfWeekId, 'sunday'>, z.ZodOptional<typeof DayScheduleSchema>>)
   ).optional(),
   
   rotationType: z.enum(['none', 'biWeeklySunday']).default('none'),
   rotationStartDate: z.date().optional().nullable(),
-  compensatoryDayOffChoice: z.enum(['monday', 'tuesday', 'wednesday', 'thursday', '']).optional().nullable()
-    .transform(value => value === "" ? null : value),
+  compensatoryDayOffChoice: z.enum(['monday', 'tuesday', 'wednesday', 'thursday', COMPENSATORY_DAY_OFF_PLACEHOLDER_VALUE]).optional().nullable()
+    .transform(value => value === COMPENSATORY_DAY_OFF_PLACEHOLDER_VALUE ? null : value),
 
 
   customScheduleOverrides: z.array(
@@ -110,8 +111,8 @@ export const ProfessionalFormSchema = z.object({
     if (getDay(data.rotationStartDate) !== 0) {
       return false; // rotationStartDate must be a Sunday
     }
-    if (!data.compensatoryDayOffChoice) {
-        return false; // compensatoryDayOffChoice is required
+    if (!data.compensatoryDayOffChoice) { // null is a valid "not selected" choice after transform
+        return false; // compensatoryDayOffChoice is required, which means a day must be selected or explicitly "none"
     }
   }
   return true;

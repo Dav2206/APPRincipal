@@ -44,6 +44,8 @@ import { cn } from '@/lib/utils';
 import { format, parseISO, getDay } from 'date-fns';
 import { es } from 'date-fns/locale';
 
+const COMPENSATORY_DAY_OFF_PLACEHOLDER_VALUE = "--none--";
+
 export default function ProfessionalsPage() {
   const { user } = useAuth();
   const { toast } = useToast();
@@ -88,38 +90,54 @@ export default function ProfessionalsPage() {
   });
   
   const isAdminOrContador = user?.role === USER_ROLES.ADMIN || user?.role === USER_ROLES.CONTADOR;
+  const isContadorOnly = user?.role === USER_ROLES.CONTADOR;
   const effectiveLocationId = isAdminOrContador
     ? (adminSelectedLocation === 'all' ? undefined : adminSelectedLocation as LocationId) 
     : user?.locationId;
 
 
   const fetchProfessionals = useCallback(async () => {
-    if(!user || (user.role !== USER_ROLES.ADMIN && user.role !== USER_ROLES.CONTADOR)) {
+    if(!user || (!isAdminOrContador && user.role !== USER_ROLES.LOCATION_STAFF)) { // Adjusted logic: if not admin/contador AND not staff, then deny. Staff can view their location.
       setIsLoading(false);
       setProfessionals([]);
       return;
     }
     setIsLoading(true);
     try {
-      const data = await getProfessionals(effectiveLocationId);
-      setProfessionals(data || []);
+      let profsToSet: Professional[] = [];
+      if (isAdminOrContador) {
+        if (effectiveLocationId) {
+          profsToSet = await getProfessionals(effectiveLocationId);
+        } else { // adminSelectedLocation === 'all'
+          const allProfsPromises = LOCATIONS.map(loc => getProfessionals(loc.id));
+          const results = await Promise.all(allProfsPromises);
+          profsToSet = results.flat();
+        }
+      } else if (user?.role === USER_ROLES.LOCATION_STAFF && user.locationId) {
+         profsToSet = await getProfessionals(user.locationId);
+      }
+      setProfessionals(profsToSet || []);
     } catch (error) {
       console.error("Failed to fetch professionals:", error);
       setProfessionals([]);
       toast({ title: "Error", description: "No se pudieron cargar los profesionales.", variant: "destructive" });
     }
     setIsLoading(false);
-  }, [effectiveLocationId, user, toast]);
+  }, [effectiveLocationId, user, toast, isAdminOrContador]);
 
   useEffect(() => {
     fetchProfessionals();
   }, [fetchProfessionals]);
 
   const handleAddProfessional = () => {
+    if (user?.role !== USER_ROLES.ADMIN && user?.role !== USER_ROLES.CONTADOR) {
+        toast({ title: "Acción no permitida", description: "Solo administradores o contadores pueden agregar profesionales.", variant: "destructive" });
+        return;
+    }
     setEditingProfessional(null);
     const defaultLoc = isAdminOrContador
       ? (adminSelectedLocation && adminSelectedLocation !== 'all' ? adminSelectedLocation : LOCATIONS[0].id)
-      : user?.locationId;
+      : user?.locationId; // This case should not be reached due to the check above, but kept for safety.
     
     form.reset({
       firstName: '',
@@ -136,6 +154,10 @@ export default function ProfessionalsPage() {
   };
 
   const handleEditProfessional = (professional: Professional) => {
+     if (user?.role !== USER_ROLES.ADMIN && user?.role !== USER_ROLES.CONTADOR) {
+        toast({ title: "Acción no permitida", description: "Solo administradores o contadores pueden editar profesionales.", variant: "destructive" });
+        return;
+    }
     setEditingProfessional(professional);
     
     const formWorkSchedule: ProfessionalFormData['workSchedule'] = {};
@@ -174,6 +196,10 @@ export default function ProfessionalsPage() {
 
 
   const onSubmit = async (data: ProfessionalFormData) => {
+    if (user?.role !== USER_ROLES.ADMIN && user?.role !== USER_ROLES.CONTADOR) {
+        toast({ title: "Acción no permitida", description: "No tiene permisos para guardar.", variant: "destructive" });
+        return;
+    }
     try {
       const result = editingProfessional && editingProfessional.id 
         ? await updateProfessional(editingProfessional.id, data)
@@ -204,10 +230,10 @@ export default function ProfessionalsPage() {
       </div>
   );
   
-  if (!user || (user.role !== USER_ROLES.ADMIN && user.role !== USER_ROLES.CONTADOR)) {
+  if (!user) { // Basic check, more specific role checks are done for actions
     return (
       <div className="flex h-screen items-center justify-center">
-        <p>Acceso no autorizado.</p>
+        <p>Cargando...</p>
       </div>
     );
   }
@@ -247,10 +273,17 @@ export default function ProfessionalsPage() {
                 Viendo: {adminSelectedLocation === 'all' ? 'Todas las sedes' : LOCATIONS.find(l => l.id === adminSelectedLocation)?.name || ''}
               </div>
             )}
+             {user.role === USER_ROLES.LOCATION_STAFF && (
+                <div className="mt-1 text-sm text-muted-foreground">
+                    Viendo: {LOCATIONS.find(l => l.id === user.locationId)?.name || 'Sede Actual'}
+                </div>
+            )}
           </div>
+          {(isAdminOrContador) && ( // Only admin and contador can add
           <Button onClick={handleAddProfessional} className="w-full mt-4 md:mt-0 md:w-auto">
             <PlusCircle className="mr-2 h-4 w-4" /> Agregar Profesional
           </Button>
+          )}
         </CardHeader>
         <CardContent>
           <div className="mb-4">
@@ -285,16 +318,19 @@ export default function ProfessionalsPage() {
                     <TableCell className="hidden md:table-cell">{LOCATIONS.find(l => l.id === prof.locationId)?.name}</TableCell>
                     <TableCell className="hidden lg:table-cell text-xs">{formatWorkScheduleDisplay(prof)}</TableCell>
                     <TableCell className="hidden xl:table-cell">{prof.phone || 'N/A'}</TableCell>
-                    {isAdminOrContador && <TableCell className="hidden xl:table-cell text-right">{(prof.biWeeklyEarnings ?? 0).toFixed(2)}</TableCell> }
+                    {(isAdminOrContador && !isContadorOnly) && <TableCell className="hidden xl:table-cell text-right">{(prof.biWeeklyEarnings ?? 0).toFixed(2)}</TableCell> }
+                    {isContadorOnly && <TableCell className="hidden xl:table-cell text-right">{(prof.biWeeklyEarnings ?? 0).toFixed(2)}</TableCell> }
                     <TableCell className="text-right">
+                     {(isAdminOrContador) && ( // Only Admin and Contador can edit
                       <Button variant="ghost" size="sm" onClick={() => handleEditProfessional(prof)}>
                         <Edit2 className="h-4 w-4" /> <span className="sr-only">Editar</span>
                       </Button>
+                     )}
                     </TableCell>
                   </TableRow>
                 )) : (
                   <TableRow>
-                    <TableCell colSpan={isAdminOrContador ? 6 : 5} className="h-24 text-center"> 
+                    <TableCell colSpan={(isAdminOrContador && !isContadorOnly) ? 6 : (isContadorOnly ? 6 : 5)} className="h-24 text-center"> 
                       No se encontraron profesionales.
                     </TableCell>
                   </TableRow>
@@ -329,7 +365,7 @@ export default function ProfessionalsPage() {
                 </div>
                 <FormField control={form.control} name="locationId" render={({ field }) => (
                     <FormItem className="mt-4"><FormLabel>Sede</FormLabel>
-                      <Select onValueChange={field.onChange} value={field.value} disabled={(user?.role === USER_ROLES.LOCATION_STAFF && !isAdminOrContador)}>
+                      <Select onValueChange={field.onChange} value={field.value} disabled={!isAdminOrContador}>
                         <FormControl><SelectTrigger><SelectValue placeholder="Seleccionar sede" /></SelectTrigger></FormControl>
                         <SelectContent>{LOCATIONS.map(loc => (<SelectItem key={loc.id} value={loc.id}>{loc.name}</SelectItem>))}</SelectContent>
                       </Select><FormMessage />
@@ -351,7 +387,7 @@ export default function ProfessionalsPage() {
                                     name={`workSchedule.${dayId}.isWorking`}
                                     render={({ field }) => (
                                         <FormItem className="flex flex-row items-center space-x-3 space-y-0 mb-2">
-                                            <FormControl><Checkbox checked={field.value} onCheckedChange={field.onChange} /></FormControl>
+                                            <FormControl><Checkbox checked={!!field.value} onCheckedChange={field.onChange} /></FormControl>
                                             <FormLabel className="font-medium">{day.name}</FormLabel>
                                         </FormItem>
                                     )}
@@ -454,10 +490,10 @@ export default function ProfessionalsPage() {
                             render={({ field }) => (
                                 <FormItem>
                                     <FormLabel>Día de Descanso Compensatorio (Semana SIGUIENTE al Domingo trabajado)</FormLabel>
-                                    <Select onValueChange={field.onChange} value={field.value || ""}>
+                                    <Select onValueChange={field.onChange} value={field.value ?? COMPENSATORY_DAY_OFF_PLACEHOLDER_VALUE}>
                                         <FormControl><SelectTrigger><SelectValue placeholder="Seleccionar día de compensación" /></SelectTrigger></FormControl>
                                         <SelectContent>
-                                            <SelectItem value="">Seleccionar día...</SelectItem>
+                                            <SelectItem value={COMPENSATORY_DAY_OFF_PLACEHOLDER_VALUE}>Seleccionar día...</SelectItem>
                                             {DAYS_OF_WEEK.filter(d => ['monday', 'tuesday', 'wednesday', 'thursday'].includes(d.id)).map(day => (
                                                 <SelectItem key={day.id} value={day.id}>{day.name}</SelectItem>
                                             ))}
