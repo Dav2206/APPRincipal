@@ -35,11 +35,11 @@ const initialMockProfessionalsData: Professional[] = LOCATIONS.flatMap((location
 );
 
 const initialMockPatientsData: Patient[] = [
-  { id: 'pat001', firstName: 'Ana', lastName: 'García', phone: '111222333', age: 39, dateOfBirth: '15-05', preferredProfessionalId: initialMockProfessionalsData[0]?.id, notes: 'Paciente regular, prefiere citas por la mañana.', isDiabetic: false },
-  { id: 'pat002', firstName: 'Luis', lastName: 'Martínez', phone: '444555666', age: 31, dateOfBirth: '20-11', notes: 'Primera visita.', isDiabetic: true },
-  { id: 'pat003', firstName: 'Elena', lastName: 'Ruiz', phone: '777888999', age: 23, dateOfBirth: '01-07', isDiabetic: false },
-  { id: 'pat004', firstName: 'Carlos', lastName: 'Vargas', phone: '222333444', age: 54, dateOfBirth: '25-03', isDiabetic: true, notes: "Sensibilidad en el pie izquierdo." },
-  { id: 'pat005', firstName: 'Sofía', lastName: 'Chávez', phone: '555666777', age: 25, dateOfBirth: '05-12', isDiabetic: false, preferredProfessionalId: initialMockProfessionalsData[1]?.id },
+  { id: 'pat001', firstName: 'Ana', lastName: 'García', phone: '111222333', age: 39, preferredProfessionalId: initialMockProfessionalsData[0]?.id, notes: 'Paciente regular, prefiere citas por la mañana.', isDiabetic: false },
+  { id: 'pat002', firstName: 'Luis', lastName: 'Martínez', phone: '444555666', age: 31, notes: 'Primera visita.', isDiabetic: true },
+  { id: 'pat003', firstName: 'Elena', lastName: 'Ruiz', phone: '777888999', age: 23, isDiabetic: false },
+  { id: 'pat004', firstName: 'Carlos', lastName: 'Vargas', phone: '222333444', age: 54, isDiabetic: true, notes: "Sensibilidad en el pie izquierdo." },
+  { id: 'pat005', firstName: 'Sofía', lastName: 'Chávez', phone: '555666777', age: 25, isDiabetic: false, preferredProfessionalId: initialMockProfessionalsData[1]?.id },
 ];
 
 const initialMockServicesData: Service[] = SERVICES_CONSTANTS.map((s_const, index) => ({
@@ -92,10 +92,12 @@ interface MockDB {
   appointments: Appointment[];
 }
 
+let globalMockDB: MockDB | null = null;
+
 function initializeGlobalMockStore(): MockDB {
-  const globalAsAny = global as any;
-  if (!globalAsAny._mockDB) {
-    globalAsAny._mockDB = {
+  if (!globalMockDB) {
+    console.log("Initializing Mock DB Store");
+    globalMockDB = {
       users: [...initialMockUsersData],
       professionals: [...initialMockProfessionalsData],
       patients: [...initialMockPatientsData],
@@ -103,10 +105,10 @@ function initializeGlobalMockStore(): MockDB {
       appointments: [...initialMockAppointmentsData],
     };
   }
-  return globalAsAny._mockDB;
+  return globalMockDB;
 }
 
-const mockDB = useMockDatabase ? initializeGlobalMockStore() : ({} as MockDB); 
+const mockDB = initializeGlobalMockStore();
 
 const generateId = (): string => {
   return Math.random().toString(36).substr(2, 9);
@@ -271,7 +273,6 @@ export const addPatient = async (data: Partial<Omit<Patient, 'id'>>): Promise<Pa
     phone: data.phone,
     age: data.age === undefined ? null : data.age,
     isDiabetic: data.isDiabetic || false,
-    dateOfBirth: (data as any).birthDay && (data as any).birthMonth ? `${(data as any).birthDay}-${(data as any).birthMonth}` : data.dateOfBirth,
     notes: data.notes,
     preferredProfessionalId: data.preferredProfessionalId,
   };
@@ -291,16 +292,6 @@ export const updatePatient = async (id: string, data: Partial<Patient>): Promise
         const index = mockDB.patients.findIndex(p => p.id === id);
         if (index !== -1) {
             const patientToUpdate = { ...mockDB.patients[index], ...data };
-            if ((data as any).birthDay && (data as any).birthMonth) {
-                patientToUpdate.dateOfBirth = `${(data as any).birthDay}-${(data as any).birthMonth}`;
-            } else if (data.dateOfBirth === undefined && ((data as any).birthDay || (data as any).birthMonth)) {
-                // If only one part of birthday is provided, or it's meant to be cleared
-                patientToUpdate.dateOfBirth = undefined;
-            }
-            // Remove temporary fields if they exist
-            delete (patientToUpdate as any).birthDay;
-            delete (patientToUpdate as any).birthMonth;
-
             mockDB.patients[index] = patientToUpdate;
             return mockDB.patients[index];
         }
@@ -354,17 +345,17 @@ export const updateService = async (id: string, data: Partial<ServiceFormData>):
 
 
 const populateAppointment = async (apptData: any): Promise<Appointment> => {
-    const patient = useMockDatabase ? mockDB.patients.find(p => p.id === apptData.patientId) : undefined; /* await getPatientById(apptData.patientId); */
-    const professional = apptData.professionalId ? (useMockDatabase ? mockDB.professionals.find(p => p.id === apptData.professionalId) : undefined /* await getProfessionalById(apptData.professionalId) */) : undefined;
-    const service = apptData.serviceId ? (useMockDatabase ? mockDB.services.find(s => s.id === apptData.serviceId) : undefined /* await getServiceById(apptData.serviceId as string) */) : undefined;
+    const patient = useMockDatabase ? mockDB.patients.find(p => p.id === apptData.patientId) : undefined; 
+    const professional = apptData.professionalId ? (useMockDatabase ? mockDB.professionals.find(p => p.id === apptData.professionalId) : undefined ) : undefined;
+    const service = apptData.serviceId ? (useMockDatabase ? mockDB.services.find(s => s.id === apptData.serviceId) : undefined ) : undefined;
 
     let addedServicesPopulated = [];
     if (apptData.addedServices && Array.isArray(apptData.addedServices)) {
         addedServicesPopulated = await Promise.all(
             apptData.addedServices.map(async (as: any) => ({
                 ...as,
-                service: as.serviceId ? (useMockDatabase ? mockDB.services.find(s => s.id === as.serviceId) : undefined /* await getServiceById(as.serviceId as string) */) : undefined,
-                professional: as.professionalId ? (useMockDatabase ? mockDB.professionals.find(p => p.id === as.professionalId) : undefined /* await getProfessionalById(as.professionalId) */) : undefined,
+                service: as.serviceId ? (useMockDatabase ? mockDB.services.find(s => s.id === as.serviceId) : undefined ) : undefined,
+                professional: as.professionalId ? (useMockDatabase ? mockDB.professionals.find(p => p.id === as.professionalId) : undefined ) : undefined,
             }))
         );
     }
@@ -479,7 +470,7 @@ export const getAppointmentById = async (id: string): Promise<Appointment | unde
     throw new Error("Real database not implemented for getAppointmentById");
 };
 
-export const addAppointment = async (data: AppointmentFormData & { patientDateOfBirth?: string }): Promise<Appointment> => {
+export const addAppointment = async (data: AppointmentFormData ): Promise<Appointment> => {
   let patientId = data.existingPatientId;
   if (!patientId) {
     let existingPatient = await findPatient(data.patientFirstName, data.patientLastName);
@@ -488,7 +479,6 @@ export const addAppointment = async (data: AppointmentFormData & { patientDateOf
        const patientUpdates: Partial<Patient> = {};
        if (data.isDiabetic !== undefined && existingPatient.isDiabetic !== data.isDiabetic) patientUpdates.isDiabetic = data.isDiabetic;
        if (data.patientAge !== undefined && existingPatient.age !== data.patientAge) patientUpdates.age = data.patientAge;
-       if (data.patientDateOfBirth && existingPatient.dateOfBirth !== data.patientDateOfBirth) patientUpdates.dateOfBirth = data.patientDateOfBirth;
        if (Object.keys(patientUpdates).length > 0) {
           await updatePatient(patientId, patientUpdates);
       }
@@ -498,7 +488,6 @@ export const addAppointment = async (data: AppointmentFormData & { patientDateOf
         lastName: data.patientLastName,
         phone: data.patientPhone,
         age: data.patientAge,
-        dateOfBirth: data.patientDateOfBirth,
         isDiabetic: data.isDiabetic || false,
         notes: '', 
         preferredProfessionalId: undefined, 
@@ -511,7 +500,6 @@ export const addAppointment = async (data: AppointmentFormData & { patientDateOf
         const patientUpdates: Partial<Patient> = {};
         if (data.isDiabetic !== undefined && data.isDiabetic !== existingPatientDetails.isDiabetic) patientUpdates.isDiabetic = data.isDiabetic;
         if (data.patientAge !== undefined && data.patientAge !== existingPatientDetails.age) patientUpdates.age = data.patientAge;
-        if (data.patientDateOfBirth && existingPatientDetails.dateOfBirth !== data.patientDateOfBirth) patientUpdates.dateOfBirth = data.patientDateOfBirth;
         if (Object.keys(patientUpdates).length > 0) {
           await updatePatient(patientId, patientUpdates);
         }

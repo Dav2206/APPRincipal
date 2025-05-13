@@ -30,7 +30,7 @@ import {
   DialogClose,
 } from '@/components/ui/dialog';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
-import { PlusCircle, Edit2, Users, Search, Loader2, FileText, CalendarClock, ChevronsDown, AlertTriangle, Cake, CheckSquare, Square, UserRound } from 'lucide-react';
+import { PlusCircle, Edit2, Users, Search, Loader2, FileText, CalendarClock, ChevronsDown, AlertTriangle, CheckSquare, Square, UserRound } from 'lucide-react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { PatientFormSchema, type PatientFormData } from '@/lib/schemas';
@@ -42,12 +42,6 @@ import { useAppState } from '@/contexts/app-state-provider';
 import { USER_ROLES } from '@/lib/constants';
 
 const PATIENTS_PER_PAGE = 8; 
-
-const days = Array.from({ length: 31 }, (_, i) => String(i + 1).padStart(2, '0'));
-const months = Array.from({ length: 12 }, (_, i) => ({
-  value: String(i + 1).padStart(2, '0'),
-  label: new Date(2000, i, 1).toLocaleString('es', { month: 'long' }),
-}));
 
 
 export default function PatientsPage() {
@@ -78,8 +72,6 @@ export default function PatientsPage() {
       lastName: '',
       phone: '',
       age: null,
-      birthDay: '',
-      birthMonth: '',
       isDiabetic: false,
       notes: ''
     }
@@ -166,22 +158,16 @@ export default function PatientsPage() {
 
   const handleAddPatient = () => {
     setEditingPatient(null);
-    form.reset({ firstName: '', lastName: '', phone: '', age: null, birthDay: '', birthMonth: '', isDiabetic: false, notes: '' });
+    form.reset({ firstName: '', lastName: '', phone: '', age: null, isDiabetic: false, notes: '' });
     setIsFormOpen(true);
   };
 
   const handleEditPatient = (patient: Patient) => {
     setEditingPatient(patient);
-    let day = '', month = '';
-    if (patient.dateOfBirth && patient.dateOfBirth.includes('-')) {
-        [day, month] = patient.dateOfBirth.split('-');
-    }
     form.reset({
         ...patient,
         phone: (user?.role === USER_ROLES.ADMIN) ? patient.phone || '' : undefined, 
         age: patient.age ?? null,
-        birthDay: day || '',
-        birthMonth: month || '',
         isDiabetic: patient.isDiabetic || false,
     });
     setIsFormOpen(true);
@@ -193,13 +179,11 @@ export default function PatientsPage() {
 
   const onSubmit = async (data: PatientFormData) => {
     try {
-      const patientDateOfBirth = (data.birthDay && data.birthMonth) ? `${data.birthDay}-${data.birthMonth}` : undefined;
       const patientDataToSave: Partial<Patient> = {
         firstName: data.firstName,
         lastName: data.lastName,
         phone: data.phone,
         age: data.age === 0 ? null : data.age,
-        dateOfBirth: patientDateOfBirth,
         isDiabetic: data.isDiabetic || false,
         notes: data.notes,
       };
@@ -408,48 +392,11 @@ export default function PatientsPage() {
                 <FormField control={form.control} name="age" render={({ field }) => (
                   <FormItem>
                       <FormLabel className="flex items-center gap-1"><UserRound size={16}/>Edad (Opcional)</FormLabel>
-                      <FormControl><Input type="number" placeholder="Ej: 30" {...field} onChange={e => field.onChange(e.target.value === '' ? null : parseInt(e.target.value,10) || null)}/></FormControl>
+                      <FormControl><Input type="number" placeholder="Ej: 30" {...field} onChange={e => field.onChange(e.target.value === '' ? null : parseInt(e.target.value,10) || null)} value={field.value ?? ''}/></FormControl>
                       <FormMessage />
                   </FormItem>
                 )}/>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-end">
-                <FormField
-                    control={form.control}
-                    name="birthDay"
-                    render={({ field }) => (
-                    <FormItem>
-                        <FormLabel className="flex items-center gap-1"><Cake size={16}/>Día de Cumpleaños (Opcional)</FormLabel>
-                        <Select onValueChange={field.onChange} value={field.value || ""}>
-                        <FormControl>
-                            <SelectTrigger><SelectValue placeholder="Día" /></SelectTrigger>
-                        </FormControl>
-                        <SelectContent>
-                            {days.map(d => <SelectItem key={d} value={d}>{d}</SelectItem>)}
-                        </SelectContent>
-                        </Select>
-                        <FormMessage />
-                    </FormItem>
-                    )}
-                />
-                <FormField
-                    control={form.control}
-                    name="birthMonth"
-                    render={({ field }) => (
-                    <FormItem>
-                         <FormLabel>Mes de Cumpleaños (Opcional)</FormLabel>
-                        <Select onValueChange={field.onChange} value={field.value || ""}>
-                        <FormControl>
-                            <SelectTrigger><SelectValue placeholder="Mes" /></SelectTrigger>
-                        </FormControl>
-                        <SelectContent>
-                            {months.map(m => <SelectItem key={m.value} value={m.value}>{m.label}</SelectItem>)}
-                        </SelectContent>
-                        </Select>
-                        <FormMessage />
-                    </FormItem>
-                    )}
-                />
-              </div>
+              
                 <FormField
                     control={form.control}
                     name="isDiabetic"

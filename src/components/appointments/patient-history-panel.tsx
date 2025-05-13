@@ -9,7 +9,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Badge } from '@/components/ui/badge';
 import { format, parseISO, differenceInDays, formatDistanceToNow, addDays as dateFnsAddDays, startOfDay } from 'date-fns';
 import { es } from 'date-fns/locale';
-import { UserSquare, CalendarDays, Stethoscope, TrendingUp, MessageSquare, AlertTriangle, Repeat, Cake, Paperclip, Camera, XIcon, ZoomIn, ZoomOut, RefreshCw, HeartPulse } from 'lucide-react';
+import { UserSquare, CalendarDays, Stethoscope, TrendingUp, MessageSquare, AlertTriangle, Repeat, Paperclip, Camera, XIcon, ZoomIn, ZoomOut, RefreshCw, HeartPulse } from 'lucide-react';
 import { APPOINTMENT_STATUS, APPOINTMENT_STATUS_DISPLAY } from '@/lib/constants';
 import Image from 'next/image';
 import { Separator } from '../ui/separator';
@@ -180,12 +180,6 @@ const PatientHistoryPanelComponent = ({ patient }: PatientHistoryPanelProps) => 
                 <p>{ageToDisplay} años</p>
               </div>
             )}
-             {patient.dateOfBirth && (
-              <div>
-                <p className="font-medium flex items-center gap-1"><Cake size={16} /> Cumpleaños:</p>
-                <p>{patient.dateOfBirth}</p> {/* Display as DD-MM */}
-              </div>
-            )}
             <div>
                 <p className="font-medium flex items-center gap-1"><HeartPulse size={16} /> Diabético:</p>
                 <p className={patient.isDiabetic ? "text-red-600 font-semibold" : ""}>{patient.isDiabetic ? 'Sí' : 'No'}</p>
@@ -348,4 +342,3 @@ const PatientHistoryPanelComponent = ({ patient }: PatientHistoryPanelProps) => 
 }
 
 export const PatientHistoryPanel = React.memo(PatientHistoryPanelComponent);
-

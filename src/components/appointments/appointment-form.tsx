@@ -22,7 +22,7 @@ import { Calendar } from '@/components/ui/calendar';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter, DialogClose } from '@/components/ui/dialog';
-import { CalendarIcon, ClockIcon, UserPlus, Building, Briefcase, ConciergeBell, Edit3, Loader2, Cake, UserRound } from 'lucide-react';
+import { CalendarIcon, ClockIcon, UserPlus, Building, Briefcase, ConciergeBell, Edit3, Loader2, UserRound } from 'lucide-react';
 import { format, parse, differenceInYears, parseISO } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { cn } from '@/lib/utils';
@@ -42,12 +42,6 @@ interface AppointmentFormProps {
 
 const ANY_PROFESSIONAL_VALUE = "_any_professional_placeholder_";
 const DEFAULT_SERVICE_ID_PLACEHOLDER = "_default_service_id_placeholder_"; 
-
-const days = Array.from({ length: 31 }, (_, i) => String(i + 1).padStart(2, '0'));
-const months = Array.from({ length: 12 }, (_, i) => ({
-  value: String(i + 1).padStart(2, '0'),
-  label: new Date(2000, i, 1).toLocaleString('es', { month: 'long' }),
-}));
 
 
 export function AppointmentForm({ isOpen, onOpenChange, onAppointmentCreated, initialData, defaultDate }: AppointmentFormProps) {
@@ -77,8 +71,6 @@ export function AppointmentForm({ isOpen, onOpenChange, onAppointmentCreated, in
       patientLastName: initialData?.patientLastName || '',
       patientPhone: initialData?.patientPhone || '',
       patientAge: initialData?.patientAge ?? null,
-      patientBirthDay: initialData?.patientBirthDay || '',
-      patientBirthMonth: initialData?.patientBirthMonth || '',
       existingPatientId: initialData?.existingPatientId || null,
       isDiabetic: initialData?.isDiabetic || false,
       locationId: initialData?.locationId || defaultLocation || LOCATIONS[0].id,
@@ -98,9 +90,9 @@ export function AppointmentForm({ isOpen, onOpenChange, onAppointmentCreated, in
       setIsLoadingServices(true);
       try {
         const fetchedServices = await getServices();
-        setServicesList(fetchedServices.services || []);
-        if (form.getValues('serviceId') === DEFAULT_SERVICE_ID_PLACEHOLDER && fetchedServices.services && fetchedServices.services.length > 0) {
-          form.setValue('serviceId', fetchedServices.services[0].id);
+        setServicesList(fetchedServices || []);
+        if (form.getValues('serviceId') === DEFAULT_SERVICE_ID_PLACEHOLDER && fetchedServices && fetchedServices.length > 0) {
+          form.setValue('serviceId', fetchedServices[0].id);
         }
       } catch (error) {
         console.error("Failed to load services for form:", error);
@@ -133,14 +125,6 @@ export function AppointmentForm({ isOpen, onOpenChange, onAppointmentCreated, in
       if (patient) {
         form.setValue('isDiabetic', patient.isDiabetic || false);
         form.setValue('patientAge', patient.age ?? null);
-        if (patient.dateOfBirth && patient.dateOfBirth.includes('-')) {
-          const [day, month] = patient.dateOfBirth.split('-');
-          form.setValue('patientBirthDay', day);
-          form.setValue('patientBirthMonth', month);
-        } else {
-          form.setValue('patientBirthDay', '');
-          form.setValue('patientBirthMonth', '');
-        }
       }
     }
     if (watchExistingPatientId) {
@@ -150,8 +134,6 @@ export function AppointmentForm({ isOpen, onOpenChange, onAppointmentCreated, in
       setShowPatientHistory(false);
       form.setValue('isDiabetic', false); 
       form.setValue('patientAge', null);
-      form.setValue('patientBirthDay', '');
-      form.setValue('patientBirthMonth', '');
     }
   }, [watchExistingPatientId, form]);
 
@@ -163,14 +145,6 @@ export function AppointmentForm({ isOpen, onOpenChange, onAppointmentCreated, in
       form.setValue('patientLastName', patient.lastName);
       form.setValue('patientPhone', (user?.role === USER_ROLES.ADMIN ? patient.phone : "Teléfono Restringido") || '');
       form.setValue('patientAge', patient.age ?? null);
-      if (patient.dateOfBirth && patient.dateOfBirth.includes('-')) {
-        const [day, month] = patient.dateOfBirth.split('-');
-        form.setValue('patientBirthDay', day);
-        form.setValue('patientBirthMonth', month);
-      } else {
-        form.setValue('patientBirthDay', '');
-        form.setValue('patientBirthMonth', '');
-      }
       form.setValue('isDiabetic', patient.isDiabetic || false);
       setCurrentPatientForHistory(patient);
       setShowPatientHistory(true);
@@ -180,8 +154,6 @@ export function AppointmentForm({ isOpen, onOpenChange, onAppointmentCreated, in
       form.setValue('patientLastName', '');
       form.setValue('patientPhone', '');
       form.setValue('patientAge', null);
-      form.setValue('patientBirthDay', '');
-      form.setValue('patientBirthMonth', '');
       form.setValue('isDiabetic', false);
       setCurrentPatientForHistory(null);
       setShowPatientHistory(false);
@@ -192,13 +164,9 @@ export function AppointmentForm({ isOpen, onOpenChange, onAppointmentCreated, in
   async function onSubmit(data: FormSchemaType) {
     setIsLoading(true);
     try {
-      const patientDateOfBirth = (data.patientBirthDay && data.patientBirthMonth) 
-        ? `${data.patientBirthDay}-${data.patientBirthMonth}` 
-        : undefined;
-
+      
       const submitData = {
         ...data,
-        patientDateOfBirth: patientDateOfBirth, 
         preferredProfessionalId: data.preferredProfessionalId === ANY_PROFESSIONAL_VALUE ? null : data.preferredProfessionalId,
         patientPhone: (data.existingPatientId && user?.role !== USER_ROLES.ADMIN) ? undefined : data.patientPhone,
         isDiabetic: data.isDiabetic || false,
@@ -224,8 +192,6 @@ export function AppointmentForm({ isOpen, onOpenChange, onAppointmentCreated, in
         patientLastName: '',
         patientPhone: '',
         patientAge: null,
-        patientBirthDay: '',
-        patientBirthMonth: '',
         isDiabetic: false,
         existingPatientId: null,
         bookingObservations: '',
@@ -260,8 +226,6 @@ export function AppointmentForm({ isOpen, onOpenChange, onAppointmentCreated, in
           patientLastName: '',
           patientPhone: '',
           patientAge: null,
-          patientBirthDay: '',
-          patientBirthMonth: '',
           isDiabetic: false,
           existingPatientId: null,
           bookingObservations: '',
@@ -302,8 +266,6 @@ export function AppointmentForm({ isOpen, onOpenChange, onAppointmentCreated, in
                           form.setValue('patientLastName', '');
                           form.setValue('patientPhone', '');
                           form.setValue('patientAge', null);
-                          form.setValue('patientBirthDay', '');
-                          form.setValue('patientBirthMonth', '');
                           form.setValue('isDiabetic', false);
                           setCurrentPatientForHistory(null);
                           setShowPatientHistory(false);
@@ -368,44 +330,6 @@ export function AppointmentForm({ isOpen, onOpenChange, onAppointmentCreated, in
                     )}
                   />
                 </div>
-                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 items-end">
-                 <FormField
-                    control={form.control}
-                    name="patientBirthDay"
-                    render={({ field }) => (
-                    <FormItem>
-                        <FormLabel className="flex items-center gap-1"><Cake size={16}/>Día de Cumpleaños (Opcional)</FormLabel>
-                        <Select onValueChange={field.onChange} value={field.value || ""} disabled={!!form.getValues("existingPatientId")}>
-                        <FormControl>
-                            <SelectTrigger><SelectValue placeholder="Día" /></SelectTrigger>
-                        </FormControl>
-                        <SelectContent>
-                            {days.map(d => <SelectItem key={`day-${d}`} value={d}>{d}</SelectItem>)}
-                        </SelectContent>
-                        </Select>
-                        <FormMessage />
-                    </FormItem>
-                    )}
-                  />
-                  <FormField
-                    control={form.control}
-                    name="patientBirthMonth"
-                    render={({ field }) => (
-                    <FormItem>
-                         <FormLabel>Mes de Cumpleaños (Opcional)</FormLabel>
-                        <Select onValueChange={field.onChange} value={field.value || ""} disabled={!!form.getValues("existingPatientId")}>
-                        <FormControl>
-                            <SelectTrigger><SelectValue placeholder="Mes" /></SelectTrigger>
-                        </FormControl>
-                        <SelectContent>
-                            {months.map(m => <SelectItem key={`month-${m.value}`} value={m.value}>{m.label}</SelectItem>)}
-                        </SelectContent>
-                        </Select>
-                        <FormMessage />
-                    </FormItem>
-                    )}
-                />
-                </div>
                 <FormField
                     control={form.control}
                     name="isDiabetic"
@@ -445,7 +369,7 @@ export function AppointmentForm({ isOpen, onOpenChange, onAppointmentCreated, in
                   render={({ field }) => (
                     <FormItem>
                       <FormLabel className="flex items-center gap-1"><Building size={16}/>Sede</FormLabel>
-                      <Select onValueChange={field.onChange} value={field.value} disabled={(user?.role === USER_ROLES.LOCATION_STAFF && !isAdminOrContador) || isLoadingServices || servicesList.length === 0}>
+                      <Select onValueChange={field.onChange} value={field.value || ""} disabled={(user?.role === USER_ROLES.LOCATION_STAFF && !isAdminOrContador) || isLoadingServices || servicesList.length === 0}>
                         <FormControl>
                           <SelectTrigger><SelectValue placeholder="Seleccionar sede" /></SelectTrigger>
                         </FormControl>
@@ -612,8 +536,6 @@ export function AppointmentForm({ isOpen, onOpenChange, onAppointmentCreated, in
                 patientLastName: '',
                 patientPhone: '',
                 patientAge: null,
-                patientBirthDay: '',
-                patientBirthMonth: '',
                 isDiabetic: false,
                 existingPatientId: null,
                 bookingObservations: '',

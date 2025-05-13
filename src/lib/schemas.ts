@@ -1,3 +1,4 @@
+
 import { z } from 'zod';
 import { LOCATIONS, TIME_SLOTS, PAYMENT_METHODS, APPOINTMENT_STATUS_DISPLAY } from './constants';
 
@@ -18,8 +19,6 @@ export const PatientFormSchema = z.object({
   lastName: z.string().min(2, "Apellido es requerido."),
   phone: z.string().optional().nullable(),
   age: z.coerce.number().int().min(0, "La edad no puede ser negativa.").optional().nullable(),
-  birthDay: z.string().optional().nullable(), // DD
-  birthMonth: z.string().optional().nullable(), // MM
   isDiabetic: z.boolean().optional(),
   notes: z.string().optional().nullable(),
 });
@@ -31,8 +30,6 @@ export const AppointmentFormSchema = z.object({
   patientLastName: z.string().min(2, "Apellido del paciente es requerido (mínimo 2 caracteres)."),
   patientPhone: z.string().optional().nullable(),
   patientAge: z.coerce.number().int().min(0, "La edad del paciente no puede ser negativa.").optional().nullable(),
-  patientBirthDay: z.string().optional().nullable(), // DD
-  patientBirthMonth: z.string().optional().nullable(), // MM
   existingPatientId: z.string().optional().nullable(),
   isDiabetic: z.boolean().optional(), 
   

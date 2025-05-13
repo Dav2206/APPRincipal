@@ -1,4 +1,5 @@
 
+
 import type { LocationId, UserRole, PaymentMethod, AppointmentStatus } from '@/lib/constants';
 
 export interface BaseEntity {
@@ -27,7 +28,6 @@ export interface Patient extends BaseEntity {
   lastName: string;
   phone?: string;
   age?: number | null; // Age is now optional and can be null
-  dateOfBirth?: string; // DD-MM format, optional
   isDiabetic?: boolean; 
   preferredProfessionalId?: string;
   notes?: string; // General notes or observations about the patient
@@ -74,7 +74,6 @@ export type AppointmentFormData = {
   patientLastName: string;
   patientPhone?: string;
   patientAge?: number | null; // Age is optional and can be null
-  patientDateOfBirth?: string; // DD-MM format, optional
   existingPatientId?: string | null; // To link if patient exists
   isDiabetic?: boolean; 
   locationId: LocationId;
@@ -99,4 +98,5 @@ export type ServiceFormData = {
   defaultDuration: number;
   price?: number;
 };
+
 
