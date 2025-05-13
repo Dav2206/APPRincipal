@@ -146,17 +146,15 @@ export function AppointmentEditDialog({ appointment, isOpen, onOpenChange, onApp
     }
     setIsSubmittingForm(true);
     try {
-      // Use the date part from form.appointmentDate and time part from form.appointmentTime
-      // These should always be present in `data` if the form was correctly initialized.
-      const datePart = data.appointmentDate || parseISO(appointment.appointmentDateTime); // Fallback to original if somehow not in form
-      const timePart = data.appointmentTime || format(parseISO(appointment.appointmentDateTime), 'HH:mm'); // Fallback
+      const datePart = data.appointmentDate || parseISO(appointment.appointmentDateTime); 
+      const timePart = data.appointmentTime || format(parseISO(appointment.appointmentDateTime), 'HH:mm');
 
       const [hours, minutes] = timePart.split(':').map(Number);
       const finalDateObject = setMinutes(setHours(datePart, hours), minutes);
 
       const updatedData: Partial<Appointment> = {
         ...data,
-        appointmentDateTime: formatISO(finalDateObject), // Use formatISO for consistent ISO string
+        appointmentDateTime: formatISO(finalDateObject), 
         serviceId: data.serviceId === DEFAULT_SERVICE_ID_PLACEHOLDER && allServices.length > 0 ? allServices[0].id : data.serviceId,
         professionalId: data.professionalId === NO_SELECTION_PLACEHOLDER ? null : data.professionalId,
         durationMinutes: data.durationMinutes,
@@ -546,7 +544,7 @@ export function AppointmentEditDialog({ appointment, isOpen, onOpenChange, onApp
                     render={({ field }) => (
                       <FormItem>
                         <FormLabel>Precio (S/) (Opcional)</FormLabel>
-                        <FormControl><Input type="number" step="0.01" placeholder="Ej: 50.00" {...field} value={field.value || ''} onChange={e => field.onChange(e.target.value ? parseFloat(e.target.value) : null)} /></FormControl>
+                        <FormControl><Input type="number" step="0.01" placeholder="Ej: 50.00" {...field} value={field.value || ''} onChange={e => field.onChange(e.target.value ? parseFloat(e.target.value) : undefined)} /></FormControl>
                         <FormMessage />
                       </FormItem>
                     )}
