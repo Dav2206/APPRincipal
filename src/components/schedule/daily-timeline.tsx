@@ -3,13 +3,14 @@
 
 import type { Appointment, Professional } from '@/types';
 import React from 'react';
-import { parseISO, getHours, getMinutes, addMinutes } from 'date-fns';
+import { parseISO, getHours, getMinutes, addMinutes, format } from 'date-fns';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { ScrollArea, ScrollBar } from '@/components/ui/scroll-area';
 import { User, Clock, AlertTriangle, Shuffle } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { LOCATIONS } from '@/lib/constants';
 import { Badge } from '@/components/ui/badge';
+import { es } from 'date-fns/locale';
 
 interface DailyTimelineProps {
   professionals: Professional[];
@@ -19,10 +20,9 @@ interface DailyTimelineProps {
   onAppointmentClick?: (appointment: Appointment) => void;
 }
 
-const PIXELS_PER_MINUTE = 1.5; // Adjust for desired density; 30min slot = 45px
-const DAY_START_HOUR = 9; // Timeline starts at 9 AM
+const PIXELS_PER_MINUTE = 1.5; 
+const DAY_START_HOUR = 9; 
 
-// Helper function to convert time string "HH:MM" to minutes since DAY_START_HOUR
 const timeToMinutesOffset = (timeStr: string): number => {
   const [hours, minutes] = timeStr.split(':').map(Number);
   return (hours - DAY_START_HOUR) * 60 + minutes;
@@ -33,10 +33,8 @@ const isOverlapping = (apptA: Appointment, apptB: Appointment): boolean => {
   const endA = addMinutes(startA, apptA.durationMinutes);
   const startB = parseISO(apptB.appointmentDateTime);
   const endB = addMinutes(startB, apptB.durationMinutes);
-  // Check if intervals [startA, endA) and [startB, endB) overlap
   return startA < endB && endA > startB;
 };
-
 
 const DailyTimelineComponent = ({ professionals, appointments, timeSlots, onAppointmentClick }: DailyTimelineProps) => {
   
@@ -48,20 +46,16 @@ const DailyTimelineComponent = ({ professionals, appointments, timeSlots, onAppo
     const appointmentStartDateTime = parseISO(appointment.appointmentDateTime);
     const apptHours = getHours(appointmentStartDateTime);
     const apptMinutes = getMinutes(appointmentStartDateTime);
-
-    // Calculate minutes from the visual start of the timeline (DAY_START_HOUR)
     const minutesFromTimelineStart = (apptHours - DAY_START_HOUR) * 60 + apptMinutes;
-    
     const top = minutesFromTimelineStart * PIXELS_PER_MINUTE;
     const height = appointment.durationMinutes * PIXELS_PER_MINUTE;
-
     return {
       top: `${top}px`,
       height: `${height}px`,
     };
   };
   
-  const totalTimelineHeight = (timeSlots.length * 30 * PIXELS_PER_MINUTE) + PIXELS_PER_MINUTE * 30; // +30 for last slot end
+  const totalTimelineHeight = (timeSlots.length * 30 * PIXELS_PER_MINUTE) + PIXELS_PER_MINUTE * 30;
 
   return (
     <TooltipProvider>
@@ -73,13 +67,12 @@ const DailyTimelineComponent = ({ professionals, appointments, timeSlots, onAppo
             {timeSlots.map((slot) => (
               <div 
                 key={slot} 
-                className="h-[45px] flex items-center justify-center text-xs border-b px-2" // 30 min * 1.5 px/min = 45px
+                className="h-[45px] flex items-center justify-center text-xs border-b px-2"
                 style={{ height: `${30 * PIXELS_PER_MINUTE}px` }}
               >
                 {slot}
               </div>
             ))}
-             {/* Extra slot to visually complete the last hour */}
             <div 
                 className="h-[45px] flex items-center justify-center text-xs border-b px-2 opacity-50"
                 style={{ height: `${30 * PIXELS_PER_MINUTE}px` }}
@@ -121,15 +114,22 @@ const DailyTimelineComponent = ({ professionals, appointments, timeSlots, onAppo
                     )}
                   </div>
                   <div className="relative" style={{ height: `${totalTimelineHeight}px` }}>
-                    {/* Grid lines for time slots (visual aid) */}
                     {timeSlots.map((slot) => (
                        <div key={`${prof.id}-${slot}-line`} className="border-b border-dashed border-muted/50" style={{ height: `${30 * PIXELS_PER_MINUTE}px` }}></div>
                     ))}
                      <div className="border-b border-dashed border-muted/50" style={{ height: `${30 * PIXELS_PER_MINUTE}px` }}></div>
 
-
                     {professionalAppointments.map(appt => {
                       const isApptOverlapping = overlappingAppointmentIds.has(appt.id);
+                      
+                      let appointmentMainText = `${appt.patient?.firstName || ''} ${appt.patient?.lastName || ''}`.trim();
+                      if (prof.id === appt.professionalId && appt.isExternalProfessional && appt.locationId !== prof.locationId) {
+                        const destinationSedeName = LOCATIONS.find(l => l.id === appt.locationId)?.name || 'Sede Desconocida';
+                        appointmentMainText = `Traslado a: ${destinationSedeName}`;
+                      } else if (!appointmentMainText) {
+                        appointmentMainText = "Cita Reservada";
+                      }
+
                       const originLocationName = appt.isExternalProfessional && appt.externalProfessionalOriginLocationId 
                         ? LOCATIONS.find(l => l.id === appt.externalProfessionalOriginLocationId)?.name 
                         : null;
@@ -153,7 +153,7 @@ const DailyTimelineComponent = ({ professionals, appointments, timeSlots, onAppo
                           >
                             <div className="flex-grow overflow-hidden">
                               <div className="flex justify-between items-start">
-                                <p className="font-semibold truncate leading-tight">{appt.patient?.firstName} {appt.patient?.lastName}</p>
+                                <p className="font-semibold truncate leading-tight">{appointmentMainText}</p>
                                 {isApptOverlapping && (
                                   <AlertTriangle className="h-3 w-3 text-destructive-foreground bg-destructive rounded-full p-px shrink-0 ml-1" />
                                 )}
@@ -161,27 +161,44 @@ const DailyTimelineComponent = ({ professionals, appointments, timeSlots, onAppo
                               <p className="truncate text-[10px] leading-tight opacity-90">{appt.service?.name}</p>
                               {appt.durationMinutes > 30 && <p className="text-[10px] leading-tight opacity-80 mt-0.5">({appt.durationMinutes} min)</p>}
                             </div>
-                            {originLocationName && (
+                            {originLocationName && appt.isExternalProfessional && appt.locationId !== prof.locationId && ( 
                               <Badge variant="outline" className="mt-1 text-[9px] p-0.5 h-fit bg-orange-100 text-orange-700 border-orange-300 self-start truncate">
-                                <Shuffle size={10} className="mr-1"/> Traslado: {originLocationName}
+                                <Shuffle size={10} className="mr-1"/> De: {originLocationName}
+                              </Badge>
+                            )}
+                             {originLocationName && appt.isExternalProfessional && appt.locationId === prof.locationId && appt.externalProfessionalOriginLocationId === prof.id && ( 
+                               <Badge variant="outline" className="mt-1 text-[9px] p-0.5 h-fit bg-green-100 text-green-700 border-green-300 self-start truncate">
+                                <Shuffle size={10} className="mr-1"/> Cubriendo (Origen: {originLocationName})
                               </Badge>
                             )}
                           </div>
                         </TooltipTrigger>
                         <TooltipContent className="bg-popover text-popover-foreground p-2 rounded-md shadow-lg max-w-xs">
                           {isApptOverlapping && <p className="text-destructive font-semibold text-xs flex items-center gap-1 mb-1"><AlertTriangle size={12} /> ¡Cita Superpuesta!</p>}
-                          <p className="font-bold text-sm">{appt.patient?.firstName} {appt.patient?.lastName}</p>
+                          
+                          {appointmentMainText.startsWith("Traslado a:") ? (
+                             <p className="font-bold text-sm">{appointmentMainText}</p>
+                          ) : (
+                             <p className="font-bold text-sm">{appt.patient?.firstName} {appt.patient?.lastName}</p>
+                          )}
+
                           <p><User size={12} className="inline mr-1"/> {appt.service?.name}</p>
-                          <p><Clock size={12} className="inline mr-1"/> {parseISO(appt.appointmentDateTime).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})} ({appt.durationMinutes} min)</p>
-                          {originLocationName && (
+                          <p><Clock size={12} className="inline mr-1"/> {format(parseISO(appt.appointmentDateTime), "HH:mm", { locale: es })} ({appt.durationMinutes} min)</p>
+                          
+                          {originLocationName && appt.isExternalProfessional && appt.locationId !== prof.locationId && (
                             <p className="text-orange-600 text-xs mt-1 flex items-center gap-1">
                               <Shuffle size={12} className="inline"/> Profesional de: {originLocationName}
                             </p>
                           )}
+                           {originLocationName && appt.isExternalProfessional && appt.locationId === prof.locationId && appt.externalProfessionalOriginLocationId === prof.id && (
+                             <p className="text-green-600 text-xs mt-1 flex items-center gap-1">
+                              <Shuffle size={12} className="inline"/> Cubriendo (Profesional de: {originLocationName})
+                            </p>
+                           )}
                           {appt.bookingObservations && <p className="text-xs mt-1 italic">Obs: {appt.bookingObservations}</p>}
                         </TooltipContent>
                       </Tooltip>
-                      )
+                      );
                     })}
                   </div>
                 </div>
@@ -190,12 +207,12 @@ const DailyTimelineComponent = ({ professionals, appointments, timeSlots, onAppo
           </div>
         </div>
         <ScrollBar orientation="horizontal" />
-      </ScrollArea>
        {appointments.length === 0 && professionals.length > 0 && (
         <p className="text-muted-foreground text-center py-8">No hay citas programadas para este día y selección.</p>
       )}
+      </ScrollArea>
     </TooltipProvider>
   );
-}
+};
 
 export const DailyTimeline = React.memo(DailyTimelineComponent);
