@@ -33,7 +33,7 @@ import {
 } from '@/components/ui/dialog';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { PlusCircle, Edit2, Briefcase, Search, Loader2, CalendarDays, Clock, Trash2, Calendar as CalendarIconLucide } from 'lucide-react';
-import { useForm, useFieldArray } from 'react-hook-form';
+import { useForm, useFieldArray, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { ProfessionalFormSchema } from '@/lib/schemas';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -41,7 +41,7 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { Calendar } from '@/components/ui/calendar';
 import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
-import { format, parseISO } from 'date-fns';
+import { format, parseISO, getDay } from 'date-fns';
 import { es } from 'date-fns/locale';
 
 export default function ProfessionalsPage() {
@@ -54,7 +54,16 @@ export default function ProfessionalsPage() {
   const [editingProfessional, setEditingProfessional] = useState<Professional | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
 
-  const defaultWorkDays = DAYS_OF_WEEK.slice(0, 5).map(day => day.id as DayOfWeekId); // Lunes a Viernes por defecto
+  const defaultBaseWorkSchedule: ProfessionalFormData['workSchedule'] = {
+    monday: { isWorking: true, startTime: '10:00', endTime: '19:00' },
+    tuesday: { isWorking: true, startTime: '10:00', endTime: '19:00' },
+    wednesday: { isWorking: true, startTime: '10:00', endTime: '19:00' },
+    thursday: { isWorking: true, startTime: '10:00', endTime: '19:00' },
+    friday: { isWorking: true, startTime: '10:00', endTime: '19:00' },
+    saturday: { isWorking: true, startTime: '09:00', endTime: '18:00' },
+    // Sunday is handled by rotation or off by default
+  };
+
 
   const form = useForm<ProfessionalFormData>({
     resolver: zodResolver(ProfessionalFormSchema),
@@ -63,12 +72,15 @@ export default function ProfessionalsPage() {
       lastName: '',
       locationId: LOCATIONS[0].id,
       phone: '',
-      workDays: defaultWorkDays,
-      startTime: '09:00',
-      endTime: '17:00',
+      workSchedule: defaultBaseWorkSchedule,
+      rotationType: 'none',
+      rotationStartDate: null,
+      compensatoryDayOffChoice: null,
       customScheduleOverrides: [],
     }
   });
+  
+  const watchRotationType = form.watch("rotationType");
 
   const { fields: customScheduleFields, append: appendCustomSchedule, remove: removeCustomSchedule } = useFieldArray({
     control: form.control,
@@ -114,9 +126,10 @@ export default function ProfessionalsPage() {
       lastName: '',
       locationId: defaultLoc as LocationId,
       phone: '',
-      workDays: defaultWorkDays,
-      startTime: '09:00',
-      endTime: '17:00',
+      workSchedule: defaultBaseWorkSchedule,
+      rotationType: 'none',
+      rotationStartDate: null,
+      compensatoryDayOffChoice: null,
       customScheduleOverrides: [],
     });
     setIsFormOpen(true);
@@ -125,27 +138,15 @@ export default function ProfessionalsPage() {
   const handleEditProfessional = (professional: Professional) => {
     setEditingProfessional(professional);
     
-    // Transform workSchedule from object to array of DayOfWeekId for the form
-    const formWorkDays: DayOfWeekId[] = [];
-    if (professional.workSchedule) {
-      for (const day of DAYS_OF_WEEK) {
-        if (professional.workSchedule[day.id as DayOfWeekId]) {
-          formWorkDays.push(day.id as DayOfWeekId);
-        }
+    const formWorkSchedule: ProfessionalFormData['workSchedule'] = {};
+    DAYS_OF_WEEK.forEach(day => {
+      if (day.id !== 'sunday') { // Base schedule form is for Mon-Sat
+        const schedule = professional.workSchedule?.[day.id as DayOfWeekId];
+        formWorkSchedule[day.id as Exclude<DayOfWeekId, 'sunday'>] = schedule 
+          ? { isWorking: true, startTime: schedule.startTime, endTime: schedule.endTime }
+          : { isWorking: false, startTime: defaultBaseWorkSchedule[day.id as Exclude<DayOfWeekId, 'sunday'>]?.startTime, endTime: defaultBaseWorkSchedule[day.id as Exclude<DayOfWeekId, 'sunday'>]?.endTime };
       }
-    }
-    
-    // Find a representative startTime/endTime from the workSchedule if available
-    let baseStartTime = '09:00';
-    let baseEndTime = '17:00';
-    if (professional.workSchedule) {
-        const firstScheduledDay = DAYS_OF_WEEK.find(d => professional.workSchedule![d.id as DayOfWeekId]);
-        if (firstScheduledDay && professional.workSchedule[firstScheduledDay.id as DayOfWeekId]) {
-            baseStartTime = professional.workSchedule[firstScheduledDay.id as DayOfWeekId]!.startTime;
-            baseEndTime = professional.workSchedule[firstScheduledDay.id as DayOfWeekId]!.endTime;
-        }
-    }
-
+    });
 
     form.reset({
         id: professional.id,
@@ -153,11 +154,12 @@ export default function ProfessionalsPage() {
         lastName: professional.lastName,
         locationId: professional.locationId as LocationId, 
         phone: professional.phone || '',
-        workDays: formWorkDays.length > 0 ? formWorkDays : defaultWorkDays,
-        startTime: baseStartTime,
-        endTime: baseEndTime,
+        workSchedule: formWorkSchedule,
+        rotationType: professional.rotationType || 'none',
+        rotationStartDate: professional.rotationStartDate ? parseISO(professional.rotationStartDate) : null,
+        compensatoryDayOffChoice: professional.compensatoryDayOffChoice || null,
         customScheduleOverrides: professional.customScheduleOverrides?.map(ov => ({
-            id: ov.id || generateId(), // Ensure ID for useFieldArray key
+            id: ov.id || generateId(), 
             date: parseISO(ov.date),
             isWorking: ov.isWorking,
             startTime: ov.startTime || undefined,
@@ -172,51 +174,15 @@ export default function ProfessionalsPage() {
 
 
   const onSubmit = async (data: ProfessionalFormData) => {
-    // Convert form data to Professional type before saving
-    const professionalDataToSave: Partial<Professional> = {
-        id: data.id,
-        firstName: data.firstName,
-        lastName: data.lastName,
-        locationId: data.locationId,
-        phone: data.phone,
-        workSchedule: {}, // Initialize as empty object
-        customScheduleOverrides: data.customScheduleOverrides?.map(ov => ({
-            id: ov.id || generateId(), // Ensure ID
-            date: format(ov.date, 'yyyy-MM-dd'), // Convert Date to ISO string
-            isWorking: ov.isWorking,
-            startTime: ov.isWorking ? ov.startTime : undefined,
-            endTime: ov.isWorking ? ov.endTime : undefined,
-            notes: ov.notes,
-        })),
-    };
-
-    // Populate workSchedule from workDays, startTime, endTime
-    if (data.workDays && data.startTime && data.endTime) {
-        data.workDays.forEach(dayId => {
-            if (professionalDataToSave.workSchedule) { // Type guard
-                 professionalDataToSave.workSchedule[dayId as DayOfWeekId] = { startTime: data.startTime!, endTime: data.endTime! };
-            }
-        });
-         // Set non-working days to null
-        for (const day of DAYS_OF_WEEK) {
-            if (professionalDataToSave.workSchedule && !data.workDays.includes(day.id as DayOfWeekId)) {
-                 professionalDataToSave.workSchedule[day.id as DayOfWeekId] = null;
-            }
-        }
-    }
-
-
     try {
-      if (editingProfessional && professionalDataToSave.id) {
-        const result = await updateProfessional(professionalDataToSave.id, professionalDataToSave);
-        if (result) {
-             toast({ title: "Profesional Actualizado", description: `${result.firstName} ${result.lastName} actualizado.` });
-        } else {
-            toast({ title: "Error", description: `No se pudo actualizar a ${data.firstName}.`, variant: "destructive" });
-        }
+      const result = editingProfessional && editingProfessional.id 
+        ? await updateProfessional(editingProfessional.id, data)
+        : await addProfessional(data);
+
+      if (result) {
+         toast({ title: editingProfessional ? "Profesional Actualizado" : "Profesional Agregado", description: `${result.firstName} ${result.lastName} ${editingProfessional ? 'actualizado' : 'agregado'}.` });
       } else {
-        const newProfessionalDataResult = await addProfessional(professionalDataToSave as Omit<Professional, 'id' | 'biWeeklyEarnings'>);
-        toast({ title: "Profesional Agregado", description: `${newProfessionalDataResult.firstName} ${newProfessionalDataResult.lastName} agregado.` });
+          toast({ title: "Error", description: `No se pudo ${editingProfessional ? 'actualizar' : 'agregar'} a ${data.firstName}.`, variant: "destructive" });
       }
       setIsFormOpen(false);
       fetchProfessionals();
@@ -251,11 +217,11 @@ export default function ProfessionalsPage() {
     const availability = getProfessionalAvailabilityForDate(prof, today);
     
     if (availability) {
-        const dayOfWeek = format(today, 'EEEE', {locale: es});
-        return `${dayOfWeek}: ${availability.startTime} - ${availability.endTime}${availability.notes ? ` (${availability.notes})` : ''}`;
+        const dayOfWeek = format(today, 'EEEE', {locale: es}); // EEEE for full day name
+        return `${dayOfWeek.charAt(0).toUpperCase() + dayOfWeek.slice(1)}: ${availability.startTime} - ${availability.endTime}${availability.notes ? ` (${availability.notes})` : ''}`;
     }
 
-    // Fallback to a general weekly schedule if no specific override for today
+    // Fallback to a general weekly schedule if no specific override or rotation for today
     if (prof.workSchedule) {
         const activeDays = DAYS_OF_WEEK
             .filter(day => prof.workSchedule![day.id as DayOfWeekId] && prof.workSchedule![day.id as DayOfWeekId]?.startTime)
@@ -363,56 +329,150 @@ export default function ProfessionalsPage() {
                 </div>
                 <FormField control={form.control} name="locationId" render={({ field }) => (
                     <FormItem className="mt-4"><FormLabel>Sede</FormLabel>
-                      <Select onValueChange={field.onChange} value={field.value} disabled={user?.role === USER_ROLES.LOCATION_STAFF}>
+                      <Select onValueChange={field.onChange} value={field.value} disabled={(user?.role === USER_ROLES.LOCATION_STAFF && !isAdminOrContador)}>
                         <FormControl><SelectTrigger><SelectValue placeholder="Seleccionar sede" /></SelectTrigger></FormControl>
                         <SelectContent>{LOCATIONS.map(loc => (<SelectItem key={loc.id} value={loc.id}>{loc.name}</SelectItem>))}</SelectContent>
                       </Select><FormMessage />
                     </FormItem>
                 )}/>
                 <FormField control={form.control} name="phone" render={({ field }) => (
-                    <FormItem className="mt-4"><FormLabel>Teléfono (Opcional)</FormLabel><FormControl><Input type="tel" placeholder="Ej: 987654321" {...field} /></FormControl><FormMessage /></FormItem>
+                    <FormItem className="mt-4"><FormLabel>Teléfono (Opcional)</FormLabel><FormControl><Input type="tel" placeholder="Ej: 987654321" {...field} value={field.value || ''} /></FormControl><FormMessage /></FormItem>
                 )}/>
               </CollapsibleSection>
 
-              <CollapsibleSection title="Horario Semanal Base (Opcional)">
-                <FormField control={form.control} name="workDays" render={() => (
-                  <FormItem>
-                    <div className="mb-2"><FormLabel className="text-base flex items-center gap-1"><CalendarDays size={16}/> Días Laborales Base</FormLabel></div>
-                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 rounded-md border p-3">
-                      {DAYS_OF_WEEK.map((day) => (
-                        <FormField key={day.id} control={form.control} name="workDays" render={({ field: workDaysField }) => (
-                          <FormItem className="flex flex-row items-start space-x-2 space-y-0">
-                            <FormControl>
-                              <Checkbox
-                                checked={workDaysField.value?.includes(day.id as DayOfWeekId)}
-                                onCheckedChange={(checked) => {
-                                  const currentWorkDays = workDaysField.value || [];
-                                  return checked
-                                    ? workDaysField.onChange([...currentWorkDays, day.id as DayOfWeekId])
-                                    : workDaysField.onChange(currentWorkDays.filter(value => value !== day.id))
-                                }}
-                              /></FormControl><FormLabel className="font-normal text-sm">{day.name}</FormLabel></FormItem>
-                        )}/>))}
-                    </div><FormMessage />
-                  </FormItem>
-                )}/>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-4">
-                  <FormField control={form.control} name="startTime" render={({ field }) => (
-                    <FormItem><FormLabel className="flex items-center gap-1"><Clock size={16}/> Hora de Entrada Base</FormLabel>
-                      <Select onValueChange={field.onChange} value={field.value}><FormControl><SelectTrigger><SelectValue placeholder="HH:MM" /></SelectTrigger></FormControl>
-                        <SelectContent>{TIME_SLOTS.map(slot => (<SelectItem key={`start-${slot}`} value={slot}>{slot}</SelectItem>))}</SelectContent>
-                      </Select><FormMessage /></FormItem>
-                  )}/>
-                  <FormField control={form.control} name="endTime" render={({ field }) => (
-                    <FormItem><FormLabel className="flex items-center gap-1"><Clock size={16}/> Hora de Salida Base</FormLabel>
-                      <Select onValueChange={field.onChange} value={field.value}><FormControl><SelectTrigger><SelectValue placeholder="HH:MM" /></SelectTrigger></FormControl>
-                        <SelectContent>{TIME_SLOTS.map(slot => (<SelectItem key={`end-${slot}`} value={slot}>{slot}</SelectItem>))}</SelectContent>
-                      </Select><FormMessage /></FormItem>
-                  )}/>
+             <CollapsibleSection title="Horario Semanal Base (Lunes a Sábado)">
+                <div className="space-y-4">
+                    {DAYS_OF_WEEK.filter(day => day.id !== 'sunday').map((day) => {
+                        const dayId = day.id as Exclude<DayOfWeekId, 'sunday'>;
+                        return (
+                            <div key={dayId} className="p-3 border rounded-md bg-muted/30">
+                                <FormField
+                                    control={form.control}
+                                    name={`workSchedule.${dayId}.isWorking`}
+                                    render={({ field }) => (
+                                        <FormItem className="flex flex-row items-center space-x-3 space-y-0 mb-2">
+                                            <FormControl><Checkbox checked={field.value} onCheckedChange={field.onChange} /></FormControl>
+                                            <FormLabel className="font-medium">{day.name}</FormLabel>
+                                        </FormItem>
+                                    )}
+                                />
+                                {form.watch(`workSchedule.${dayId}.isWorking`) && (
+                                    <div className="grid grid-cols-2 gap-3 mt-1">
+                                        <FormField
+                                            control={form.control}
+                                            name={`workSchedule.${dayId}.startTime`}
+                                            render={({ field }) => (
+                                                <FormItem>
+                                                    <FormLabel className="text-xs">Hora Inicio</FormLabel>
+                                                    <Select onValueChange={field.onChange} value={field.value || ""}>
+                                                        <FormControl><SelectTrigger><SelectValue placeholder="HH:MM" /></SelectTrigger></FormControl>
+                                                        <SelectContent>{TIME_SLOTS.map(slot => (<SelectItem key={`base-start-${dayId}-${slot}`} value={slot}>{slot}</SelectItem>))}</SelectContent>
+                                                    </Select>
+                                                    <FormMessage />
+                                                </FormItem>
+                                            )}
+                                        />
+                                        <FormField
+                                            control={form.control}
+                                            name={`workSchedule.${dayId}.endTime`}
+                                            render={({ field }) => (
+                                                <FormItem>
+                                                    <FormLabel className="text-xs">Hora Fin</FormLabel>
+                                                    <Select onValueChange={field.onChange} value={field.value || ""}>
+                                                        <FormControl><SelectTrigger><SelectValue placeholder="HH:MM" /></SelectTrigger></FormControl>
+                                                        <SelectContent>{TIME_SLOTS.map(slot => (<SelectItem key={`base-end-${dayId}-${slot}`} value={slot}>{slot}</SelectItem>))}</SelectContent>
+                                                    </Select>
+                                                    <FormMessage />
+                                                </FormItem>
+                                            )}
+                                        />
+                                    </div>
+                                )}
+                                <FormMessage>{form.formState.errors.workSchedule?.[dayId]?.root?.message || form.formState.errors.workSchedule?.[dayId]?.startTime?.message}</FormMessage>
+                            </div>
+                        );
+                    })}
                 </div>
-              </CollapsibleSection>
+            </CollapsibleSection>
 
-              <CollapsibleSection title="Anulaciones de Horario / Horarios Específicos">
+
+            <CollapsibleSection title="Rotación de Domingo y Horario Compensatorio">
+                <FormField
+                    control={form.control}
+                    name="rotationType"
+                    render={({ field }) => (
+                        <FormItem>
+                            <FormLabel>Tipo de Rotación de Domingo</FormLabel>
+                            <Select onValueChange={field.onChange} value={field.value}>
+                                <FormControl><SelectTrigger><SelectValue placeholder="Seleccionar tipo de rotación" /></SelectTrigger></FormControl>
+                                <SelectContent>
+                                    <SelectItem value="none">Ninguna (Domingo usualmente libre o según horario base si se configura)</SelectItem>
+                                    <SelectItem value="biWeeklySunday">Domingo Bi-Semananal (con compensatorio)</SelectItem>
+                                </SelectContent>
+                            </Select>
+                            <FormMessage />
+                        </FormItem>
+                    )}
+                />
+                {watchRotationType === 'biWeeklySunday' && (
+                    <div className="space-y-4 mt-4 pl-4 border-l-2 border-primary">
+                         <p className="text-sm text-muted-foreground">
+                            El profesional trabajará un domingo sí y uno no, con un día de descanso compensatorio la semana siguiente al domingo trabajado. Horario del domingo trabajado: 10:00 AM - 06:00 PM.
+                        </p>
+                        <FormField
+                            control={form.control}
+                            name="rotationStartDate"
+                            render={({ field }) => (
+                                <FormItem className="flex flex-col">
+                                    <FormLabel>Fecha de Inicio de Rotación (Primer Domingo que trabaja)</FormLabel>
+                                    <Popover>
+                                        <PopoverTrigger asChild>
+                                            <FormControl>
+                                                <Button variant={"outline"} className={cn("w-full pl-3 text-left font-normal", !field.value && "text-muted-foreground")}>
+                                                    {field.value ? format(field.value, "PPP", {locale: es}) : <span>Seleccionar fecha</span>}
+                                                    <CalendarIconLucide className="ml-auto h-4 w-4 opacity-50" />
+                                                </Button>
+                                            </FormControl>
+                                        </PopoverTrigger>
+                                        <PopoverContent className="w-auto p-0" align="start">
+                                            <Calendar
+                                                mode="single"
+                                                selected={field.value}
+                                                onSelect={field.onChange}
+                                                disabled={(date) => getDay(date) !== 0} // Only allow selecting Sundays
+                                                initialFocus
+                                            />
+                                        </PopoverContent>
+                                    </Popover>
+                                    <FormMessage />
+                                </FormItem>
+                            )}
+                        />
+                        <FormField
+                            control={form.control}
+                            name="compensatoryDayOffChoice"
+                            render={({ field }) => (
+                                <FormItem>
+                                    <FormLabel>Día de Descanso Compensatorio (Semana SIGUIENTE al Domingo trabajado)</FormLabel>
+                                    <Select onValueChange={field.onChange} value={field.value || ""}>
+                                        <FormControl><SelectTrigger><SelectValue placeholder="Seleccionar día de compensación" /></SelectTrigger></FormControl>
+                                        <SelectContent>
+                                            <SelectItem value="">Seleccionar día...</SelectItem>
+                                            {DAYS_OF_WEEK.filter(d => ['monday', 'tuesday', 'wednesday', 'thursday'].includes(d.id)).map(day => (
+                                                <SelectItem key={day.id} value={day.id}>{day.name}</SelectItem>
+                                            ))}
+                                        </SelectContent>
+                                    </Select>
+                                    <FormMessage />
+                                </FormItem>
+                            )}
+                        />
+                    </div>
+                )}
+            </CollapsibleSection>
+
+
+              <CollapsibleSection title="Anulaciones de Horario / Horarios Específicos (Opcional)">
                 <div className="space-y-4">
                   {customScheduleFields.map((field, index) => (
                     <div key={field.id} className="p-4 border rounded-lg space-y-3 relative bg-muted/30">
@@ -474,7 +534,6 @@ export default function ProfessionalsPage() {
 }
 
 
-// Helper Collapsible Section Component
 interface CollapsibleSectionProps {
   title: string;
   children: React.ReactNode;
@@ -498,4 +557,3 @@ const ChevronIcon = ({ isOpen }: { isOpen: boolean }) => (
     <polyline points="6 9 12 15 18 9"></polyline>
   </svg>
 );
-

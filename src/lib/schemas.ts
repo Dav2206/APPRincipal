@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { LOCATIONS, TIME_SLOTS, PAYMENT_METHODS, APPOINTMENT_STATUS_DISPLAY, DAYS_OF_WEEK } from './constants';
 import type { DayOfWeekId } from './constants';
+import { getDay } from 'date-fns';
 
 export const LoginSchema = z.object({
   username: z.string().min(1, { message: 'El nombre de usuario es requerido.' }),
@@ -20,6 +21,8 @@ export const PatientFormSchema = z.object({
   lastName: z.string().min(2, "Apellido es requerido."),
   phone: z.string().optional().nullable(),
   age: z.coerce.number().int().min(0, "La edad no puede ser negativa.").optional().nullable(),
+  birthDay: z.coerce.number().int().min(1).max(31).optional().nullable(),
+  birthMonth: z.coerce.number().int().min(0).max(11).optional().nullable(), // 0 for January, 11 for December
   isDiabetic: z.boolean().optional(),
   notes: z.string().optional().nullable(),
 });
@@ -33,6 +36,8 @@ export const AppointmentFormSchema = z.object({
   patientAge: z.coerce.number().int().min(0, "La edad del paciente no puede ser negativa.").optional().nullable(),
   existingPatientId: z.string().optional().nullable(),
   isDiabetic: z.boolean().optional(),
+  birthDay: z.coerce.number().int().min(1).max(31).optional().nullable(),
+  birthMonth: z.coerce.number().int().min(0).max(11).optional().nullable(),
 
   locationId: z.string().refine(val => locationIds.includes(val as any), { message: "Sede inválida."}),
   serviceId: z.string().min(1, "Servicio es requerido."),
@@ -44,52 +49,75 @@ export const AppointmentFormSchema = z.object({
 
 export type AppointmentFormData = z.infer<typeof AppointmentFormSchema>;
 
+const DayScheduleSchema = z.object({
+  isWorking: z.boolean().optional(),
+  startTime: z.string().regex(/^([01]\d|2[0-3]):([0-5]\d)$/, "Formato HH:MM").optional().nullable(),
+  endTime: z.string().regex(/^([01]\d|2[0-3]):([0-5]\d)$/, "Formato HH:MM").optional().nullable(),
+}).refine(data => {
+  if (data.isWorking) {
+    return data.startTime && data.endTime && data.startTime < data.endTime;
+  }
+  return true;
+}, {
+  message: "Si trabaja, inicio y fin son requeridos, y inicio debe ser antes que fin.",
+  path: ["startTime"],
+});
+
 export const ProfessionalFormSchema = z.object({
   id: z.string().optional(),
   firstName: z.string().min(2, "Nombre es requerido."),
   lastName: z.string().min(2, "Apellido es requerido."),
-  locationId: z.string().refine(val => locationIds.includes(val as any), { message: "Sede inválida."}),
+  locationId: z.string().refine(val => locationIds.includes(val as any), { message: "Sede inválida." }),
   phone: z.string().optional().nullable(),
 
-  // Horario Semanal Base (opcional)
-  workDays: z.array(z.string().refine(val => dayOfWeekIds.includes(val as DayOfWeekId), { message: "Día inválido."})).min(0, "Debe seleccionar días de trabajo o definir anulaciones.").optional(),
-  startTime: z.string().regex(/^([01]\d|2[0-3]):([0-5]\d)$/, "Formato de hora inválido (HH:MM)").optional(),
-  endTime: z.string().regex(/^([01]\d|2[0-3]):([0-5]\d)$/, "Formato de hora inválido (HH:MM)").optional(),
+  workSchedule: z.object(
+    DAYS_OF_WEEK.filter(day => day.id !== 'sunday') // Base schedule for Mon-Sat
+      .reduce((acc, day) => {
+        acc[day.id as DayOfWeekId] = DayScheduleSchema.optional();
+        return acc;
+      }, {} as Record<Exclude<DayOfWeekId, 'sunday'>, z.ZodOptional<typeof DayScheduleSchema>>)
+  ).optional(),
+  
+  rotationType: z.enum(['none', 'biWeeklySunday']).default('none'),
+  rotationStartDate: z.date().optional().nullable(),
+  compensatoryDayOffChoice: z.enum(['monday', 'tuesday', 'wednesday', 'thursday', '']).optional().nullable()
+    .transform(value => value === "" ? null : value),
 
-  // Anulaciones o Horarios Específicos
+
   customScheduleOverrides: z.array(
     z.object({
-      id: z.string(), // Para react-hook-form useFieldArray
+      id: z.string(),
       date: z.date({ required_error: "La fecha es requerida para la anulación." }),
       isWorking: z.boolean(),
-      startTime: z.string().regex(/^([01]\d|2[0-3]):([0-5]\d)$/, "Formato de hora inválido (HH:MM)").optional().nullable(),
-      endTime: z.string().regex(/^([01]\d|2[0-3]):([0-5]\d)$/, "Formato de hora inválido (HH:MM)").optional().nullable(),
+      startTime: z.string().regex(/^([01]\d|2[0-3]):([0-5]\d)$/, "Formato HH:MM").optional().nullable(),
+      endTime: z.string().regex(/^([01]\d|2[0-3]):([0-5]\d)$/, "Formato HH:MM").optional().nullable(),
       notes: z.string().optional().nullable(),
     }).refine(data => {
       if (data.isWorking) {
-        // Si está trabajando, startTime y endTime son requeridos y endTime debe ser mayor que startTime
         return data.startTime && data.endTime && data.startTime < data.endTime;
       }
-      return true; // Si no está trabajando, no se requieren startTime/endTime
+      return true;
     }, {
-      message: "Si trabaja, la hora de inicio y fin son requeridas, y la de inicio debe ser anterior a la de fin.",
+      message: "Si trabaja, inicio y fin son requeridos, y inicio debe ser antes que fin.",
       path: ["startTime"], 
     })
   ).optional().nullable(),
 }).refine(data => {
-  // Validación para el horario base si se definen workDays
-  if (data.workDays && data.workDays.length > 0) {
-      if (!data.startTime || !data.endTime) {
-          return false; // startTime y endTime son requeridos si hay workDays
-      }
-      const [startHour, startMinute] = data.startTime.split(':').map(Number);
-      const [endHour, endMinute] = data.endTime.split(':').map(Number);
-      return (startHour * 60 + startMinute) < (endHour * 60 + endMinute);
+  if (data.rotationType === 'biWeeklySunday') {
+    if (!data.rotationStartDate) {
+      return false; // rotationStartDate is required for biWeeklySunday
+    }
+    if (getDay(data.rotationStartDate) !== 0) {
+      return false; // rotationStartDate must be a Sunday
+    }
+    if (!data.compensatoryDayOffChoice) {
+        return false; // compensatoryDayOffChoice is required
+    }
   }
-  return true; // Si no hay workDays, esta validación de horario base no aplica
+  return true;
 }, {
-  message: "Si se definen días base, la hora de inicio y fin son requeridas, y la de inicio debe ser anterior a la de fin.",
-  path: ["startTime"], // Path para el error del horario base
+  message: "Para rotación bi-semanal de domingo, se requiere una fecha de inicio (que sea domingo) y un día de compensación (Lunes-Jueves).",
+  path: ["rotationStartDate"], // Or a more general path if needed
 });
 export type ProfessionalFormData = z.infer<typeof ProfessionalFormSchema>;
 
@@ -101,15 +129,15 @@ export const AppointmentUpdateSchema = z.object({
   appointmentTime: z.string().refine(val => TIME_SLOTS.includes(val), { message: "Hora inválida."}).optional(),
   actualArrivalTime: z.string().optional().nullable(), // HH:MM
   professionalId: z.string().optional().nullable(), // Attending professional
-  durationMinutes: z.number().int().positive("La duración debe ser un número positivo.").optional().nullable(),
+  durationMinutes: z.coerce.number().int().positive("La duración debe ser un número positivo.").optional().nullable(),
   paymentMethod: z.string().refine(val => paymentMethodValues.includes(val as any), {message: "Método de pago inválido"}).optional().nullable(),
-  amountPaid: z.number().positive("El monto pagado debe ser un número positivo.").optional().nullable(),
+  amountPaid: z.coerce.number().positive("El monto pagado debe ser un número positivo.").optional().nullable(),
   staffNotes: z.string().optional().nullable(),
   attachedPhotos: z.array(z.string().startsWith("data:image/", { message: "Debe ser un data URI de imagen válido." })).optional().nullable(),
   addedServices: z.array(z.object({
     serviceId: z.string().min(1, "Servicio adicional inválido."),
     professionalId: z.string().optional().nullable(),
-    price: z.number().positive().optional().nullable(),
+    price: z.coerce.number().positive().optional().nullable(),
   })).optional().nullable(),
 });
 
@@ -126,4 +154,3 @@ export const ServiceFormSchema = z.object({
   price: z.coerce.number().positive("El precio debe ser un número positivo.").optional().nullable(),
 });
 export type ServiceFormData = z.infer<typeof ServiceFormSchema>;
-
