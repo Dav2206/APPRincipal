@@ -17,6 +17,7 @@ export const PatientFormSchema = z.object({
   firstName: z.string().min(2, "Nombre es requerido."),
   lastName: z.string().min(2, "Apellido es requerido."),
   phone: z.string().optional(),
+  age: z.coerce.number().int().positive("La edad debe ser un número positivo.").min(1, "Edad es requerida."),
   dateOfBirth: z.string().optional().refine(val => !val || /^\d{4}-\d{2}-\d{2}$/.test(val), {
     message: "Formato de fecha debe ser YYYY-MM-DD",
   }).or(z.literal('')),
@@ -30,6 +31,7 @@ export const AppointmentFormSchema = z.object({
   patientFirstName: z.string().min(2, "Nombre del paciente es requerido (mínimo 2 caracteres)."),
   patientLastName: z.string().min(2, "Apellido del paciente es requerido (mínimo 2 caracteres)."),
   patientPhone: z.string().optional(),
+  patientAge: z.coerce.number().int().positive("La edad del paciente debe ser un número positivo.").min(1, "Edad del paciente es requerida."),
   patientDateOfBirth: z.string().optional().refine(val => !val || /^\d{4}-\d{2}-\d{2}$/.test(val), { // YYYY-MM-DD format
     message: "Formato de fecha de nacimiento debe ser YYYY-MM-DD.",
   }).or(z.literal('')),

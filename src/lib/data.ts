@@ -39,11 +39,11 @@ const initialMockProfessionalsData: Professional[] = LOCATIONS.flatMap((location
 );
 
 const initialMockPatientsData: Patient[] = [
-  { id: 'pat001', firstName: 'Ana', lastName: 'García', phone: '111222333', preferredProfessionalId: initialMockProfessionalsData[0]?.id, notes: 'Paciente regular, prefiere citas por la mañana.', dateOfBirth: '1985-05-15', isDiabetic: false },
-  { id: 'pat002', firstName: 'Luis', lastName: 'Martínez', phone: '444555666', notes: 'Primera visita.', dateOfBirth: '1992-11-20', isDiabetic: true },
-  { id: 'pat003', firstName: 'Elena', lastName: 'Ruiz', phone: '777888999', dateOfBirth: '2000-07-01', isDiabetic: false },
-  { id: 'pat004', firstName: 'Carlos', lastName: 'Vargas', phone: '222333444', dateOfBirth: '1970-03-25', isDiabetic: true, notes: "Sensibilidad en el pie izquierdo." },
-  { id: 'pat005', firstName: 'Sofía', lastName: 'Chávez', phone: '555666777', dateOfBirth: '1998-12-05', isDiabetic: false, preferredProfessionalId: initialMockProfessionalsData[1]?.id },
+  { id: 'pat001', firstName: 'Ana', lastName: 'García', phone: '111222333', age: 39, dateOfBirth: '1985-05-15', preferredProfessionalId: initialMockProfessionalsData[0]?.id, notes: 'Paciente regular, prefiere citas por la mañana.', isDiabetic: false },
+  { id: 'pat002', firstName: 'Luis', lastName: 'Martínez', phone: '444555666', age: 31, dateOfBirth: '1992-11-20', notes: 'Primera visita.', isDiabetic: true },
+  { id: 'pat003', firstName: 'Elena', lastName: 'Ruiz', phone: '777888999', age: 23, dateOfBirth: '2000-07-01', isDiabetic: false },
+  { id: 'pat004', firstName: 'Carlos', lastName: 'Vargas', phone: '222333444', age: 54, dateOfBirth: '1970-03-25', isDiabetic: true, notes: "Sensibilidad en el pie izquierdo." },
+  { id: 'pat005', firstName: 'Sofía', lastName: 'Chávez', phone: '555666777', age: 25, dateOfBirth: '1998-12-05', isDiabetic: false, preferredProfessionalId: initialMockProfessionalsData[1]?.id },
 ];
 
 const initialMockServicesData: Service[] = SERVICES_CONSTANTS.map((s_const, index) => ({
@@ -276,6 +276,7 @@ export const findPatient = async (firstName: string, lastName: string): Promise<
 export const addPatient = async (data: Omit<Patient, 'id'>): Promise<Patient> => {
   const newPatientData: Omit<Patient, 'id'> = {
     ...data,
+    age: data.age || 0,
     isDiabetic: data.isDiabetic || false,
   };
   if (useMockDatabase) {
@@ -479,14 +480,15 @@ export const addAppointment = async (data: AppointmentFormData): Promise<Appoint
     let existingPatient = await findPatient(data.patientFirstName, data.patientLastName);
     if (existingPatient) {
       patientId = existingPatient.id;
-       if (data.isDiabetic !== undefined && existingPatient.isDiabetic !== data.isDiabetic) {
-          await updatePatient(patientId, { isDiabetic: data.isDiabetic });
+       if ((data.isDiabetic !== undefined && existingPatient.isDiabetic !== data.isDiabetic) || (data.patientAge !== undefined && existingPatient.age !== data.patientAge)) {
+          await updatePatient(patientId, { isDiabetic: data.isDiabetic, age: data.patientAge, dateOfBirth: data.patientDateOfBirth });
       }
     } else {
       const newPatient = await addPatient({
         firstName: data.patientFirstName,
         lastName: data.patientLastName,
         phone: data.patientPhone,
+        age: data.patientAge,
         dateOfBirth: data.patientDateOfBirth,
         isDiabetic: data.isDiabetic || false,
         notes: '', 
@@ -496,8 +498,8 @@ export const addAppointment = async (data: AppointmentFormData): Promise<Appoint
     }
   } else {
       const existingPatientDetails = await getPatientById(patientId);
-      if (existingPatientDetails && data.isDiabetic !== undefined && data.isDiabetic !== existingPatientDetails.isDiabetic) {
-        await updatePatient(patientId, { isDiabetic: data.isDiabetic });
+      if (existingPatientDetails && ((data.isDiabetic !== undefined && data.isDiabetic !== existingPatientDetails.isDiabetic) || (data.patientAge !== undefined && data.patientAge !== existingPatientDetails.age))) {
+        await updatePatient(patientId, { isDiabetic: data.isDiabetic, age: data.patientAge, dateOfBirth: data.patientDateOfBirth });
       }
   }
 

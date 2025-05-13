@@ -29,7 +29,7 @@ import {
   DialogClose,
 } from '@/components/ui/dialog';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
-import { PlusCircle, Edit2, Users, Search, Loader2, FileText, CalendarClock, ChevronsDown, AlertTriangle, Cake, CheckSquare, Square } from 'lucide-react';
+import { PlusCircle, Edit2, Users, Search, Loader2, FileText, CalendarClock, ChevronsDown, AlertTriangle, Cake, CheckSquare, Square, UserRound } from 'lucide-react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { PatientFormSchema, type PatientFormData } from '@/lib/schemas';
@@ -69,6 +69,7 @@ export default function PatientsPage() {
       firstName: '',
       lastName: '',
       phone: '',
+      age: 0,
       dateOfBirth: '',
       isDiabetic: false,
       notes: ''
@@ -156,7 +157,7 @@ export default function PatientsPage() {
 
   const handleAddPatient = () => {
     setEditingPatient(null);
-    form.reset({ firstName: '', lastName: '', phone: '', dateOfBirth: '', isDiabetic: false, notes: '' });
+    form.reset({ firstName: '', lastName: '', phone: '', age: 0, dateOfBirth: '', isDiabetic: false, notes: '' });
     setIsFormOpen(true);
   };
 
@@ -165,6 +166,8 @@ export default function PatientsPage() {
     form.reset({
         ...patient,
         phone: (user?.role === USER_ROLES.ADMIN) ? patient.phone : undefined, 
+        age: patient.age || 0,
+        dateOfBirth: patient.dateOfBirth || '',
         isDiabetic: patient.isDiabetic || false,
     });
     setIsFormOpen(true);
@@ -216,17 +219,6 @@ export default function PatientsPage() {
   
   const handleLoadMore = () => {
     fetchPatientsData(currentPage + 1, searchTerm, filterPatientsWithAppointmentsToday, lastVisiblePatientId);
-  };
-
-  const calculateAge = (dateOfBirth?: string): string => {
-    if (!dateOfBirth) return 'N/A';
-    try {
-      const dob = parseISO(dateOfBirth);
-      const age = differenceInYears(new Date(), dob);
-      return age.toString();
-    } catch {
-      return 'Inválida';
-    }
   };
 
   const LoadingState = () => (
@@ -319,7 +311,7 @@ export default function PatientsPage() {
                       <TableCell className="hidden md:table-cell">
                         {user?.role === USER_ROLES.ADMIN ? (patient.phone || 'N/A') : 'Restringido'}
                       </TableCell>
-                      <TableCell className="hidden sm:table-cell">{calculateAge(patient.dateOfBirth)}</TableCell>
+                      <TableCell className="hidden sm:table-cell">{patient.age > 0 ? patient.age : 'N/A'}</TableCell>
                       <TableCell className="hidden lg:table-cell text-center">
                         {patient.isDiabetic ? <CheckSquare className="h-5 w-5 text-red-600 mx-auto" /> : <Square className="h-5 w-5 text-muted-foreground mx-auto" />}
                       </TableCell>
@@ -384,10 +376,17 @@ export default function PatientsPage() {
                       <FormMessage />
                   </FormItem>
                )}/>
+                <FormField control={form.control} name="age" render={({ field }) => (
+                  <FormItem>
+                      <FormLabel className="flex items-center gap-1"><UserRound size={16}/>Edad</FormLabel>
+                      <FormControl><Input type="number" placeholder="Ej: 30" {...field} onChange={e => field.onChange(parseInt(e.target.value,10) || 0)}/></FormControl>
+                      <FormMessage />
+                  </FormItem>
+                )}/>
                <FormField control={form.control} name="dateOfBirth" render={({ field }) => (
                   <FormItem>
-                      <FormLabel>Fecha de Nacimiento (YYYY-MM-DD)</FormLabel>
-                      <FormControl><Input type="text" placeholder="Ej: 1990-01-15" {...field} /></FormControl>
+                      <FormLabel className="flex items-center gap-1"><Cake size={16}/>Fecha de Nacimiento (Opcional)</FormLabel>
+                      <FormControl><Input type="text" placeholder="YYYY-MM-DD" {...field} /></FormControl>
                       <FormMessage />
                   </FormItem>
                )}/>
@@ -447,4 +446,3 @@ export default function PatientsPage() {
     </div>
   );
 }
-
