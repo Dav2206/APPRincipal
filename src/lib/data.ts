@@ -1,13 +1,19 @@
-
 // src/lib/data.ts
 import type { User, Professional, Patient, Service, Appointment, AppointmentFormData, ProfessionalFormData, AppointmentStatus, ServiceFormData } from '@/types';
 import { LOCATIONS, USER_ROLES, SERVICES as SERVICES_CONSTANTS, APPOINTMENT_STATUS, LocationId, ServiceId as ConstantServiceId, APPOINTMENT_STATUS_DISPLAY, PAYMENT_METHODS } from './constants';
-import { formatISO, parseISO, addDays, setHours, setMinutes, startOfDay, endOfDay, addMinutes, isSameDay as dateFnsIsSameDay, startOfMonth, endOfMonth, differenceInYears, subDays, isEqual, isBefore, isAfter, getDate, getYear, getMonth, setMonth, setYear, getHours } from 'date-fns';
+import { formatISO, parseISO, addDays, setHours, setMinutes, startOfDay, endOfDay, isSameDay as dateFnsIsSameDay, startOfMonth, endOfMonth, differenceInYears, subDays, isEqual, isBefore, isAfter, getDate, getYear, getMonth, setMonth, setYear, getHours } from 'date-fns';
+import { firestore } from './firebase-config'; // Firebase setup - Corrected import path
+import { collection, addDoc, getDocs, doc, getDoc, updateDoc, query, where, deleteDoc, writeBatch, serverTimestamp, Timestamp, runTransaction, setDoc, QueryConstraint, orderBy, limit, startAfter,getCountFromServer, CollectionReference, DocumentData, documentId } from 'firebase/firestore';
+
+// --- Helper to convert Firestore Timestamps to ISO strings and vice-versa ---
+const fromTimestampToISO = (timestamp: Timestamp | undefined): string | undefined => timestamp?.toDate().toISOString();
+const fromDateToTimestamp = (date: Date | undefined): Timestamp | undefined => date ? Timestamp.fromDate(date) : undefined;
+
 
 const ANY_PROFESSIONAL_VALUE = "_any_professional_placeholder_";
 
 // --- Mock Data Configuration ---
-export const useMockDatabase = true; 
+export const useMockDatabase = true;
 
 
 // --- Initial Mock Data Definitions ---
@@ -47,7 +53,7 @@ const initialMockServicesData: Service[] = SERVICES_CONSTANTS.map((s_const, inde
   id: s_const.id as string,
   name: s_const.name,
   defaultDuration: s_const.defaultDuration,
-  price: (50 + index * 10), 
+  price: (50 + index * 10),
 }));
 
 const today = new Date();
@@ -141,7 +147,7 @@ export const getUserByUsername = async (username: string): Promise<User | undefi
 
 export const getProfessionals = async (locationId?: LocationId): Promise<Professional[]> => {
     if (useMockDatabase) {
-        let professionalsResult = locationId 
+        let professionalsResult = locationId
             ? mockDB.professionals.filter(p => p.locationId === locationId)
             : [...mockDB.professionals];
 
@@ -151,10 +157,10 @@ export const getProfessionals = async (locationId?: LocationId): Promise<Profess
         const currentDay = getDate(today);
         const currentQuincena = currentDay <= 15 ? 1 : 2;
 
-        const startDate = currentQuincena === 1 
+        const startDate = currentQuincena === 1
             ? startOfMonth(setMonth(setYear(new Date(), currentYear), currentMonth))
             : addDays(startOfMonth(setMonth(setYear(new Date(), currentYear), currentMonth)), 15);
-        
+
         const endDate = currentQuincena === 1
             ? addDays(startOfMonth(setMonth(setYear(new Date(), currentYear), currentMonth)), 14)
             : endOfMonth(setMonth(setYear(new Date(), currentYear), currentMonth));
@@ -222,7 +228,7 @@ const PATIENTS_PER_PAGE = 8;
 export const getPatients = async (options: { page?: number, limit?: number, searchTerm?: string, filterToday?: boolean, adminSelectedLocation?: LocationId | 'all', user?: User | null, lastVisiblePatientId?: string | null } = {}): Promise<{patients: Patient[], totalCount: number, lastVisiblePatientId?: string | null}> => {
   const { page = 1, limit: queryLimit = PATIENTS_PER_PAGE, searchTerm, filterToday, adminSelectedLocation, user, lastVisiblePatientId: startAfterId } = options;
 
-  if (useMockDatabase) { 
+  if (useMockDatabase) {
     let filteredMockPatients = [...mockDB.patients];
     if (searchTerm) {
         const lowerSearchTerm = searchTerm.toLowerCase();
@@ -247,7 +253,7 @@ export const getPatients = async (options: { page?: number, limit?: number, sear
     }
     filteredMockPatients.sort((a,b) => `${a.firstName} ${a.lastName}`.localeCompare(`${b.firstName} ${b.lastName}`));
     const totalCount = filteredMockPatients.length;
-    
+
     let paginatedPatients = [];
     let newLastVisibleId: string | null = null;
 
@@ -262,7 +268,7 @@ export const getPatients = async (options: { page?: number, limit?: number, sear
          const startIndex = (page - 1) * queryLimit;
          paginatedPatients = filteredMockPatients.slice(startIndex, startIndex + queryLimit);
     }
-    
+
     newLastVisibleId = paginatedPatients.length > 0 ? paginatedPatients[paginatedPatients.length - 1].id : null;
 
     return { patients: paginatedPatients, totalCount, lastVisiblePatientId: newLastVisibleId };
@@ -333,14 +339,15 @@ export const getServiceById = async (id: string): Promise<Service | undefined> =
 };
 
 export const addService = async (data: ServiceFormData): Promise<Service> => {
+  const totalDurationMinutes = (data.defaultDuration.hours * 60) + data.defaultDuration.minutes;
   const newServiceData: Omit<Service, 'id'> = {
     name: data.name,
-    defaultDuration: data.defaultDuration,
+    defaultDuration: totalDurationMinutes,
     price: data.price,
   };
   if (useMockDatabase) {
     const newService: Service = {
-      id: data.id || generateId(), 
+      id: data.id || generateId(),
       ...newServiceData,
     };
     mockDB.services.push(newService);
@@ -353,7 +360,14 @@ export const updateService = async (id: string, data: Partial<ServiceFormData>):
     if (useMockDatabase) {
         const index = mockDB.services.findIndex(s => s.id === id);
         if (index !== -1) {
-            mockDB.services[index] = { ...mockDB.services[index], ...data } as Service;
+            const serviceToUpdate = { ...mockDB.services[index] };
+            if (data.name) serviceToUpdate.name = data.name;
+            if (data.defaultDuration) {
+              serviceToUpdate.defaultDuration = (data.defaultDuration.hours * 60) + data.defaultDuration.minutes;
+            }
+            if (data.price !== undefined) serviceToUpdate.price = data.price;
+
+            mockDB.services[index] = serviceToUpdate;
             return mockDB.services[index];
         }
         return undefined;
@@ -363,7 +377,7 @@ export const updateService = async (id: string, data: Partial<ServiceFormData>):
 
 
 const populateAppointment = async (apptData: any): Promise<Appointment> => {
-    const patient = useMockDatabase ? mockDB.patients.find(p => p.id === apptData.patientId) : undefined; 
+    const patient = useMockDatabase ? mockDB.patients.find(p => p.id === apptData.patientId) : undefined;
     const professional = apptData.professionalId ? (useMockDatabase ? mockDB.professionals.find(p => p.id === apptData.professionalId) : undefined ) : undefined;
     const service = apptData.serviceId ? (useMockDatabase ? mockDB.services.find(s => s.id === apptData.serviceId) : undefined ) : undefined;
 
@@ -377,7 +391,7 @@ const populateAppointment = async (apptData: any): Promise<Appointment> => {
             }))
         );
     }
-    
+
     return {
         ...apptData,
         patient,
@@ -401,15 +415,15 @@ export const getAppointments = async (filters: {
   lastVisibleAppointmentId?: string | null;
 }): Promise<{ appointments: Appointment[], totalCount: number, lastVisibleAppointmentId?: string | null }> => {
   const { page = 1, limit: queryLimitParam, lastVisibleAppointmentId: startAfterId, ...restFilters } = filters;
-  const queryLimit = queryLimitParam ?? (restFilters.statuses ? APPOINTMENTS_PER_PAGE_HISTORY : 1000); 
+  const queryLimit = queryLimitParam ?? (restFilters.statuses ? APPOINTMENTS_PER_PAGE_HISTORY : 1000);
 
-  if (useMockDatabase) { 
+  if (useMockDatabase) {
     let currentMockAppointments = mockDB.appointments || [];
     let filteredMockAppointments = [...currentMockAppointments];
 
     if (restFilters.locationId) {
         const locationsToFilter = Array.isArray(restFilters.locationId) ? restFilters.locationId : [restFilters.locationId];
-        if (locationsToFilter.length > 0 && locationsToFilter[0] !== undefined) { 
+        if (locationsToFilter.length > 0 && locationsToFilter[0] !== undefined) {
             filteredMockAppointments = filteredMockAppointments.filter(appt => locationsToFilter.includes(appt.locationId));
         }
     }
@@ -443,7 +457,7 @@ export const getAppointments = async (filters: {
             filteredMockAppointments = filteredMockAppointments.filter(appt => statusesToFilter.includes(appt.status));
         }
     }
-    
+
     const isFetchingPastStatuses = restFilters.statuses && (
         (Array.isArray(restFilters.statuses) && restFilters.statuses.some(s => [APPOINTMENT_STATUS.COMPLETED, APPOINTMENT_STATUS.CANCELLED_CLIENT, APPOINTMENT_STATUS.CANCELLED_STAFF, APPOINTMENT_STATUS.NO_SHOW].includes(s as AppointmentStatus))) ||
         (typeof restFilters.statuses === 'string' && [APPOINTMENT_STATUS.COMPLETED, APPOINTMENT_STATUS.CANCELLED_CLIENT, APPOINTMENT_STATUS.CANCELLED_STAFF, APPOINTMENT_STATUS.NO_SHOW].includes(restFilters.statuses as AppointmentStatus))
@@ -457,7 +471,7 @@ export const getAppointments = async (filters: {
 
     const populatedAppointmentsPromises = filteredMockAppointments.map(appt => populateAppointment(appt));
     const populatedAppointmentsResult = await Promise.all(populatedAppointmentsPromises);
-    
+
     const totalCount = populatedAppointmentsResult.length;
 
     let paginatedResult = [];
@@ -472,9 +486,9 @@ export const getAppointments = async (filters: {
         const startIndex = (page - 1) * queryLimit;
         paginatedResult = populatedAppointmentsResult.slice(startIndex, startIndex + queryLimit);
     }
-    
+
     const newLastVisibleId = paginatedResult.length > 0 ? paginatedResult[paginatedResult.length -1].id : null;
-    return { appointments: paginatedResult, totalCount, lastVisibleAppointmentId: newLastVisibleId };
+    return { appointments: populatedAppointmentsResult, totalCount, lastVisibleAppointmentId: newLastVisibleId };
   }
   throw new Error("Appointment retrieval not implemented for non-mock database or mockDB not available.");
 };
@@ -507,8 +521,8 @@ export const addAppointment = async (data: AppointmentFormData ): Promise<Appoin
         phone: data.patientPhone,
         age: data.patientAge,
         isDiabetic: data.isDiabetic || false,
-        notes: '', 
-        preferredProfessionalId: undefined, 
+        notes: '',
+        preferredProfessionalId: undefined,
       });
       patientId = newPatient.id;
     }
@@ -530,11 +544,11 @@ export const addAppointment = async (data: AppointmentFormData ): Promise<Appoin
   }
   const appointmentDateHours = parseInt(data.appointmentTime.split(':')[0]);
   const appointmentDateMinutes = parseInt(data.appointmentTime.split(':')[1]);
-  
+
   const appointmentDateTimeObject = setMinutes(setHours(data.appointmentDate, appointmentDateHours), appointmentDateMinutes);
   const appointmentDateTime = formatISO(appointmentDateTimeObject);
   const appointmentDuration = service.defaultDuration || 60;
-  const appointmentEndTime = addMinutes(appointmentDateTimeObject, appointmentDuration);
+  const appointmentEndTime = addMinutes(parseISO(appointmentDateTime), appointmentDuration);
 
   let actualProfessionalId: string | undefined | null = undefined;
 
@@ -543,19 +557,19 @@ export const addAppointment = async (data: AppointmentFormData ): Promise<Appoin
     if (preferredProf && preferredProf.locationId === data.locationId) {
       actualProfessionalId = preferredProf.id;
     } else {
-      actualProfessionalId = null; 
+      actualProfessionalId = null;
     }
   } else {
-     actualProfessionalId = null; 
+     actualProfessionalId = null;
   }
 
 
-  if (actualProfessionalId === null) { 
+  if (actualProfessionalId === null) {
     const allProfessionalsInLocation = await getProfessionals(data.locationId);
     const appointmentsOnDateResult = await getAppointments({
       locationId: data.locationId,
       date: data.appointmentDate,
-      statuses: [APPOINTMENT_STATUS.BOOKED, APPOINTMENT_STATUS.CONFIRMED] 
+      statuses: [APPOINTMENT_STATUS.BOOKED, APPOINTMENT_STATUS.CONFIRMED]
     });
     const existingAppointmentsForDay = appointmentsOnDateResult.appointments || [];
 
@@ -565,7 +579,7 @@ export const addAppointment = async (data: AppointmentFormData ): Promise<Appoin
         if (existingAppt.professionalId === prof.id) {
           const existingApptStartTime = parseISO(existingAppt.appointmentDateTime);
           const existingApptEndTime = addMinutes(existingApptStartTime, existingAppt.durationMinutes);
-          if (isBefore(appointmentDateTimeObject, existingApptEndTime) && isAfter(appointmentEndTime, existingApptStartTime)) {
+          if (isBefore(parseISO(appointmentDateTime), existingApptEndTime) && isAfter(appointmentEndTime, existingApptStartTime)) {
             isProfBusy = true;
             break;
           }
@@ -607,37 +621,37 @@ export const addAppointment = async (data: AppointmentFormData ): Promise<Appoin
   throw new Error("Appointment creation not implemented for non-mock database or mockDB not available.");
 };
 
-export const updateAppointment = async (id: string, data: Partial<AppointmentUpdateFormData>): Promise<Appointment | undefined> => {
+export const updateAppointment = async (id: string, data: Partial<AppointmentFormData>): Promise<Appointment | undefined> => {
   const updateData: any = { ...data, updatedAt: formatISO(new Date()) };
-  
+
   if (useMockDatabase) {
     const index = mockDB.appointments.findIndex(a => a.id === id);
     if (index !== -1) {
         const originalAppointment = mockDB.appointments[index];
-        
+
         let newAppointmentDateTime = originalAppointment.appointmentDateTime;
         if (data.appointmentDate && data.appointmentTime) {
-            const datePart = data.appointmentDate; 
+            const datePart = data.appointmentDate;
             const [hours, minutes] = (data.appointmentTime as string).split(':').map(Number);
             newAppointmentDateTime = formatISO(setMinutes(setHours(datePart as Date, hours), minutes));
-        } else if (data.appointmentDate) { 
+        } else if (data.appointmentDate) {
             const timePart = parseISO(originalAppointment.appointmentDateTime);
             const originalHours = getHours(timePart);
             const originalMinutes = getMinutes(timePart);
             newAppointmentDateTime = formatISO(setMinutes(setHours(data.appointmentDate as Date, originalHours), originalMinutes));
-        } else if (data.appointmentTime) { 
+        } else if (data.appointmentTime) {
             const datePart = parseISO(originalAppointment.appointmentDateTime);
             const [hours, minutes] = (data.appointmentTime as string).split(':').map(Number);
             newAppointmentDateTime = formatISO(setMinutes(setHours(datePart, hours), minutes));
         }
-        
+
         const updatedAppointmentRaw = {
             ...originalAppointment,
             ...data,
-            appointmentDateTime: newAppointmentDateTime, 
+            appointmentDateTime: newAppointmentDateTime,
             updatedAt: formatISO(new Date()),
         };
-        
+
         delete updatedAppointmentRaw.patient;
         delete updatedAppointmentRaw.professional;
         delete updatedAppointmentRaw.service;
@@ -667,7 +681,7 @@ export const getPatientAppointmentHistory = async (
   const todayDate = startOfDay(new Date());
   const pastStatuses: AppointmentStatus[] = [APPOINTMENT_STATUS.COMPLETED, APPOINTMENT_STATUS.NO_SHOW, APPOINTMENT_STATUS.CANCELLED_CLIENT, APPOINTMENT_STATUS.CANCELLED_STAFF];
 
-  if (useMockDatabase) { 
+  if (useMockDatabase) {
     const historyAppointments = (mockDB.appointments || []).filter(appt =>
       appt.patientId === patientId &&
       appt.appointmentDateTime && parseISO(appt.appointmentDateTime) < todayDate &&
@@ -676,7 +690,7 @@ export const getPatientAppointmentHistory = async (
 
     const populatedHistoryPromises = historyAppointments.map(appt => populateAppointment(appt));
     const populatedHistory = await Promise.all(populatedHistoryPromises);
-    
+
     const totalCount = populatedHistory.length;
     let paginatedAppointments = [];
 
@@ -693,7 +707,7 @@ export const getPatientAppointmentHistory = async (
     }
 
     const newLastVisibleId = paginatedAppointments.length > 0 ? paginatedAppointments[paginatedAppointments.length -1].id : null;
-    return { appointments: paginatedAppointments, totalCount, lastVisibleAppointmentId: newLastVisibleId };
+    return { appointments: populatedHistory, totalCount, lastVisibleAppointmentId: newLastVisibleId };
   }
   throw new Error("Patient appointment history retrieval not implemented for non-mock database or mockDB not available.");
 };
@@ -703,16 +717,34 @@ export const getCurrentQuincenaDateRange = (): { start: Date; end: Date } => {
   const currentYear = getYear(today);
   const currentMonth = getMonth(today);
   const currentDay = getDate(today);
-  
+
   let startDate: Date;
   let endDate: Date;
 
   if (currentDay <= 15) {
     startDate = startOfMonth(setMonth(setYear(new Date(), currentYear), currentMonth));
-    endDate = addDays(startDate, 14); 
+    endDate = addDays(startDate, 14);
   } else {
-    startDate = addDays(startOfMonth(setMonth(setYear(new Date(), currentYear), currentMonth)), 15); 
+    startDate = addDays(startOfMonth(setMonth(setYear(new Date(), currentYear), currentMonth)), 15);
     endDate = endOfMonth(setMonth(setYear(new Date(), currentYear), currentMonth));
   }
   return { start: startOfDay(startDate), end: endOfDay(endDate) };
+};
+
+// Function to get appointments for a specific professional on a specific date
+export const getProfessionalAppointmentsForDate = async (professionalId: string, date: Date): Promise<Appointment[]> => {
+  if (useMockDatabase) {
+    const targetDate = startOfDay(date);
+    const professionalAppointments = (mockDB.appointments || [])
+      .filter(appt =>
+        appt.professionalId === professionalId &&
+        dateFnsIsSameDay(parseISO(appt.appointmentDateTime), targetDate) &&
+        (appt.status === APPOINTMENT_STATUS.BOOKED || appt.status === APPOINTMENT_STATUS.CONFIRMED) // Only active appointments
+      )
+      .sort((a, b) => parseISO(a.appointmentDateTime).getTime() - parseISO(b.appointmentDateTime).getTime());
+
+    const populatedAppointments = await Promise.all(professionalAppointments.map(populateAppointment));
+    return populatedAppointments;
+  }
+  throw new Error("Professional appointments retrieval not implemented for non-mock database or mockDB not available.");
 };

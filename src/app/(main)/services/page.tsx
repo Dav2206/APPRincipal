@@ -1,4 +1,3 @@
-
 "use client";
 
 import type { Service, ServiceFormData } from '@/types';
@@ -48,8 +47,8 @@ export default function ServicesPage() {
     resolver: zodResolver(ServiceFormSchema),
     defaultValues: {
       name: '',
-      defaultDuration: 30,
-      price: undefined, 
+      defaultDuration: { hours: 0, minutes: 30 },
+      price: undefined,
     }
   });
 
@@ -63,10 +62,10 @@ export default function ServicesPage() {
     setIsLoading(true);
     try {
       const data = await getServices();
-      setServices(data); 
+      setServices(data);
     } catch (error) {
       toast({ title: "Error", description: "No se pudieron cargar los servicios.", variant: "destructive" });
-      setServices([]); 
+      setServices([]);
     } finally {
       setIsLoading(false);
     }
@@ -80,15 +79,19 @@ export default function ServicesPage() {
 
   const handleAddService = () => {
     setEditingService(null);
-    form.reset({ name: '', defaultDuration: 30, price: undefined });
+    form.reset({ name: '', defaultDuration: { hours: 0, minutes: 30 }, price: undefined });
     setIsFormOpen(true);
   };
 
   const handleEditService = (service: Service) => {
     setEditingService(service);
+    const hours = Math.floor((service.defaultDuration || 0) / 60);
+    const minutes = (service.defaultDuration || 0) % 60;
     form.reset({
-      ...service,
-      price: service.price ?? undefined, 
+      id: service.id,
+      name: service.name,
+      defaultDuration: { hours, minutes },
+      price: service.price ?? undefined,
     });
     setIsFormOpen(true);
   };
@@ -113,7 +116,7 @@ export default function ServicesPage() {
       console.error(error);
     }
   };
-  
+
   if (authIsLoading || !user || user.role !== USER_ROLES.ADMIN) {
     return (
       <div className="flex h-screen items-center justify-center">
@@ -128,7 +131,7 @@ export default function ServicesPage() {
         <p className="mt-4 text-muted-foreground">Cargando servicios...</p>
       </div>
   );
-  
+
   const NoServicesCard = () => (
     <Card className="col-span-full mt-8 border-dashed border-2">
       <CardContent className="py-10 text-center">
@@ -200,7 +203,7 @@ export default function ServicesPage() {
           <Form {...form}>
             <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4 py-4 max-h-[70vh] overflow-y-auto pr-2">
               {editingService && <input type="hidden" {...form.register("id")} value={editingService.id} />}
-              
+
               <FormField control={form.control} name="name" render={({ field }) => (
                 <FormItem>
                   <FormLabel>Nombre del Servicio</FormLabel>
@@ -208,32 +211,59 @@ export default function ServicesPage() {
                   <FormMessage />
                 </FormItem>
               )}/>
-              <FormField control={form.control} name="defaultDuration" render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Duración Predeterminada (minutos)</FormLabel>
-                  <FormControl><Input type="number" placeholder="Ej: 60" {...field} onChange={e => field.onChange(parseInt(e.target.value,10) || 0)} /></FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}/>
+              <div>
+                <FormLabel>Duración Predeterminada</FormLabel>
+                <div className="grid grid-cols-2 gap-4 mt-1">
+                  <FormField
+                    control={form.control}
+                    name="defaultDuration.hours"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel className="text-xs text-muted-foreground">Horas</FormLabel>
+                        <FormControl><Input type="number" placeholder="Ej: 1" {...field} onChange={e => field.onChange(parseInt(e.target.value,10) || 0)} /></FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={form.control}
+                    name="defaultDuration.minutes"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel className="text-xs text-muted-foreground">Minutos</FormLabel>
+                        <FormControl><Input type="number" placeholder="Ej: 30" {...field} onChange={e => field.onChange(parseInt(e.target.value,10) || 0)} /></FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                </div>
+                {form.formState.errors.defaultDuration?.message && (
+                    <p className="text-sm font-medium text-destructive mt-1">{form.formState.errors.defaultDuration.message}</p>
+                )}
+                 {form.formState.errors.defaultDuration?.root?.message && ( // For path: [] errors
+                    <p className="text-sm font-medium text-destructive mt-1">{form.formState.errors.defaultDuration.root.message}</p>
+                )}
+              </div>
+
               <FormField control={form.control} name="price" render={({ field }) => (
                 <FormItem>
                   <FormLabel>Precio (S/) (Opcional)</FormLabel>
                   <FormControl>
-                    <Input 
-                      type="number" 
-                      step="0.01" 
-                      placeholder="Ej: 80.00" 
-                      {...field} 
-                      value={field.value ?? ''} 
+                    <Input
+                      type="number"
+                      step="0.01"
+                      placeholder="Ej: 80.00"
+                      {...field}
+                      value={field.value ?? ""}
                       onChange={e => {
                         const value = e.target.value;
                         if (value === '') {
-                          field.onChange(undefined); 
+                          field.onChange(undefined);
                         } else {
                           const parsedValue = parseFloat(value);
                           field.onChange(isNaN(parsedValue) ? undefined : parsedValue);
                         }
-                      }} 
+                      }}
                     />
                   </FormControl>
                   <FormMessage />
@@ -253,4 +283,3 @@ export default function ServicesPage() {
     </div>
   );
 }
-

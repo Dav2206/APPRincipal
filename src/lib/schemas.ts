@@ -1,4 +1,3 @@
-
 import { z } from 'zod';
 import { LOCATIONS, TIME_SLOTS, PAYMENT_METHODS, APPOINTMENT_STATUS_DISPLAY } from './constants';
 
@@ -31,10 +30,10 @@ export const AppointmentFormSchema = z.object({
   patientPhone: z.string().optional().nullable(),
   patientAge: z.coerce.number().int().min(0, "La edad del paciente no puede ser negativa.").optional().nullable(),
   existingPatientId: z.string().optional().nullable(),
-  isDiabetic: z.boolean().optional(), 
-  
+  isDiabetic: z.boolean().optional(),
+
   locationId: z.string().refine(val => locationIds.includes(val as any), { message: "Sede inválida."}),
-  serviceId: z.string().min(1, "Servicio es requerido."), 
+  serviceId: z.string().min(1, "Servicio es requerido."),
   appointmentDate: z.date({ required_error: "Fecha de la cita es requerida."}),
   appointmentTime: z.string().refine(val => TIME_SLOTS.includes(val), { message: "Hora inválida."}),
   preferredProfessionalId: z.string().optional().nullable(),
@@ -55,14 +54,14 @@ export type ProfessionalFormData = z.infer<typeof ProfessionalFormSchema>;
 
 export const AppointmentUpdateSchema = z.object({
   status: z.string().refine(val => appointmentStatusKeys.includes(val as any), {message: "Estado inválido"}),
-  serviceId: z.string().min(1, "Servicio es requerido.").optional(), 
+  serviceId: z.string().min(1, "Servicio es requerido.").optional(),
   appointmentDate: z.date({ required_error: "Fecha de la cita es requerida."}).optional(),
   appointmentTime: z.string().refine(val => TIME_SLOTS.includes(val), { message: "Hora inválida."}).optional(),
   actualArrivalTime: z.string().optional().nullable(), // HH:MM
   professionalId: z.string().optional().nullable(), // Attending professional
-  durationMinutes: z.number().int().positive().optional().nullable(),
+  durationMinutes: z.number().int().positive("La duración debe ser un número positivo.").optional().nullable(),
   paymentMethod: z.string().refine(val => paymentMethodValues.includes(val as any), {message: "Método de pago inválido"}).optional().nullable(),
-  amountPaid: z.number().positive().optional().nullable(),
+  amountPaid: z.number().positive("El monto pagado debe ser un número positivo.").optional().nullable(),
   staffNotes: z.string().optional().nullable(),
   attachedPhotos: z.array(z.string().startsWith("data:image/", { message: "Debe ser un data URI de imagen válido." })).optional().nullable(),
   addedServices: z.array(z.object({
@@ -75,9 +74,13 @@ export const AppointmentUpdateSchema = z.object({
 export const ServiceFormSchema = z.object({
   id: z.string().optional(),
   name: z.string().min(2, "Nombre del servicio es requerido."),
-  defaultDuration: z.coerce.number().int().positive("La duración debe ser un número positivo."),
+  defaultDuration: z.object({
+    hours: z.coerce.number().int().min(0, "Horas no pueden ser negativas.").max(23, "Horas no pueden ser más de 23.").default(0),
+    minutes: z.coerce.number().int().min(0, "Minutos no pueden ser negativos.").max(59, "Minutos no pueden ser más de 59.").default(30),
+  }).refine(data => (data.hours * 60 + data.minutes) > 0, {
+    message: "La duración total debe ser mayor a 0 minutos.",
+    path: ["defaultDuration"], // General error for the duration object
+  }),
   price: z.coerce.number().positive("El precio debe ser un número positivo.").optional().nullable(),
 });
 export type ServiceFormData = z.infer<typeof ServiceFormSchema>;
-
-
