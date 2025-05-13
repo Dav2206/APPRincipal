@@ -5,7 +5,7 @@ import { LOCATIONS, USER_ROLES, SERVICES as SERVICES_CONSTANTS, APPOINTMENT_STAT
 import type { DayOfWeekId } from './constants';
 import { formatISO, parseISO, addDays, setHours, setMinutes, startOfDay, endOfDay, isSameDay as dateFnsIsSameDay, startOfMonth, endOfMonth, differenceInYears, subDays, isEqual, isBefore, isAfter, getDate, getYear, getMonth, setMonth, setYear, getHours, addMinutes as dateFnsAddMinutes, isWithinInterval, getDay, format, differenceInDays } from 'date-fns';
 import { es } from 'date-fns/locale';
-import { useMockDatabase as globalUseMockDatabase } from './firebase-config'; 
+import { useMockDatabase as globalUseMockDatabase } from './firebase-config';
 
 
 const generateId = (): string => {
@@ -29,8 +29,18 @@ const initialMockUsersData: User[] = [
   }))
 ];
 
-const initialMockProfessionalsData: Professional[] = LOCATIONS.flatMap((location, locIndex) =>
-  Array.from({ length: 2 }, (_, i) => {
+const professionalCounts: Record<LocationId, number> = {
+  higuereta: 15,
+  eden_benavides: 2,
+  crucetas: 2,
+  carpaccio: 2,
+  vista_alegre: 2,
+  san_antonio: 8,
+};
+
+const initialMockProfessionalsData: Professional[] = LOCATIONS.flatMap((location, locIndex) => {
+  const numProfessionals = professionalCounts[location.id] || 2; // Default to 2 if not specified
+  return Array.from({ length: numProfessionals }, (_, i) => {
     const baseSchedule: { [key in DayOfWeekId]?: { startTime: string; endTime: string; isWorking?: boolean } | null } = {
       monday: { startTime: '10:00', endTime: '19:00', isWorking: true },
       tuesday: { startTime: '10:00', endTime: '19:00', isWorking: true },
@@ -38,12 +48,14 @@ const initialMockProfessionalsData: Professional[] = LOCATIONS.flatMap((location
       thursday: { startTime: '10:00', endTime: '19:00', isWorking: true },
       friday: { startTime: '10:00', endTime: '19:00', isWorking: true },
       saturday: { startTime: '09:00', endTime: '18:00', isWorking: true },
-      sunday: { isWorking: false }, 
+      sunday: { isWorking: false },
     };
 
-    const isFirstProfFirstLoc = i === 0 && locIndex === 0;
-    const rotationStartDateForDemo = startOfDay(new Date()); 
-    while (getDay(rotationStartDateForDemo) !== 0) { 
+    const isFirstProfHiguereta = location.id === 'higuereta' && i === 0;
+    const isSecondProfHiguereta = location.id === 'higuereta' && i === 1;
+
+    const rotationStartDateForDemo = startOfDay(new Date());
+    while (getDay(rotationStartDateForDemo) !== 0) {
         rotationStartDateForDemo.setDate(rotationStartDateForDemo.getDate() + 1);
     }
 
@@ -54,26 +66,26 @@ const initialMockProfessionalsData: Professional[] = LOCATIONS.flatMap((location
       lastName: location.name.split(' ')[0],
       locationId: location.id,
       phone: `9876543${locIndex}${i + 1}`,
-      biWeeklyEarnings: Math.random() * 1500 + 500, 
+      biWeeklyEarnings: Math.random() * 1500 + 500,
       workSchedule: baseSchedule,
-      rotationType: isFirstProfFirstLoc ? 'biWeeklySunday' : 'none',
-      rotationStartDate: isFirstProfFirstLoc ? formatISO(rotationStartDateForDemo, { representation: 'date' }) : null,
-      compensatoryDayOffChoice: isFirstProfFirstLoc ? 'monday' : null,
-      customScheduleOverrides: (i === 1 && locIndex === 0) ? [ 
+      rotationType: isFirstProfHiguereta ? 'biWeeklySunday' : 'none',
+      rotationStartDate: isFirstProfHiguereta ? formatISO(rotationStartDateForDemo, { representation: 'date' }) : null,
+      compensatoryDayOffChoice: isFirstProfHiguereta ? 'monday' : null,
+      customScheduleOverrides: isSecondProfHiguereta ? [
         { id: generateId(), date: formatISO(dateFnsAddMinutes(new Date(), 7 * 24 * 60), { representation: 'date' }), isWorking: true, startTime: '10:00', endTime: '14:00', notes: 'Turno especial' },
         { id: generateId(), date: formatISO(dateFnsAddMinutes(new Date(), 3 * 24 * 60), { representation: 'date' }), isWorking: false, notes: 'Día libre' }
       ] : [],
     };
-  })
-);
+  });
+});
 
 
 const initialMockPatientsData: Patient[] = [
-  { id: 'pat001', firstName: 'Ana', lastName: 'García', phone: '111222333', age: 39, birthDay: 15, birthMonth: 4, preferredProfessionalId: initialMockProfessionalsData[0]?.id, notes: 'Paciente regular, prefiere citas por la mañana.', isDiabetic: false },
+  { id: 'pat001', firstName: 'Ana', lastName: 'García', phone: '111222333', age: 39, birthDay: 15, birthMonth: 4, preferredProfessionalId: initialMockProfessionalsData.find(p => p.locationId === 'higuereta')?.id, notes: 'Paciente regular, prefiere citas por la mañana.', isDiabetic: false },
   { id: 'pat002', firstName: 'Luis', lastName: 'Martínez', phone: '444555666', age: 31, birthDay: 20, birthMonth: 8, notes: 'Primera visita.', isDiabetic: true },
   { id: 'pat003', firstName: 'Elena', lastName: 'Ruiz', phone: '777888999', age: 23, birthDay: 5, birthMonth: 11, isDiabetic: false },
   { id: 'pat004', firstName: 'Carlos', lastName: 'Vargas', phone: '222333444', age: 54, birthDay: 10, birthMonth: 1, isDiabetic: true, notes: "Sensibilidad en el pie izquierdo." },
-  { id: 'pat005', firstName: 'Sofía', lastName: 'Chávez', phone: '555666777', age: 25, birthDay: 2, birthMonth: 6, isDiabetic: false, preferredProfessionalId: initialMockProfessionalsData[1]?.id },
+  { id: 'pat005', firstName: 'Sofía', lastName: 'Chávez', phone: '555666777', age: 25, birthDay: 2, birthMonth: 6, isDiabetic: false, preferredProfessionalId: initialMockProfessionalsData.find(p => p.locationId === 'higuereta' && p.firstName === 'Profesional 2')?.id },
 ];
 
 const initialMockServicesData: Service[] = SERVICES_CONSTANTS.map((s_const, index) => ({
@@ -178,10 +190,10 @@ export const getProfessionals = async (locationId?: LocationId): Promise<Profess
 
         const startDate = currentQuincena === 1
             ? startOfMonth(setMonth(setYear(new Date(), currentYear), currentMonth))
-            : dateFnsAddMinutes(startOfMonth(setMonth(setYear(new Date(), currentYear), currentMonth)), 15 * 24 * 60); 
+            : dateFnsAddMinutes(startOfMonth(setMonth(setYear(new Date(), currentYear), currentMonth)), 15 * 24 * 60);
 
         const endDate = currentQuincena === 1
-            ? dateFnsAddMinutes(startOfMonth(setMonth(setYear(new Date(), currentYear), currentMonth)), 14 * 24 * 60 + (23*60+59)) 
+            ? dateFnsAddMinutes(startOfMonth(setMonth(setYear(new Date(), currentYear), currentMonth)), 14 * 24 * 60 + (23*60+59))
             : endOfMonth(setMonth(setYear(new Date(), currentYear), currentMonth));
 
         const appointmentsForPeriod = (mockDB.appointments || []).filter(appt => {
@@ -216,7 +228,7 @@ export const addProfessional = async (data: ProfessionalFormData): Promise<Profe
         lastName: data.lastName,
         locationId: data.locationId,
         phone: data.phone || undefined,
-        workSchedule: {}, 
+        workSchedule: {},
         rotationType: data.rotationType,
         rotationStartDate: data.rotationStartDate ? formatISO(data.rotationStartDate, { representation: 'date'}) : null,
         compensatoryDayOffChoice: data.compensatoryDayOffChoice || null,
@@ -229,15 +241,15 @@ export const addProfessional = async (data: ProfessionalFormData): Promise<Profe
             notes: ov.notes,
         })) || [],
     };
-    
+
     if (data.workSchedule) {
       (Object.keys(data.workSchedule) as Array<Exclude<DayOfWeekId, 'sunday'>>).forEach(dayId => {
         const dayData = data.workSchedule![dayId];
         if (dayData) {
-          professionalToSave.workSchedule[dayId] = { 
-            startTime: dayData.startTime || '00:00', 
-            endTime: dayData.endTime || '00:00', 
-            isWorking: dayData.isWorking === undefined ? true : dayData.isWorking 
+          professionalToSave.workSchedule[dayId] = {
+            startTime: dayData.startTime || '00:00',
+            endTime: dayData.endTime || '00:00',
+            isWorking: dayData.isWorking === undefined ? true : dayData.isWorking
           };
         } else {
           professionalToSave.workSchedule[dayId] = null;
@@ -247,7 +259,7 @@ export const addProfessional = async (data: ProfessionalFormData): Promise<Profe
         professionalToSave.workSchedule.sunday = { startTime: '00:00', endTime: '00:00', isWorking: false };
       }
     }
-    
+
     const newProfessional: Professional = {
       id: generateId(),
       ...professionalToSave,
@@ -268,17 +280,17 @@ export const updateProfessional = async (id: string, data: Partial<ProfessionalF
             if(data.firstName) professionalToUpdate.firstName = data.firstName;
             if(data.lastName) professionalToUpdate.lastName = data.lastName;
             if(data.locationId) professionalToUpdate.locationId = data.locationId;
-            professionalToUpdate.phone = data.phone || undefined; 
+            professionalToUpdate.phone = data.phone || undefined;
 
             if (data.workSchedule) {
-                professionalToUpdate.workSchedule = { ...professionalToUpdate.workSchedule }; 
+                professionalToUpdate.workSchedule = { ...professionalToUpdate.workSchedule };
                  (Object.keys(data.workSchedule) as Array<Exclude<DayOfWeekId, 'sunday'>>).forEach(dayId => {
                     const dayData = data.workSchedule![dayId];
                     if (dayData) {
-                        professionalToUpdate.workSchedule[dayId] = { 
-                            startTime: dayData.startTime || '00:00', 
-                            endTime: dayData.endTime || '00:00', 
-                            isWorking: dayData.isWorking === undefined ? true : dayData.isWorking 
+                        professionalToUpdate.workSchedule[dayId] = {
+                            startTime: dayData.startTime || '00:00',
+                            endTime: dayData.endTime || '00:00',
+                            isWorking: dayData.isWorking === undefined ? true : dayData.isWorking
                         };
                     } else {
                         professionalToUpdate.workSchedule[dayId] = null;
@@ -292,7 +304,7 @@ export const updateProfessional = async (id: string, data: Partial<ProfessionalF
                      professionalToUpdate.workSchedule.sunday = {startTime: '00:00', endTime: '00:00', isWorking: false};
                  }
             }
-            
+
             if (data.hasOwnProperty('rotationType')) professionalToUpdate.rotationType = data.rotationType!;
             professionalToUpdate.rotationStartDate = data.rotationStartDate ? formatISO(data.rotationStartDate, {representation: 'date'}) : null;
             professionalToUpdate.compensatoryDayOffChoice = data.compensatoryDayOffChoice || null;
@@ -356,10 +368,10 @@ export const getPatients = async (options: { page?: number, limit?: number, sear
         const lastIndex = filteredMockPatients.findIndex(p => p.id === startAfterId);
         if (lastIndex !== -1) {
             paginatedPatients = filteredMockPatients.slice(lastIndex + 1, lastIndex + 1 + queryLimit);
-        } else { 
+        } else {
             paginatedPatients = filteredMockPatients.slice(0, queryLimit);
         }
-    } else { 
+    } else {
          const startIndex = (page - 1) * queryLimit;
          paginatedPatients = filteredMockPatients.slice(startIndex, startIndex + queryLimit);
     }
@@ -391,8 +403,8 @@ export const addPatient = async (data: Partial<Omit<Patient, 'id'>>): Promise<Pa
     lastName: data.lastName!,
     phone: data.phone,
     age: data.age === undefined ? null : data.age,
-    birthDay: data.birthDay === undefined ? null : data.birthDay,
-    birthMonth: data.birthMonth === undefined ? null : data.birthMonth,
+    birthDay: data.birthDay,
+    birthMonth: data.birthMonth,
     isDiabetic: data.isDiabetic || false,
     notes: data.notes,
     preferredProfessionalId: data.preferredProfessionalId,
@@ -660,10 +672,10 @@ export const addAppointment = async (data: AppointmentFormData ): Promise<Appoin
     if (preferredProf && preferredProf.locationId === data.locationId) {
       actualProfessionalId = preferredProf.id;
     } else {
-      actualProfessionalId = null; 
+      actualProfessionalId = null;
     }
   } else {
-     actualProfessionalId = null; 
+     actualProfessionalId = null;
   }
 
 
@@ -686,7 +698,7 @@ export const addAppointment = async (data: AppointmentFormData ): Promise<Appoin
       if (!isWithinInterval(appointmentDateTimeObject, { start: profStartTime, end: dateFnsAddMinutes(profEndTime, -appointmentDuration) })) {
           continue;
       }
-      
+
       let isProfBusy = false;
       for (const existingAppt of existingAppointmentsForDay) {
         if (existingAppt.professionalId === prof.id) {
@@ -700,7 +712,7 @@ export const addAppointment = async (data: AppointmentFormData ): Promise<Appoin
       }
       if (!isProfBusy) {
         actualProfessionalId = prof.id;
-        break; 
+        break;
       }
     }
   }
@@ -710,7 +722,7 @@ export const addAppointment = async (data: AppointmentFormData ): Promise<Appoin
     patientId: patientId!,
     locationId: data.locationId,
     serviceId: data.serviceId,
-    professionalId: actualProfessionalId, 
+    professionalId: actualProfessionalId,
     appointmentDateTime: appointmentDateTime,
     durationMinutes: appointmentDuration,
     preferredProfessionalId: (data.preferredProfessionalId === ANY_PROFESSIONAL_VALUE || !data.preferredProfessionalId) ? undefined : data.preferredProfessionalId,
@@ -742,13 +754,13 @@ export const updateAppointment = async (id: string, data: Partial<Appointment>):
       const updatedAppointmentRaw = { ...originalAppointment, ...data, updatedAt: formatISO(new Date()) };
 
       if (data.patientId && originalAppointment.patient?.id !== data.patientId) {
-          delete updatedAppointmentRaw.patient; 
+          delete updatedAppointmentRaw.patient;
       }
       if (data.professionalId && originalAppointment.professional?.id !== data.professionalId) {
-          delete updatedAppointmentRaw.professional; 
+          delete updatedAppointmentRaw.professional;
       }
       if (data.serviceId && originalAppointment.service?.id !== data.serviceId) {
-          delete updatedAppointmentRaw.service; 
+          delete updatedAppointmentRaw.service;
       }
 
       if (data.addedServices) {
@@ -803,7 +815,7 @@ export const getPatientAppointmentHistory = async (
     }
 
     const newLastVisibleId = paginatedAppointments.length > 0 ? paginatedAppointments[paginatedAppointments.length -1].id : null;
-    return { appointments: paginatedAppointments, totalCount, lastVisibleAppointmentId: newLastVisibleId }; 
+    return { appointments: paginatedAppointments, totalCount, lastVisibleAppointmentId: newLastVisibleId };
   }
   throw new Error("Patient appointment history retrieval not implemented for non-mock database or mockDB not available.");
 };
@@ -819,9 +831,9 @@ export const getCurrentQuincenaDateRange = (): { start: Date; end: Date } => {
 
   if (currentDay <= 15) {
     startDate = startOfMonth(setMonth(setYear(new Date(), currentYear), currentMonth));
-    endDate = dateFnsAddMinutes(startDate, 14 * 24 * 60 + (23*60+59)); 
+    endDate = dateFnsAddMinutes(startDate, 14 * 24 * 60 + (23*60+59));
   } else {
-    startDate = dateFnsAddMinutes(startOfMonth(setMonth(setYear(new Date(), currentYear), currentMonth)), 15 * 24 * 60); 
+    startDate = dateFnsAddMinutes(startOfMonth(setMonth(setYear(new Date(), currentYear), currentMonth)), 15 * 24 * 60);
     endDate = endOfMonth(setMonth(setYear(new Date(), currentYear), currentMonth));
   }
   return { start: startOfDay(startDate), end: endOfDay(endDate) };
@@ -834,7 +846,7 @@ export const getProfessionalAppointmentsForDate = async (professionalId: string,
       .filter(appt =>
         appt.professionalId === professionalId &&
         dateFnsIsSameDay(parseISO(appt.appointmentDateTime), targetDate) &&
-        (appt.status === APPOINTMENT_STATUS.BOOKED || appt.status === APPOINTMENT_STATUS.CONFIRMED) 
+        (appt.status === APPOINTMENT_STATUS.BOOKED || appt.status === APPOINTMENT_STATUS.CONFIRMED)
       )
       .sort((a, b) => parseISO(a.appointmentDateTime).getTime() - parseISO(b.appointmentDateTime).getTime());
 
@@ -855,24 +867,24 @@ export function getProfessionalAvailabilityForDate(
   // 1. Check customScheduleOverrides (highest precedence)
   if (professional.customScheduleOverrides) {
     const override = professional.customScheduleOverrides.find(
-      ov => ov.date === targetDateString 
+      ov => ov.date === targetDateString
     );
     if (override) {
       if (override.isWorking && override.startTime && override.endTime) {
         return { startTime: override.startTime, endTime: override.endTime, notes: override.notes };
       }
-      return null; 
+      return null;
     }
   }
-  
+
   // 2. Bi-Weekly Sunday Rotation Logic
   if (professional.rotationType === 'biWeeklySunday' && professional.rotationStartDate && professional.compensatoryDayOffChoice) {
-    const rotationAnchorDate = parseISO(professional.rotationStartDate); 
+    const rotationAnchorDate = parseISO(professional.rotationStartDate);
     const daysDiff = differenceInDays(startOfDay(targetDate), startOfDay(rotationAnchorDate));
 
-    if (daysDiff >= 0) { 
+    if (daysDiff >= 0) {
         const weekNumberInCycle = Math.floor(daysDiff / 7) % 2; // 0 for work Sunday week, 1 for compensatory/off Sunday week
-    
+
         // Week 0: Work Sunday week
         if (weekNumberInCycle === 0) {
             if (targetDayOfWeekJs === 0) { // Is it Sunday?
@@ -889,7 +901,7 @@ export function getProfessionalAvailabilityForDate(
                 return null; // Compensatory day off
             }
             if (targetDayOfWeekJs === 0) { // Is it Sunday in the "off" week of rotation?
-                return null; 
+                return null;
             }
         }
     }
@@ -901,12 +913,12 @@ export function getProfessionalAvailabilityForDate(
     const dailySchedule = professional.workSchedule[dayKey];
 
     if (dailySchedule) {
-      if (dailySchedule.isWorking === false) return null; 
-      if (dailySchedule.startTime && dailySchedule.endTime) { 
+      if (dailySchedule.isWorking === false) return null;
+      if (dailySchedule.startTime && dailySchedule.endTime) {
         return { startTime: dailySchedule.startTime, endTime: dailySchedule.endTime };
       }
     }
   }
 
-  return null; 
+  return null;
 }
