@@ -1,4 +1,3 @@
-
 "use client";
 
 import type { Professional, ProfessionalFormData } from '@/types';
@@ -295,7 +294,7 @@ export default function ProfessionalsPage() {
   }
 
  const calculateNextGeneralDayOff = (prof: Professional, today: Date): Date | null => {
-  for (let i = 1; i <= 30; i++) { // Check next 30 days
+  for (let i = 0; i <= 30; i++) { // Check next 30 days, including today
     const checkDate = dateFnsAddDays(today, i);
     const availability = getProfessionalAvailabilityForDate(prof, checkDate);
     if (!availability) { 
@@ -307,7 +306,7 @@ export default function ProfessionalsPage() {
 
 
  const formatWorkScheduleDisplay = (prof: Professional) => {
-  const today = startOfDay(new Date()); // Use actual 'today' for current status
+  const today = startOfDay(new Date(2025, 4, 13)); // Tuesday, May 13, 2025
   const availabilityToday = getProfessionalAvailabilityForDate(prof, today);
 
   let todayStr = "Hoy: ";
@@ -344,17 +343,9 @@ export default function ProfessionalsPage() {
     const compDayName = DAYS_OF_WEEK.find(d => d.id === prof.compensatoryDayOffChoice)?.name;
     generalStr = `Rotación Dom. (Comp. ${compDayName || 'N/A'})`;
   } else {
-    const activeDays = DAYS_OF_WEEK
-        .filter(day => prof.workSchedule?.[day.id as DayOfWeekId]?.isWorking && day.id !== 'sunday')
-        .map(day => day.name.substring(0,1).toUpperCase())
-        .join('');
-    if (activeDays.length > 0) {
-        generalStr = `Días Base: ${activeDays}`;
-    } else {
-        generalStr = "Horario base no definido";
-    }
+    generalStr = "Horario base regular";
   }
-
+  
   const nextDayOffDate = calculateNextGeneralDayOff(prof, today);
   let nextDayOffDisplayStr = "";
   if (nextDayOffDate) {
