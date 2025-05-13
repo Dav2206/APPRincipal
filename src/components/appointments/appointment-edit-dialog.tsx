@@ -59,6 +59,7 @@ export function AppointmentEditDialog({ appointment, isOpen, onOpenChange, onApp
   const { toast } = useToast();
   const [professionals, setProfessionals] = useState<Professional[]>([]);
   const [allServices, setAllServices] = useState<Service[] | null>(null);
+  const [isLoadingServices, setIsLoadingServices] = useState(true);
   const [isUploadingImage, setIsUploadingImage] = useState(false);
   const [isSubmittingForm, setIsSubmittingForm] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -79,27 +80,43 @@ export function AppointmentEditDialog({ appointment, isOpen, onOpenChange, onApp
 
   useEffect(() => {
     if (isOpen) {
+      setIsLoadingServices(true);
       async function loadData() {
         const locationForProfs = appointment.locationId || ( (user?.role === USER_ROLES.ADMIN || user?.role === USER_ROLES.CONTADOR) ? undefined : user?.locationId);
         
-        const [profsData, servicesDataFromApi] = await Promise.all([
-          getProfessionals(locationForProfs),
-          getServices()
-        ]);
-        setProfessionals(profsData.professionals || []);
-        setAllServices(servicesDataFromApi.services || []);
+        try {
+          const [profsData, servicesDataFromApi] = await Promise.all([
+            getProfessionals(locationForProfs),
+            getServices()
+          ]);
+          setProfessionals(profsData || []);
+          setAllServices(servicesDataFromApi || []);
+        } catch (error) {
+            console.error("Failed to load data for edit dialog:", error);
+            setProfessionals([]);
+            setAllServices([]);
+            toast({ title: "Error", description: "No se pudieron cargar los datos necesarios para editar.", variant: "destructive"});
+        } finally {
+            setIsLoadingServices(false);
+        }
       }
       loadData();
     }
-  }, [isOpen, appointment.locationId, user]);
+  }, [isOpen, appointment.locationId, user, toast]);
 
    useEffect(() => {
-    if (isOpen && appointment && allServices) { 
+    if (isOpen && appointment && allServices !== null) { 
       const initialDurationMinutes = appointment.durationMinutes || appointment.service?.defaultDuration || 0;
       const appointmentDateTime = parseISO(appointment.appointmentDateTime);
+      
+      let currentServiceId = appointment.serviceId;
+      if (!currentServiceId || (allServices && !allServices.find(s => s.id === currentServiceId))) {
+          currentServiceId = allServices && allServices.length > 0 ? allServices[0].id : DEFAULT_SERVICE_ID_PLACEHOLDER;
+      }
+
       form.reset({
         status: appointment.status,
-        serviceId: appointment.serviceId || (allServices.length > 0 ? allServices[0].id : DEFAULT_SERVICE_ID_PLACEHOLDER),
+        serviceId: currentServiceId,
         appointmentDate: appointmentDateTime,
         appointmentTime: format(appointmentDateTime, 'HH:mm'),
         actualArrivalTime: appointment.actualArrivalTime || format(new Date(), 'HH:mm'),
@@ -110,7 +127,7 @@ export function AppointmentEditDialog({ appointment, isOpen, onOpenChange, onApp
         staffNotes: appointment.staffNotes || '',
         attachedPhotos: appointment.attachedPhotos?.filter(p => typeof p === 'string' && p.startsWith("data:image/")) || [],
         addedServices: appointment.addedServices?.map(as => ({
-          serviceId: as.serviceId || (allServices.length > 0 ? allServices[0].id : DEFAULT_SERVICE_ID_PLACEHOLDER),
+          serviceId: as.serviceId || (allServices && allServices.length > 0 ? allServices[0].id : DEFAULT_SERVICE_ID_PLACEHOLDER),
           professionalId: as.professionalId || NO_SELECTION_PLACEHOLDER,
           price: as.price ?? undefined,
         })) || [],
@@ -140,8 +157,8 @@ export function AppointmentEditDialog({ appointment, isOpen, onOpenChange, onApp
   };
 
   const onSubmitUpdate = async (data: AppointmentUpdateFormData) => {
-    if (!allServices) {
-        toast({ title: "Error", description: "Servicios aún no cargados.", variant: "destructive" });
+    if (allServices === null || (allServices && allServices.length === 0 && data.serviceId === DEFAULT_SERVICE_ID_PLACEHOLDER)) {
+        toast({ title: "Error", description: "No hay servicios disponibles o no se ha seleccionado uno.", variant: "destructive" });
         return;
     }
     setIsSubmittingForm(true);
@@ -152,17 +169,27 @@ export function AppointmentEditDialog({ appointment, isOpen, onOpenChange, onApp
       const [hours, minutes] = timePart.split(':').map(Number);
       const finalDateObject = setMinutes(setHours(datePart, hours), minutes);
 
+      let finalServiceId = data.serviceId;
+      if (data.serviceId === DEFAULT_SERVICE_ID_PLACEHOLDER && allServices && allServices.length > 0) {
+          finalServiceId = allServices[0].id;
+      } else if (data.serviceId === DEFAULT_SERVICE_ID_PLACEHOLDER) {
+          toast({ title: "Error", description: "Servicio principal es requerido.", variant: "destructive" });
+          setIsSubmittingForm(false);
+          return;
+      }
+
+
       const updatedData: Partial<Appointment> = {
         ...data,
         appointmentDateTime: formatISO(finalDateObject), 
-        serviceId: data.serviceId === DEFAULT_SERVICE_ID_PLACEHOLDER && allServices.length > 0 ? allServices[0].id : data.serviceId,
+        serviceId: finalServiceId,
         professionalId: data.professionalId === NO_SELECTION_PLACEHOLDER ? null : data.professionalId,
         durationMinutes: data.durationMinutes,
         amountPaid: data.amountPaid,
         attachedPhotos: (data.attachedPhotos || []).filter(photo => photo && typeof photo === 'string' && photo.startsWith("data:image/")),
         addedServices: data.addedServices?.map(as => ({
           ...as,
-          serviceId: as.serviceId === DEFAULT_SERVICE_ID_PLACEHOLDER ? (allServices.length > 0 ? allServices[0].id : '') : as.serviceId,
+          serviceId: as.serviceId === DEFAULT_SERVICE_ID_PLACEHOLDER ? (allServices && allServices.length > 0 ? allServices[0].id : '') : as.serviceId,
           professionalId: as.professionalId === NO_SELECTION_PLACEHOLDER ? null : as.professionalId,
           price: as.price,
         })),
@@ -290,17 +317,18 @@ export function AppointmentEditDialog({ appointment, isOpen, onOpenChange, onApp
                 <FormLabel className="flex items-center gap-1"><ConciergeBell size={16}/>Motivo de la Reserva (Servicio Principal)</FormLabel>
                 <Select
                   onValueChange={field.onChange}
-                  value={field.value === DEFAULT_SERVICE_ID_PLACEHOLDER && allServices && allServices.length > 0 ? allServices[0].id : field.value}
-                  disabled={!allServices || allServices.length === 0}
+                  value={field.value}
+                  disabled={isLoadingServices || !allServices || allServices.length === 0}
                 >
                   <FormControl>
                     <SelectTrigger>
-                      <SelectValue placeholder={allServices && allServices.length > 0 ? "Seleccionar servicio" : "Cargando servicios..."} />
+                      <SelectValue placeholder={isLoadingServices ? "Cargando servicios..." : (!allServices || allServices.length === 0) ? "No hay servicios" : "Seleccionar servicio"} />
                     </SelectTrigger>
                   </FormControl>
                   <SelectContent>
-                    {(!allServices || allServices.length === 0) && <SelectItem value={DEFAULT_SERVICE_ID_PLACEHOLDER} disabled>Cargando...</SelectItem>}
-                    {allServices && allServices.map(s => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}
+                    {isLoadingServices && <SelectItem value={DEFAULT_SERVICE_ID_PLACEHOLDER} disabled>Cargando...</SelectItem>}
+                    {!isLoadingServices && (!allServices || allServices.length === 0) && <SelectItem value={DEFAULT_SERVICE_ID_PLACEHOLDER} disabled>No hay servicios disponibles</SelectItem>}
+                    {!isLoadingServices && allServices && allServices.map(s => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}
                   </SelectContent>
                 </Select>
                 <FormMessage />
@@ -491,11 +519,11 @@ export function AppointmentEditDialog({ appointment, isOpen, onOpenChange, onApp
             </div>
           )}
 
-          {(form.watch('status') === APPOINTMENT_STATUS.CONFIRMED || form.watch('status') === APPOINTMENT_STATUS.COMPLETED) && allServices && (
+          {(form.watch('status') === APPOINTMENT_STATUS.CONFIRMED || form.watch('status') === APPOINTMENT_STATUS.COMPLETED) && !isLoadingServices && allServices && (
             <div className="space-y-3 pt-3 mt-3 border-t">
               <div className="flex justify-between items-center">
                 <h4 className="text-md font-semibold flex items-center gap-2"><ShoppingBag/> Servicios Adicionales</h4>
-                <Button type="button" size="sm" variant="outline" onClick={() => appendAddedService({ serviceId: allServices.length > 0 ? allServices[0].id : DEFAULT_SERVICE_ID_PLACEHOLDER, professionalId: NO_SELECTION_PLACEHOLDER, price: undefined })}>
+                <Button type="button" size="sm" variant="outline" onClick={() => appendAddedService({ serviceId: allServices && allServices.length > 0 ? allServices[0].id : DEFAULT_SERVICE_ID_PLACEHOLDER, professionalId: NO_SELECTION_PLACEHOLDER, price: undefined })}>
                   <PlusCircle className="mr-2 h-4 w-4" /> Agregar Servicio
                 </Button>
               </div>
@@ -510,11 +538,11 @@ export function AppointmentEditDialog({ appointment, isOpen, onOpenChange, onApp
                     render={({ field }) => (
                       <FormItem>
                         <FormLabel>Servicio Adicional</FormLabel>
-                        <Select onValueChange={field.onChange} value={field.value === DEFAULT_SERVICE_ID_PLACEHOLDER && allServices.length > 0 ? allServices[0].id : field.value } disabled={allServices.length === 0}>
-                          <FormControl><SelectTrigger><SelectValue placeholder={allServices.length > 0 ? "Seleccionar servicio" : "Cargando..."} /></SelectTrigger></FormControl>
+                        <Select onValueChange={field.onChange} value={field.value} disabled={!allServices || allServices.length === 0}>
+                          <FormControl><SelectTrigger><SelectValue placeholder={allServices && allServices.length > 0 ? "Seleccionar servicio" : "No hay servicios"} /></SelectTrigger></FormControl>
                           <SelectContent>
-                             {allServices.length === 0 && <SelectItem value={DEFAULT_SERVICE_ID_PLACEHOLDER} disabled>Cargando...</SelectItem>}
-                            {allServices.map(s => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}
+                             {(!allServices || allServices.length === 0) && <SelectItem value={DEFAULT_SERVICE_ID_PLACEHOLDER} disabled>No hay servicios</SelectItem>}
+                             {allServices && allServices.map(s => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}
                           </SelectContent>
                         </Select>
                         <FormMessage />
@@ -559,8 +587,8 @@ export function AppointmentEditDialog({ appointment, isOpen, onOpenChange, onApp
             <DialogClose asChild>
               <Button type="button" variant="outline">Cancelar</Button>
             </DialogClose>
-            <Button type="submit" disabled={isSubmittingForm || isUploadingImage || !allServices || (allServices && allServices.length === 0)}>
-              {(isSubmittingForm || isUploadingImage) && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+            <Button type="submit" disabled={isSubmittingForm || isUploadingImage || isLoadingServices || (allServices !== null && allServices.length === 0) }>
+              {(isSubmittingForm || isUploadingImage || isLoadingServices) && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
               Guardar Cambios
             </Button>
           </DialogFooter>
