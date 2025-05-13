@@ -28,7 +28,7 @@ export interface Patient extends BaseEntity {
   lastName: string;
   phone?: string;
   dateOfBirth?: string; // YYYY-MM-DD
-  isDiabetic?: boolean; // New field
+  isDiabetic?: boolean; 
   // For "historial del paciente"
   preferredProfessionalId?: string;
   notes?: string; // General notes or observations about the patient
@@ -85,7 +85,10 @@ export type AppointmentFormData = {
   bookingObservations?: string;
 };
 
-export type ProfessionalFormData = Omit<Professional, 'biWeeklyEarnings' | 'id' | 'email'> & { id?: string };
+export type ProfessionalFormData = Omit<Professional, 'biWeeklyEarnings' | 'id' > & { 
+  id?: string;
+  specializations?: ProfessionalSpecialization[];
+};
 
 
 // Export AppointmentStatus to be available for other modules if needed directly
@@ -97,4 +100,5 @@ export type ServiceFormData = {
   defaultDuration: number;
   price?: number;
 };
+
 

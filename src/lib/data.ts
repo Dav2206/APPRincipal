@@ -1,6 +1,7 @@
+
 import type { User, Professional, Patient, Service, Appointment, AppointmentFormData, ProfessionalFormData, AppointmentStatus, ServiceFormData } from '@/types';
 import { LOCATIONS, USER_ROLES, SERVICES as SERVICES_CONSTANTS, APPOINTMENT_STATUS, LocationId, ServiceId as ConstantServiceId, APPOINTMENT_STATUS_DISPLAY, PAYMENT_METHODS } from './constants';
-import { formatISO, parseISO, addDays, setHours, setMinutes, startOfDay, endOfDay, addMinutes, isSameDay as dateFnsIsSameDay, startOfMonth, endOfMonth, differenceInYears, subDays, isEqual, isBefore, isAfter } from 'date-fns';
+import { formatISO, parseISO, addDays, setHours, setMinutes, startOfDay, endOfDay, addMinutes, isSameDay as dateFnsIsSameDay, startOfMonth, endOfMonth, differenceInYears, subDays, isEqual, isBefore, isAfter, getDate, getYear, getMonth, setMonth, setYear } from 'date-fns';
 
 // --- Helper to convert Firestore Timestamps to ISO strings and vice-versa ---
 // Note: Firestore specific types (Timestamp, serverTimestamp etc.) are not used in mock data.
@@ -9,7 +10,7 @@ const ANY_PROFESSIONAL_VALUE = "_any_professional_placeholder_";
 
 // --- Mock Data Configuration ---
 export const useMockDatabase = true; // Force mock database usage
-console.log("Data layer: Using mock database:", useMockDatabase);
+// console.log("Data layer: Using mock database:", useMockDatabase);
 
 
 // --- Initial Mock Data Definitions ---
@@ -33,7 +34,7 @@ const initialMockProfessionalsData: Professional[] = LOCATIONS.flatMap((location
     lastName: location.name.split(' ')[0],
     locationId: location.id,
     phone: `9876543${locIndex}${i + 1}`,
-    biWeeklyEarnings: (500 + (locIndex * 100) + (i * 50)), // Deterministic value
+    // biWeeklyEarnings will be calculated dynamically now
   }))
 );
 
@@ -98,7 +99,7 @@ interface MockDB {
 function initializeGlobalMockStore(): MockDB {
   const globalAsAny = global as any;
   if (!globalAsAny._mockDB) {
-    console.log("Initializing global mock DB store...");
+    // console.log("Initializing global mock DB store...");
     globalAsAny._mockDB = {
       users: [...initialMockUsersData],
       professionals: [...initialMockProfessionalsData],
@@ -121,19 +122,46 @@ export const getUserByUsername = async (username: string): Promise<User | undefi
     if (useMockDatabase) {
         return mockDB.users.find(u => u.username === username);
     }
-    // Real database logic would go here
     throw new Error("Real database not implemented for getUserByUsername");
 };
 
 // --- Professionals ---
 export const getProfessionals = async (locationId?: LocationId): Promise<Professional[]> => {
     if (useMockDatabase) {
-        if (locationId) {
-            return mockDB.professionals.filter(p => p.locationId === locationId);
-        }
-        return [...mockDB.professionals];
+        let professionalsResult = locationId 
+            ? mockDB.professionals.filter(p => p.locationId === locationId)
+            : [...mockDB.professionals];
+
+        // Calculate bi-weekly earnings for each professional
+        const today = new Date();
+        const currentYear = getYear(today);
+        const currentMonth = getMonth(today);
+        const currentDay = getDate(today);
+        const currentQuincena = currentDay <= 15 ? 1 : 2;
+
+        const startDate = currentQuincena === 1 
+            ? startOfMonth(setMonth(setYear(new Date(), currentYear), currentMonth))
+            : addDays(startOfMonth(setMonth(setYear(new Date(), currentYear), currentMonth)), 15);
+        
+        const endDate = currentQuincena === 1
+            ? addDays(startOfMonth(setMonth(setYear(new Date(), currentYear), currentMonth)), 14)
+            : endOfMonth(setMonth(setYear(new Date(), currentYear), currentMonth));
+
+        const appointmentsForPeriod = (mockDB.appointments || []).filter(appt => {
+            const apptDate = parseISO(appt.appointmentDateTime);
+            return appt.status === APPOINTMENT_STATUS.COMPLETED &&
+                   apptDate >= startDate &&
+                   apptDate <= endDate;
+        });
+
+        professionalsResult = professionalsResult.map(prof => {
+            const profAppointments = appointmentsForPeriod.filter(appt => appt.professionalId === prof.id);
+            const earnings = profAppointments.reduce((sum, appt) => sum + (appt.amountPaid || 0), 0);
+            return { ...prof, biWeeklyEarnings: earnings };
+        });
+
+        return professionalsResult;
     }
-    // Real database logic would go here
     throw new Error("Real database not implemented for getProfessionals");
 };
 
@@ -141,7 +169,6 @@ export const getProfessionalById = async (id: string): Promise<Professional | un
     if (useMockDatabase) {
         return mockDB.professionals.find(p => p.id === id);
     }
-    // Real database logic would go here
     throw new Error("Real database not implemented for getProfessionalById");
 };
 
@@ -151,6 +178,7 @@ export const addProfessional = async (data: Omit<ProfessionalFormData, 'id'>): P
     lastName: data.lastName,
     locationId: data.locationId,
     phone: data.phone,
+    specializations: data.specializations || [],
   };
 
   if (useMockDatabase) {
@@ -162,7 +190,6 @@ export const addProfessional = async (data: Omit<ProfessionalFormData, 'id'>): P
     mockDB.professionals.push(newProfessional);
     return newProfessional;
   }
-  // Real database logic would go here
   throw new Error("Real database not implemented for addProfessional");
 };
 
@@ -177,7 +204,6 @@ export const updateProfessional = async (id: string, data: Partial<ProfessionalF
         }
         return undefined;
     }
-    // Real database logic would go here
     throw new Error("Real database not implemented for updateProfessional");
 };
 
@@ -231,7 +257,6 @@ export const getPatients = async (options: { page?: number, limit?: number, sear
 
     return { patients: paginatedPatients, totalCount, lastVisiblePatientId: newLastVisibleId };
   }
-  // Real database logic would go here
   throw new Error("Real database not implemented for getPatients");
 };
 
@@ -239,7 +264,6 @@ export const getPatientById = async (id: string): Promise<Patient | undefined> =
     if (useMockDatabase) {
         return mockDB.patients.find(p => p.id === id);
     }
-    // Real database logic would go here
     throw new Error("Real database not implemented for getPatientById");
 };
 
@@ -247,7 +271,6 @@ export const findPatient = async (firstName: string, lastName: string): Promise<
     if (useMockDatabase) {
         return mockDB.patients.find(p => p.firstName.toLowerCase() === firstName.toLowerCase() && p.lastName.toLowerCase() === lastName.toLowerCase());
     }
-    // Real database logic would go here
     throw new Error("Real database not implemented for findPatient");
 };
 
@@ -264,7 +287,6 @@ export const addPatient = async (data: Omit<Patient, 'id'>): Promise<Patient> =>
     mockDB.patients.push(newPatient);
     return newPatient;
   }
-  // Real database logic would go here
   throw new Error("Real database not implemented for addPatient");
 };
 
@@ -277,7 +299,6 @@ export const updatePatient = async (id: string, data: Partial<Patient>): Promise
         }
         return undefined;
     }
-    // Real database logic would go here
     throw new Error("Real database not implemented for updatePatient");
 };
 
@@ -286,7 +307,6 @@ export const getServices = async (): Promise<Service[]> => {
     if (useMockDatabase) {
         return [...mockDB.services].sort((a, b) => a.name.localeCompare(b.name));
     }
-    // Real database logic would go here
     throw new Error("Real database not implemented for getServices");
 };
 
@@ -294,7 +314,6 @@ export const getServiceById = async (id: string): Promise<Service | undefined> =
     if (useMockDatabase) {
         return mockDB.services.find(s => s.id === id);
     }
-    // Real database logic would go here
     throw new Error("Real database not implemented for getServiceById");
 };
 
@@ -312,7 +331,6 @@ export const addService = async (data: ServiceFormData): Promise<Service> => {
     mockDB.services.push(newService);
     return newService;
   }
-  // Real database logic would go here
   throw new Error("Real database not implemented for addService");
 };
 
@@ -325,7 +343,6 @@ export const updateService = async (id: string, data: Partial<ServiceFormData>):
         }
         return undefined;
     }
-    // Real database logic would go here
     throw new Error("Real database not implemented for updateService");
 };
 
@@ -445,7 +462,6 @@ export const getAppointments = async (filters: {
     const newLastVisibleId = paginatedResult.length > 0 ? paginatedResult[paginatedResult.length -1].id : null;
     return { appointments: paginatedResult, totalCount, lastVisibleAppointmentId: newLastVisibleId };
   }
-  // Real database logic would go here
   throw new Error("Real database not implemented for getAppointments");
 };
 
@@ -455,7 +471,6 @@ export const getAppointmentById = async (id: string): Promise<Appointment | unde
         const appt = mockDB.appointments.find(a => a.id === id);
         return appt ? populateAppointment(appt) : undefined;
     }
-    // Real database logic would go here
     throw new Error("Real database not implemented for getAppointmentById");
 };
 
@@ -506,7 +521,6 @@ export const addAppointment = async (data: AppointmentFormData): Promise<Appoint
     if (preferredProf && preferredProf.locationId === data.locationId) {
       actualProfessionalId = preferredProf.id;
     } else {
-      console.warn(`Preferred professional ${data.preferredProfessionalId} not found or not in location ${data.locationId}. Attempting to auto-assign or leave unassigned.`);
       // Fall through to auto-assignment or unassigned
       actualProfessionalId = null; 
     }
@@ -539,12 +553,12 @@ export const addAppointment = async (data: AppointmentFormData): Promise<Appoint
       }
       if (!isProfBusy) {
         actualProfessionalId = prof.id;
-        console.log(`Auto-assigned professional ${actualProfessionalId} for appointment.`);
+        // console.log(`Auto-assigned professional ${actualProfessionalId} for appointment.`);
         break;
       }
     }
      if (actualProfessionalId === null) {
-        console.warn(`No professional available for auto-assignment at ${data.locationId} on ${data.appointmentDate} at ${data.appointmentTime}. Appointment will be unassigned.`);
+        // console.warn(`No professional available for auto-assignment at ${data.locationId} on ${data.appointmentDate} at ${data.appointmentTime}. Appointment will be unassigned.`);
     }
   }
 
@@ -574,7 +588,6 @@ export const addAppointment = async (data: AppointmentFormData): Promise<Appoint
     mockDB.appointments.push(populatedNewAppointment);
     return populatedNewAppointment;
   }
-  // Real database logic would go here
   throw new Error("Real database not implemented for addAppointment");
 };
 
@@ -586,17 +599,16 @@ export const updateAppointment = async (id: string, data: Partial<Appointment>):
     if (index !== -1) {
         const originalAppointment = mockDB.appointments[index];
         
-        // Handle date and time updates carefully for mock
         let newAppointmentDateTime = originalAppointment.appointmentDateTime;
         if (data.appointmentDate && data.appointmentTime) {
-            const datePart = data.appointmentDate; // Assuming it's already a Date object
+            const datePart = data.appointmentDate; 
             const [hours, minutes] = (data.appointmentTime as string).split(':').map(Number);
-            newAppointmentDateTime = formatISO(setMinutes(setHours(datePart, hours), minutes));
-        } else if (data.appointmentDate) { // Only date changed
+            newAppointmentDateTime = formatISO(setMinutes(setHours(datePart as Date, hours), minutes));
+        } else if (data.appointmentDate) { 
             const timePart = parseISO(originalAppointment.appointmentDateTime);
-            const [hours, minutes] = [timePart.getHours(), timePart.getMinutes()];
+            const [hours, minutes] = [getHours(timePart), getMinutes(timePart)];
             newAppointmentDateTime = formatISO(setMinutes(setHours(data.appointmentDate as Date, hours), minutes));
-        } else if (data.appointmentTime) { // Only time changed
+        } else if (data.appointmentTime) { 
             const datePart = parseISO(originalAppointment.appointmentDateTime);
             const [hours, minutes] = (data.appointmentTime as string).split(':').map(Number);
             newAppointmentDateTime = formatISO(setMinutes(setHours(datePart, hours), minutes));
@@ -605,11 +617,10 @@ export const updateAppointment = async (id: string, data: Partial<Appointment>):
         const updatedAppointmentRaw = {
             ...originalAppointment,
             ...data,
-            appointmentDateTime: newAppointmentDateTime, // Use the re-calculated ISO string
+            appointmentDateTime: newAppointmentDateTime, 
             updatedAt: formatISO(new Date()),
         };
         
-        // Remove properties that should not be directly on the raw appointment object before populating
         delete updatedAppointmentRaw.patient;
         delete updatedAppointmentRaw.professional;
         delete updatedAppointmentRaw.service;
@@ -628,7 +639,6 @@ export const updateAppointment = async (id: string, data: Partial<Appointment>):
     }
     return undefined;
   }
-  // Real database logic would go here
   throw new Error("Real database not implemented for updateAppointment");
 };
 
@@ -668,6 +678,27 @@ export const getPatientAppointmentHistory = async (
     const newLastVisibleId = paginatedAppointments.length > 0 ? paginatedAppointments[paginatedAppointments.length -1].id : null;
     return { appointments: paginatedAppointments, totalCount, lastVisibleAppointmentId: newLastVisibleId };
   }
-  // Real database logic would go here
   throw new Error("Real database not implemented for getPatientAppointmentHistory");
+};
+
+// Helper function to get the start and end dates of the current quincena
+export const getCurrentQuincenaDateRange = (): { start: Date; end: Date } => {
+  const today = new Date();
+  const currentYear = getYear(today);
+  const currentMonth = getMonth(today);
+  const currentDay = getDate(today);
+  
+  let startDate: Date;
+  let endDate: Date;
+
+  if (currentDay <= 15) {
+    // First quincena (1st to 15th)
+    startDate = startOfMonth(setMonth(setYear(new Date(), currentYear), currentMonth));
+    endDate = addDays(startDate, 14); // Day 15
+  } else {
+    // Second quincena (16th to end of month)
+    startDate = addDays(startOfMonth(setMonth(setYear(new Date(), currentYear), currentMonth)), 15); // Day 16
+    endDate = endOfMonth(setMonth(setYear(new Date(), currentYear), currentMonth));
+  }
+  return { start: startOfDay(startDate), end: endOfDay(endDate) };
 };

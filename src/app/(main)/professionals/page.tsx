@@ -70,10 +70,16 @@ export default function ProfessionalsPage() {
       return;
     }
     setIsLoading(true);
-    const data = await getProfessionals(effectiveLocationId);
-    setProfessionals(data);
+    try {
+      const data = await getProfessionals(effectiveLocationId);
+      setProfessionals(data);
+    } catch (error) {
+      console.error("Failed to fetch professionals:", error);
+      setProfessionals([]);
+      toast({ title: "Error", description: "No se pudieron cargar los profesionales.", variant: "destructive" });
+    }
     setIsLoading(false);
-  }, [effectiveLocationId, user]);
+  }, [effectiveLocationId, user, toast]);
 
   useEffect(() => {
     fetchProfessionals();
@@ -200,7 +206,7 @@ export default function ProfessionalsPage() {
                         : 'N/A'}
                     </TableCell>
                     <TableCell className="hidden lg:table-cell">{prof.phone || 'N/A'}</TableCell>
-                    {isAdminOrContador && <TableCell className="hidden xl:table-cell text-right">{prof.biWeeklyEarnings?.toFixed(2) || 'N/A'}</TableCell> }
+                    {isAdminOrContador && <TableCell className="hidden xl:table-cell text-right">{(prof.biWeeklyEarnings ?? 0).toFixed(2)}</TableCell> }
                     <TableCell className="text-right">
                       <Button variant="ghost" size="sm" onClick={() => handleEditProfessional(prof)}>
                         <Edit2 className="h-4 w-4" /> <span className="sr-only">Editar</span>
