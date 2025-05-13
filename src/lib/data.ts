@@ -2,7 +2,7 @@
 // src/lib/data.ts
 import type { User, Professional, Patient, Service, Appointment, AppointmentFormData, ProfessionalFormData, AppointmentStatus, ServiceFormData } from '@/types';
 import { LOCATIONS, USER_ROLES, SERVICES as SERVICES_CONSTANTS, APPOINTMENT_STATUS, LocationId, ServiceId as ConstantServiceId, APPOINTMENT_STATUS_DISPLAY, PAYMENT_METHODS } from './constants';
-import { formatISO, parseISO, addDays, setHours, setMinutes, startOfDay, endOfDay, addMinutes, isSameDay as dateFnsIsSameDay, startOfMonth, endOfMonth, differenceInYears, subDays, isEqual, isBefore, isAfter, getDate, getYear, getMonth, setMonth, setYear } from 'date-fns';
+import { formatISO, parseISO, addDays, setHours, setMinutes, startOfDay, endOfDay, addMinutes, isSameDay as dateFnsIsSameDay, startOfMonth, endOfMonth, differenceInYears, subDays, isEqual, isBefore, isAfter, getDate, getYear, getMonth, setMonth, setYear, getHours } from 'date-fns';
 
 const ANY_PROFESSIONAL_VALUE = "_any_professional_placeholder_";
 
@@ -31,6 +31,7 @@ const initialMockProfessionalsData: Professional[] = LOCATIONS.flatMap((location
     lastName: location.name.split(' ')[0],
     locationId: location.id,
     phone: `9876543${locIndex}${i + 1}`,
+    biWeeklyEarnings: 0, // Initialize earnings
   }))
 );
 
@@ -53,7 +54,7 @@ const today = new Date();
 const yesterday = subDays(today, 1);
 const twoDaysAgo = subDays(today, 2);
 const tomorrow = addDays(today,1);
-const fixedFutureDateForRegistry = new Date(2025, 4, 9); 
+const fixedFutureDateForRegistry = new Date(2025, 4, 9); // May 9, 2025
 
 const initialMockAppointmentsData: Appointment[] = [
   {
@@ -95,17 +96,33 @@ interface MockDB {
 let globalMockDB: MockDB | null = null;
 
 function initializeGlobalMockStore(): MockDB {
-  if (!globalMockDB) {
-    console.log("Initializing Mock DB Store");
-    globalMockDB = {
-      users: [...initialMockUsersData],
-      professionals: [...initialMockProfessionalsData],
-      patients: [...initialMockPatientsData],
-      services: [...initialMockServicesData],
-      appointments: [...initialMockAppointmentsData],
-    };
+  if (typeof window !== 'undefined') {
+    // Client-side code
+    if (!(window as any).__globalMockDB) {
+      console.log("Initializing Mock DB Store (Client)");
+      (window as any).__globalMockDB = {
+        users: [...initialMockUsersData],
+        professionals: [...initialMockProfessionalsData],
+        patients: [...initialMockPatientsData],
+        services: [...initialMockServicesData],
+        appointments: [...initialMockAppointmentsData],
+      };
+    }
+    return (window as any).__globalMockDB;
+  } else {
+    // Server-side code
+    if (!globalMockDB) {
+      console.log("Initializing Mock DB Store (Server)");
+      globalMockDB = {
+        users: [...initialMockUsersData],
+        professionals: [...initialMockProfessionalsData],
+        patients: [...initialMockPatientsData],
+        services: [...initialMockServicesData],
+        appointments: [...initialMockAppointmentsData],
+      };
+    }
+    return globalMockDB;
   }
-  return globalMockDB;
 }
 
 const mockDB = initializeGlobalMockStore();
@@ -118,7 +135,8 @@ export const getUserByUsername = async (username: string): Promise<User | undefi
     if (useMockDatabase) {
         return mockDB.users.find(u => u.username === username);
     }
-    throw new Error("Real database not implemented for getUserByUsername");
+    // Fallback to real database if not using mock (should not happen based on current setup)
+    throw new Error("User retrieval not implemented for non-mock database or mockDB not available.");
 };
 
 export const getProfessionals = async (locationId?: LocationId): Promise<Professional[]> => {
@@ -156,14 +174,14 @@ export const getProfessionals = async (locationId?: LocationId): Promise<Profess
 
         return professionalsResult;
     }
-    throw new Error("Real database not implemented for getProfessionals");
+    throw new Error("Professional retrieval not implemented for non-mock database or mockDB not available.");
 };
 
 export const getProfessionalById = async (id: string): Promise<Professional | undefined> => {
     if (useMockDatabase) {
         return mockDB.professionals.find(p => p.id === id);
     }
-    throw new Error("Real database not implemented for getProfessionalById");
+    throw new Error("Professional retrieval not implemented for non-mock database or mockDB not available.");
 };
 
 export const addProfessional = async (data: Omit<ProfessionalFormData, 'id'>): Promise<Professional> => {
@@ -183,7 +201,7 @@ export const addProfessional = async (data: Omit<ProfessionalFormData, 'id'>): P
     mockDB.professionals.push(newProfessional);
     return newProfessional;
   }
-  throw new Error("Real database not implemented for addProfessional");
+  throw new Error("Professional creation not implemented for non-mock database or mockDB not available.");
 };
 
 export const updateProfessional = async (id: string, data: Partial<ProfessionalFormData>): Promise<Professional | undefined> => {
@@ -197,7 +215,7 @@ export const updateProfessional = async (id: string, data: Partial<ProfessionalF
         }
         return undefined;
     }
-    throw new Error("Real database not implemented for updateProfessional");
+    throw new Error("Professional update not implemented for non-mock database or mockDB not available.");
 };
 
 const PATIENTS_PER_PAGE = 8;
@@ -249,21 +267,21 @@ export const getPatients = async (options: { page?: number, limit?: number, sear
 
     return { patients: paginatedPatients, totalCount, lastVisiblePatientId: newLastVisibleId };
   }
-  throw new Error("Real database not implemented for getPatients");
+  throw new Error("Patient retrieval not implemented for non-mock database or mockDB not available.");
 };
 
 export const getPatientById = async (id: string): Promise<Patient | undefined> => {
     if (useMockDatabase) {
         return mockDB.patients.find(p => p.id === id);
     }
-    throw new Error("Real database not implemented for getPatientById");
+    throw new Error("Patient retrieval not implemented for non-mock database or mockDB not available.");
 };
 
 export const findPatient = async (firstName: string, lastName: string): Promise<Patient | undefined> => {
     if (useMockDatabase) {
         return mockDB.patients.find(p => p.firstName.toLowerCase() === firstName.toLowerCase() && p.lastName.toLowerCase() === lastName.toLowerCase());
     }
-    throw new Error("Real database not implemented for findPatient");
+    throw new Error("Patient retrieval not implemented for non-mock database or mockDB not available.");
 };
 
 export const addPatient = async (data: Partial<Omit<Patient, 'id'>>): Promise<Patient> => {
@@ -284,7 +302,7 @@ export const addPatient = async (data: Partial<Omit<Patient, 'id'>>): Promise<Pa
     mockDB.patients.push(newPatient);
     return newPatient;
   }
-  throw new Error("Real database not implemented for addPatient");
+  throw new Error("Patient creation not implemented for non-mock database or mockDB not available.");
 };
 
 export const updatePatient = async (id: string, data: Partial<Patient>): Promise<Patient | undefined> => {
@@ -297,21 +315,21 @@ export const updatePatient = async (id: string, data: Partial<Patient>): Promise
         }
         return undefined;
     }
-    throw new Error("Real database not implemented for updatePatient");
+    throw new Error("Patient update not implemented for non-mock database or mockDB not available.");
 };
 
 export const getServices = async (): Promise<Service[]> => {
     if (useMockDatabase) {
         return [...mockDB.services].sort((a, b) => a.name.localeCompare(b.name));
     }
-    throw new Error("Real database not implemented for getServices");
+    throw new Error("Service retrieval not implemented for non-mock database or mockDB not available.");
 };
 
 export const getServiceById = async (id: string): Promise<Service | undefined> => {
     if (useMockDatabase) {
         return mockDB.services.find(s => s.id === id);
     }
-    throw new Error("Real database not implemented for getServiceById");
+    throw new Error("Service retrieval not implemented for non-mock database or mockDB not available.");
 };
 
 export const addService = async (data: ServiceFormData): Promise<Service> => {
@@ -328,7 +346,7 @@ export const addService = async (data: ServiceFormData): Promise<Service> => {
     mockDB.services.push(newService);
     return newService;
   }
-  throw new Error("Real database not implemented for addService");
+  throw new Error("Service creation not implemented for non-mock database or mockDB not available.");
 };
 
 export const updateService = async (id: string, data: Partial<ServiceFormData>): Promise<Service | undefined> => {
@@ -340,7 +358,7 @@ export const updateService = async (id: string, data: Partial<ServiceFormData>):
         }
         return undefined;
     }
-    throw new Error("Real database not implemented for updateService");
+    throw new Error("Service update not implemented for non-mock database or mockDB not available.");
 };
 
 
@@ -438,27 +456,27 @@ export const getAppointments = async (filters: {
     });
 
     const populatedAppointmentsPromises = filteredMockAppointments.map(appt => populateAppointment(appt));
-    const populatedAppointments = await Promise.all(populatedAppointmentsPromises);
+    const populatedAppointmentsResult = await Promise.all(populatedAppointmentsPromises);
     
-    const totalCount = populatedAppointments.length;
+    const totalCount = populatedAppointmentsResult.length;
 
     let paginatedResult = [];
     if (startAfterId) {
-        const lastIdx = populatedAppointments.findIndex(a => a.id === startAfterId);
+        const lastIdx = populatedAppointmentsResult.findIndex(a => a.id === startAfterId);
         if (lastIdx !== -1) {
-            paginatedResult = populatedAppointments.slice(lastIdx + 1, lastIdx + 1 + queryLimit);
+            paginatedResult = populatedAppointmentsResult.slice(lastIdx + 1, lastIdx + 1 + queryLimit);
         } else {
-            paginatedResult = populatedAppointments.slice(0, queryLimit);
+            paginatedResult = populatedAppointmentsResult.slice(0, queryLimit);
         }
     } else {
         const startIndex = (page - 1) * queryLimit;
-        paginatedResult = populatedAppointments.slice(startIndex, startIndex + queryLimit);
+        paginatedResult = populatedAppointmentsResult.slice(startIndex, startIndex + queryLimit);
     }
     
     const newLastVisibleId = paginatedResult.length > 0 ? paginatedResult[paginatedResult.length -1].id : null;
-    return { appointments: populatedAppointments, totalCount, lastVisibleAppointmentId: newLastVisibleId };
+    return { appointments: paginatedResult, totalCount, lastVisibleAppointmentId: newLastVisibleId };
   }
-  throw new Error("Real database not implemented for getAppointments");
+  throw new Error("Appointment retrieval not implemented for non-mock database or mockDB not available.");
 };
 
 
@@ -467,7 +485,7 @@ export const getAppointmentById = async (id: string): Promise<Appointment | unde
         const appt = mockDB.appointments.find(a => a.id === id);
         return appt ? populateAppointment(appt) : undefined;
     }
-    throw new Error("Real database not implemented for getAppointmentById");
+    throw new Error("Appointment retrieval not implemented for non-mock database or mockDB not available.");
 };
 
 export const addAppointment = async (data: AppointmentFormData ): Promise<Appointment> => {
@@ -586,10 +604,10 @@ export const addAppointment = async (data: AppointmentFormData ): Promise<Appoin
     mockDB.appointments.push(populatedNewAppointment);
     return populatedNewAppointment;
   }
-  throw new Error("Real database not implemented for addAppointment");
+  throw new Error("Appointment creation not implemented for non-mock database or mockDB not available.");
 };
 
-export const updateAppointment = async (id: string, data: Partial<Appointment>): Promise<Appointment | undefined> => {
+export const updateAppointment = async (id: string, data: Partial<AppointmentUpdateFormData>): Promise<Appointment | undefined> => {
   const updateData: any = { ...data, updatedAt: formatISO(new Date()) };
   
   if (useMockDatabase) {
@@ -604,8 +622,9 @@ export const updateAppointment = async (id: string, data: Partial<Appointment>):
             newAppointmentDateTime = formatISO(setMinutes(setHours(datePart as Date, hours), minutes));
         } else if (data.appointmentDate) { 
             const timePart = parseISO(originalAppointment.appointmentDateTime);
-            const [hours, minutes] = [getHours(timePart), getMinutes(timePart)];
-            newAppointmentDateTime = formatISO(setMinutes(setHours(data.appointmentDate as Date, hours), minutes));
+            const originalHours = getHours(timePart);
+            const originalMinutes = getMinutes(timePart);
+            newAppointmentDateTime = formatISO(setMinutes(setHours(data.appointmentDate as Date, originalHours), originalMinutes));
         } else if (data.appointmentTime) { 
             const datePart = parseISO(originalAppointment.appointmentDateTime);
             const [hours, minutes] = (data.appointmentTime as string).split(':').map(Number);
@@ -637,7 +656,7 @@ export const updateAppointment = async (id: string, data: Partial<Appointment>):
     }
     return undefined;
   }
-  throw new Error("Real database not implemented for updateAppointment");
+  throw new Error("Appointment update not implemented for non-mock database or mockDB not available.");
 };
 
 export const getPatientAppointmentHistory = async (
@@ -674,9 +693,9 @@ export const getPatientAppointmentHistory = async (
     }
 
     const newLastVisibleId = paginatedAppointments.length > 0 ? paginatedAppointments[paginatedAppointments.length -1].id : null;
-    return { appointments: populatedAppointments, totalCount, lastVisibleAppointmentId: newLastVisibleId };
+    return { appointments: paginatedAppointments, totalCount, lastVisibleAppointmentId: newLastVisibleId };
   }
-  throw new Error("Real database not implemented for getPatientAppointmentHistory");
+  throw new Error("Patient appointment history retrieval not implemented for non-mock database or mockDB not available.");
 };
 
 export const getCurrentQuincenaDateRange = (): { start: Date; end: Date } => {
@@ -697,4 +716,3 @@ export const getCurrentQuincenaDateRange = (): { start: Date; end: Date } => {
   }
   return { start: startOfDay(startDate), end: endOfDay(endDate) };
 };
-
