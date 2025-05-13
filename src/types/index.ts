@@ -1,5 +1,5 @@
 
-import type { LocationId, UserRole, PaymentMethod, AppointmentStatus } from '@/lib/constants';
+import type { LocationId, UserRole, PaymentMethod, AppointmentStatus, DayOfWeekId } from '@/lib/constants';
 
 export interface BaseEntity {
   id: string;
@@ -20,9 +20,21 @@ export interface Professional extends BaseEntity {
   locationId: LocationId;
   phone?: string;
   biWeeklyEarnings?: number;
-  workDays: string[]; // e.g., ["monday", "tuesday", ..., "sunday"]
-  startTime: string; // e.g., "09:00"
-  endTime: string; // e.g., "17:00"
+  
+  // Horario Semanal Base (opcional, puede servir como plantilla o para días sin anulación)
+  workSchedule?: {
+    [key in DayOfWeekId]?: { startTime: string; endTime: string } | null;
+  };
+
+  // Anulaciones o Horarios Específicos
+  customScheduleOverrides?: Array<{
+    id: string; // Unique ID for each override, useful for form handling
+    date: string; // Fecha específica en formato ISO "YYYY-MM-DD"
+    isWorking: boolean; // True si trabaja, false si es un día libre anulando el workSchedule base
+    startTime?: string; // "HH:MM", solo si isWorking es true
+    endTime?: string; // "HH:MM", solo si isWorking es true
+    notes?: string; // Opcional, para notas sobre este turno específico
+  }>;
 }
 
 export interface Patient extends BaseEntity {
@@ -86,11 +98,24 @@ export type AppointmentFormData = {
   bookingObservations?: string;
 };
 
-export type ProfessionalFormData = Omit<Professional, 'biWeeklyEarnings' | 'id' > & {
+export type ProfessionalFormData = Omit<Professional, 'id' | 'biWeeklyEarnings' | 'workSchedule' | 'customScheduleOverrides'> & {
   id?: string;
-  workDays: string[];
-  startTime: string;
-  endTime: string;
+  
+  // Para el formulario, podría ser más fácil manejar workSchedule como antes
+  // y tener una sección separada para los customScheduleOverrides.
+  workDays: DayOfWeekId[]; // Días de la semana base
+  startTime: string;   // Hora de inicio base
+  endTime: string;     // Hora de fin base
+  
+  // Para el formulario de anulaciones
+  customScheduleOverrides?: Array<{
+    id: string; // Important for useFieldArray key
+    date: Date; // Usamos Date para el DatePicker y luego convertimos a string ISO
+    isWorking: boolean;
+    startTime?: string;
+    endTime?: string;
+    notes?: string;
+  }>;
 };
 
 
@@ -100,7 +125,7 @@ export type { AppointmentStatus };
 export type ServiceFormData = {
   id?: string;
   name: string;
-  defaultDuration: { // Changed to object for form input
+  defaultDuration: { 
     hours: number;
     minutes: number;
   };
