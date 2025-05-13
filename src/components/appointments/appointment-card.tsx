@@ -16,7 +16,7 @@ import { AppointmentEditDialog } from './appointment-edit-dialog';
 import type { Professional } from '@/types';
 import { getProfessionals } from '@/lib/data';
 
-import { FormField } from "@/components/ui/form"; // Removed Form import as it's not directly used
+import { Form, FormField } from "@/components/ui/form";
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { AppointmentUpdateSchema } from '@/lib/schemas';
@@ -57,7 +57,7 @@ const AppointmentCardComponent = ({ appointment, onUpdate }: AppointmentCardProp
                 setProfessionalsForDisplay(profs);
             } catch (error) {
                 console.error("Failed to load professionals for appointment card:", error);
-                setProfessionalsForDisplay([]); 
+                setProfessionalsForDisplay([]);
             } finally {
                 setIsLoadingProfessionals(false);
             }
@@ -72,7 +72,7 @@ const AppointmentCardComponent = ({ appointment, onUpdate }: AppointmentCardProp
   const getStatusBadgeVariant = (status: AppointmentStatus) => {
     switch (status) {
       case APPOINTMENT_STATUS.BOOKED: return 'default';
-      case APPOINTMENT_STATUS.CONFIRMED: return 'default'; 
+      case APPOINTMENT_STATUS.CONFIRMED: return 'default';
       case APPOINTMENT_STATUS.COMPLETED: return 'default';
       case APPOINTMENT_STATUS.CANCELLED_CLIENT:
       case APPOINTMENT_STATUS.CANCELLED_STAFF:
@@ -86,10 +86,10 @@ const AppointmentCardComponent = ({ appointment, onUpdate }: AppointmentCardProp
   };
 
   const handleAppointmentUpdated = (updatedAppointment: Appointment) => {
-    onUpdate(updatedAppointment); 
-    setIsUpdateModalOpen(false); 
+    onUpdate(updatedAppointment);
+    setIsUpdateModalOpen(false);
   };
-  
+
   const fileToDataUri = (file: File): Promise<string> => {
     return new Promise((resolve, reject) => {
       const reader = new FileReader();
@@ -114,7 +114,7 @@ const AppointmentCardComponent = ({ appointment, onUpdate }: AppointmentCardProp
         toast({ title: "Error al cargar imagen", description: "No se pudo procesar la imagen.", variant: "destructive"});
       } finally {
         setIsUploadingImage(false);
-        if(fileInputRef.current) fileInputRef.current.value = ""; 
+        if(fileInputRef.current) fileInputRef.current.value = "";
       }
     }
   };
@@ -127,14 +127,14 @@ const AppointmentCardComponent = ({ appointment, onUpdate }: AppointmentCardProp
           <div className="flex justify-between items-start">
             <div>
               <CardTitle className="text-lg flex items-center gap-2">
-                <UserIcon className="text-primary" /> 
+                <UserIcon className="text-primary" />
                 {appointment.patient?.firstName} {appointment.patient?.lastName}
               </CardTitle>
               <CardDescription>{appointment.service?.name} <span className="text-xs text-muted-foreground">({LOCATIONS.find(l=>l.id === appointment.locationId)?.name})</span></CardDescription>
             </div>
-            <Badge 
-              variant={getStatusBadgeVariant(appointment.status)} 
-              className={`capitalize text-xs h-fit ${APPOINTMENT_STATUS_DISPLAY[appointment.status as AppointmentStatus] === APPOINTMENT_STATUS_DISPLAY.completado ? 'bg-green-600 text-white' : '' }`}
+            <Badge
+              variant={getStatusBadgeVariant(appointment.status)}
+              className={`capitalize text-xs h-fit ${APPOINTMENT_STATUS_DISPLAY[appointment.status as AppointmentStatus] === APPOINTMENT_STATUS_DISPLAY.Completado ? 'bg-green-600 text-white' : '' }`}
             >
               {APPOINTMENT_STATUS_DISPLAY[appointment.status as AppointmentStatus] || appointment.status}
             </Badge>
@@ -235,5 +235,3 @@ const AppointmentCardComponent = ({ appointment, onUpdate }: AppointmentCardProp
 }
 
 export const AppointmentCard = React.memo(AppointmentCardComponent);
-
-```
