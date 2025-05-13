@@ -32,7 +32,7 @@ import {
   DialogDescription,
 } from '@/components/ui/dialog';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
-import { PlusCircle, Edit2, Briefcase, Search, Loader2, CalendarDays, Clock, Trash2, Calendar as CalendarIconLucide } from 'lucide-react';
+import { PlusCircle, Edit2, Briefcase, Search, Loader2, CalendarDays, Clock, Trash2, Calendar as CalendarIconLucide, AlertTriangle, Users } from 'lucide-react';
 import { useForm, useFieldArray, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { ProfessionalFormSchema } from '@/lib/schemas';
@@ -43,6 +43,8 @@ import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
 import { format, parseISO, getDay, isSameDay, differenceInDays, startOfDay } from 'date-fns';
 import { es } from 'date-fns/locale';
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
+
 
 const COMPENSATORY_DAY_OFF_PLACEHOLDER_VALUE = "--none--";
 
@@ -76,7 +78,7 @@ export default function ProfessionalsPage() {
       workSchedule: defaultBaseWorkSchedule,
       rotationType: 'none',
       rotationStartDate: null,
-      compensatoryDayOffChoice: COMPENSATORY_DAY_OFF_PLACEHOLDER_VALUE as any, // Placeholder for form
+      compensatoryDayOffChoice: COMPENSATORY_DAY_OFF_PLACEHOLDER_VALUE as any, 
       customScheduleOverrides: [],
     }
   });
@@ -245,7 +247,7 @@ export default function ProfessionalsPage() {
     todayStr += `${availabilityToday.startTime}-${availabilityToday.endTime}`;
     if (availabilityToday.notes) todayStr += ` (${availabilityToday.notes})`;
   } else {
-    let reason = "No disponible";
+    let reason = "Descansando";
     const override = prof.customScheduleOverrides?.find(ov => isSameDay(parseISO(ov.date), today) && !ov.isWorking);
     if (override) {
       reason = `Anulación${override.notes ? ` (${override.notes})` : ''}`;
@@ -255,16 +257,18 @@ export default function ProfessionalsPage() {
       if (daysDiff >= 0) {
         const weekNumberInCycle = Math.floor(daysDiff / 7) % 2;
         const targetDayId = DAYS_OF_WEEK[getDay(today)].id;
-        if (weekNumberInCycle === 1) {
+        if (weekNumberInCycle === 1) { // Compensatory week
           if (targetDayId === prof.compensatoryDayOffChoice && (getDay(today) >= 1 && getDay(today) <= 4)) {
             reason = `Desc. Compensatorio (${DAYS_OF_WEEK.find(d => d.id === prof.compensatoryDayOffChoice)?.name})`;
-          } else if (getDay(today) === 0) {
+          } else if (getDay(today) === 0) { // Sunday on compensatory week
              reason = "Domingo (Rotación Desc.)";
           }
+        } else if (weekNumberInCycle === 0 && getDay(today) === 0) { // Sunday on work week, but no custom override and default schedule is off
+            // This case is handled by availabilityToday if they are working. If not, means base Sunday schedule is off.
         }
       }
     } else if (!prof.workSchedule?.[DAYS_OF_WEEK[getDay(today)].id as DayOfWeekId]?.isWorking && !override) {
-        reason = "No disponible (Horario base)";
+        reason = `Descansando (Horario base: ${DAYS_OF_WEEK[getDay(today)].name} libre)`;
     }
     todayStr += reason;
   }
@@ -275,7 +279,7 @@ export default function ProfessionalsPage() {
     generalStr = `Rotación Dom. (Compensa: ${compDayName || 'N/A'})`;
   } else {
     const activeDays = DAYS_OF_WEEK
-        .filter(day => prof.workSchedule?.[day.id as DayOfWeekId]?.isWorking && prof.workSchedule[day.id as DayOfWeekId]?.startTime && day.id !== 'sunday')
+        .filter(day => prof.workSchedule?.[day.id as DayOfWeekId]?.isWorking && day.id !== 'sunday')
         .map(day => day.name.substring(0,1).toUpperCase())
         .join('');
     if (activeDays.length > 0) {
@@ -293,7 +297,7 @@ export default function ProfessionalsPage() {
       <Card className="shadow-md">
         <CardHeader className="flex flex-col md:flex-row justify-between items-center">
           <div>
-            <CardTitle className="text-2xl flex items-center gap-2"><Briefcase className="text-primary"/> Gestión de Profesionales</CardTitle>
+            <CardTitle className="text-2xl flex items-center gap-2"><Users className="text-primary"/> Gestión de Profesionales</CardTitle>
             <CardDescription>Ver, agregar o editar información y horarios de los profesionales.</CardDescription>
             {isAdminOrContador && (
               <div className="mt-1 text-sm text-muted-foreground">
@@ -358,7 +362,7 @@ export default function ProfessionalsPage() {
                 )) : (
                   <TableRow>
                     <TableCell colSpan={(isAdminOrContador && !isContadorOnly) ? 6 : (isContadorOnly ? 6 : 5)} className="h-24 text-center"> 
-                      No se encontraron profesionales.
+                      <AlertTriangle className="inline-block mr-2 h-5 w-5 text-muted-foreground" /> No se encontraron profesionales.
                     </TableCell>
                   </TableRow>
                 )}
@@ -378,211 +382,219 @@ export default function ProfessionalsPage() {
             </DialogDescription>
           </DialogHeader>
           <Form {...form}>
-            <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6 py-4 max-h-[80vh] overflow-y-auto pr-2">
+            <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-1 py-4 max-h-[80vh] overflow-y-auto pr-2">
               {editingProfessional && <input type="hidden" {...form.register("id")} />}
               
-              <CollapsibleSection title="Información Personal">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <FormField control={form.control} name="firstName" render={({ field }) => (
-                    <FormItem><FormLabel>Nombre(s)</FormLabel><FormControl><Input placeholder="Ej: Juan" {...field} /></FormControl><FormMessage /></FormItem>
-                  )}/>
-                  <FormField control={form.control} name="lastName" render={({ field }) => (
-                    <FormItem><FormLabel>Apellido(s)</FormLabel><FormControl><Input placeholder="Ej: Pérez" {...field} /></FormControl><FormMessage /></FormItem>
-                  )}/>
-                </div>
-                <FormField control={form.control} name="locationId" render={({ field }) => (
-                    <FormItem className="mt-4"><FormLabel>Sede</FormLabel>
-                      <Select onValueChange={field.onChange} value={field.value} disabled={!isAdminOrContador && !!editingProfessional /* Allow admin/contador to change; staff cannot change existing */}>
-                        <FormControl><SelectTrigger><SelectValue placeholder="Seleccionar sede" /></SelectTrigger></FormControl>
-                        <SelectContent>{LOCATIONS.map(loc => (<SelectItem key={loc.id} value={loc.id}>{loc.name}</SelectItem>))}</SelectContent>
-                      </Select><FormMessage />
-                    </FormItem>
-                )}/>
-                <FormField control={form.control} name="phone" render={({ field }) => (
-                    <FormItem className="mt-4"><FormLabel>Teléfono (Opcional)</FormLabel><FormControl><Input type="tel" placeholder="Ej: 987654321" {...field} value={field.value || ''} /></FormControl><FormMessage /></FormItem>
-                )}/>
-              </CollapsibleSection>
+              <Accordion type="multiple" defaultValue={['personal-info', 'base-schedule']} className="w-full">
+                <AccordionItem value="personal-info">
+                  <AccordionTrigger className="text-lg font-semibold">Información Personal</AccordionTrigger>
+                  <AccordionContent className="space-y-4 pt-2">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <FormField control={form.control} name="firstName" render={({ field }) => (
+                        <FormItem><FormLabel>Nombre(s)</FormLabel><FormControl><Input placeholder="Ej: Juan" {...field} /></FormControl><FormMessage /></FormItem>
+                      )}/>
+                      <FormField control={form.control} name="lastName" render={({ field }) => (
+                        <FormItem><FormLabel>Apellido(s)</FormLabel><FormControl><Input placeholder="Ej: Pérez" {...field} /></FormControl><FormMessage /></FormItem>
+                      )}/>
+                    </div>
+                    <FormField control={form.control} name="locationId" render={({ field }) => (
+                        <FormItem className="mt-4"><FormLabel>Sede</FormLabel>
+                          <Select onValueChange={field.onChange} value={field.value} disabled={!isAdminOrContador && !!editingProfessional}>
+                            <FormControl><SelectTrigger><SelectValue placeholder="Seleccionar sede" /></SelectTrigger></FormControl>
+                            <SelectContent>{LOCATIONS.map(loc => (<SelectItem key={loc.id} value={loc.id}>{loc.name}</SelectItem>))}</SelectContent>
+                          </Select><FormMessage />
+                        </FormItem>
+                    )}/>
+                    <FormField control={form.control} name="phone" render={({ field }) => (
+                        <FormItem className="mt-4"><FormLabel>Teléfono (Opcional)</FormLabel><FormControl><Input type="tel" placeholder="Ej: 987654321" {...field} value={field.value || ''} /></FormControl><FormMessage /></FormItem>
+                    )}/>
+                  </AccordionContent>
+                </AccordionItem>
 
-             <CollapsibleSection title="Horario Semanal Base (Lunes a Sábado)">
-                <div className="space-y-4">
-                    {DAYS_OF_WEEK.filter(day => day.id !== 'sunday').map((day) => {
-                        const dayId = day.id as Exclude<DayOfWeekId, 'sunday'>;
-                        return (
-                            <div key={dayId} className="p-3 border rounded-md bg-muted/30">
-                                <FormField
-                                    control={form.control}
-                                    name={`workSchedule.${dayId}.isWorking`}
-                                    render={({ field }) => (
-                                        <FormItem className="flex flex-row items-center space-x-3 space-y-0 mb-2">
-                                            <FormControl><Checkbox checked={!!field.value} onCheckedChange={field.onChange} /></FormControl>
-                                            <FormLabel className="font-medium">{day.name}</FormLabel>
-                                        </FormItem>
-                                    )}
-                                />
-                                {form.watch(`workSchedule.${dayId}.isWorking`) && (
-                                    <div className="grid grid-cols-2 gap-3 mt-1">
-                                        <FormField
-                                            control={form.control}
-                                            name={`workSchedule.${dayId}.startTime`}
-                                            render={({ field }) => (
-                                                <FormItem>
-                                                    <FormLabel className="text-xs">Hora Inicio</FormLabel>
-                                                    <Select onValueChange={field.onChange} value={field.value || ""} >
-                                                        <FormControl><SelectTrigger><SelectValue placeholder="HH:MM" /></SelectTrigger></FormControl>
-                                                        <SelectContent>{TIME_SLOTS.map(slot => (<SelectItem key={`base-start-${dayId}-${slot}`} value={slot}>{slot}</SelectItem>))}</SelectContent>
-                                                    </Select>
-                                                    <FormMessage />
-                                                </FormItem>
-                                            )}
-                                        />
-                                        <FormField
-                                            control={form.control}
-                                            name={`workSchedule.${dayId}.endTime`}
-                                            render={({ field }) => (
-                                                <FormItem>
-                                                    <FormLabel className="text-xs">Hora Fin</FormLabel>
-                                                    <Select onValueChange={field.onChange} value={field.value || ""} >
-                                                        <FormControl><SelectTrigger><SelectValue placeholder="HH:MM" /></SelectTrigger></FormControl>
-                                                        <SelectContent>{TIME_SLOTS.map(slot => (<SelectItem key={`base-end-${dayId}-${slot}`} value={slot}>{slot}</SelectItem>))}</SelectContent>
-                                                    </Select>
-                                                    <FormMessage />
-                                                </FormItem>
-                                            )}
-                                        />
-                                    </div>
+                <AccordionItem value="base-schedule">
+                  <AccordionTrigger className="text-lg font-semibold">Horario Semanal Base (Lunes a Sábado)</AccordionTrigger>
+                  <AccordionContent className="space-y-4 pt-2">
+                      {DAYS_OF_WEEK.filter(day => day.id !== 'sunday').map((day) => {
+                          const dayId = day.id as Exclude<DayOfWeekId, 'sunday'>;
+                          return (
+                              <div key={dayId} className="p-3 border rounded-md bg-muted/30">
+                                  <FormField
+                                      control={form.control}
+                                      name={`workSchedule.${dayId}.isWorking`}
+                                      render={({ field }) => (
+                                          <FormItem className="flex flex-row items-center space-x-3 space-y-0 mb-2">
+                                              <FormControl><Checkbox checked={!!field.value} onCheckedChange={field.onChange} /></FormControl>
+                                              <FormLabel className="font-medium">{day.name}</FormLabel>
+                                          </FormItem>
+                                      )}
+                                  />
+                                  {form.watch(`workSchedule.${dayId}.isWorking`) && (
+                                      <div className="grid grid-cols-2 gap-3 mt-1">
+                                          <FormField
+                                              control={form.control}
+                                              name={`workSchedule.${dayId}.startTime`}
+                                              render={({ field }) => (
+                                                  <FormItem>
+                                                      <FormLabel className="text-xs">Hora Inicio</FormLabel>
+                                                      <Select onValueChange={field.onChange} value={field.value || ""} >
+                                                          <FormControl><SelectTrigger><SelectValue placeholder="HH:MM" /></SelectTrigger></FormControl>
+                                                          <SelectContent>{TIME_SLOTS.map(slot => (<SelectItem key={`base-start-${dayId}-${slot}`} value={slot}>{slot}</SelectItem>))}</SelectContent>
+                                                      </Select>
+                                                      <FormMessage />
+                                                  </FormItem>
+                                              )}
+                                          />
+                                          <FormField
+                                              control={form.control}
+                                              name={`workSchedule.${dayId}.endTime`}
+                                              render={({ field }) => (
+                                                  <FormItem>
+                                                      <FormLabel className="text-xs">Hora Fin</FormLabel>
+                                                      <Select onValueChange={field.onChange} value={field.value || ""} >
+                                                          <FormControl><SelectTrigger><SelectValue placeholder="HH:MM" /></SelectTrigger></FormControl>
+                                                          <SelectContent>{TIME_SLOTS.map(slot => (<SelectItem key={`base-end-${dayId}-${slot}`} value={slot}>{slot}</SelectItem>))}</SelectContent>
+                                                      </Select>
+                                                      <FormMessage />
+                                                  </FormItem>
+                                              )}
+                                          />
+                                      </div>
+                                  )}
+                                  <FormMessage>{form.formState.errors.workSchedule?.[dayId]?.root?.message || form.formState.errors.workSchedule?.[dayId]?.startTime?.message}</FormMessage>
+                              </div>
+                          );
+                      })}
+                  </AccordionContent>
+                </AccordionItem>
+
+                <AccordionItem value="sunday-rotation">
+                  <AccordionTrigger className="text-lg font-semibold">Rotación de Domingo y Horario Compensatorio</AccordionTrigger>
+                  <AccordionContent className="space-y-4 pt-2">
+                    <FormField
+                        control={form.control}
+                        name="rotationType"
+                        render={({ field }) => (
+                            <FormItem>
+                                <FormLabel>Tipo de Rotación de Domingo</FormLabel>
+                                <Select onValueChange={field.onChange} value={field.value}>
+                                    <FormControl><SelectTrigger><SelectValue placeholder="Seleccionar tipo de rotación" /></SelectTrigger></FormControl>
+                                    <SelectContent>
+                                        <SelectItem value="none">Ninguna (Domingo según horario base o libre)</SelectItem>
+                                        <SelectItem value="biWeeklySunday">Domingo Bi-Semananal (con compensatorio)</SelectItem>
+                                    </SelectContent>
+                                </Select>
+                                <FormMessage />
+                            </FormItem>
+                        )}
+                    />
+                    {watchRotationType === 'biWeeklySunday' && (
+                        <div className="space-y-4 mt-4 pl-4 border-l-2 border-primary">
+                            <p className="text-sm text-muted-foreground">
+                                El profesional trabajará un domingo sí y uno no (10:00 AM - 06:00 PM), con un día de descanso compensatorio la semana siguiente al domingo trabajado.
+                            </p>
+                            <FormField
+                                control={form.control}
+                                name="rotationStartDate"
+                                render={({ field }) => (
+                                    <FormItem className="flex flex-col">
+                                        <FormLabel>Fecha de Inicio de Rotación (Primer Domingo que trabaja)</FormLabel>
+                                        <Popover>
+                                            <PopoverTrigger asChild>
+                                                <FormControl>
+                                                    <Button variant={"outline"} className={cn("w-full pl-3 text-left font-normal", !field.value && "text-muted-foreground")}>
+                                                        {field.value ? format(field.value, "PPP", {locale: es}) : <span>Seleccionar fecha</span>}
+                                                        <CalendarIconLucide className="ml-auto h-4 w-4 opacity-50" />
+                                                    </Button>
+                                                </FormControl>
+                                            </PopoverTrigger>
+                                            <PopoverContent className="w-auto p-0" align="start">
+                                                <Calendar
+                                                    mode="single"
+                                                    selected={field.value}
+                                                    onSelect={field.onChange}
+                                                    disabled={(date) => getDay(date) !== 0} 
+                                                    initialFocus
+                                                />
+                                            </PopoverContent>
+                                        </Popover>
+                                        <FormMessage />
+                                    </FormItem>
                                 )}
-                                <FormMessage>{form.formState.errors.workSchedule?.[dayId]?.root?.message || form.formState.errors.workSchedule?.[dayId]?.startTime?.message}</FormMessage>
-                            </div>
-                        );
-                    })}
-                </div>
-            </CollapsibleSection>
-
-
-            <CollapsibleSection title="Rotación de Domingo y Horario Compensatorio">
-                <FormField
-                    control={form.control}
-                    name="rotationType"
-                    render={({ field }) => (
-                        <FormItem>
-                            <FormLabel>Tipo de Rotación de Domingo</FormLabel>
-                            <Select onValueChange={field.onChange} value={field.value}>
-                                <FormControl><SelectTrigger><SelectValue placeholder="Seleccionar tipo de rotación" /></SelectTrigger></FormControl>
-                                <SelectContent>
-                                    <SelectItem value="none">Ninguna (Domingo según horario base o libre)</SelectItem>
-                                    <SelectItem value="biWeeklySunday">Domingo Bi-Semananal (con compensatorio)</SelectItem>
-                                </SelectContent>
-                            </Select>
-                            <FormMessage />
-                        </FormItem>
-                    )}
-                />
-                {watchRotationType === 'biWeeklySunday' && (
-                    <div className="space-y-4 mt-4 pl-4 border-l-2 border-primary">
-                         <p className="text-sm text-muted-foreground">
-                            El profesional trabajará un domingo sí y uno no (10:00 AM - 06:00 PM), con un día de descanso compensatorio la semana siguiente al domingo trabajado.
-                        </p>
-                        <FormField
-                            control={form.control}
-                            name="rotationStartDate"
-                            render={({ field }) => (
-                                <FormItem className="flex flex-col">
-                                    <FormLabel>Fecha de Inicio de Rotación (Primer Domingo que trabaja)</FormLabel>
-                                    <Popover>
-                                        <PopoverTrigger asChild>
-                                            <FormControl>
-                                                <Button variant={"outline"} className={cn("w-full pl-3 text-left font-normal", !field.value && "text-muted-foreground")}>
-                                                    {field.value ? format(field.value, "PPP", {locale: es}) : <span>Seleccionar fecha</span>}
-                                                    <CalendarIconLucide className="ml-auto h-4 w-4 opacity-50" />
-                                                </Button>
-                                            </FormControl>
-                                        </PopoverTrigger>
-                                        <PopoverContent className="w-auto p-0" align="start">
-                                            <Calendar
-                                                mode="single"
-                                                selected={field.value}
-                                                onSelect={field.onChange}
-                                                disabled={(date) => getDay(date) !== 0} 
-                                                initialFocus
-                                            />
-                                        </PopoverContent>
-                                    </Popover>
-                                    <FormMessage />
-                                </FormItem>
-                            )}
-                        />
-                        <FormField
-                            control={form.control}
-                            name="compensatoryDayOffChoice"
-                            render={({ field }) => (
-                                <FormItem>
-                                    <FormLabel>Día de Descanso Compensatorio (Semana SIGUIENTE al Domingo trabajado)</FormLabel>
-                                    <Select onValueChange={field.onChange} value={field.value ?? COMPENSATORY_DAY_OFF_PLACEHOLDER_VALUE}>
-                                        <FormControl><SelectTrigger><SelectValue placeholder="Seleccionar día de compensación" /></SelectTrigger></FormControl>
-                                        <SelectContent>
-                                            <SelectItem value={COMPENSATORY_DAY_OFF_PLACEHOLDER_VALUE}>Seleccionar día...</SelectItem>
-                                            {DAYS_OF_WEEK.filter(d => ['monday', 'tuesday', 'wednesday', 'thursday'].includes(d.id)).map(day => (
-                                                <SelectItem key={day.id} value={day.id}>{day.name}</SelectItem>
-                                            ))}
-                                        </SelectContent>
-                                    </Select>
-                                    <FormMessage />
-                                </FormItem>
-                            )}
-                        />
-                    </div>
-                )}
-            </CollapsibleSection>
-
-
-              <CollapsibleSection title="Anulaciones de Horario / Horarios Específicos (Opcional)">
-                <div className="space-y-4">
-                  {customScheduleFields.map((field, index) => (
-                    <div key={field.id} className="p-4 border rounded-lg space-y-3 relative bg-muted/30">
-                       <Button type="button" variant="ghost" size="icon" className="absolute top-2 right-2 h-7 w-7" onClick={() => removeCustomSchedule(index)}>
-                          <Trash2 className="h-4 w-4 text-destructive" /> <span className="sr-only">Eliminar Anulación</span>
-                       </Button>
-                      <FormField control={form.control} name={`customScheduleOverrides.${index}.date`} render={({ field: dateField }) => (
-                        <FormItem className="flex flex-col"><FormLabel>Fecha Específica</FormLabel>
-                          <Popover><PopoverTrigger asChild><FormControl>
-                              <Button variant={"outline"} className={cn("w-full pl-3 text-left font-normal", !dateField.value && "text-muted-foreground")}>
-                                {dateField.value ? format(dateField.value, "PPP", {locale: es}) : <span>Seleccionar fecha</span>} <CalendarIconLucide className="ml-auto h-4 w-4 opacity-50" />
-                              </Button></FormControl></PopoverTrigger>
-                            <PopoverContent className="w-auto p-0" align="start"><Calendar mode="single" selected={dateField.value} onSelect={dateField.onChange} initialFocus /></PopoverContent>
-                          </Popover><FormMessage /></FormItem>
-                      )}/>
-                      <FormField control={form.control} name={`customScheduleOverrides.${index}.isWorking`} render={({ field: isWorkingField }) => (
-                        <FormItem className="flex flex-row items-center space-x-3 space-y-0 rounded-md border p-3 shadow-sm bg-background">
-                          <FormControl><Checkbox checked={isWorkingField.value} onCheckedChange={isWorkingField.onChange} /></FormControl>
-                          <div className="space-y-1 leading-none"><FormLabel>¿Trabaja este día?</FormLabel></div>
-                        </FormItem>
-                      )}/>
-                      {form.watch(`customScheduleOverrides.${index}.isWorking`) && (
-                        <div className="grid grid-cols-2 gap-3">
-                          <FormField control={form.control} name={`customScheduleOverrides.${index}.startTime`} render={({ field: stField }) => (
-                            <FormItem><FormLabel className="text-xs">Hora Inicio</FormLabel>
-                              <Select onValueChange={stField.onChange} value={stField.value || ""}><FormControl><SelectTrigger><SelectValue placeholder="HH:MM"/></SelectTrigger></FormControl>
-                                <SelectContent>{TIME_SLOTS.map(slot => (<SelectItem key={`cs-start-${slot}`} value={slot}>{slot}</SelectItem>))}</SelectContent>
-                              </Select><FormMessage /></FormItem>
-                          )}/>
-                          <FormField control={form.control} name={`customScheduleOverrides.${index}.endTime`} render={({ field: etField }) => (
-                            <FormItem><FormLabel className="text-xs">Hora Fin</FormLabel>
-                              <Select onValueChange={etField.onChange} value={etField.value || ""}><FormControl><SelectTrigger><SelectValue placeholder="HH:MM"/></SelectTrigger></FormControl>
-                                <SelectContent>{TIME_SLOTS.map(slot => (<SelectItem key={`cs-end-${slot}`} value={slot}>{slot}</SelectItem>))}</SelectContent>
-                              </Select><FormMessage /></FormItem>
-                          )}/>
+                            />
+                            <FormField
+                                control={form.control}
+                                name="compensatoryDayOffChoice"
+                                render={({ field }) => (
+                                    <FormItem>
+                                        <FormLabel>Día de Descanso Compensatorio (Semana SIGUIENTE al Domingo trabajado)</FormLabel>
+                                        <Select onValueChange={field.onChange} value={field.value === null ? COMPENSATORY_DAY_OFF_PLACEHOLDER_VALUE : field.value || COMPENSATORY_DAY_OFF_PLACEHOLDER_VALUE}>
+                                            <FormControl><SelectTrigger><SelectValue placeholder="Seleccionar día de compensación" /></SelectTrigger></FormControl>
+                                            <SelectContent>
+                                                <SelectItem value={COMPENSATORY_DAY_OFF_PLACEHOLDER_VALUE}>Seleccionar día...</SelectItem>
+                                                {DAYS_OF_WEEK.filter(d => ['monday', 'tuesday', 'wednesday', 'thursday'].includes(d.id)).map(day => (
+                                                    <SelectItem key={day.id} value={day.id}>{day.name}</SelectItem>
+                                                ))}
+                                            </SelectContent>
+                                        </Select>
+                                        <FormMessage />
+                                    </FormItem>
+                                )}
+                            />
                         </div>
-                      )}
-                      <FormField control={form.control} name={`customScheduleOverrides.${index}.notes`} render={({ field: notesField }) => (
-                        <FormItem><FormLabel className="text-xs">Notas (Opcional)</FormLabel><FormControl><Textarea placeholder="Ej: Turno especial, Domingo quincenal" {...notesField} value={notesField.value || ''} /></FormControl><FormMessage /></FormItem>
-                      )}/>
-                    </div>
-                  ))}
-                </div>
-                <Button type="button" variant="outline" size="sm" className="mt-4" onClick={() => appendCustomSchedule({ id: generateId(), date: new Date(), isWorking: true, startTime: '09:00', endTime: '17:00', notes: '' })}>
-                  <PlusCircle className="mr-2 h-4 w-4" /> Agregar Horario Específico
-                </Button>
-              </CollapsibleSection>
+                    )}
+                  </AccordionContent>
+                </AccordionItem>
+
+                <AccordionItem value="custom-overrides">
+                  <AccordionTrigger className="text-lg font-semibold">Anulaciones de Horario / Horarios Específicos (Opcional)</AccordionTrigger>
+                  <AccordionContent className="space-y-4 pt-2">
+                    {customScheduleFields.map((field, index) => (
+                      <div key={field.id} className="p-4 border rounded-lg space-y-3 relative bg-muted/30">
+                          <Button type="button" variant="ghost" size="icon" className="absolute top-2 right-2 h-7 w-7" onClick={() => removeCustomSchedule(index)}>
+                            <Trash2 className="h-4 w-4 text-destructive" /> <span className="sr-only">Eliminar Anulación</span>
+                          </Button>
+                        <FormField control={form.control} name={`customScheduleOverrides.${index}.date`} render={({ field: dateField }) => (
+                          <FormItem className="flex flex-col"><FormLabel>Fecha Específica</FormLabel>
+                            <Popover><PopoverTrigger asChild><FormControl>
+                                <Button variant={"outline"} className={cn("w-full pl-3 text-left font-normal", !dateField.value && "text-muted-foreground")}>
+                                  {dateField.value ? format(dateField.value, "PPP", {locale: es}) : <span>Seleccionar fecha</span>} <CalendarIconLucide className="ml-auto h-4 w-4 opacity-50" />
+                                </Button></FormControl></PopoverTrigger>
+                              <PopoverContent className="w-auto p-0" align="start"><Calendar mode="single" selected={dateField.value} onSelect={dateField.onChange} initialFocus /></PopoverContent>
+                            </Popover><FormMessage /></FormItem>
+                        )}/>
+                        <FormField control={form.control} name={`customScheduleOverrides.${index}.isWorking`} render={({ field: isWorkingField }) => (
+                          <FormItem className="flex flex-row items-center space-x-3 space-y-0 rounded-md border p-3 shadow-sm bg-background">
+                            <FormControl><Checkbox checked={isWorkingField.value} onCheckedChange={isWorkingField.onChange} /></FormControl>
+                            <div className="space-y-1 leading-none"><FormLabel>¿Trabaja este día?</FormLabel></div>
+                          </FormItem>
+                        )}/>
+                        {form.watch(`customScheduleOverrides.${index}.isWorking`) && (
+                          <div className="grid grid-cols-2 gap-3">
+                            <FormField control={form.control} name={`customScheduleOverrides.${index}.startTime`} render={({ field: stField }) => (
+                              <FormItem><FormLabel className="text-xs">Hora Inicio</FormLabel>
+                                <Select onValueChange={stField.onChange} value={stField.value || ""}><FormControl><SelectTrigger><SelectValue placeholder="HH:MM"/></SelectTrigger></FormControl>
+                                  <SelectContent>{TIME_SLOTS.map(slot => (<SelectItem key={`cs-start-${slot}`} value={slot}>{slot}</SelectItem>))}</SelectContent>
+                                </Select><FormMessage /></FormItem>
+                            )}/>
+                            <FormField control={form.control} name={`customScheduleOverrides.${index}.endTime`} render={({ field: etField }) => (
+                              <FormItem><FormLabel className="text-xs">Hora Fin</FormLabel>
+                                <Select onValueChange={etField.onChange} value={etField.value || ""}><FormControl><SelectTrigger><SelectValue placeholder="HH:MM"/></SelectTrigger></FormControl>
+                                  <SelectContent>{TIME_SLOTS.map(slot => (<SelectItem key={`cs-end-${slot}`} value={slot}>{slot}</SelectItem>))}</SelectContent>
+                                </Select><FormMessage /></FormItem>
+                            )}/>
+                          </div>
+                        )}
+                        <FormField control={form.control} name={`customScheduleOverrides.${index}.notes`} render={({ field: notesField }) => (
+                          <FormItem><FormLabel className="text-xs">Notas (Opcional)</FormLabel><FormControl><Textarea placeholder="Ej: Turno especial, Domingo quincenal" {...notesField} value={notesField.value || ''} /></FormControl><FormMessage /></FormItem>
+                        )}/>
+                      </div>
+                    ))}
+                    <Button type="button" variant="outline" size="sm" className="mt-4" onClick={() => appendCustomSchedule({ id: generateId(), date: new Date(), isWorking: true, startTime: '09:00', endTime: '17:00', notes: '' })}>
+                      <PlusCircle className="mr-2 h-4 w-4" /> Agregar Horario Específico
+                    </Button>
+                  </AccordionContent>
+                </AccordionItem>
+              </Accordion>
 
               <DialogFooter className="pt-6">
                 <DialogClose asChild><Button type="button" variant="outline">Cancelar</Button></DialogClose>
@@ -595,29 +607,3 @@ export default function ProfessionalsPage() {
     </div>
   );
 }
-
-
-interface CollapsibleSectionProps {
-  title: string;
-  children: React.ReactNode;
-  defaultOpen?: boolean;
-}
-const CollapsibleSection: React.FC<CollapsibleSectionProps> = ({ title, children, defaultOpen = true }) => {
-  const [isOpen, setIsOpen] = useState(defaultOpen);
-  return (
-    <div className="py-3 border-b last:border-b-0">
-      <button type="button" className="flex justify-between items-center w-full text-left text-lg font-semibold" onClick={() => setIsOpen(!isOpen)}>
-        {title}
-        <ChevronIcon isOpen={isOpen} />
-      </button>
-      {isOpen && <div className="mt-3 space-y-4">{children}</div>}
-    </div>
-  );
-};
-
-const ChevronIcon = ({ isOpen }: { isOpen: boolean }) => (
-  <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={cn("transition-transform", isOpen ? "rotate-180" : "")}>
-    <polyline points="6 9 12 15 18 9"></polyline>
-  </svg>
-);
-

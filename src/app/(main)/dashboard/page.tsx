@@ -2,18 +2,21 @@
 "use client";
 
 import { useAuth } from '@/contexts/auth-provider';
-import { USER_ROLES, LOCATIONS, LocationId, APPOINTMENT_STATUS } from '@/lib/constants';
+import { USER_ROLES, LOCATIONS, LocationId, APPOINTMENT_STATUS, DAYS_OF_WEEK } from '@/lib/constants';
+import type { Professional } from '@/types';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import Link from 'next/link';
 import Image from 'next/image';
-import { CalendarPlus, Users, History, Briefcase, Loader2 } from 'lucide-react';
+import { CalendarPlus, Users, History, Briefcase, Loader2, Bed, CalendarCheck2 } from 'lucide-react';
 import { useAppState } from '@/contexts/app-state-provider';
 import { useState, useEffect } from 'react';
-import { getAppointments, getProfessionals } from '@/lib/data';
-import { startOfDay, startOfMonth, endOfMonth } from 'date-fns';
+import { getAppointments, getProfessionals, getProfessionalAvailabilityForDate } from '@/lib/data';
+import { startOfDay, startOfMonth, endOfMonth, nextSunday, isToday } from 'date-fns';
 import { StatCard } from '@/components/dashboard/stat-card';
 import { ActionCard } from '@/components/dashboard/action-card';
+import { ProfessionalStatusTodayCard } from '@/components/dashboard/professional-status-today-card';
+
 
 interface DashboardStats {
   todayAppointments: string;
@@ -32,25 +35,35 @@ export default function DashboardPage() {
     totalRevenueMonth: '0.00',
   });
   const [isLoadingStats, setIsLoadingStats] = useState(true);
+  const [professionalsOnRestToday, setProfessionalsOnRestToday] = useState<Professional[]>([]);
+  const [professionalsWorkingNextSunday, setProfessionalsWorkingNextSunday] = useState<Professional[]>([]);
+  const [isLoadingProfessionalStatus, setIsLoadingProfessionalStatus] = useState(true);
+
+  const isAdminOrContador = user?.role === USER_ROLES.ADMIN || user?.role === USER_ROLES.CONTADOR;
+  const isContador = user?.role === USER_ROLES.CONTADOR;
+  
+  const effectiveLocationId = isAdminOrContador 
+    ? (selectedLocationId === 'all' ? undefined : selectedLocationId as LocationId) 
+    : user?.locationId;
+
 
   useEffect(() => {
-    const fetchDashboardStats = async () => {
+    const fetchDashboardData = async () => {
       if (!user) return;
 
       setIsLoadingStats(true);
+      setIsLoadingProfessionalStatus(true);
+
       let todayAppointmentsCount = 0;
       let pendingConfirmationsCount = 0;
       let activeProfessionalsCount = 0;
       let totalRevenueMonthValue = 0;
       
-      const isAdminOrContador = user.role === USER_ROLES.ADMIN || user.role === USER_ROLES.CONTADOR;
-      const isContador = user.role === USER_ROLES.CONTADOR;
+      const today = startOfDay(new Date());
+      const currentMonthStart = startOfMonth(today);
+      const currentMonthEnd = endOfMonth(today);
 
       try {
-        const today = startOfDay(new Date());
-        const currentMonthStart = startOfMonth(today);
-        const currentMonthEnd = endOfMonth(today);
-
         // Fetch Today's Appointments
         if (isAdminOrContador || user.role === USER_ROLES.LOCATION_STAFF) { 
           if (selectedLocationId === 'all' && (isAdminOrContador)) {
@@ -66,8 +79,7 @@ export default function DashboardPage() {
           }
         }
 
-
-        // Fetch Pending Confirmations (status: 'booked')
+        // Fetch Pending Confirmations
         if (isAdminOrContador || user.role === USER_ROLES.LOCATION_STAFF) { 
           if (selectedLocationId === 'all' && (isAdminOrContador)) {
              const allLocationsPendingPromises = LOCATIONS.map(loc => getAppointments({ statuses: [APPOINTMENT_STATUS.BOOKED], locationId: loc.id }));
@@ -82,7 +94,7 @@ export default function DashboardPage() {
           }
         }
         
-        // Fetch Total Revenue for Current Month (status: 'completed') - ONLY FOR CONTADOR
+        // Fetch Total Revenue for Current Month (ONLY FOR CONTADOR)
         if (isContador) {
           if (selectedLocationId === 'all') {
             const allLocationsCompletedPromises = LOCATIONS.map(loc => getAppointments({
@@ -104,22 +116,21 @@ export default function DashboardPage() {
           }
         }
 
-
-        // Fetch Active Professionals
-        if (isAdminOrContador || user.role === USER_ROLES.LOCATION_STAFF) { 
-            if (selectedLocationId === 'all' && (isAdminOrContador)) {
-                const allProfessionalsPromises = LOCATIONS.map(loc => getProfessionals(loc.id));
-                const allProfessionalsResults = await Promise.all(allProfessionalsPromises);
-                activeProfessionalsCount = allProfessionalsResults.reduce((sum, result) => sum + result.length, 0);
-            } else if (selectedLocationId && selectedLocationId !== 'all' && (isAdminOrContador || user.locationId === selectedLocationId)) {
-                const locationProfessionals = await getProfessionals(selectedLocationId as LocationId);
-                activeProfessionalsCount = locationProfessionals.length;
-            } else if (user.role === USER_ROLES.LOCATION_STAFF && user.locationId) {
-                const locationProfessionals = await getProfessionals(user.locationId);
-                activeProfessionalsCount = locationProfessionals.length;
+        // Fetch All Professionals for status checks
+        let allFetchedProfessionals: Professional[] = [];
+        if (isAdminOrContador) {
+            if (effectiveLocationId) {
+                allFetchedProfessionals = await getProfessionals(effectiveLocationId);
+            } else { // 'all' locations selected by admin/contador
+                const allProfsPromises = LOCATIONS.map(loc => getProfessionals(loc.id));
+                const results = await Promise.all(allProfsPromises);
+                allFetchedProfessionals = results.flat();
             }
+        } else if (user?.role === USER_ROLES.LOCATION_STAFF && user.locationId) {
+            allFetchedProfessionals = await getProfessionals(user.locationId);
         }
-
+        
+        activeProfessionalsCount = allFetchedProfessionals.filter(prof => !!getProfessionalAvailabilityForDate(prof, today)).length;
 
         setStats({
           todayAppointments: todayAppointmentsCount.toString(),
@@ -127,26 +138,49 @@ export default function DashboardPage() {
           activeProfessionals: activeProfessionalsCount.toString(),
           totalRevenueMonth: totalRevenueMonthValue.toFixed(2),
         });
+        setIsLoadingStats(false);
+
+        // Professional Status for today and next Sunday
+        const restingToday: Professional[] = [];
+        const workingNextSundayDate = nextSunday(today);
+        const workingNextSunday: Professional[] = [];
+
+        for (const prof of allFetchedProfessionals) {
+          const availabilityToday = getProfessionalAvailabilityForDate(prof, today);
+          if (!availabilityToday) {
+            restingToday.push(prof);
+          }
+
+          const availabilityNextSunday = getProfessionalAvailabilityForDate(prof, workingNextSundayDate);
+          if (availabilityNextSunday) {
+            workingNextSunday.push(prof);
+          }
+        }
+        setProfessionalsOnRestToday(restingToday);
+        setProfessionalsWorkingNextSunday(workingNextSunday);
 
       } catch (error) {
-        console.error("Failed to fetch dashboard stats:", error);
+        console.error("Failed to fetch dashboard data:", error);
         setStats({
             todayAppointments: "N/A",
             pendingConfirmations: "N/A",
             activeProfessionals: "N/A",
             totalRevenueMonth: "N/A",
         });
+        setProfessionalsOnRestToday([]);
+        setProfessionalsWorkingNextSunday([]);
       } finally {
         setIsLoadingStats(false);
+        setIsLoadingProfessionalStatus(false);
       }
     };
 
-    fetchDashboardStats();
-  }, [user, selectedLocationId]);
+    fetchDashboardData();
+  }, [user, selectedLocationId, effectiveLocationId, isAdminOrContador, isContador]);
 
 
   if (!user) {
-    return null; // Or a loading indicator
+    return null; 
   }
 
   const greetingName = user.name || user.username;
@@ -159,7 +193,7 @@ export default function DashboardPage() {
   let displayLocationName = "Todas las Sedes";
   if (user.role === USER_ROLES.LOCATION_STAFF && user.locationId) {
     displayLocationName = LOCATIONS.find(l => l.id === user.locationId)?.name || "Tu Sede";
-  } else if ((user.role === USER_ROLES.ADMIN || user.role === USER_ROLES.CONTADOR) && selectedLocationId && selectedLocationId !== 'all') {
+  } else if ((isAdminOrContador) && selectedLocationId && selectedLocationId !== 'all') {
     displayLocationName = LOCATIONS.find(l => l.id === selectedLocationId)?.name || "Sede Seleccionada";
   }
   
@@ -187,7 +221,7 @@ export default function DashboardPage() {
           icon={<Users className="h-6 w-6 text-primary" />} 
         />
         <StatCard 
-          title="Profesionales Activos" 
+          title="Profesionales Activos Hoy" 
           value={isLoadingStats ? "..." : stats.activeProfessionals} 
           icon={<Briefcase className="h-6 w-6 text-primary" />} 
         />
@@ -198,6 +232,23 @@ export default function DashboardPage() {
             icon={<History className="h-6 w-6 text-primary" />} 
           />
         )}
+      </div>
+
+      <div className="grid gap-6 md:grid-cols-2 mb-8">
+        <ProfessionalStatusTodayCard
+            title="Profesionales Descansando Hoy"
+            professionals={professionalsOnRestToday}
+            isLoading={isLoadingProfessionalStatus}
+            icon={<Bed className="h-6 w-6 text-primary" />}
+            emptyMessage="Todos los profesionales están activos hoy."
+        />
+        <ProfessionalStatusTodayCard
+            title={`Profesionales Trabajando Próximo Domingo (${DAYS_OF_WEEK.find(d => d.id === 'sunday')?.name})`}
+            professionals={professionalsWorkingNextSunday}
+            isLoading={isLoadingProfessionalStatus}
+            icon={<CalendarCheck2 className="h-6 w-6 text-primary" />}
+            emptyMessage="Ningún profesional programado para el próximo domingo."
+        />
       </div>
       
       <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
@@ -249,4 +300,3 @@ export default function DashboardPage() {
     </div>
   );
 }
-
