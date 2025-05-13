@@ -27,7 +27,7 @@ export default function SchedulePage() {
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [allSystemProfessionals, setAllSystemProfessionals] = useState<Professional[]>([]);
   const [workingProfessionals, setWorkingProfessionals] = useState<Professional[]>([]);
-  const [currentDate, setCurrentDate] = useState<Date>(startOfDay(new Date(2025, 4, 13))); // Tuesday, May 13, 2025
+  const [currentDate, setCurrentDate] = useState<Date>(startOfDay(new Date())); // Use actual current date
   const [isLoading, setIsLoading] = useState(true);
   const [selectedAppointmentForEdit, setSelectedAppointmentForEdit] = useState<Appointment | null>(null);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
@@ -213,8 +213,8 @@ export default function SchedulePage() {
                 <ChevronRightIcon className="h-4 w-4" />
               </Button>
               <Button
-                variant={isEqual(currentDate, startOfDay(new Date(2025,4,13))) ? "secondary" : "outline"}
-                onClick={() => handleDateChange(new Date(2025,4,13))}
+                variant={isEqual(currentDate, startOfDay(new Date())) ? "secondary" : "outline"}
+                onClick={() => handleDateChange(new Date())}
                 className="hidden sm:inline-flex"
               >
                 Hoy
@@ -281,3 +281,4 @@ export default function SchedulePage() {
     </div>
   );
 }
+

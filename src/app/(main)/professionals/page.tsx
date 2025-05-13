@@ -294,9 +294,9 @@ export default function ProfessionalsPage() {
     )
   }
 
- const calculateNextGeneralDayOff = (prof: Professional, today: Date): Date | null => {
+ const calculateNextGeneralDayOff = (prof: Professional, referenceDate: Date): Date | null => {
   for (let i = 0; i <= 30; i++) { // Check next 30 days, including today
-    const checkDate = dateFnsAddDays(today, i);
+    const checkDate = dateFnsAddDays(referenceDate, i);
     const availability = getProfessionalAvailabilityForDate(prof, checkDate);
     if (!availability) { 
       return checkDate;
@@ -307,7 +307,7 @@ export default function ProfessionalsPage() {
 
 
  const formatWorkScheduleDisplay = (prof: Professional) => {
-  const today = startOfDay(new Date(2025, 4, 13)); // Tuesday, May 13, 2025
+  const today = startOfDay(new Date()); 
   const availabilityToday = getProfessionalAvailabilityForDate(prof, today);
 
   let todayStr = "Hoy: ";
@@ -662,4 +662,5 @@ export default function ProfessionalsPage() {
     </div>
   );
 }
+
 

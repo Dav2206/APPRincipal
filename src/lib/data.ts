@@ -182,7 +182,7 @@ export const getProfessionals = async (locationId?: LocationId): Promise<Profess
             ? mockDB.professionals.filter(p => p.locationId === locationId)
             : [...mockDB.professionals]; // Return all if no locationId specified
 
-        const today = new Date(2025, 4, 13); // Tuesday, May 13, 2025
+        const today = new Date(); // Use actual current date for earnings calculation context
         const currentYear = getYear(today);
         const currentMonth = getMonth(today);
         const currentDay = getDate(today);
@@ -342,7 +342,7 @@ export const getPatients = async (options: { page?: number, limit?: number, sear
         );
     }
     if (filterToday && user) {
-        const todayIsoDate = startOfDay(new Date(2025, 4, 13)); // Tuesday, May 13, 2025
+        const todayIsoDate = startOfDay(new Date()); // Use actual current date for filtering
         const isAdminOrContador = user.role === USER_ROLES.ADMIN || user.role === USER_ROLES.CONTADOR;
         const effectiveLocationId = isAdminOrContador
         ? (adminSelectedLocation === 'all' ? undefined : adminSelectedLocation)
@@ -596,7 +596,7 @@ export const getAppointments = async (filters: {
     }
 
     const newLastVisibleId = paginatedResult.length > 0 ? populatedAppointmentsResult[populatedAppointmentsResult.length -1].id : null;
-    return { appointments: paginatedResult, totalCount, lastVisibleAppointmentId: newLastVisibleId };
+    return { appointments: populatedAppointmentsResult, totalCount, lastVisibleAppointmentId: newLastVisibleId };
   }
   throw new Error("Appointment retrieval not implemented for non-mock database or mockDB not available.");
 };
@@ -757,8 +757,8 @@ export const addAppointment = async (data: AppointmentFormData & { isExternalPro
     const newAppointment: Appointment = {
       id: generateId(),
       ...newAppointmentData,
-      createdAt: formatISO(new Date(2025, 4, 13)), // Tuesday, May 13, 2025
-      updatedAt: formatISO(new Date(2025, 4, 13)), // Tuesday, May 13, 2025
+      createdAt: formatISO(new Date()), // Use actual current date for creation/update
+      updatedAt: formatISO(new Date()), // Use actual current date for creation/update
     };
     const populatedNewAppointment = await populateAppointment(newAppointment);
     mockDB.appointments.push(populatedNewAppointment);
@@ -776,7 +776,7 @@ export const updateAppointment = async (id: string, data: Partial<Appointment>):
       let updatedAppointmentRaw = {
         ...originalAppointment,
         ...data,
-        updatedAt: formatISO(new Date(2025, 4, 13)), // Tuesday, May 13, 2025
+        updatedAt: formatISO(new Date()), // Use actual current date
       };
 
       if (data.patientId && originalAppointment.patient?.id !== data.patientId) {
@@ -822,7 +822,7 @@ export const getPatientAppointmentHistory = async (
   options: { page?: number, limit?: number, lastVisibleAppointmentId?: string | null } = {}
 ): Promise<{ appointments: Appointment[], totalCount: number, lastVisibleAppointmentId?: string | null }> => {
   const { page = 1, limit: queryLimit = APPOINTMENTS_PER_PAGE_HISTORY, lastVisibleAppointmentId: startAfterId } = options;
-  const todayDate = startOfDay(new Date(2025, 4, 13)); // Tuesday, May 13, 2025
+  const todayDate = startOfDay(new Date()); // Use actual current date for history cutoff
   const pastStatuses: AppointmentStatus[] = [APPOINTMENT_STATUS.COMPLETED, APPOINTMENT_STATUS.NO_SHOW, APPOINTMENT_STATUS.CANCELLED_CLIENT, APPOINTMENT_STATUS.CANCELLED_STAFF];
 
   if (useMockDatabase) {
@@ -857,7 +857,7 @@ export const getPatientAppointmentHistory = async (
 };
 
 export const getCurrentQuincenaDateRange = (): { start: Date; end: Date } => {
-  const today = new Date(2025, 4, 13); // Tuesday, May 13, 2025
+  const today = new Date(); // Use actual current date
   const currentYear = getYear(today);
   const currentMonth = getMonth(today);
   const currentDay = getDate(today);
@@ -895,10 +895,11 @@ export const getProfessionalAppointmentsForDate = async (professionalId: string,
 
 export function getProfessionalAvailabilityForDate(
   professional: Professional,
-  targetDate: Date
+  targetDate: Date // Parameter to receive the date to check against
 ): { startTime: string; endTime: string; notes?: string } | null {
-  const targetDateString = format(targetDate, 'yyyy-MM-dd');
-  const targetDayOfWeekJs = getDay(targetDate);
+  const dateToCheck = startOfDay(targetDate); // Normalize the targetDate
+  const targetDateString = format(dateToCheck, 'yyyy-MM-dd');
+  const targetDayOfWeekJs = getDay(dateToCheck);
 
   if (professional.customScheduleOverrides) {
     const override = professional.customScheduleOverrides.find(
@@ -908,13 +909,13 @@ export function getProfessionalAvailabilityForDate(
       if (override.isWorking && override.startTime && override.endTime) {
         return { startTime: override.startTime, endTime: override.endTime, notes: override.notes };
       }
-      return null;
+      return null; // Override explicitly states not working or times are missing
     }
   }
 
   if (professional.rotationType === 'biWeeklySunday' && professional.rotationStartDate && professional.compensatoryDayOffChoice) {
     const rotationAnchorDate = parseISO(professional.rotationStartDate);
-    const daysDiff = differenceInDays(startOfDay(targetDate), startOfDay(rotationAnchorDate));
+    const daysDiff = differenceInDays(dateToCheck, startOfDay(rotationAnchorDate));
 
     if (daysDiff >= 0) {
         const weekNumberInCycle = Math.floor(daysDiff / 7) % 2;
@@ -923,7 +924,7 @@ export function getProfessionalAvailabilityForDate(
             if (targetDayOfWeekJs === 0) { // It's Sunday on a "Work Sunday" week
                 return { startTime: '10:00', endTime: '18:00', notes: 'Domingo (Rotación)' };
             }
-            // For other days of this "Work Sunday" week, use base schedule
+            // For other days of this "Work Sunday" week, use base schedule (handled below)
         }
         else if (weekNumberInCycle === 1) { // "Compensatory Day Off" week (and Sunday off)
             const compensatoryDayId = professional.compensatoryDayOffChoice;
@@ -935,7 +936,7 @@ export function getProfessionalAvailabilityForDate(
             if (targetDayOfWeekJs === 0) { // It's Sunday on a "Compensatory/Off Sunday" week
                 return null;
             }
-            // For other days of this "Compensatory" week (that are not the comp day or Sunday), use base schedule
+            // For other days of this "Compensatory" week (that are not the comp day or Sunday), use base schedule (handled below)
         }
     }
   }
@@ -946,7 +947,8 @@ export function getProfessionalAvailabilityForDate(
     const dailySchedule = professional.workSchedule[dayKey];
 
     if (dailySchedule) {
-      if (dailySchedule.isWorking === false) return null; // Explicitly not working on base schedule
+      // If isWorking is explicitly false, they are not working
+      if (dailySchedule.isWorking === false) return null;
 
       // If isWorking is true or undefined (assume true), and times are present
       if (dailySchedule.startTime && dailySchedule.endTime) {
