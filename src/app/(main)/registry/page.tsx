@@ -74,7 +74,7 @@ export default function RegistryPage() {
   const [allServices, setAllServices] = useState<Service[] | null>(null);
 
   const [selectedYear, setSelectedYear] = useState<number>(getYear(new Date()));
-  const [selectedMonth, setSelectedMonth] = useState<number>(getMonth(new Date())); 
+  const [selectedMonth, setSelectedMonth] = useState<number>(getMonth(new Date()));
   const [selectedQuincena, setSelectedQuincena] = useState<1 | 2>(getDate(new Date()) <= 15 ? 1 : 2);
 
 
@@ -90,8 +90,8 @@ export default function RegistryPage() {
 
   useEffect(() => {
     async function loadServices() {
-        const servicesData = await getServices();
-        setAllServices(servicesData.services || []); 
+        const servicesArray = await getServices();
+        setAllServices(servicesArray || []);
     }
     loadServices();
   }, []);
@@ -104,17 +104,15 @@ export default function RegistryPage() {
     const targetLocation = locationContext === 'all' ? undefined : locationContext;
 
     if (isAdminOrContador) {
-      if (targetLocation) { 
-        const result = await getProfessionals(targetLocation);
-        profs = result.professionals || [];
-      } else { 
+      if (targetLocation) {
+        profs = await getProfessionals(targetLocation);
+      } else {
         const allProfsPromises = LOCATIONS.map(loc => getProfessionals(loc.id));
         const results = await Promise.all(allProfsPromises);
-        profs = results.map(r => r.professionals || []).flat();
+        profs = results.flat();
       }
-    } else if (user?.locationId) { 
-      const result = await getProfessionals(user.locationId);
-      profs = result.professionals || [];
+    } else if (user?.locationId) {
+      profs = await getProfessionals(user.locationId);
     }
     return profs;
   }, [user, isAdminOrContador]);
@@ -122,7 +120,10 @@ export default function RegistryPage() {
 
   useEffect(() => {
     const generateDailyReport = async () => {
-      if (!user || !allServices || allServices.length === 0) return;
+      if (!user || !allServices?.length) { // Safely access length
+        setIsLoading(false);
+        return;
+      }
       setIsLoading(true);
 
       const profContext = isAdminOrContador ? (adminSelectedLocation === 'all' ? 'all' : effectiveLocationId) : user?.locationId;
@@ -130,7 +131,7 @@ export default function RegistryPage() {
 
       let appointmentsForDateResponse: { appointments: Appointment[] };
       if (isAdminOrContador && adminSelectedLocation === 'all') {
-        const promises = LOCATIONS.map(loc => 
+        const promises = LOCATIONS.map(loc =>
           getAppointments({ date: selectedDate, locationId: loc.id, statuses: [APPOINTMENT_STATUS.COMPLETED] })
         );
         const results = await Promise.all(promises);
@@ -148,7 +149,7 @@ export default function RegistryPage() {
       const dailyReportMap = new Map<string, Omit<DailyActivityReportItem, 'professionalName' | 'locationName' | 'type' | 'servicesBreakdown' | 'totalServicesCount' > & { locationId: LocationId, services: Map<string, { serviceName: string, count: number }> }>();
 
       appointmentsForDate.forEach(appt => {
-        if (appt.professionalId && appt.status === APPOINTMENT_STATUS.COMPLETED) {
+        if (appt.professionalId && appt.status === APPOINTMENT_STATUS.COMPLETED && allServices) {
           const reportEntry = dailyReportMap.get(appt.professionalId) || {
             professionalId: appt.professionalId,
             locationId: appt.locationId,
@@ -156,13 +157,11 @@ export default function RegistryPage() {
             services: new Map<string, { serviceName: string, count: number }>(),
           };
           
-          // Main service
           const mainServiceName = allServices.find(s => s.id === appt.serviceId)?.name || 'Servicio Desconocido';
           const mainServiceEntry = reportEntry.services.get(appt.serviceId) || { serviceName: mainServiceName, count: 0 };
           mainServiceEntry.count += 1;
           reportEntry.services.set(appt.serviceId, mainServiceEntry);
 
-          // Added services
           appt.addedServices?.forEach(added => {
             const addedServiceName = allServices.find(s => s.id === added.serviceId)?.name || 'Servicio Adicional Desc.';
             const addedServiceEntry = reportEntry.services.get(added.serviceId) || { serviceName: addedServiceName, count: 0 };
@@ -204,7 +203,10 @@ export default function RegistryPage() {
     };
 
     const generateBiWeeklyReport = async () => {
-      if (!user) return;
+      if (!user || !allServices?.length) { // Safely access length
+         setIsLoading(false);
+         return;
+      }
       setIsLoading(true);
 
       const profContext = isAdminOrContador ? (adminSelectedLocation === 'all' ? 'all' : effectiveLocationId) : user?.locationId;
@@ -216,9 +218,9 @@ export default function RegistryPage() {
       
       let appointmentsForPeriodResponse: { appointments: Appointment[] };
       if (isAdminOrContador && adminSelectedLocation === 'all') {
-         const promises = LOCATIONS.map(loc => 
-          getAppointments({ 
-            locationId: loc.id, 
+         const promises = LOCATIONS.map(loc =>
+          getAppointments({
+            locationId: loc.id,
             statuses: [APPOINTMENT_STATUS.COMPLETED],
             dateRange: {start: startDate, end: endDate}
           })
@@ -227,10 +229,10 @@ export default function RegistryPage() {
         const flatAppointments = results.map(r => r.appointments || []).flat();
         appointmentsForPeriodResponse = { appointments: flatAppointments };
       } else if (effectiveLocationId) {
-        appointmentsForPeriodResponse = await getAppointments({ 
-            locationId: effectiveLocationId, 
+        appointmentsForPeriodResponse = await getAppointments({
+            locationId: effectiveLocationId,
             statuses: [APPOINTMENT_STATUS.COMPLETED],
-            dateRange: {start: startDate, end: endDate} 
+            dateRange: {start: startDate, end: endDate}
         });
       } else {
          appointmentsForPeriodResponse = { appointments: [] };
@@ -282,7 +284,7 @@ export default function RegistryPage() {
         });
 
         LOCATIONS.forEach(loc => {
-          if (professionalsByLocation.has(loc.id) || locationTotals.has(loc.id)) { 
+          if (professionalsByLocation.has(loc.id) || locationTotals.has(loc.id)) {
             const profsForLocation = professionalsByLocation.get(loc.id);
             groupedResult.push({
               type: 'biWeeklyGrouped',
@@ -400,22 +402,22 @@ export default function RegistryPage() {
     if (direction === 'next') {
       if (newQuincena === 1) {
         newQuincena = 2;
-      } else { 
+      } else {
         newQuincena = 1;
-        if (newMonth === 11) { 
-          newMonth = 0; 
+        if (newMonth === 11) {
+          newMonth = 0;
           newYear += 1;
         } else {
           newMonth += 1;
         }
       }
-    } else { 
+    } else {
       if (newQuincena === 2) {
         newQuincena = 1;
-      } else { 
+      } else {
         newQuincena = 2;
-        if (newMonth === 0) { 
-          newMonth = 11; 
+        if (newMonth === 0) {
+          newMonth = 11;
           newYear -= 1;
         } else {
           newMonth -= 1;
@@ -430,14 +432,14 @@ export default function RegistryPage() {
       const latestValue = latestAllowed.year * 1000 + latestAllowed.month * 10 + latestAllowed.quincena;
 
       if (targetValue < earliestValue || targetValue > latestValue) {
-        return; 
+        return;
       }
     } else { // Admin/Contador logic
       const today = new Date();
       const firstDayOfNewQuincena = newQuincena === 1 ? startOfMonth(setMonth(setYear(new Date(),newYear), newMonth)) : addDays(startOfMonth(setMonth(setYear(new Date(),newYear), newMonth)),15);
       
       if(isAfter(firstDayOfNewQuincena, today) && !isSameDay(firstDayOfNewQuincena, startOfDay(today))) {
-          return; 
+          return;
       }
       if (newYear < availableYearsForAdmin[availableYearsForAdmin.length -1]) {
           return;
@@ -517,7 +519,7 @@ export default function RegistryPage() {
                 Registro de Actividad
               </CardTitle>
               <CardDescription>
-                {reportType === 'daily' 
+                {reportType === 'daily'
                   ? 'Servicios realizados e ingresos generados por profesional en el día seleccionado.'
                   : `Ingresos quincenales generados por profesional. (${getBiWeeklyPeriodDescription()})`}
               </CardDescription>
@@ -617,7 +619,7 @@ export default function RegistryPage() {
                     (reportData as GroupedBiWeeklyReportItem[]).map((group, index) => (
                       <React.Fragment key={`${group.locationId}-grouped-report-${index}`}>
                         {(group.professionals || []).map(item => (
-                          <TableRow key={`${item.professionalId}-${group.locationId}-biWeekly`}>
+                          <TableRow key={`${item.professionalId}-${group.locationId}-biWeekly-${index}`}>
                             <TableCell className="font-medium">{item.professionalName}</TableCell>
                             <TableCell>{item.locationName}</TableCell>
                             <TableCell className="text-right">{(item.biWeeklyEarnings || 0).toFixed(2)}</TableCell>
@@ -630,8 +632,8 @@ export default function RegistryPage() {
                       </React.Fragment>
                     ))
                   ) : (
-                    (reportData as (DailyActivityReportItem | BiWeeklyEarningsReportItem)[]).map(item => (
-                      <TableRow key={item.professionalId + (item.type === 'daily' ? item.locationName : (item as BiWeeklyEarningsReportItem).locationId || '') + (item.type === 'biWeekly' ? selectedYear +'-'+selectedMonth+'-'+selectedQuincena : '')}>
+                    (reportData as (DailyActivityReportItem | BiWeeklyEarningsReportItem)[]).map((item, idx) => (
+                      <TableRow key={item.professionalId + '-' + (item as any).locationName + '-' + item.type + '-' + idx}>
                         <TableCell className="font-medium">{item.professionalName}</TableCell>
                         {(isAdminOrContador && adminSelectedLocation === 'all' && item.type !== 'biWeeklyGrouped') && <TableCell>{item.locationName}</TableCell>}
                         {item.type === 'daily' && (
@@ -674,3 +676,4 @@ export default function RegistryPage() {
     </div>
   );
 }
+

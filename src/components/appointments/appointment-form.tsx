@@ -27,16 +27,16 @@ import { format, parse } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { cn } from '@/lib/utils';
 import { PatientSearchField } from './patient-search-field';
-import { PatientHistoryPanel } from './patient-history-panel'; 
-import { AttendancePredictionTool } from './attendance-prediction-tool'; 
+import { PatientHistoryPanel } from './patient-history-panel';
+import { AttendancePredictionTool } from './attendance-prediction-tool';
 import { useToast } from '@/hooks/use-toast';
 
 
 interface AppointmentFormProps {
   isOpen: boolean;
   onOpenChange: (open: boolean) => void;
-  onAppointmentCreated: () => void; 
-  initialData?: Partial<FormSchemaType>; 
+  onAppointmentCreated: () => void;
+  initialData?: Partial<FormSchemaType>;
   defaultDate?: Date;
 }
 
@@ -51,15 +51,16 @@ export function AppointmentForm({ isOpen, onOpenChange, onAppointmentCreated, in
   const [professionals, setProfessionals] = useState<Professional[]>([]);
   const [servicesList, setServicesList] = useState<Service[]>([]);
   const [isLoading, setIsLoading] = useState(false);
+  const [isLoadingServices, setIsLoadingServices] = useState(true);
   const [showPatientHistory, setShowPatientHistory] = useState(false);
   const [currentPatientForHistory, setCurrentPatientForHistory] = useState<Patient | null>(null);
 
   const isAdminOrContador = user?.role === USER_ROLES.ADMIN || user?.role === USER_ROLES.CONTADOR;
-  const defaultLocation = user?.role === USER_ROLES.LOCATION_STAFF 
-    ? user.locationId 
-    : (isAdminOrContador && adminSelectedLocation && adminSelectedLocation !== 'all' 
-        ? adminSelectedLocation 
-        : (isAdminOrContador ? LOCATIONS[0].id : undefined) 
+  const defaultLocation = user?.role === USER_ROLES.LOCATION_STAFF
+    ? user.locationId
+    : (isAdminOrContador && adminSelectedLocation && adminSelectedLocation !== 'all'
+        ? adminSelectedLocation
+        : (isAdminOrContador ? LOCATIONS[0].id : undefined)
     );
 
   const form = useForm<FormSchemaType>({
@@ -85,20 +86,30 @@ export function AppointmentForm({ isOpen, onOpenChange, onAppointmentCreated, in
 
   useEffect(() => {
     async function loadInitialServices() {
-      const fetchedServices = await getServices();
-      setServicesList(fetchedServices);
-      // Set default serviceId after services are loaded if it's still the placeholder
-      if (form.getValues('serviceId') === DEFAULT_SERVICE_ID_PLACEHOLDER && fetchedServices.length > 0) {
-        form.setValue('serviceId', fetchedServices[0].id);
+      setIsLoadingServices(true);
+      try {
+        const fetchedServices = await getServices();
+        setServicesList(fetchedServices || []);
+        if (form.getValues('serviceId') === DEFAULT_SERVICE_ID_PLACEHOLDER && fetchedServices && fetchedServices.length > 0) {
+          form.setValue('serviceId', fetchedServices[0].id);
+        }
+      } catch (error) {
+        console.error("Failed to load services for form:", error);
+        setServicesList([]);
+        toast({ title: "Error", description: "No se pudieron cargar los servicios.", variant: "destructive" });
+      } finally {
+        setIsLoadingServices(false);
       }
     }
-    loadInitialServices();
-  }, [form]);
+    if (isOpen) { // Only load if the form is open
+        loadInitialServices();
+    }
+  }, [isOpen, form, toast]);
 
   useEffect(() => {
     async function loadProfessionals(location: LocationId) {
       const profs = await getProfessionals(location);
-      setProfessionals(profs);
+      setProfessionals(profs || []);
     }
     if (watchLocationId) {
       loadProfessionals(watchLocationId as LocationId);
@@ -164,13 +175,13 @@ export function AppointmentForm({ isOpen, onOpenChange, onAppointmentCreated, in
         variant: "default",
       });
       onAppointmentCreated();
-      onOpenChange(false); 
-      form.reset({ 
+      onOpenChange(false);
+      form.reset({
         ...form.formState.defaultValues,
         appointmentDate: defaultDate || new Date(),
-        locationId: data.locationId, 
-        serviceId: servicesList.length > 0 ? servicesList[0].id : DEFAULT_SERVICE_ID_PLACEHOLDER, 
-        appointmentTime: TIME_SLOTS[4], 
+        locationId: data.locationId,
+        serviceId: servicesList.length > 0 ? servicesList[0].id : DEFAULT_SERVICE_ID_PLACEHOLDER,
+        appointmentTime: TIME_SLOTS[4],
         preferredProfessionalId: ANY_PROFESSIONAL_VALUE,
         patientFirstName: '',
         patientLastName: '',
@@ -179,7 +190,7 @@ export function AppointmentForm({ isOpen, onOpenChange, onAppointmentCreated, in
         isDiabetic: false,
         existingPatientId: null,
         bookingObservations: '',
-      }); 
+      });
       setCurrentPatientForHistory(null);
       setShowPatientHistory(false);
     } catch (error) {
@@ -199,12 +210,12 @@ export function AppointmentForm({ isOpen, onOpenChange, onAppointmentCreated, in
   return (
     <Dialog open={isOpen} onOpenChange={(open) => {
       if (!open) {
-        form.reset({ 
+        form.reset({
           ...form.formState.defaultValues,
           appointmentDate: defaultDate || new Date(),
           locationId: initialData?.locationId || defaultLocation || LOCATIONS[0].id,
           serviceId: servicesList.length > 0 ? servicesList[0].id : DEFAULT_SERVICE_ID_PLACEHOLDER,
-          appointmentTime: TIME_SLOTS[4], 
+          appointmentTime: TIME_SLOTS[4],
           preferredProfessionalId: ANY_PROFESSIONAL_VALUE,
           patientFirstName: '',
           patientLastName: '',
@@ -213,7 +224,7 @@ export function AppointmentForm({ isOpen, onOpenChange, onAppointmentCreated, in
           isDiabetic: false,
           existingPatientId: null,
           bookingObservations: '',
-        }); 
+        });
         setCurrentPatientForHistory(null);
         setShowPatientHistory(false);
       }
@@ -230,7 +241,7 @@ export function AppointmentForm({ isOpen, onOpenChange, onAppointmentCreated, in
           </DialogDescription>
         </DialogHeader>
         
-        <div className="flex-grow overflow-y-auto pr-2 -mr-2"> 
+        <div className="flex-grow overflow-y-auto pr-2 -mr-2">
           <Form {...form}>
             <form onSubmit={form.handleSubmit(onSubmit)} className="grid grid-cols-1 md:grid-cols-2 gap-6 py-4">
               <div className="md:col-span-2 space-y-4 p-4 border rounded-lg shadow-sm bg-card">
@@ -241,7 +252,7 @@ export function AppointmentForm({ isOpen, onOpenChange, onAppointmentCreated, in
                   render={({ field }) => (
                     <FormItem>
                       <FormLabel>Paciente</FormLabel>
-                      <PatientSearchField 
+                      <PatientSearchField
                         onPatientSelect={handlePatientSelect}
                         selectedPatientId={field.value}
                         onClear={() => {
@@ -291,11 +302,11 @@ export function AppointmentForm({ isOpen, onOpenChange, onAppointmentCreated, in
                     render={({ field }) => (
                       <FormItem>
                         <FormLabel>Teléfono (Opcional)</FormLabel>
-                        <FormControl><Input 
-                          type="tel" 
-                          placeholder={(!!form.getValues("existingPatientId") && user?.role !== USER_ROLES.ADMIN) ? "Teléfono Restringido" : "Ej: 987654321"} 
-                          {...field} 
-                          disabled={!!form.getValues("existingPatientId")} 
+                        <FormControl><Input
+                          type="tel"
+                          placeholder={(!!form.getValues("existingPatientId") && user?.role !== USER_ROLES.ADMIN) ? "Teléfono Restringido" : "Ej: 987654321"}
+                          {...field}
+                          disabled={!!form.getValues("existingPatientId")}
                         /></FormControl>
                         <FormMessage />
                       </FormItem>
@@ -355,7 +366,7 @@ export function AppointmentForm({ isOpen, onOpenChange, onAppointmentCreated, in
                   render={({ field }) => (
                     <FormItem>
                       <FormLabel className="flex items-center gap-1"><Building size={16}/>Sede</FormLabel>
-                      <Select onValueChange={field.onChange} value={field.value} disabled={(user?.role === USER_ROLES.LOCATION_STAFF && !isAdminOrContador) || servicesList.length === 0}>
+                      <Select onValueChange={field.onChange} value={field.value} disabled={(user?.role === USER_ROLES.LOCATION_STAFF && !isAdminOrContador) || isLoadingServices || servicesList.length === 0}>
                         <FormControl>
                           <SelectTrigger><SelectValue placeholder="Seleccionar sede" /></SelectTrigger>
                         </FormControl>
@@ -375,15 +386,16 @@ export function AppointmentForm({ isOpen, onOpenChange, onAppointmentCreated, in
                   render={({ field }) => (
                     <FormItem>
                       <FormLabel>Servicio</FormLabel>
-                      <Select onValueChange={field.onChange} value={field.value === DEFAULT_SERVICE_ID_PLACEHOLDER && servicesList.length > 0 ? servicesList[0].id : field.value} disabled={servicesList.length === 0}>
+                      <Select onValueChange={field.onChange} value={field.value === DEFAULT_SERVICE_ID_PLACEHOLDER && servicesList.length > 0 ? servicesList[0].id : field.value} disabled={isLoadingServices || servicesList.length === 0}>
                         <FormControl>
                           <SelectTrigger>
-                            <SelectValue placeholder={servicesList.length > 0 ? "Seleccionar servicio" : "Cargando servicios..."} />
+                            <SelectValue placeholder={isLoadingServices ? "Cargando servicios..." : (servicesList.length > 0 ? "Seleccionar servicio" : "No hay servicios")} />
                            </SelectTrigger>
                         </FormControl>
                         <SelectContent>
-                          {servicesList.length === 0 && <SelectItem value={DEFAULT_SERVICE_ID_PLACEHOLDER} disabled>Cargando...</SelectItem>}
-                          {servicesList.map(serv => (
+                          {isLoadingServices && <SelectItem value={DEFAULT_SERVICE_ID_PLACEHOLDER} disabled>Cargando...</SelectItem>}
+                          {!isLoadingServices && servicesList.length === 0 && <SelectItem value={DEFAULT_SERVICE_ID_PLACEHOLDER} disabled>No hay servicios</SelectItem>}
+                          {!isLoadingServices && servicesList.map(serv => (
                             <SelectItem key={serv.id} value={serv.id}>{serv.name}</SelectItem>
                           ))}
                         </SelectContent>
@@ -408,7 +420,7 @@ export function AppointmentForm({ isOpen, onOpenChange, onAppointmentCreated, in
                                   "pl-3 text-left font-normal",
                                   !field.value && "text-muted-foreground"
                                 )}
-                                disabled={servicesList.length === 0}
+                                disabled={isLoadingServices || servicesList.length === 0}
                               >
                                 {field.value ? (
                                   format(field.value, "PPP", { locale: es })
@@ -424,7 +436,7 @@ export function AppointmentForm({ isOpen, onOpenChange, onAppointmentCreated, in
                               mode="single"
                               selected={field.value}
                               onSelect={field.onChange}
-                              disabled={(date) => date < new Date(new Date().setHours(0,0,0,0))} 
+                              disabled={(date) => date < new Date(new Date().setHours(0,0,0,0))}
                               initialFocus
                             />
                           </PopoverContent>
@@ -439,7 +451,7 @@ export function AppointmentForm({ isOpen, onOpenChange, onAppointmentCreated, in
                     render={({ field }) => (
                       <FormItem>
                         <FormLabel className="flex items-center gap-1"><ClockIcon size={16}/>Hora de la Cita</FormLabel>
-                        <Select onValueChange={field.onChange} value={field.value} disabled={servicesList.length === 0}>
+                        <Select onValueChange={field.onChange} value={field.value} disabled={isLoadingServices || servicesList.length === 0}>
                           <FormControl>
                             <SelectTrigger><SelectValue placeholder="Seleccionar hora" /></SelectTrigger>
                           </FormControl>
@@ -464,10 +476,10 @@ export function AppointmentForm({ isOpen, onOpenChange, onAppointmentCreated, in
                   render={({ field }) => (
                     <FormItem>
                       <FormLabel>Profesional Preferido (Opcional)</FormLabel>
-                      <Select 
-                        onValueChange={(value) => field.onChange(value === ANY_PROFESSIONAL_VALUE ? null : value)} 
+                      <Select
+                        onValueChange={(value) => field.onChange(value === ANY_PROFESSIONAL_VALUE ? null : value)}
                         value={field.value || ANY_PROFESSIONAL_VALUE}
-                        disabled={servicesList.length === 0 || professionals.length === 0}
+                        disabled={isLoadingServices || servicesList.length === 0 || professionals.length === 0}
                       >
                         <FormControl>
                           <SelectTrigger><SelectValue placeholder={professionals.length > 0 ? "Cualquier profesional" : "No hay profesionales"} /></SelectTrigger>
@@ -494,7 +506,7 @@ export function AppointmentForm({ isOpen, onOpenChange, onAppointmentCreated, in
                           placeholder="Ej: El paciente tiene movilidad reducida, requiere un podólogo con experiencia en pie diabético, etc."
                           className="resize-none"
                           {...field}
-                          disabled={servicesList.length === 0}
+                          disabled={isLoadingServices || servicesList.length === 0}
                         />
                       </FormControl>
                       <FormMessage />
@@ -509,12 +521,12 @@ export function AppointmentForm({ isOpen, onOpenChange, onAppointmentCreated, in
         <DialogFooter className="pt-4 border-t">
           <DialogClose asChild>
             <Button variant="outline" onClick={() => {
-               form.reset({ 
+               form.reset({
                 ...form.formState.defaultValues,
                 appointmentDate: defaultDate || new Date(),
                 locationId: initialData?.locationId || defaultLocation || LOCATIONS[0].id,
                 serviceId: servicesList.length > 0 ? servicesList[0].id : DEFAULT_SERVICE_ID_PLACEHOLDER,
-                appointmentTime: TIME_SLOTS[4], 
+                appointmentTime: TIME_SLOTS[4],
                 preferredProfessionalId: ANY_PROFESSIONAL_VALUE,
                 patientFirstName: '',
                 patientLastName: '',
@@ -523,14 +535,14 @@ export function AppointmentForm({ isOpen, onOpenChange, onAppointmentCreated, in
                 isDiabetic: false,
                 existingPatientId: null,
                 bookingObservations: '',
-              }); 
+              });
               setCurrentPatientForHistory(null);
               setShowPatientHistory(false);
               onOpenChange(false);
             }}>Cancelar</Button>
           </DialogClose>
-          <Button type="submit" onClick={form.handleSubmit(onSubmit)} disabled={isLoading || servicesList.length === 0}>
-            {isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+          <Button type="submit" onClick={form.handleSubmit(onSubmit)} disabled={isLoading || isLoadingServices || servicesList.length === 0}>
+            {(isLoading || isLoadingServices) && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
             {initialData?.patientFirstName ? 'Actualizar Cita' : 'Agendar Cita'}
           </Button>
         </DialogFooter>
@@ -538,4 +550,3 @@ export function AppointmentForm({ isOpen, onOpenChange, onAppointmentCreated, in
     </Dialog>
   );
 }
-
