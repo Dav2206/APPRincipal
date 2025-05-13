@@ -8,13 +8,15 @@ import { Button } from '@/components/ui/button';
 import { APPOINTMENT_STATUS, USER_ROLES, SERVICES as ALL_SERVICES_CONSTANTS, APPOINTMENT_STATUS_DISPLAY, LOCATIONS } from '@/lib/constants';
 import { format, parseISO } from 'date-fns';
 import { es } from 'date-fns/locale';
-import { CalendarIcon, ClockIcon, UserIcon, StethoscopeIcon, DollarSignIcon, EditIcon, Info, Paperclip, ShoppingBag } from 'lucide-react';
+import { CalendarIcon, ClockIcon, UserIcon, StethoscopeIcon, DollarSignIcon, EditIcon, Info, Paperclip, ShoppingBag, Shuffle } from 'lucide-react';
 import { useAuth } from '@/contexts/auth-provider';
 import React, { useState, useEffect, useRef } from 'react';
 import Image from 'next/image';
 import { AppointmentEditDialog } from './appointment-edit-dialog';
 import type { Professional } from '@/types';
 import { getProfessionals } from '@/lib/data';
+
+import { Form, FormField } from "@/components/ui/form";
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { AppointmentUpdateSchema } from '@/lib/schemas';
@@ -44,27 +46,18 @@ const AppointmentCardComponent = ({ appointment, onUpdate }: AppointmentCardProp
     resolver: zodResolver(AppointmentUpdateSchema),
   });
 
-  const { fields: addedServiceFields, append: appendAddedService, remove: removeAddedService } = useForm({
-    control: form.control,
-    name: "addedServices",
-  }).control._fields // Directly accessing control._fields is not standard, prefer useFieldArray
-
-   const { fields: attachedPhotoFields, append: appendAttachedPhoto, remove: removeAttachedPhoto } = useForm({
-    control: form.control,
-    name: "attachedPhotos",
-  }).control._fields;
-
-
   useEffect(() => {
     async function loadProfessionals() {
         if (user?.locationId || user?.role === USER_ROLES.ADMIN || user?.role === USER_ROLES.CONTADOR) {
             setIsLoadingProfessionals(true);
             try {
+                // If it's an external professional, we might need to fetch from their origin location
+                // For simplicity, ensure current location's professionals are always available for dropdowns in edit.
                 const profs = await getProfessionals(appointment.locationId);
                 setProfessionalsForDisplay(profs);
             } catch (error) {
                 console.error("Failed to load professionals for appointment card:", error);
-                setProfessionalsForDisplay([]); // Ensure it's an array on error
+                setProfessionalsForDisplay([]); 
             } finally {
                 setIsLoadingProfessionals(false);
             }
@@ -159,7 +152,13 @@ const AppointmentCardComponent = ({ appointment, onUpdate }: AppointmentCardProp
           {appointment.professional && (
             <div className="flex items-center gap-2 text-muted-foreground">
               <StethoscopeIcon className="h-4 w-4" />
-              <span>Atendido por: {appointment.professional.firstName} {appointment.professional.lastName}</span>
+              <span>Atendido por: {appointment.professional.firstName} {appointment.professional.lastName}
+                {appointment.isExternalProfessional && appointment.externalProfessionalOriginLocationId && (
+                  <Badge variant="outline" className="ml-1 text-xs p-1 h-fit bg-orange-100 text-orange-700 border-orange-300">
+                    <Shuffle size={12} className="mr-1"/> Traslado: {LOCATIONS.find(l => l.id === appointment.externalProfessionalOriginLocationId)?.name}
+                  </Badge>
+                )}
+              </span>
             </div>
           )}
           {appointment.preferredProfessionalId && !appointment.professionalId && (
@@ -168,7 +167,7 @@ const AppointmentCardComponent = ({ appointment, onUpdate }: AppointmentCardProp
               <span className="text-amber-700">Prefiere a: {professionalsForDisplay.find(p=>p.id === appointment.preferredProfessionalId)?.firstName || 'Profesional especificado'}</span>
             </div>
           )}
-          {appointment.bookingObservations && (
+           {appointment.bookingObservations && (
             <div className="flex items-start gap-2 text-muted-foreground pt-1">
               <Info className="h-4 w-4 mt-0.5 shrink-0" />
               <p className="text-xs italic">Obs. Reserva: {appointment.bookingObservations}</p>
@@ -236,3 +235,4 @@ const AppointmentCardComponent = ({ appointment, onUpdate }: AppointmentCardProp
 }
 
 export const AppointmentCard = React.memo(AppointmentCardComponent);
+

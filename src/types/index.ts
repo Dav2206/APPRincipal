@@ -20,17 +20,16 @@ export interface Professional extends BaseEntity {
   biWeeklyEarnings?: number;
   
   workSchedule: {
-    // Allow each day to have a schedule object with start/end times and an isWorking flag, or be null if not configured
     [key in DayOfWeekId]?: { startTime: string; endTime: string; isWorking?: boolean; } | null;
   };
 
   rotationType: 'none' | 'biWeeklySunday';
-  rotationStartDate: string | null; // ISO Date string "YYYY-MM-DD", should be a Sunday if rotationType is 'biWeeklySunday'
-  compensatoryDayOffChoice: DayOfWeekId | null; // e.g., 'monday', relevant if rotationType is 'biWeeklySunday'
+  rotationStartDate: string | null; 
+  compensatoryDayOffChoice: DayOfWeekId | null; 
 
   customScheduleOverrides?: Array<{
     id: string;
-    date: string; // ISO date string "YYYY-MM-DD"
+    date: string; 
     isWorking: boolean;
     startTime?: string;
     endTime?: string;
@@ -43,8 +42,6 @@ export interface Patient extends BaseEntity {
   lastName: string;
   phone?: string;
   age?: number | null;
-  birthDay?: number | null; 
-  birthMonth?: number | null;
   isDiabetic?: boolean;
   preferredProfessionalId?: string;
   notes?: string;
@@ -78,6 +75,8 @@ export interface Appointment extends BaseEntity {
   attachedPhotos?: string[];
   createdAt?: string;
   updatedAt?: string;
+  isExternalProfessional?: boolean; // New field
+  externalProfessionalOriginLocationId?: LocationId | null; // New field
 }
 
 export type AppointmentFormData = {
@@ -87,8 +86,6 @@ export type AppointmentFormData = {
   patientAge?: number | null;
   existingPatientId?: string | null;
   isDiabetic?: boolean;
-  birthDay?: number | null;
-  birthMonth?: number | null;
 
   locationId: LocationId;
   serviceId: string;
@@ -96,6 +93,7 @@ export type AppointmentFormData = {
   appointmentTime: string;
   preferredProfessionalId?: string | null;
   bookingObservations?: string | null;
+  searchExternal?: boolean; // New field to indicate if searching in other locations
 };
 
 export type ProfessionalFormData = {
@@ -106,7 +104,6 @@ export type ProfessionalFormData = {
   phone?: string | null;
   
   workSchedule: {
-    // For each day (Mon-Sat in form), isWorking flag and optional start/end times
     [key in Exclude<DayOfWeekId, 'sunday'>]?: { startTime?: string; endTime?: string; isWorking?: boolean };
   };
   
@@ -135,3 +132,4 @@ export type ServiceFormData = {
   };
   price?: number;
 };
+

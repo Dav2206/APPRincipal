@@ -22,8 +22,6 @@ export const PatientFormSchema = z.object({
   lastName: z.string().min(2, "Apellido es requerido."),
   phone: z.string().optional().nullable(),
   age: z.coerce.number().int().min(0, "La edad no puede ser negativa.").optional().nullable(),
-  birthDay: z.coerce.number().int().min(1).max(31).optional().nullable(),
-  birthMonth: z.coerce.number().int().min(0).max(11).optional().nullable(), // 0 for January, 11 for December
   isDiabetic: z.boolean().optional(),
   notes: z.string().optional().nullable(),
 });
@@ -37,8 +35,6 @@ export const AppointmentFormSchema = z.object({
   patientAge: z.coerce.number().int().min(0, "La edad del paciente no puede ser negativa.").optional().nullable(),
   existingPatientId: z.string().optional().nullable(),
   isDiabetic: z.boolean().optional(),
-  birthDay: z.coerce.number().int().min(1).max(31).optional().nullable(),
-  birthMonth: z.coerce.number().int().min(0).max(11).optional().nullable(),
 
   locationId: z.string().refine(val => locationIds.includes(val as any), { message: "Sede inválida."}),
   serviceId: z.string().min(1, "Servicio es requerido."),
@@ -46,6 +42,7 @@ export const AppointmentFormSchema = z.object({
   appointmentTime: z.string().refine(val => TIME_SLOTS.includes(val), { message: "Hora inválida."}),
   preferredProfessionalId: z.string().optional().nullable(),
   bookingObservations: z.string().optional().nullable(),
+  searchExternal: z.boolean().optional(),
 });
 
 export type AppointmentFormData = z.infer<typeof AppointmentFormSchema>;
@@ -72,7 +69,7 @@ export const ProfessionalFormSchema = z.object({
   phone: z.string().optional().nullable(),
 
   workSchedule: z.object(
-    DAYS_OF_WEEK.filter(day => day.id !== 'sunday') // Base schedule for Mon-Sat
+    DAYS_OF_WEEK.filter(day => day.id !== 'sunday')
       .reduce((acc, day) => {
         acc[day.id as Exclude<DayOfWeekId, 'sunday'>] = DayScheduleSchema.optional();
         return acc;
@@ -106,19 +103,19 @@ export const ProfessionalFormSchema = z.object({
 }).refine(data => {
   if (data.rotationType === 'biWeeklySunday') {
     if (!data.rotationStartDate) {
-      return false; // rotationStartDate is required for biWeeklySunday
+      return false; 
     }
     if (getDay(data.rotationStartDate) !== 0) {
-      return false; // rotationStartDate must be a Sunday
+      return false; 
     }
-    if (!data.compensatoryDayOffChoice) { // null is a valid "not selected" choice after transform
-        return false; // compensatoryDayOffChoice is required, which means a day must be selected or explicitly "none"
+    if (data.compensatoryDayOffChoice === null || data.compensatoryDayOffChoice === COMPENSATORY_DAY_OFF_PLACEHOLDER_VALUE) { // After transform, null means it was placeholder
+        return false; 
     }
   }
   return true;
 }, {
   message: "Para rotación bi-semanal de domingo, se requiere una fecha de inicio (que sea domingo) y un día de compensación (Lunes-Jueves).",
-  path: ["rotationStartDate"], // Or a more general path if needed
+  path: ["rotationStartDate"], 
 });
 export type ProfessionalFormData = z.infer<typeof ProfessionalFormSchema>;
 
@@ -128,8 +125,8 @@ export const AppointmentUpdateSchema = z.object({
   serviceId: z.string().min(1, "Servicio es requerido.").optional(),
   appointmentDate: z.date({ required_error: "Fecha de la cita es requerida."}).optional(),
   appointmentTime: z.string().refine(val => TIME_SLOTS.includes(val), { message: "Hora inválida."}).optional(),
-  actualArrivalTime: z.string().optional().nullable(), // HH:MM
-  professionalId: z.string().optional().nullable(), // Attending professional
+  actualArrivalTime: z.string().optional().nullable(), 
+  professionalId: z.string().optional().nullable(), 
   durationMinutes: z.coerce.number().int().positive("La duración debe ser un número positivo.").optional().nullable(),
   paymentMethod: z.string().refine(val => paymentMethodValues.includes(val as any), {message: "Método de pago inválido"}).optional().nullable(),
   amountPaid: z.coerce.number().positive("El monto pagado debe ser un número positivo.").optional().nullable(),
@@ -150,8 +147,9 @@ export const ServiceFormSchema = z.object({
     minutes: z.coerce.number().int().min(0, "Minutos no pueden ser negativos.").max(59, "Minutos no pueden ser más de 59.").default(30),
   }).refine(data => (data.hours * 60 + data.minutes) > 0, {
     message: "La duración total debe ser mayor a 0 minutos.",
-    path: ["defaultDuration"], 
+    path: ["root"], 
   }),
   price: z.coerce.number().positive("El precio debe ser un número positivo.").optional().nullable(),
 });
 export type ServiceFormData = z.infer<typeof ServiceFormSchema>;
+

@@ -81,11 +81,11 @@ const initialMockProfessionalsData: Professional[] = LOCATIONS.flatMap((location
 
 
 const initialMockPatientsData: Patient[] = [
-  { id: 'pat001', firstName: 'Ana', lastName: 'García', phone: '111222333', age: 39, birthDay: 15, birthMonth: 4, preferredProfessionalId: initialMockProfessionalsData.find(p => p.locationId === 'higuereta')?.id, notes: 'Paciente regular, prefiere citas por la mañana.', isDiabetic: false },
-  { id: 'pat002', firstName: 'Luis', lastName: 'Martínez', phone: '444555666', age: 31, birthDay: 20, birthMonth: 8, notes: 'Primera visita.', isDiabetic: true },
-  { id: 'pat003', firstName: 'Elena', lastName: 'Ruiz', phone: '777888999', age: 23, birthDay: 5, birthMonth: 11, isDiabetic: false },
-  { id: 'pat004', firstName: 'Carlos', lastName: 'Vargas', phone: '222333444', age: 54, birthDay: 10, birthMonth: 1, isDiabetic: true, notes: "Sensibilidad en el pie izquierdo." },
-  { id: 'pat005', firstName: 'Sofía', lastName: 'Chávez', phone: '555666777', age: 25, birthDay: 2, birthMonth: 6, isDiabetic: false, preferredProfessionalId: initialMockProfessionalsData.find(p => p.locationId === 'higuereta' && p.firstName === 'Profesional 2')?.id },
+  { id: 'pat001', firstName: 'Ana', lastName: 'García', phone: '111222333', age: 39, preferredProfessionalId: initialMockProfessionalsData.find(p => p.locationId === 'higuereta')?.id, notes: 'Paciente regular, prefiere citas por la mañana.', isDiabetic: false },
+  { id: 'pat002', firstName: 'Luis', lastName: 'Martínez', phone: '444555666', age: 31, notes: 'Primera visita.', isDiabetic: true },
+  { id: 'pat003', firstName: 'Elena', lastName: 'Ruiz', phone: '777888999', age: 23, isDiabetic: false },
+  { id: 'pat004', firstName: 'Carlos', lastName: 'Vargas', phone: '222333444', age: 54, isDiabetic: true, notes: "Sensibilidad en el pie izquierdo." },
+  { id: 'pat005', firstName: 'Sofía', lastName: 'Chávez', phone: '555666777', age: 25, isDiabetic: false, preferredProfessionalId: initialMockProfessionalsData.find(p => p.locationId === 'higuereta' && p.firstName === 'Profesional 2')?.id },
 ];
 
 const initialMockServicesData: Service[] = SERVICES_CONSTANTS.map((s_const, index) => ({
@@ -181,7 +181,7 @@ export const getProfessionals = async (locationId?: LocationId): Promise<Profess
     if (useMockDatabase) {
         let professionalsResult = locationId
             ? mockDB.professionals.filter(p => p.locationId === locationId)
-            : [...mockDB.professionals];
+            : [...mockDB.professionals]; // Return all if no locationId specified
 
         const today = new Date();
         const currentYear = getYear(today);
@@ -201,7 +201,8 @@ export const getProfessionals = async (locationId?: LocationId): Promise<Profess
             const apptDate = parseISO(appt.appointmentDateTime);
             return appt.status === APPOINTMENT_STATUS.COMPLETED &&
                    apptDate >= startDate &&
-                   apptDate <= endDate;
+                   apptDate <= endDate &&
+                   (locationId ? appt.locationId === locationId : true); // Filter by location if provided
         });
 
         professionalsResult = professionalsResult.map(prof => {
@@ -256,7 +257,6 @@ export const addProfessional = async (data: ProfessionalFormData): Promise<Profe
           professionalToSave.workSchedule[dayId] = {startTime: '00:00', endTime: '00:00', isWorking: false};
         }
       });
-      // Ensure Sunday is always present, even if not explicitly in form, defaulting to non-working
       if (!professionalToSave.workSchedule.sunday) {
         professionalToSave.workSchedule.sunday = { startTime: '00:00', endTime: '00:00', isWorking: false };
       }
@@ -285,33 +285,32 @@ export const updateProfessional = async (id: string, data: Partial<ProfessionalF
             professionalToUpdate.phone = data.phone || undefined;
 
             if (data.workSchedule) {
-                professionalToUpdate.workSchedule = { ...professionalToUpdate.workSchedule }; // Ensure we are working with a copy
+                professionalToUpdate.workSchedule = { ...professionalToUpdate.workSchedule }; 
                  (Object.keys(data.workSchedule) as Array<Exclude<DayOfWeekId, 'sunday'>>).forEach(dayId => {
                     const dayData = data.workSchedule![dayId];
                     if (dayData) {
                         professionalToUpdate.workSchedule[dayId] = {
-                            startTime: dayData.startTime || '00:00', // Default times if missing
+                            startTime: dayData.startTime || '00:00', 
                             endTime: dayData.endTime || '00:00',
-                            isWorking: dayData.isWorking === undefined ? true : dayData.isWorking // Default isWorking to true if missing
+                            isWorking: dayData.isWorking === undefined ? true : dayData.isWorking 
                         };
-                    } else { // If dayData is explicitly null or undefined in form (e.g. cleared checkbox), mark as not working
+                    } else { 
                          professionalToUpdate.workSchedule[dayId] = {startTime: '00:00', endTime: '00:00', isWorking: false};
                     }
                 });
-                // Ensure Sunday has a schedule, default to non-working if not specified by rotation logic
                  if (!professionalToUpdate.workSchedule.sunday) {
                      professionalToUpdate.workSchedule.sunday = {startTime: '00:00', endTime: '00:00', isWorking: false};
                  }
             }
 
-            if (data.hasOwnProperty('rotationType')) professionalToUpdate.rotationType = data.rotationType!; // Assert non-null with !
+            if (data.hasOwnProperty('rotationType')) professionalToUpdate.rotationType = data.rotationType!; 
             professionalToUpdate.rotationStartDate = data.rotationStartDate ? formatISO(data.rotationStartDate, {representation: 'date'}) : null;
-            professionalToUpdate.compensatoryDayOffChoice = data.compensatoryDayOffChoice || null;
+            professionalToUpdate.compensatoryDayOffChoice = data.compensatoryDayOffChoice === "--none--" ? null : (data.compensatoryDayOffChoice || null);
 
 
             if (data.customScheduleOverrides) {
                 professionalToUpdate.customScheduleOverrides = data.customScheduleOverrides.map(ov => ({
-                    id: ov.id || generateId(), // Ensure ID exists
+                    id: ov.id || generateId(), 
                     date: formatISO(ov.date, { representation: 'date' }),
                     isWorking: ov.isWorking,
                     startTime: ov.isWorking ? ov.startTime : undefined,
@@ -369,7 +368,6 @@ export const getPatients = async (options: { page?: number, limit?: number, sear
         if (lastIndex !== -1) {
             paginatedPatients = filteredMockPatients.slice(lastIndex + 1, lastIndex + 1 + queryLimit);
         } else {
-            // If startAfterId is not found (e.g., data changed), fallback to regular pagination for current page
             const startIndex = (page - 1) * queryLimit;
             paginatedPatients = filteredMockPatients.slice(startIndex, startIndex + queryLimit);
         }
@@ -405,8 +403,6 @@ export const addPatient = async (data: Partial<Omit<Patient, 'id'>>): Promise<Pa
     lastName: data.lastName!,
     phone: data.phone,
     age: data.age === undefined ? null : data.age,
-    birthDay: data.birthDay,
-    birthMonth: data.birthMonth,
     isDiabetic: data.isDiabetic || false,
     notes: data.notes,
     preferredProfessionalId: data.preferredProfessionalId,
@@ -598,8 +594,8 @@ export const getAppointments = async (filters: {
         paginatedResult = populatedAppointmentsResult.slice(startIndex, startIndex + queryLimit);
     }
 
-    const newLastVisibleId = paginatedResult.length > 0 ? paginatedResult[paginatedResult.length -1].id : null;
-    return { appointments: populatedAppointmentsResult, totalCount, lastVisibleAppointmentId: newLastVisibleId };
+    const newLastVisibleId = paginatedResult.length > 0 ? populatedAppointmentsResult[populatedAppointmentsResult.length -1].id : null;
+    return { appointments: paginatedResult, totalCount, lastVisibleAppointmentId: newLastVisibleId };
   }
   throw new Error("Appointment retrieval not implemented for non-mock database or mockDB not available.");
 };
@@ -613,7 +609,7 @@ export const getAppointmentById = async (id: string): Promise<Appointment | unde
     throw new Error("Appointment retrieval not implemented for non-mock database or mockDB not available.");
 };
 
-export const addAppointment = async (data: AppointmentFormData ): Promise<Appointment> => {
+export const addAppointment = async (data: AppointmentFormData & { isExternalProfessional?: boolean; externalProfessionalOriginLocationId?: LocationId | null } ): Promise<Appointment> => {
   let patientId = data.existingPatientId;
   if (!patientId) {
     let existingPatient = await findPatient(data.patientFirstName, data.patientLastName);
@@ -622,8 +618,6 @@ export const addAppointment = async (data: AppointmentFormData ): Promise<Appoin
        const patientUpdates: Partial<Patient> = {};
        if (data.isDiabetic !== undefined && existingPatient.isDiabetic !== data.isDiabetic) patientUpdates.isDiabetic = data.isDiabetic;
        if (data.patientAge !== undefined && existingPatient.age !== data.patientAge) patientUpdates.age = data.patientAge;
-       if (data.birthDay !== undefined && existingPatient.birthDay !== data.birthDay) patientUpdates.birthDay = data.birthDay;
-       if (data.birthMonth !== undefined && existingPatient.birthMonth !== data.birthMonth) patientUpdates.birthMonth = data.birthMonth;
        if (Object.keys(patientUpdates).length > 0) {
           await updatePatient(patientId, patientUpdates);
       }
@@ -633,8 +627,6 @@ export const addAppointment = async (data: AppointmentFormData ): Promise<Appoin
         lastName: data.patientLastName,
         phone: data.patientPhone || undefined,
         age: data.patientAge,
-        birthDay: data.birthDay,
-        birthMonth: data.birthMonth,
         isDiabetic: data.isDiabetic || false,
         notes: '',
         preferredProfessionalId: undefined,
@@ -647,8 +639,6 @@ export const addAppointment = async (data: AppointmentFormData ): Promise<Appoin
         const patientUpdates: Partial<Patient> = {};
         if (data.isDiabetic !== undefined && data.isDiabetic !== existingPatientDetails.isDiabetic) patientUpdates.isDiabetic = data.isDiabetic;
         if (data.patientAge !== undefined && data.patientAge !== existingPatientDetails.age) patientUpdates.age = data.patientAge;
-        if (data.birthDay !== undefined && data.birthDay !== existingPatientDetails.birthDay) patientUpdates.birthDay = data.birthDay;
-        if (data.birthMonth !== undefined && data.birthMonth !== existingPatientDetails.birthMonth) patientUpdates.birthMonth = data.birthMonth;
         if (Object.keys(patientUpdates).length > 0) {
           await updatePatient(patientId, patientUpdates);
         }
@@ -671,26 +661,38 @@ export const addAppointment = async (data: AppointmentFormData ): Promise<Appoin
 
   if (data.preferredProfessionalId && data.preferredProfessionalId !== ANY_PROFESSIONAL_VALUE) {
     const preferredProf = await getProfessionalById(data.preferredProfessionalId);
-    if (preferredProf && preferredProf.locationId === data.locationId) {
-      actualProfessionalId = preferredProf.id;
+    if (preferredProf) { // Check if professional exists
+        // If searching external, or if local prof, assign
+        if (data.searchExternal || preferredProf.locationId === data.locationId) {
+            actualProfessionalId = preferredProf.id;
+        } else {
+            actualProfessionalId = null; // Preferred is local, but not matching or not available for this slot
+        }
     } else { 
-      actualProfessionalId = null;
+      actualProfessionalId = null; // Preferred professional not found
     }
   } else { 
-     actualProfessionalId = null;
+     actualProfessionalId = null; // "Any professional" selected or no preference
   }
 
 
-  if (actualProfessionalId === null) {
-    const allProfessionalsInLocation = await getProfessionals(data.locationId);
+  if (actualProfessionalId === null) { // If no specific professional is set, or "Any" was chosen and external search is not on.
+    const professionalsToConsider = data.searchExternal 
+      ? await getProfessionals() // Get all professionals if searching external
+      : await getProfessionals(data.locationId); // Otherwise, only from target location
+
     const appointmentsOnDateResult = await getAppointments({
-      locationId: data.locationId,
+      locationId: data.searchExternal ? undefined : data.locationId, // Broader search if external
       date: data.appointmentDate,
       statuses: [APPOINTMENT_STATUS.BOOKED, APPOINTMENT_STATUS.CONFIRMED]
     });
     const existingAppointmentsForDay = appointmentsOnDateResult.appointments || [];
 
-    for (const prof of allProfessionalsInLocation) {
+    for (const prof of professionalsToConsider) {
+      // If searching external, we allow prof.locationId to be different.
+      // If not searching external, prof.locationId must match data.locationId (already filtered if getProfessionals was called with locationId).
+      if (!data.searchExternal && prof.locationId !== data.locationId) continue;
+
       const availability = getProfessionalAvailabilityForDate(prof, data.appointmentDate);
       if (!availability) continue; 
 
@@ -718,17 +720,20 @@ export const addAppointment = async (data: AppointmentFormData ): Promise<Appoin
       }
       if (!isProfBusy) {
         actualProfessionalId = prof.id;
+        if (data.searchExternal && prof.locationId !== data.locationId) {
+            data.isExternalProfessional = true;
+            data.externalProfessionalOriginLocationId = prof.locationId;
+        }
         break; 
       }
     }
   }
 
-
   const newAppointmentData: Omit<Appointment, 'id' | 'createdAt' | 'updatedAt' | 'patient' | 'service' | 'professional'> = {
     patientId: patientId!,
     locationId: data.locationId,
     serviceId: data.serviceId,
-    professionalId: actualProfessionalId,
+    professionalId: actualProfessionalId, // This might be null if no one is found
     appointmentDateTime: appointmentDateTime,
     durationMinutes: appointmentDuration,
     preferredProfessionalId: (data.preferredProfessionalId === ANY_PROFESSIONAL_VALUE || !data.preferredProfessionalId) ? undefined : data.preferredProfessionalId,
@@ -736,6 +741,8 @@ export const addAppointment = async (data: AppointmentFormData ): Promise<Appoin
     status: APPOINTMENT_STATUS.BOOKED,
     attachedPhotos: [],
     addedServices: [],
+    isExternalProfessional: data.isExternalProfessional || false,
+    externalProfessionalOriginLocationId: data.isExternalProfessional ? data.externalProfessionalOriginLocationId : null,
   };
 
   if (useMockDatabase) {
@@ -784,6 +791,15 @@ export const updateAppointment = async (id: string, data: Partial<Appointment>):
           price: as.price,
         }));
       }
+      
+      // Handle external professional fields if present in data
+      if (data.hasOwnProperty('isExternalProfessional')) {
+        updatedAppointmentRaw.isExternalProfessional = data.isExternalProfessional;
+      }
+      if (data.hasOwnProperty('externalProfessionalOriginLocationId')) {
+        updatedAppointmentRaw.externalProfessionalOriginLocationId = data.externalProfessionalOriginLocationId;
+      }
+
 
       const populatedAppointment = await populateAppointment(updatedAppointmentRaw);
       mockDB.appointments[index] = populatedAppointment;
@@ -827,7 +843,7 @@ export const getPatientAppointmentHistory = async (
         paginatedAppointments = populatedHistory.slice(startIndex, startIndex + queryLimit);
     }
 
-    const newLastVisibleId = paginatedAppointments.length > 0 ? paginatedAppointments[paginatedAppointments.length -1].id : null;
+    const newLastVisibleId = paginatedAppointments.length > 0 ? populatedAppointments[populatedAppointments.length -1].id : null;
     return { appointments: populatedAppointments, totalCount, lastVisibleAppointmentId: newLastVisibleId };
   }
   throw new Error("Patient appointment history retrieval not implemented for non-mock database or mockDB not available.");
@@ -875,7 +891,7 @@ export function getProfessionalAvailabilityForDate(
   targetDate: Date
 ): { startTime: string; endTime: string; notes?: string } | null {
   const targetDateString = format(targetDate, 'yyyy-MM-dd');
-  const targetDayOfWeekJs = getDay(targetDate); // 0 for Sunday, 1 for Monday...
+  const targetDayOfWeekJs = getDay(targetDate); 
 
   if (professional.customScheduleOverrides) {
     const override = professional.customScheduleOverrides.find(
@@ -896,37 +912,42 @@ export function getProfessionalAvailabilityForDate(
     if (daysDiff >= 0) { 
         const weekNumberInCycle = Math.floor(daysDiff / 7) % 2; 
 
-        if (weekNumberInCycle === 0) {
-            if (targetDayOfWeekJs === 0) { 
+        if (weekNumberInCycle === 0) { // "Work Sunday" week
+            if (targetDayOfWeekJs === 0) { // It's Sunday on a "Work Sunday" week
                 return { startTime: '10:00', endTime: '18:00', notes: 'Domingo (Rotación)' };
             }
+            // For other days of this "Work Sunday" week, use base schedule
         }
-        else if (weekNumberInCycle === 1) {
+        else if (weekNumberInCycle === 1) { // "Compensatory Day Off" week (and Sunday off)
             const compensatoryDayId = professional.compensatoryDayOffChoice; 
             const targetDayConstant = DAYS_OF_WEEK[targetDayOfWeekJs]; 
 
-            if (targetDayConstant && targetDayConstant.id === compensatoryDayId && (targetDayOfWeekJs >= 1 && targetDayOfWeekJs <= 4)) {
+            if (targetDayConstant && targetDayConstant.id === compensatoryDayId && (targetDayOfWeekJs >= 1 && targetDayOfWeekJs <= 4) /* Mon-Thu */) {
+                return null; // It's their compensatory day off
+            }
+            if (targetDayOfWeekJs === 0) { // It's Sunday on a "Compensatory/Off Sunday" week
                 return null; 
             }
-            if (targetDayOfWeekJs === 0) { 
-                return null; 
-            }
+            // For other days of this "Compensatory" week (that are not the comp day or Sunday), use base schedule
         }
     }
   }
 
+  // Fallback to base weekly schedule
   if (professional.workSchedule) {
     const dayKey = DAYS_OF_WEEK[targetDayOfWeekJs].id as DayOfWeekId;
     const dailySchedule = professional.workSchedule[dayKey];
 
     if (dailySchedule) {
-      if (dailySchedule.isWorking === false) return null;
+      if (dailySchedule.isWorking === false) return null; // Explicitly not working on base schedule
       
+      // If isWorking is true or undefined (assume true), and times are present
       if (dailySchedule.startTime && dailySchedule.endTime) {
         return { startTime: dailySchedule.startTime, endTime: dailySchedule.endTime };
       }
     }
   }
 
-  return null; 
+  return null; // Default to not working if no specific schedule found
 }
+

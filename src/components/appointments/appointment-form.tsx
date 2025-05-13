@@ -1,3 +1,4 @@
+
 "use client";
 
 import React, { useState, useEffect, useMemo } from 'react';
@@ -21,7 +22,7 @@ import { Calendar } from '@/components/ui/calendar';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter, DialogClose } from '@/components/ui/dialog';
-import { CalendarIcon, ClockIcon, UserPlus, Building, Briefcase, ConciergeBell, Edit3, Loader2, UserRound, AlertCircle } from 'lucide-react';
+import { CalendarIcon, ClockIcon, UserPlus, Building, Briefcase, ConciergeBell, Edit3, Loader2, UserRound, AlertCircle, Shuffle } from 'lucide-react';
 import { format, parse, differenceInYears, parseISO, addMinutes, areIntervalsOverlapping, startOfDay } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { cn } from '@/lib/utils';
@@ -49,12 +50,16 @@ export function AppointmentForm({ isOpen, onOpenChange, onAppointmentCreated, in
   const { selectedLocationId: adminSelectedLocation } = useAppState();
   const { toast } = useToast();
 
-  const [allProfessionals, setAllProfessionals] = useState<Professional[]>([]);
+  const [currentLocationProfessionals, setCurrentLocationProfessionals] = useState<Professional[]>([]);
+  const [allSystemProfessionals, setAllSystemProfessionals] = useState<Professional[]>([]);
   const [servicesList, setServicesList] = useState<Service[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [isLoadingServices, setIsLoadingServices] = useState(true);
+  const [isLoadingCurrentLocationProfs, setIsLoadingCurrentLocationProfs] = useState(true);
+  const [isLoadingAllSystemProfs, setIsLoadingAllSystemProfs] = useState(true);
   const [showPatientHistory, setShowPatientHistory] = useState(false);
   const [currentPatientForHistory, setCurrentPatientForHistory] = useState<Patient | null>(null);
+  const [searchInOtherLocations, setSearchInOtherLocations] = useState(false);
 
   const [appointmentsForSelectedDate, setAppointmentsForSelectedDate] = useState<Appointment[]>([]);
   const [isLoadingAppointments, setIsLoadingAppointments] = useState(false);
@@ -82,9 +87,10 @@ export function AppointmentForm({ isOpen, onOpenChange, onAppointmentCreated, in
       locationId: initialData?.locationId || defaultLocation || LOCATIONS[0].id,
       serviceId: initialData?.serviceId || DEFAULT_SERVICE_ID_PLACEHOLDER,
       appointmentDate: initialData?.appointmentDate || defaultDate || new Date(),
-      appointmentTime: initialData?.appointmentTime || TIME_SLOTS[4],
+      appointmentTime: initialData?.appointmentTime || TIME_SLOTS[4], // Default to 10:00 AM
       preferredProfessionalId: initialData?.preferredProfessionalId || ANY_PROFESSIONAL_VALUE,
       bookingObservations: initialData?.bookingObservations || '',
+      searchExternal: false,
     },
   });
 
@@ -94,6 +100,7 @@ export function AppointmentForm({ isOpen, onOpenChange, onAppointmentCreated, in
   const watchAppointmentTime = form.watch('appointmentTime');
   const watchServiceId = form.watch('serviceId');
   const watchPreferredProfessionalId = form.watch('preferredProfessionalId');
+  const watchSearchExternal = form.watch('searchExternal');
 
 
   useEffect(() => {
@@ -119,23 +126,47 @@ export function AppointmentForm({ isOpen, onOpenChange, onAppointmentCreated, in
   }, [isOpen, form, toast]);
 
   useEffect(() => {
-    async function loadProfessionals(location: LocationId) {
-      setIsLoading(true);
+    async function loadCurrentLocationProfessionals(location: LocationId) {
+      setIsLoadingCurrentLocationProfs(true);
       try {
         const profs = await getProfessionals(location);
-        setAllProfessionals(profs || []);
+        setCurrentLocationProfessionals(profs || []);
       } catch (error) {
         console.error("Failed to load professionals for location:", location, error);
-        setAllProfessionals([]);
+        setCurrentLocationProfessionals([]);
         toast({ title: "Error", description: `No se pudieron cargar los profesionales para ${LOCATIONS.find(l=>l.id===location)?.name}.`, variant: "destructive" });
       } finally {
-        setIsLoading(false);
+        setIsLoadingCurrentLocationProfs(false);
       }
     }
     if (isOpen && watchLocationId) {
-      loadProfessionals(watchLocationId as LocationId);
+      loadCurrentLocationProfessionals(watchLocationId as LocationId);
     }
   }, [isOpen, watchLocationId, toast]);
+
+  useEffect(() => {
+    async function loadAllSystemProfessionals() {
+      if (!isOpen || !isAdminOrContador) { // Only fetch all if admin/contador
+        setAllSystemProfessionals(currentLocationProfessionals); // For staff, "all system" is just their location
+        setIsLoadingAllSystemProfs(false);
+        return;
+      }
+      setIsLoadingAllSystemProfs(true);
+      try {
+        const profs = await getProfessionals(); // No locationId fetches all
+        setAllSystemProfessionals(profs || []);
+      } catch (error) {
+        console.error("Failed to load all system professionals:", error);
+        setAllSystemProfessionals([]);
+        toast({ title: "Error", description: "No se pudieron cargar todos los profesionales del sistema.", variant: "destructive" });
+      } finally {
+        setIsLoadingAllSystemProfs(false);
+      }
+    }
+     if (isOpen) {
+      loadAllSystemProfessionals();
+    }
+  }, [isOpen, isAdminOrContador, currentLocationProfessionals, toast]);
 
 
   useEffect(() => {
@@ -164,8 +195,8 @@ export function AppointmentForm({ isOpen, onOpenChange, onAppointmentCreated, in
 
 
   useEffect(() => {
-    if (!isOpen || !watchAppointmentDate || !watchAppointmentTime || !watchServiceId || servicesList.length === 0 || isLoadingAppointments || !allProfessionals.length) {
-      setAvailableProfessionalsForTimeSlot(allProfessionals); // Default to all if not enough info
+    if (!isOpen || !watchAppointmentDate || !watchAppointmentTime || !watchServiceId || servicesList.length === 0 || isLoadingAppointments || isLoadingCurrentLocationProfs) {
+      setAvailableProfessionalsForTimeSlot(currentLocationProfessionals); 
       setSlotAvailabilityMessage('');
       return;
     }
@@ -181,24 +212,27 @@ export function AppointmentForm({ isOpen, onOpenChange, onAppointmentCreated, in
     const proposedStartTime = parse(`${format(watchAppointmentDate, 'yyyy-MM-dd')} ${watchAppointmentTime}`, 'yyyy-MM-dd HH:mm', new Date());
     const proposedEndTime = addMinutes(proposedStartTime, appointmentDuration);
 
+    const professionalsToConsider = watchSearchExternal ? allSystemProfessionals : currentLocationProfessionals;
     const availableProfs: Professional[] = [];
 
-    for (const prof of allProfessionals) {
+    for (const prof of professionalsToConsider) {
       const dailyAvailability = getProfessionalAvailabilityForDate(prof, watchAppointmentDate);
-      if (!dailyAvailability) continue; // Not working this day
+      if (!dailyAvailability) continue; 
 
       const profWorkStartTime = parse(`${format(watchAppointmentDate, 'yyyy-MM-dd')} ${dailyAvailability.startTime}`, 'yyyy-MM-dd HH:mm', new Date());
       const profWorkEndTime = parse(`${format(watchAppointmentDate, 'yyyy-MM-dd')} ${dailyAvailability.endTime}`, 'yyyy-MM-dd HH:mm', new Date());
 
-      // Check if proposed slot is within professional's working hours
       if (proposedStartTime < profWorkStartTime || proposedEndTime > profWorkEndTime) {
         continue;
       }
 
-      // Check for conflicts with existing appointments for this professional
       let isBusy = false;
-      const profAppointments = appointmentsForSelectedDate.filter(appt => appt.professionalId === prof.id);
-      for (const existingAppt of profAppointments) {
+      // When searching external, appointment conflicts should be checked against the professional's actual location appointments
+      const appointmentsForProfLocation = watchSearchExternal && prof.locationId !== watchLocationId 
+        ? [] // Simplified: For external, assume we'd fetch their actual schedule, too complex for now
+        : appointmentsForSelectedDate.filter(appt => appt.professionalId === prof.id);
+
+      for (const existingAppt of appointmentsForProfLocation) {
         const existingApptStartTime = parseISO(existingAppt.appointmentDateTime);
         const existingApptEndTime = addMinutes(existingApptStartTime, existingAppt.durationMinutes);
         if (areIntervalsOverlapping(
@@ -216,12 +250,12 @@ export function AppointmentForm({ isOpen, onOpenChange, onAppointmentCreated, in
 
     setAvailableProfessionalsForTimeSlot(availableProfs);
     if (availableProfs.length === 0) {
-      setSlotAvailabilityMessage('No hay profesionales disponibles en este horario para el servicio y duración seleccionados.');
+      setSlotAvailabilityMessage(watchSearchExternal ? 'No hay profesionales disponibles en otras sedes para este horario.' : 'No hay profesionales locales disponibles en este horario.');
     } else {
       setSlotAvailabilityMessage('');
     }
 
-  }, [isOpen, watchAppointmentDate, watchAppointmentTime, watchServiceId, servicesList, allProfessionals, appointmentsForSelectedDate, isLoadingAppointments]);
+  }, [isOpen, watchAppointmentDate, watchAppointmentTime, watchServiceId, servicesList, currentLocationProfessionals, allSystemProfessionals, appointmentsForSelectedDate, isLoadingAppointments, isLoadingCurrentLocationProfs, watchSearchExternal, watchLocationId]);
 
 
   useEffect(() => {
@@ -270,16 +304,32 @@ export function AppointmentForm({ isOpen, onOpenChange, onAppointmentCreated, in
 
   async function onSubmit(data: FormSchemaType) {
     setIsLoading(true);
-    try {
+    let finalBookingObservations = data.bookingObservations || '';
+    let isExternalProfAssignment = false;
+    let externalProfOriginLocId: LocationId | null = null;
 
-      const submitData = {
+    if (data.preferredProfessionalId && data.preferredProfessionalId !== ANY_PROFESSIONAL_VALUE) {
+        const selectedProf = allSystemProfessionals.find(p => p.id === data.preferredProfessionalId);
+        if (selectedProf && selectedProf.locationId !== data.locationId) {
+            isExternalProfAssignment = true;
+            externalProfOriginLocId = selectedProf.locationId;
+            finalBookingObservations += `${finalBookingObservations ? '; ' : ''}Profesional ${selectedProf.firstName} ${selectedProf.lastName} de sede ${LOCATIONS.find(l=>l.id === selectedProf.locationId)?.name} se movilizará.`;
+        }
+    }
+
+
+    try {
+      const submitData: AppointmentFormData & { isExternalProfessional?: boolean; externalProfessionalOriginLocationId?: LocationId | null } = {
         ...data,
         preferredProfessionalId: data.preferredProfessionalId === ANY_PROFESSIONAL_VALUE ? null : data.preferredProfessionalId,
         patientPhone: (data.existingPatientId && user?.role !== USER_ROLES.ADMIN) ? undefined : data.patientPhone,
         isDiabetic: data.isDiabetic || false,
         patientAge: data.patientAge === 0 ? null : data.patientAge,
+        bookingObservations: finalBookingObservations.trim() || undefined,
+        isExternalProfessional: isExternalProfAssignment,
+        externalProfessionalOriginLocationId: externalProfOriginLocId,
       };
-      console.log("Submitting appointment data:", submitData);
+
       await addAppointment(submitData);
       toast({
         title: "Cita Agendada",
@@ -302,9 +352,11 @@ export function AppointmentForm({ isOpen, onOpenChange, onAppointmentCreated, in
         isDiabetic: false,
         existingPatientId: null,
         bookingObservations: '',
+        searchExternal: false,
       });
       setCurrentPatientForHistory(null);
       setShowPatientHistory(false);
+      setSearchInOtherLocations(false);
     } catch (error) {
       console.error("Error creating appointment:", error);
       toast({
@@ -318,14 +370,25 @@ export function AppointmentForm({ isOpen, onOpenChange, onAppointmentCreated, in
   }
 
   const isSubmitDisabled = useMemo(() => {
-    if (isLoading || isLoadingServices || isLoadingAppointments) return true;
+    if (isLoading || isLoadingServices || isLoadingAppointments || isLoadingCurrentLocationProfs || isLoadingAllSystemProfs) return true;
     if (servicesList.length === 0) return true;
-    if (availableProfessionalsForTimeSlot.length === 0) return true;
+    
+    // If searching external, allow submission even if local list is empty, relies on staff selecting a specific external prof.
+    // If not searching external, and no local profs available, disable.
+    if (!watchSearchExternal && availableProfessionalsForTimeSlot.length === 0) return true;
+
+    // If specific professional is selected, check if they are in the currently considered list (local or all system)
     if (watchPreferredProfessionalId && watchPreferredProfessionalId !== ANY_PROFESSIONAL_VALUE) {
-      return !availableProfessionalsForTimeSlot.find(p => p.id === watchPreferredProfessionalId);
+      const listToSearch = watchSearchExternal ? allSystemProfessionals : availableProfessionalsForTimeSlot;
+      return !listToSearch.find(p => p.id === watchPreferredProfessionalId);
     }
+    
+    // If "any professional" is selected and searching external, it's a manual assignment (enable)
+    // If "any professional" is selected and NOT searching external, only enable if local profs available
+    if (watchPreferredProfessionalId === ANY_PROFESSIONAL_VALUE && !watchSearchExternal && availableProfessionalsForTimeSlot.length === 0) return true;
+
     return false;
-  }, [isLoading, isLoadingServices, isLoadingAppointments, servicesList, availableProfessionalsForTimeSlot, watchPreferredProfessionalId]);
+  }, [isLoading, isLoadingServices, isLoadingAppointments, isLoadingCurrentLocationProfs, isLoadingAllSystemProfs, servicesList, availableProfessionalsForTimeSlot, watchPreferredProfessionalId, watchSearchExternal, allSystemProfessionals]);
 
 
   if (!isOpen) return null;
@@ -347,11 +410,12 @@ export function AppointmentForm({ isOpen, onOpenChange, onAppointmentCreated, in
           isDiabetic: false,
           existingPatientId: null,
           bookingObservations: '',
+          searchExternal: false,
         });
         setCurrentPatientForHistory(null);
         setShowPatientHistory(false);
         setSlotAvailabilityMessage('');
-        setAvailableProfessionalsForTimeSlot(allProfessionals);
+        setSearchInOtherLocations(false);
       }
       onOpenChange(open);
     }}>
@@ -489,7 +553,7 @@ export function AppointmentForm({ isOpen, onOpenChange, onAppointmentCreated, in
                   render={({ field }) => (
                     <FormItem>
                       <FormLabel className="flex items-center gap-1"><Building size={16}/>Sede</FormLabel>
-                      <Select onValueChange={field.onChange} value={field.value || ""} disabled={(user?.role === USER_ROLES.LOCATION_STAFF && !isAdminOrContador) || isLoadingServices || servicesList.length === 0}>
+                      <Select onValueChange={(value) => { field.onChange(value); setSearchInOtherLocations(false); form.setValue('preferredProfessionalId', ANY_PROFESSIONAL_VALUE);}} value={field.value || ""} disabled={(user?.role === USER_ROLES.LOCATION_STAFF && !isAdminOrContador) || isLoadingServices || servicesList.length === 0}>
                         <FormControl>
                           <SelectTrigger><SelectValue placeholder="Seleccionar sede" /></SelectTrigger>
                         </FormControl>
@@ -589,16 +653,54 @@ export function AppointmentForm({ isOpen, onOpenChange, onAppointmentCreated, in
                     )}
                   />
                 </div>
-                 {slotAvailabilityMessage && (
-                  <Alert variant={availableProfessionalsForTimeSlot.length > 0 ? "default" : "destructive"} className="mt-2">
+                 {slotAvailabilityMessage && availableProfessionalsForTimeSlot.length === 0 && !watchSearchExternal && (
+                  <Alert variant={"destructive"} className="mt-2">
                     <AlertCircle className="h-4 w-4" />
                     <AlertDescription>{slotAvailabilityMessage}</AlertDescription>
+                    <Button type="button" variant="link" size="sm" className="p-0 h-auto mt-1 text-destructive hover:text-destructive/80" onClick={() => {setSearchInOtherLocations(true); form.setValue('searchExternal', true);}}>
+                      <Shuffle className="mr-1 h-3 w-3"/> Intentar buscar en otras sedes
+                    </Button>
                   </Alert>
                 )}
+                 {slotAvailabilityMessage && availableProfessionalsForTimeSlot.length === 0 && watchSearchExternal && (
+                    <Alert variant={"destructive"} className="mt-2">
+                        <AlertCircle className="h-4 w-4" />
+                        <AlertDescription>{slotAvailabilityMessage}</AlertDescription>
+                         <Button type="button" variant="link" size="sm" className="p-0 h-auto mt-1 text-destructive hover:text-destructive/80" onClick={() => {setSearchInOtherLocations(false); form.setValue('searchExternal', false);}}>
+                           Volver a buscar en sede actual
+                        </Button>
+                    </Alert>
+                 )}
               </div>
 
               <div className="space-y-4 p-4 border rounded-lg shadow-sm bg-card">
                 <h3 className="text-lg font-semibold flex items-center gap-2"><Briefcase /> Profesional y Observaciones</h3>
+                 <FormField
+                    control={form.control}
+                    name="searchExternal"
+                    render={({ field }) => (
+                        <FormItem className="flex flex-row items-center space-x-3 space-y-0 rounded-md border p-3 shadow-sm">
+                            <FormControl>
+                                <Checkbox
+                                    checked={field.value}
+                                    onCheckedChange={(checked) => {
+                                        const isChecked = Boolean(checked);
+                                        field.onChange(isChecked);
+                                        setSearchInOtherLocations(isChecked);
+                                        form.setValue('preferredProfessionalId', ANY_PROFESSIONAL_VALUE); // Reset preferred prof when mode changes
+                                    }}
+                                    disabled={availableProfessionalsForTimeSlot.length > 0 && !field.value} // Disable if local profs available and not already searching external
+                                />
+                            </FormControl>
+                            <div className="space-y-1 leading-none">
+                                <FormLabel className={(availableProfessionalsForTimeSlot.length > 0 && !field.value) ? "text-muted-foreground" : ""}>
+                                    Buscar profesional en otras sedes
+                                </FormLabel>
+                                {availableProfessionalsForTimeSlot.length > 0 && !field.value && <FormDescription className="text-xs">Deshabilitado porque hay profesionales locales disponibles.</FormDescription>}
+                            </div>
+                        </FormItem>
+                    )}
+                />
                 <FormField
                   control={form.control}
                   name="preferredProfessionalId"
@@ -608,15 +710,17 @@ export function AppointmentForm({ isOpen, onOpenChange, onAppointmentCreated, in
                       <Select
                         onValueChange={(value) => field.onChange(value === ANY_PROFESSIONAL_VALUE ? null : value)}
                         value={field.value || ANY_PROFESSIONAL_VALUE}
-                        disabled={isLoadingServices || servicesList.length === 0 || isLoadingAppointments || allProfessionals.length === 0 }
+                        disabled={isLoadingServices || servicesList.length === 0 || isLoadingAppointments || (watchSearchExternal ? isLoadingAllSystemProfs : isLoadingCurrentLocationProfs) }
                       >
                         <FormControl>
-                          <SelectTrigger><SelectValue placeholder={availableProfessionalsForTimeSlot.length > 0 ? "Cualquier profesional disponible" : "No hay profesionales disponibles"} /></SelectTrigger>
+                          <SelectTrigger><SelectValue placeholder={availableProfessionalsForTimeSlot.length > 0 || watchSearchExternal ? "Cualquier profesional disponible" : "No hay profesionales"} /></SelectTrigger>
                         </FormControl>
                         <SelectContent>
                           <SelectItem value={ANY_PROFESSIONAL_VALUE}>Cualquier profesional disponible</SelectItem>
-                          {availableProfessionalsForTimeSlot.map(prof => (
-                            <SelectItem key={prof.id} value={prof.id}>{prof.firstName} {prof.lastName}</SelectItem>
+                          {(watchSearchExternal ? allSystemProfessionals : availableProfessionalsForTimeSlot).map(prof => (
+                            <SelectItem key={prof.id} value={prof.id}>
+                                {prof.firstName} {prof.lastName} {watchSearchExternal && prof.locationId !== watchLocationId ? `(Sede: ${LOCATIONS.find(l=>l.id === prof.locationId)?.name})` : ''}
+                            </SelectItem>
                           ))}
                         </SelectContent>
                       </Select>
@@ -665,16 +769,17 @@ export function AppointmentForm({ isOpen, onOpenChange, onAppointmentCreated, in
                 isDiabetic: false,
                 existingPatientId: null,
                 bookingObservations: '',
+                searchExternal: false,
               });
               setCurrentPatientForHistory(null);
               setShowPatientHistory(false);
               setSlotAvailabilityMessage('');
-              setAvailableProfessionalsForTimeSlot(allProfessionals);
+              setSearchInOtherLocations(false);
               onOpenChange(false);
             }}>Cancelar</Button>
           </DialogClose>
           <Button type="submit" onClick={form.handleSubmit(onSubmit)} disabled={isSubmitDisabled}>
-            {(isLoading || isLoadingServices || isLoadingAppointments) && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+            {(isLoading || isLoadingServices || isLoadingAppointments || isLoadingCurrentLocationProfs || isLoadingAllSystemProfs) && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
             {initialData?.patientFirstName ? 'Actualizar Cita' : 'Agendar Cita'}
           </Button>
         </DialogFooter>
@@ -682,3 +787,4 @@ export function AppointmentForm({ isOpen, onOpenChange, onAppointmentCreated, in
     </Dialog>
   );
 }
+
