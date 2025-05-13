@@ -31,19 +31,19 @@ const initialMockUsersData: User[] = [
 
 const initialMockProfessionalsData: Professional[] = LOCATIONS.flatMap((location, locIndex) =>
   Array.from({ length: 2 }, (_, i) => {
-    const baseSchedule: { [key in DayOfWeekId]?: { startTime: string; endTime: string } | null } = {
-      monday: { startTime: '10:00', endTime: '19:00' },
-      tuesday: { startTime: '10:00', endTime: '19:00' },
-      wednesday: { startTime: '10:00', endTime: '19:00' },
-      thursday: { startTime: '10:00', endTime: '19:00' },
-      friday: { startTime: '10:00', endTime: '19:00' },
-      saturday: { startTime: '09:00', endTime: '18:00' },
-      sunday: null, // Sunday off by default in base, rotation will override
+    const baseSchedule: { [key in DayOfWeekId]?: { startTime: string; endTime: string; isWorking?: boolean } | null } = {
+      monday: { startTime: '10:00', endTime: '19:00', isWorking: true },
+      tuesday: { startTime: '10:00', endTime: '19:00', isWorking: true },
+      wednesday: { startTime: '10:00', endTime: '19:00', isWorking: true },
+      thursday: { startTime: '10:00', endTime: '19:00', isWorking: true },
+      friday: { startTime: '10:00', endTime: '19:00', isWorking: true },
+      saturday: { startTime: '09:00', endTime: '18:00', isWorking: true },
+      sunday: { isWorking: false }, 
     };
 
     const isFirstProfFirstLoc = i === 0 && locIndex === 0;
-    const rotationStartDateForDemo = startOfDay(new Date()); // Make it today for easy testing
-    while (getDay(rotationStartDateForDemo) !== 0) { // Find next Sunday from today
+    const rotationStartDateForDemo = startOfDay(new Date()); 
+    while (getDay(rotationStartDateForDemo) !== 0) { 
         rotationStartDateForDemo.setDate(rotationStartDateForDemo.getDate() + 1);
     }
 
@@ -54,14 +54,14 @@ const initialMockProfessionalsData: Professional[] = LOCATIONS.flatMap((location
       lastName: location.name.split(' ')[0],
       locationId: location.id,
       phone: `9876543${locIndex}${i + 1}`,
-      biWeeklyEarnings: Math.random() * 1500 + 500, // Random earnings for demo
+      biWeeklyEarnings: Math.random() * 1500 + 500, 
       workSchedule: baseSchedule,
       rotationType: isFirstProfFirstLoc ? 'biWeeklySunday' : 'none',
       rotationStartDate: isFirstProfFirstLoc ? formatISO(rotationStartDateForDemo, { representation: 'date' }) : null,
       compensatoryDayOffChoice: isFirstProfFirstLoc ? 'monday' : null,
       customScheduleOverrides: (i === 1 && locIndex === 0) ? [ 
-        { id: generateId(), date: formatISO(addDays(new Date(), 7), { representation: 'date' }), isWorking: true, startTime: '10:00', endTime: '14:00', notes: 'Turno especial' },
-        { id: generateId(), date: formatISO(addDays(new Date(), 3), { representation: 'date' }), isWorking: false, notes: 'Día libre' }
+        { id: generateId(), date: formatISO(dateFnsAddMinutes(new Date(), 7 * 24 * 60), { representation: 'date' }), isWorking: true, startTime: '10:00', endTime: '14:00', notes: 'Turno especial' },
+        { id: generateId(), date: formatISO(dateFnsAddMinutes(new Date(), 3 * 24 * 60), { representation: 'date' }), isWorking: false, notes: 'Día libre' }
       ] : [],
     };
   })
@@ -87,7 +87,7 @@ const today = new Date();
 const yesterday = subDays(today, 1);
 const twoDaysAgo = subDays(today, 2);
 const tomorrow = addDays(today,1);
-const fixedFutureDateForRegistry = new Date(2025, 4, 9);
+const fixedFutureDateForRegistry = new Date(2025, 4, 9); // May 9, 2025
 
 const initialMockAppointmentsData: Appointment[] = [
   {
@@ -230,19 +230,21 @@ export const addProfessional = async (data: ProfessionalFormData): Promise<Profe
         })) || [],
     };
     
-    // Populate workSchedule from form's workSchedule object
     if (data.workSchedule) {
       (Object.keys(data.workSchedule) as Array<Exclude<DayOfWeekId, 'sunday'>>).forEach(dayId => {
         const dayData = data.workSchedule![dayId];
-        if (dayData?.isWorking && dayData.startTime && dayData.endTime) {
-          professionalToSave.workSchedule[dayId] = { startTime: dayData.startTime, endTime: dayData.endTime };
+        if (dayData) {
+          professionalToSave.workSchedule[dayId] = { 
+            startTime: dayData.startTime || '00:00', 
+            endTime: dayData.endTime || '00:00', 
+            isWorking: dayData.isWorking === undefined ? true : dayData.isWorking 
+          };
         } else {
           professionalToSave.workSchedule[dayId] = null;
         }
       });
-      // Ensure Sunday is null by default in base schedule if not explicitly handled otherwise
       if (!professionalToSave.workSchedule.sunday) {
-        professionalToSave.workSchedule.sunday = null;
+        professionalToSave.workSchedule.sunday = { startTime: '00:00', endTime: '00:00', isWorking: false };
       }
     }
     
@@ -266,18 +268,29 @@ export const updateProfessional = async (id: string, data: Partial<ProfessionalF
             if(data.firstName) professionalToUpdate.firstName = data.firstName;
             if(data.lastName) professionalToUpdate.lastName = data.lastName;
             if(data.locationId) professionalToUpdate.locationId = data.locationId;
-            professionalToUpdate.phone = data.phone || undefined; // Allow unsetting phone
+            professionalToUpdate.phone = data.phone || undefined; 
 
             if (data.workSchedule) {
-                professionalToUpdate.workSchedule = { ...professionalToUpdate.workSchedule }; // Ensure new object
+                professionalToUpdate.workSchedule = { ...professionalToUpdate.workSchedule }; 
                  (Object.keys(data.workSchedule) as Array<Exclude<DayOfWeekId, 'sunday'>>).forEach(dayId => {
                     const dayData = data.workSchedule![dayId];
-                    if (dayData?.isWorking && dayData.startTime && dayData.endTime) {
-                        professionalToUpdate.workSchedule[dayId] = { startTime: dayData.startTime, endTime: dayData.endTime };
+                    if (dayData) {
+                        professionalToUpdate.workSchedule[dayId] = { 
+                            startTime: dayData.startTime || '00:00', 
+                            endTime: dayData.endTime || '00:00', 
+                            isWorking: dayData.isWorking === undefined ? true : dayData.isWorking 
+                        };
                     } else {
                         professionalToUpdate.workSchedule[dayId] = null;
                     }
                 });
+                 if (!professionalToUpdate.workSchedule.sunday && data.workSchedule.hasOwnProperty('sunday')) {
+                    // Handle Sunday specifically if it's part of the form update (though form doesn't include it)
+                    // This part might need adjustment based on how Sunday is managed if it's not in the form.
+                    // For now, assume form only sends Mon-Sat, Sunday is handled by rotation or remains default.
+                 } else if (!professionalToUpdate.workSchedule.sunday) {
+                     professionalToUpdate.workSchedule.sunday = {startTime: '00:00', endTime: '00:00', isWorking: false};
+                 }
             }
             
             if (data.hasOwnProperty('rotationType')) professionalToUpdate.rotationType = data.rotationType!;
@@ -604,7 +617,7 @@ export const addAppointment = async (data: AppointmentFormData ): Promise<Appoin
       const newPatient = await addPatient({
         firstName: data.patientFirstName,
         lastName: data.patientLastName,
-        phone: data.patientPhone,
+        phone: data.patientPhone || undefined,
         age: data.patientAge,
         birthDay: data.birthDay,
         birthMonth: data.birthMonth,
@@ -842,69 +855,58 @@ export function getProfessionalAvailabilityForDate(
   // 1. Check customScheduleOverrides (highest precedence)
   if (professional.customScheduleOverrides) {
     const override = professional.customScheduleOverrides.find(
-      ov => ov.date === targetDateString // Dates are already ISO strings
+      ov => ov.date === targetDateString 
     );
     if (override) {
       if (override.isWorking && override.startTime && override.endTime) {
         return { startTime: override.startTime, endTime: override.endTime, notes: override.notes };
       }
-      return null; // Explicitly not working due to override
+      return null; 
     }
   }
   
   // 2. Bi-Weekly Sunday Rotation Logic
   if (professional.rotationType === 'biWeeklySunday' && professional.rotationStartDate && professional.compensatoryDayOffChoice) {
-    const rotationAnchorDate = parseISO(professional.rotationStartDate); // This is the first Sunday of a "Work Sunday" cycle
-    
-    // Calculate the number of full weeks passed since the rotation anchor Sunday.
-    // A "week" here starts on Sunday for cycle calculation simplicity.
+    const rotationAnchorDate = parseISO(professional.rotationStartDate); 
     const daysDiff = differenceInDays(startOfDay(targetDate), startOfDay(rotationAnchorDate));
 
-    if (daysDiff >= 0) { // Only apply rotation if targetDate is on or after rotationStartDate
-        const weekNumberInAbsolute = Math.floor(daysDiff / 7); // Week number since rotation start (0-indexed)
-        const cycleWeek = weekNumberInAbsolute % 3; // 0, 1, 2 for the 3-week cycle
+    if (daysDiff >= 0) { 
+        const weekNumberInCycle = Math.floor(daysDiff / 7) % 2; // 0 for work Sunday week, 1 for compensatory/off Sunday week
     
-        // cycleWeek 0: Week A - Works Sunday (this IS the rotationAnchorDate or equivalent in a future cycle)
-        if (cycleWeek === 0) {
+        // Week 0: Work Sunday week
+        if (weekNumberInCycle === 0) {
             if (targetDayOfWeekJs === 0) { // Is it Sunday?
                 return { startTime: '10:00', endTime: '18:00', notes: 'Domingo (Rotación)' };
             }
-            // For Mon-Sat of this week, fall through to base schedule
         }
-        // cycleWeek 1: Week B - Compensatory day off (Mon-Thu), Sunday OFF
-        else if (cycleWeek === 1) {
+        // Week 1: Compensatory day off week (also Sunday off by default in this week)
+        else if (weekNumberInCycle === 1) {
             const compensatoryDayId = professional.compensatoryDayOffChoice;
-            const targetDayId = DAYS_OF_WEEK.find(d => getDay(parseISO(d.id === 'sunday' ? `2000-01-02` : `2000-01-${['monday','tuesday','wednesday','thursday','friday','saturday'].indexOf(d.id)+3}`)) === targetDayOfWeekJs)?.id;
+            const targetDayConstant = DAYS_OF_WEEK[targetDayOfWeekJs];
 
-            if (targetDayId === compensatoryDayId && (targetDayOfWeekJs >= 1 && targetDayOfWeekJs <= 4) /* Mon-Thu */) {
+
+            if (targetDayConstant && targetDayConstant.id === compensatoryDayId && (targetDayOfWeekJs >= 1 && targetDayOfWeekJs <= 4) /* Mon-Thu */) {
                 return null; // Compensatory day off
             }
-            if (targetDayOfWeekJs === 0) { // Is it Sunday?
-                return null; // Sunday after a working Sunday is OFF
+            if (targetDayOfWeekJs === 0) { // Is it Sunday in the "off" week of rotation?
+                return null; 
             }
-            // For other days of this week, fall through to base schedule
-        }
-        // cycleWeek 2: Week C - Normal Mon-Sat from base, Sunday OFF
-        else if (cycleWeek === 2) {
-            if (targetDayOfWeekJs === 0) { // Is it Sunday?
-                 return null; // Normal Sunday OFF in this part of the cycle
-            }
-            // For Mon-Sat of this week, fall through to base schedule
         }
     }
   }
 
-  // 3. Fallback to base workSchedule (for Mon-Sat, or if no rotation/override applies)
+  // 3. Fallback to base workSchedule
   if (professional.workSchedule) {
-    // Find the DayOfWeekId that matches targetDayOfWeekJs
-    // DAYS_OF_WEEK assumes Sunday is index 0, Monday is 1, etc. which matches getDay()
     const dayKey = DAYS_OF_WEEK[targetDayOfWeekJs].id as DayOfWeekId;
     const dailySchedule = professional.workSchedule[dayKey];
 
-    if (dailySchedule && dailySchedule.startTime && dailySchedule.endTime) {
-      return { startTime: dailySchedule.startTime, endTime: dailySchedule.endTime };
+    if (dailySchedule) {
+      if (dailySchedule.isWorking === false) return null; 
+      if (dailySchedule.startTime && dailySchedule.endTime) { 
+        return { startTime: dailySchedule.startTime, endTime: dailySchedule.endTime };
+      }
     }
   }
 
-  return null; // Not working if no override, no applicable rotation, and no base schedule for the day
+  return null; 
 }

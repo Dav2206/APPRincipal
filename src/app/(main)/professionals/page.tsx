@@ -41,7 +41,7 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { Calendar } from '@/components/ui/calendar';
 import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
-import { format, parseISO, getDay } from 'date-fns';
+import { format, parseISO, getDay, isSameDay, differenceInDays, startOfDay } from 'date-fns';
 import { es } from 'date-fns/locale';
 
 const COMPENSATORY_DAY_OFF_PLACEHOLDER_VALUE = "--none--";
@@ -63,7 +63,6 @@ export default function ProfessionalsPage() {
     thursday: { isWorking: true, startTime: '10:00', endTime: '19:00' },
     friday: { isWorking: true, startTime: '10:00', endTime: '19:00' },
     saturday: { isWorking: true, startTime: '09:00', endTime: '18:00' },
-    // Sunday is handled by rotation or off by default
   };
 
 
@@ -77,7 +76,7 @@ export default function ProfessionalsPage() {
       workSchedule: defaultBaseWorkSchedule,
       rotationType: 'none',
       rotationStartDate: null,
-      compensatoryDayOffChoice: null,
+      compensatoryDayOffChoice: COMPENSATORY_DAY_OFF_PLACEHOLDER_VALUE as any, // Placeholder for form
       customScheduleOverrides: [],
     }
   });
@@ -97,7 +96,7 @@ export default function ProfessionalsPage() {
 
 
   const fetchProfessionals = useCallback(async () => {
-    if(!user || (!isAdminOrContador && user.role !== USER_ROLES.LOCATION_STAFF)) { // Adjusted logic: if not admin/contador AND not staff, then deny. Staff can view their location.
+    if(!user || (!isAdminOrContador && user.role !== USER_ROLES.LOCATION_STAFF)) { 
       setIsLoading(false);
       setProfessionals([]);
       return;
@@ -108,7 +107,7 @@ export default function ProfessionalsPage() {
       if (isAdminOrContador) {
         if (effectiveLocationId) {
           profsToSet = await getProfessionals(effectiveLocationId);
-        } else { // adminSelectedLocation === 'all'
+        } else { 
           const allProfsPromises = LOCATIONS.map(loc => getProfessionals(loc.id));
           const results = await Promise.all(allProfsPromises);
           profsToSet = results.flat();
@@ -137,7 +136,7 @@ export default function ProfessionalsPage() {
     setEditingProfessional(null);
     const defaultLoc = isAdminOrContador
       ? (adminSelectedLocation && adminSelectedLocation !== 'all' ? adminSelectedLocation : LOCATIONS[0].id)
-      : user?.locationId; // This case should not be reached due to the check above, but kept for safety.
+      : user?.locationId; 
     
     form.reset({
       firstName: '',
@@ -147,7 +146,7 @@ export default function ProfessionalsPage() {
       workSchedule: defaultBaseWorkSchedule,
       rotationType: 'none',
       rotationStartDate: null,
-      compensatoryDayOffChoice: null,
+      compensatoryDayOffChoice: COMPENSATORY_DAY_OFF_PLACEHOLDER_VALUE as any,
       customScheduleOverrides: [],
     });
     setIsFormOpen(true);
@@ -161,13 +160,12 @@ export default function ProfessionalsPage() {
     setEditingProfessional(professional);
     
     const formWorkSchedule: ProfessionalFormData['workSchedule'] = {};
-    DAYS_OF_WEEK.forEach(day => {
-      if (day.id !== 'sunday') { // Base schedule form is for Mon-Sat
-        const schedule = professional.workSchedule?.[day.id as DayOfWeekId];
-        formWorkSchedule[day.id as Exclude<DayOfWeekId, 'sunday'>] = schedule 
-          ? { isWorking: true, startTime: schedule.startTime, endTime: schedule.endTime }
-          : { isWorking: false, startTime: defaultBaseWorkSchedule[day.id as Exclude<DayOfWeekId, 'sunday'>]?.startTime, endTime: defaultBaseWorkSchedule[day.id as Exclude<DayOfWeekId, 'sunday'>]?.endTime };
-      }
+    DAYS_OF_WEEK.filter(d => d.id !== 'sunday').forEach(day => {
+      const dayId = day.id as Exclude<DayOfWeekId, 'sunday'>;
+      const schedule = professional.workSchedule?.[dayId];
+      formWorkSchedule[dayId] = schedule 
+        ? { isWorking: schedule.isWorking, startTime: schedule.startTime, endTime: schedule.endTime }
+        : { isWorking: false, startTime: defaultBaseWorkSchedule[dayId]?.startTime, endTime: defaultBaseWorkSchedule[dayId]?.endTime };
     });
 
     form.reset({
@@ -179,7 +177,7 @@ export default function ProfessionalsPage() {
         workSchedule: formWorkSchedule,
         rotationType: professional.rotationType || 'none',
         rotationStartDate: professional.rotationStartDate ? parseISO(professional.rotationStartDate) : null,
-        compensatoryDayOffChoice: professional.compensatoryDayOffChoice || null,
+        compensatoryDayOffChoice: professional.compensatoryDayOffChoice || (COMPENSATORY_DAY_OFF_PLACEHOLDER_VALUE as any),
         customScheduleOverrides: professional.customScheduleOverrides?.map(ov => ({
             id: ov.id || generateId(), 
             date: parseISO(ov.date),
@@ -230,7 +228,7 @@ export default function ProfessionalsPage() {
       </div>
   );
   
-  if (!user) { // Basic check, more specific role checks are done for actions
+  if (!user) { 
     return (
       <div className="flex h-screen items-center justify-center">
         <p>Cargando...</p>
@@ -238,27 +236,56 @@ export default function ProfessionalsPage() {
     );
   }
 
-  const formatWorkScheduleDisplay = (prof: Professional) => {
-    const today = new Date();
-    const availability = getProfessionalAvailabilityForDate(prof, today);
-    
-    if (availability) {
-        const dayOfWeek = format(today, 'EEEE', {locale: es}); // EEEE for full day name
-        return `${dayOfWeek.charAt(0).toUpperCase() + dayOfWeek.slice(1)}: ${availability.startTime} - ${availability.endTime}${availability.notes ? ` (${availability.notes})` : ''}`;
-    }
+ const formatWorkScheduleDisplay = (prof: Professional) => {
+  const today = new Date();
+  const availabilityToday = getProfessionalAvailabilityForDate(prof, today);
 
-    // Fallback to a general weekly schedule if no specific override or rotation for today
-    if (prof.workSchedule) {
-        const activeDays = DAYS_OF_WEEK
-            .filter(day => prof.workSchedule![day.id as DayOfWeekId] && prof.workSchedule![day.id as DayOfWeekId]?.startTime)
-            .map(day => {
-                const schedule = prof.workSchedule![day.id as DayOfWeekId]!;
-                return `${day.name.substring(0,3)} (${schedule.startTime}-${schedule.endTime})`;
-            });
-        if (activeDays.length > 0) return activeDays.join(', ');
+  let todayStr = "Hoy: ";
+  if (availabilityToday) {
+    todayStr += `${availabilityToday.startTime}-${availabilityToday.endTime}`;
+    if (availabilityToday.notes) todayStr += ` (${availabilityToday.notes})`;
+  } else {
+    let reason = "No disponible";
+    const override = prof.customScheduleOverrides?.find(ov => isSameDay(parseISO(ov.date), today) && !ov.isWorking);
+    if (override) {
+      reason = `Anulación${override.notes ? ` (${override.notes})` : ''}`;
+    } else if (prof.rotationType === 'biWeeklySunday' && prof.rotationStartDate && prof.compensatoryDayOffChoice) {
+      const rotationAnchorDate = parseISO(prof.rotationStartDate);
+      const daysDiff = differenceInDays(startOfDay(today), startOfDay(rotationAnchorDate));
+      if (daysDiff >= 0) {
+        const weekNumberInCycle = Math.floor(daysDiff / 7) % 2;
+        const targetDayId = DAYS_OF_WEEK[getDay(today)].id;
+        if (weekNumberInCycle === 1) {
+          if (targetDayId === prof.compensatoryDayOffChoice && (getDay(today) >= 1 && getDay(today) <= 4)) {
+            reason = `Desc. Compensatorio (${DAYS_OF_WEEK.find(d => d.id === prof.compensatoryDayOffChoice)?.name})`;
+          } else if (getDay(today) === 0) {
+             reason = "Domingo (Rotación Desc.)";
+          }
+        }
+      }
+    } else if (!prof.workSchedule?.[DAYS_OF_WEEK[getDay(today)].id as DayOfWeekId]?.isWorking && !override) {
+        reason = "No disponible (Horario base)";
     }
-    return 'No disponible / Horario no definido';
+    todayStr += reason;
   }
+
+  let generalStr = "";
+  if (prof.rotationType === 'biWeeklySunday' && prof.compensatoryDayOffChoice) {
+    const compDayName = DAYS_OF_WEEK.find(d => d.id === prof.compensatoryDayOffChoice)?.name;
+    generalStr = `Rotación Dom. (Compensa: ${compDayName || 'N/A'})`;
+  } else {
+    const activeDays = DAYS_OF_WEEK
+        .filter(day => prof.workSchedule?.[day.id as DayOfWeekId]?.isWorking && prof.workSchedule[day.id as DayOfWeekId]?.startTime && day.id !== 'sunday')
+        .map(day => day.name.substring(0,1).toUpperCase())
+        .join('');
+    if (activeDays.length > 0) {
+        generalStr = `Días Base: ${activeDays}`;
+    } else {
+        generalStr = "Horario base no definido";
+    }
+  }
+  return `${todayStr} | ${generalStr}`;
+};
 
 
   return (
@@ -279,7 +306,7 @@ export default function ProfessionalsPage() {
                 </div>
             )}
           </div>
-          {(isAdminOrContador) && ( // Only admin and contador can add
+          {(isAdminOrContador) && ( 
           <Button onClick={handleAddProfessional} className="w-full mt-4 md:mt-0 md:w-auto">
             <PlusCircle className="mr-2 h-4 w-4" /> Agregar Profesional
           </Button>
@@ -321,7 +348,7 @@ export default function ProfessionalsPage() {
                     {(isAdminOrContador && !isContadorOnly) && <TableCell className="hidden xl:table-cell text-right">{(prof.biWeeklyEarnings ?? 0).toFixed(2)}</TableCell> }
                     {isContadorOnly && <TableCell className="hidden xl:table-cell text-right">{(prof.biWeeklyEarnings ?? 0).toFixed(2)}</TableCell> }
                     <TableCell className="text-right">
-                     {(isAdminOrContador) && ( // Only Admin and Contador can edit
+                     {(isAdminOrContador) && ( 
                       <Button variant="ghost" size="sm" onClick={() => handleEditProfessional(prof)}>
                         <Edit2 className="h-4 w-4" /> <span className="sr-only">Editar</span>
                       </Button>
@@ -365,7 +392,7 @@ export default function ProfessionalsPage() {
                 </div>
                 <FormField control={form.control} name="locationId" render={({ field }) => (
                     <FormItem className="mt-4"><FormLabel>Sede</FormLabel>
-                      <Select onValueChange={field.onChange} value={field.value} disabled={!isAdminOrContador}>
+                      <Select onValueChange={field.onChange} value={field.value} disabled={!isAdminOrContador && !!editingProfessional /* Allow admin/contador to change; staff cannot change existing */}>
                         <FormControl><SelectTrigger><SelectValue placeholder="Seleccionar sede" /></SelectTrigger></FormControl>
                         <SelectContent>{LOCATIONS.map(loc => (<SelectItem key={loc.id} value={loc.id}>{loc.name}</SelectItem>))}</SelectContent>
                       </Select><FormMessage />
@@ -400,7 +427,7 @@ export default function ProfessionalsPage() {
                                             render={({ field }) => (
                                                 <FormItem>
                                                     <FormLabel className="text-xs">Hora Inicio</FormLabel>
-                                                    <Select onValueChange={field.onChange} value={field.value || ""}>
+                                                    <Select onValueChange={field.onChange} value={field.value || ""} >
                                                         <FormControl><SelectTrigger><SelectValue placeholder="HH:MM" /></SelectTrigger></FormControl>
                                                         <SelectContent>{TIME_SLOTS.map(slot => (<SelectItem key={`base-start-${dayId}-${slot}`} value={slot}>{slot}</SelectItem>))}</SelectContent>
                                                     </Select>
@@ -414,7 +441,7 @@ export default function ProfessionalsPage() {
                                             render={({ field }) => (
                                                 <FormItem>
                                                     <FormLabel className="text-xs">Hora Fin</FormLabel>
-                                                    <Select onValueChange={field.onChange} value={field.value || ""}>
+                                                    <Select onValueChange={field.onChange} value={field.value || ""} >
                                                         <FormControl><SelectTrigger><SelectValue placeholder="HH:MM" /></SelectTrigger></FormControl>
                                                         <SelectContent>{TIME_SLOTS.map(slot => (<SelectItem key={`base-end-${dayId}-${slot}`} value={slot}>{slot}</SelectItem>))}</SelectContent>
                                                     </Select>
@@ -442,7 +469,7 @@ export default function ProfessionalsPage() {
                             <Select onValueChange={field.onChange} value={field.value}>
                                 <FormControl><SelectTrigger><SelectValue placeholder="Seleccionar tipo de rotación" /></SelectTrigger></FormControl>
                                 <SelectContent>
-                                    <SelectItem value="none">Ninguna (Domingo usualmente libre o según horario base si se configura)</SelectItem>
+                                    <SelectItem value="none">Ninguna (Domingo según horario base o libre)</SelectItem>
                                     <SelectItem value="biWeeklySunday">Domingo Bi-Semananal (con compensatorio)</SelectItem>
                                 </SelectContent>
                             </Select>
@@ -453,7 +480,7 @@ export default function ProfessionalsPage() {
                 {watchRotationType === 'biWeeklySunday' && (
                     <div className="space-y-4 mt-4 pl-4 border-l-2 border-primary">
                          <p className="text-sm text-muted-foreground">
-                            El profesional trabajará un domingo sí y uno no, con un día de descanso compensatorio la semana siguiente al domingo trabajado. Horario del domingo trabajado: 10:00 AM - 06:00 PM.
+                            El profesional trabajará un domingo sí y uno no (10:00 AM - 06:00 PM), con un día de descanso compensatorio la semana siguiente al domingo trabajado.
                         </p>
                         <FormField
                             control={form.control}
@@ -475,7 +502,7 @@ export default function ProfessionalsPage() {
                                                 mode="single"
                                                 selected={field.value}
                                                 onSelect={field.onChange}
-                                                disabled={(date) => getDay(date) !== 0} // Only allow selecting Sundays
+                                                disabled={(date) => getDay(date) !== 0} 
                                                 initialFocus
                                             />
                                         </PopoverContent>
@@ -593,3 +620,4 @@ const ChevronIcon = ({ isOpen }: { isOpen: boolean }) => (
     <polyline points="6 9 12 15 18 9"></polyline>
   </svg>
 );
+

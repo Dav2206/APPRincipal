@@ -20,7 +20,8 @@ export interface Professional extends BaseEntity {
   biWeeklyEarnings?: number;
   
   workSchedule: {
-    [key in DayOfWeekId]?: { startTime: string; endTime: string; } | null;
+    // Allow each day to have a schedule object with start/end times and an isWorking flag, or be null if not configured
+    [key in DayOfWeekId]?: { startTime: string; endTime: string; isWorking?: boolean; } | null;
   };
 
   rotationType: 'none' | 'biWeeklySunday';
@@ -42,8 +43,8 @@ export interface Patient extends BaseEntity {
   lastName: string;
   phone?: string;
   age?: number | null;
-  birthDay?: number | null; // Day of the month (1-31)
-  birthMonth?: number | null; // Month of the year (0-11 for Jan-Dec)
+  birthDay?: number | null; 
+  birthMonth?: number | null;
   isDiabetic?: boolean;
   preferredProfessionalId?: string;
   notes?: string;
@@ -82,16 +83,19 @@ export interface Appointment extends BaseEntity {
 export type AppointmentFormData = {
   patientFirstName: string;
   patientLastName: string;
-  patientPhone?: string;
+  patientPhone?: string | null;
   patientAge?: number | null;
   existingPatientId?: string | null;
   isDiabetic?: boolean;
+  birthDay?: number | null;
+  birthMonth?: number | null;
+
   locationId: LocationId;
   serviceId: string;
   appointmentDate: Date;
   appointmentTime: string;
   preferredProfessionalId?: string | null;
-  bookingObservations?: string;
+  bookingObservations?: string | null;
 };
 
 export type ProfessionalFormData = {
@@ -102,11 +106,12 @@ export type ProfessionalFormData = {
   phone?: string | null;
   
   workSchedule: {
-    [key in DayOfWeekId]?: { startTime?: string; endTime?: string; isWorking?: boolean };
+    // For each day (Mon-Sat in form), isWorking flag and optional start/end times
+    [key in Exclude<DayOfWeekId, 'sunday'>]?: { startTime?: string; endTime?: string; isWorking?: boolean };
   };
   
   rotationType: 'none' | 'biWeeklySunday';
-  rotationStartDate?: Date | null; // Use Date for form, convert to string for storage
+  rotationStartDate?: Date | null; 
   compensatoryDayOffChoice?: DayOfWeekId | null;
   
   customScheduleOverrides?: Array<{
