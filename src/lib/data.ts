@@ -1,7 +1,8 @@
+
 // src/lib/data.ts
 import type { User, Professional, Patient, Service, Appointment, AppointmentFormData, ProfessionalFormData, AppointmentStatus, ServiceFormData } from '@/types';
 import { LOCATIONS, USER_ROLES, SERVICES as SERVICES_CONSTANTS, APPOINTMENT_STATUS, LocationId, ServiceId as ConstantServiceId, APPOINTMENT_STATUS_DISPLAY, PAYMENT_METHODS } from './constants';
-import { formatISO, parseISO, addDays, setHours, setMinutes, startOfDay, endOfDay, isSameDay as dateFnsIsSameDay, startOfMonth, endOfMonth, differenceInYears, subDays, isEqual, isBefore, isAfter, getDate, getYear, getMonth, setMonth, setYear, getHours } from 'date-fns';
+import { formatISO, parseISO, addDays, setHours, setMinutes, startOfDay, endOfDay, isSameDay as dateFnsIsSameDay, startOfMonth, endOfMonth, differenceInYears, subDays, isEqual, isBefore, isAfter, getDate, getYear, getMonth, setMonth, setYear, getHours, addMinutes } from 'date-fns';
 import { firestore } from './firebase-config'; // Firebase setup - Corrected import path
 import { collection, addDoc, getDocs, doc, getDoc, updateDoc, query, where, deleteDoc, writeBatch, serverTimestamp, Timestamp, runTransaction, setDoc, QueryConstraint, orderBy, limit, startAfter,getCountFromServer, CollectionReference, DocumentData, documentId } from 'firebase/firestore';
 
@@ -621,52 +622,39 @@ export const addAppointment = async (data: AppointmentFormData ): Promise<Appoin
   throw new Error("Appointment creation not implemented for non-mock database or mockDB not available.");
 };
 
-export const updateAppointment = async (id: string, data: Partial<AppointmentFormData>): Promise<Appointment | undefined> => {
-  const updateData: any = { ...data, updatedAt: formatISO(new Date()) };
-
+export const updateAppointment = async (id: string, data: Partial<Appointment>): Promise<Appointment | undefined> => {
   if (useMockDatabase) {
     const index = mockDB.appointments.findIndex(a => a.id === id);
     if (index !== -1) {
-        const originalAppointment = mockDB.appointments[index];
+      const originalAppointment = mockDB.appointments[index];
+      const updatedAppointmentRaw = { ...originalAppointment, ...data, updatedAt: formatISO(new Date()) };
 
-        let newAppointmentDateTime = originalAppointment.appointmentDateTime;
-        if (data.appointmentDate && data.appointmentTime) {
-            const datePart = data.appointmentDate;
-            const [hours, minutes] = (data.appointmentTime as string).split(':').map(Number);
-            newAppointmentDateTime = formatISO(setMinutes(setHours(datePart as Date, hours), minutes));
-        } else if (data.appointmentDate) {
-            const timePart = parseISO(originalAppointment.appointmentDateTime);
-            const originalHours = getHours(timePart);
-            const originalMinutes = getMinutes(timePart);
-            newAppointmentDateTime = formatISO(setMinutes(setHours(data.appointmentDate as Date, originalHours), originalMinutes));
-        } else if (data.appointmentTime) {
-            const datePart = parseISO(originalAppointment.appointmentDateTime);
-            const [hours, minutes] = (data.appointmentTime as string).split(':').map(Number);
-            newAppointmentDateTime = formatISO(setMinutes(setHours(datePart, hours), minutes));
-        }
+      // Ensure related objects are not directly spread if they are already populated
+      // and only IDs are being updated.
+      if (data.patientId && originalAppointment.patient?.id !== data.patientId) {
+          delete updatedAppointmentRaw.patient; // Will be repopulated
+      }
+      if (data.professionalId && originalAppointment.professional?.id !== data.professionalId) {
+          delete updatedAppointmentRaw.professional; // Will be repopulated
+      }
+      if (data.serviceId && originalAppointment.service?.id !== data.serviceId) {
+          delete updatedAppointmentRaw.service; // Will be repopulated
+      }
 
-        const updatedAppointmentRaw = {
-            ...originalAppointment,
-            ...data,
-            appointmentDateTime: newAppointmentDateTime,
-            updatedAt: formatISO(new Date()),
-        };
-
-        delete updatedAppointmentRaw.patient;
-        delete updatedAppointmentRaw.professional;
-        delete updatedAppointmentRaw.service;
-        if (updatedAppointmentRaw.addedServices) {
-            updatedAppointmentRaw.addedServices = updatedAppointmentRaw.addedServices.map((as: any) => ({
-                serviceId: as.serviceId,
-                professionalId: as.professionalId,
-                price: as.price
-            }));
-        }
+      // Ensure addedServices are just IDs and price if they are being updated
+      if (data.addedServices) {
+        updatedAppointmentRaw.addedServices = data.addedServices.map(as => ({
+          serviceId: as.serviceId,
+          professionalId: as.professionalId,
+          price: as.price,
+          // Do not spread `as.service` or `as.professional` here
+        }));
+      }
 
 
-        const populatedAppointment = await populateAppointment(updatedAppointmentRaw);
-        mockDB.appointments[index] = populatedAppointment;
-        return populatedAppointment;
+      const populatedAppointment = await populateAppointment(updatedAppointmentRaw);
+      mockDB.appointments[index] = populatedAppointment;
+      return populatedAppointment;
     }
     return undefined;
   }
