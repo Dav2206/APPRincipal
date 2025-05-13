@@ -424,7 +424,6 @@ export default function PatientsPage() {
                             <SelectTrigger><SelectValue placeholder="Día" /></SelectTrigger>
                         </FormControl>
                         <SelectContent>
-                            <SelectItem value="">-- Día --</SelectItem>
                             {days.map(d => <SelectItem key={d} value={d}>{d}</SelectItem>)}
                         </SelectContent>
                         </Select>
@@ -443,7 +442,6 @@ export default function PatientsPage() {
                             <SelectTrigger><SelectValue placeholder="Mes" /></SelectTrigger>
                         </FormControl>
                         <SelectContent>
-                             <SelectItem value="">-- Mes --</SelectItem>
                             {months.map(m => <SelectItem key={m.value} value={m.value}>{m.label}</SelectItem>)}
                         </SelectContent>
                         </Select>
