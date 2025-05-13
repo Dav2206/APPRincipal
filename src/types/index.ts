@@ -75,8 +75,9 @@ export interface Appointment extends BaseEntity {
   attachedPhotos?: string[];
   createdAt?: string;
   updatedAt?: string;
-  isExternalProfessional?: boolean; // New field
-  externalProfessionalOriginLocationId?: LocationId | null; // New field
+  isExternalProfessional?: boolean; 
+  externalProfessionalOriginLocationId?: LocationId | null; 
+  isTravelBlock?: boolean; // Used in schedule to denote a professional is away
 }
 
 export type AppointmentFormData = {
@@ -93,7 +94,7 @@ export type AppointmentFormData = {
   appointmentTime: string;
   preferredProfessionalId?: string | null;
   bookingObservations?: string | null;
-  searchExternal?: boolean; // New field to indicate if searching in other locations
+  searchExternal?: boolean; 
 };
 
 export type ProfessionalFormData = {
@@ -132,4 +133,3 @@ export type ServiceFormData = {
   };
   price?: number;
 };
-

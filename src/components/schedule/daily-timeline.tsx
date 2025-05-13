@@ -6,7 +6,7 @@ import React from 'react';
 import { parseISO, getHours, getMinutes, addMinutes, format } from 'date-fns';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { ScrollArea, ScrollBar } from '@/components/ui/scroll-area';
-import { User, Clock, AlertTriangle, Shuffle } from 'lucide-react';
+import { User, Clock, AlertTriangle, Shuffle, Navigation } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { LOCATIONS } from '@/lib/constants';
 import { Badge } from '@/components/ui/badge';
@@ -14,22 +14,24 @@ import { es } from 'date-fns/locale';
 
 interface DailyTimelineProps {
   professionals: Professional[];
-  appointments: Appointment[];
-  timeSlots: string[]; // e.g., ["09:00", "09:30", ..., "19:30"]
+  appointments: Appointment[]; // This now includes actual appointments and "travel block" appointments
+  timeSlots: string[];
   currentDate: Date;
   onAppointmentClick?: (appointment: Appointment) => void;
-  viewingLocationId: LocationId; // Add this prop
+  viewingLocationId: LocationId;
 }
 
-const PIXELS_PER_MINUTE = 1.5; 
-const DAY_START_HOUR = 9; 
+const PIXELS_PER_MINUTE = 1.5;
+const DAY_START_HOUR = 9;
 
-const timeToMinutesOffset = (timeStr: string): number => {
-  const [hours, minutes] = timeStr.split(':').map(Number);
-  return (hours - DAY_START_HOUR) * 60 + minutes;
-};
+// This function is not used with the current PIXELS_PER_MINUTE approach for top/height
+// const timeToMinutesOffset = (timeStr: string): number => {
+//   const [hours, minutes] = timeStr.split(':').map(Number);
+//   return (hours - DAY_START_HOUR) * 60 + minutes;
+// };
 
 const isOverlapping = (apptA: Appointment, apptB: Appointment): boolean => {
+  if (apptA.isTravelBlock || apptB.isTravelBlock) return false; // Travel blocks don't overlap with actual appts for collision detection
   const startA = parseISO(apptA.appointmentDateTime);
   const endA = addMinutes(startA, apptA.durationMinutes);
   const startB = parseISO(apptB.appointmentDateTime);
@@ -39,9 +41,16 @@ const isOverlapping = (apptA: Appointment, apptB: Appointment): boolean => {
 
 const DailyTimelineComponent = ({ professionals, appointments, timeSlots, onAppointmentClick, viewingLocationId }: DailyTimelineProps) => {
   
-  if (professionals.length === 0) {
-    return <p className="text-muted-foreground text-center py-8">No hay profesionales para mostrar en esta sede para la fecha seleccionada.</p>;
+  if (professionals.length === 0 && appointments.filter(a => a.locationId === viewingLocationId && !a.isTravelBlock).length === 0) {
+    return <p className="text-muted-foreground text-center py-8">No hay profesionales trabajando ni citas para mostrar en esta sede para la fecha seleccionada.</p>;
   }
+   if (professionals.length === 0 && appointments.filter(a => a.locationId === viewingLocationId && !a.isTravelBlock).length > 0) {
+    // This case implies appointments exist but no professionals are in the columns, which means unassigned appointments.
+    // The current logic for building `professionalsForColumns` might need adjustment if unassigned appts should create columns.
+    // For now, if `professionals` is empty, we show the "no professionals" message.
+     return <p className="text-muted-foreground text-center py-8">No hay profesionales asignados para mostrar en columnas, pero pueden existir citas sin asignar para esta fecha.</p>;
+  }
+
 
   const getAppointmentStyle = (appointment: Appointment) => {
     const appointmentStartDateTime = parseISO(appointment.appointmentDateTime);
@@ -63,7 +72,7 @@ const DailyTimelineComponent = ({ professionals, appointments, timeSlots, onAppo
       <ScrollArea className="w-full whitespace-nowrap rounded-md border">
         <div className="flex relative">
           {/* Time Column */}
-          <div className="sticky left-0 z-10 bg-background border-r">
+          <div className="sticky left-0 z-20 bg-background border-r">
             <div className="h-16 flex items-center justify-center font-semibold border-b px-2 text-sm">Hora</div>
             {timeSlots.map((slot) => (
               <div 
@@ -85,16 +94,20 @@ const DailyTimelineComponent = ({ professionals, appointments, timeSlots, onAppo
           {/* Professionals Columns */}
           <div className="flex flex-nowrap">
             {professionals.map(prof => {
-              const professionalAppointments = appointments
-                .filter(appt => appt.professionalId === prof.id && appt.locationId === viewingLocationId)
+              // Filter appointments for THIS professional. This includes actual appts AT viewingLocationId OR travel blocks FOR this prof.
+              const professionalTimelineItems = appointments
+                .filter(appt => appt.professionalId === prof.id)
+                .filter(appt => appt.locationId === viewingLocationId || appt.isTravelBlock) // Show appts at this location OR travel blocks
                 .sort((a, b) => parseISO(a.appointmentDateTime).getTime() - parseISO(b.appointmentDateTime).getTime());
 
+              // Collision detection only for actual appointments at this location
+              const actualAppointmentsForCollision = professionalTimelineItems.filter(appt => !appt.isTravelBlock && appt.locationId === viewingLocationId);
               const overlappingAppointmentIds = new Set<string>();
-              for (let i = 0; i < professionalAppointments.length; i++) {
-                for (let j = i + 1; j < professionalAppointments.length; j++) {
-                  if (isOverlapping(professionalAppointments[i], professionalAppointments[j])) {
-                    overlappingAppointmentIds.add(professionalAppointments[i].id);
-                    overlappingAppointmentIds.add(professionalAppointments[j].id);
+              for (let i = 0; i < actualAppointmentsForCollision.length; i++) {
+                for (let j = i + 1; j < actualAppointmentsForCollision.length; j++) {
+                  if (isOverlapping(actualAppointmentsForCollision[i], actualAppointmentsForCollision[j])) {
+                    overlappingAppointmentIds.add(actualAppointmentsForCollision[i].id);
+                    overlappingAppointmentIds.add(actualAppointmentsForCollision[j].id);
                   }
                 }
               }
@@ -120,13 +133,41 @@ const DailyTimelineComponent = ({ professionals, appointments, timeSlots, onAppo
                     ))}
                      <div className="border-b border-dashed border-muted/50" style={{ height: `${30 * PIXELS_PER_MINUTE}px` }}></div>
 
-                    {professionalAppointments.map(appt => {
-                      const isApptOverlapping = overlappingAppointmentIds.has(appt.id);
+                    {professionalTimelineItems.map(appt => {
+                      const isApptOverlapping = overlappingAppointmentIds.has(appt.id) && !appt.isTravelBlock;
                       
-                      let appointmentMainText = `${appt.patient?.firstName || ''} ${appt.patient?.lastName || ''}`.trim();
-                      if (!appointmentMainText) {
-                        appointmentMainText = "Cita Reservada";
+                      if (appt.isTravelBlock) {
+                        // Render Travel Block
+                        const destinationLocationName = LOCATIONS.find(l => l.id === appt.locationId)?.name || 'Otra Sede';
+                        return (
+                          <Tooltip key={appt.id} delayDuration={100}>
+                            <TooltipTrigger asChild>
+                              <div
+                                className={cn(
+                                  "absolute left-1 right-1 rounded-md p-1.5 shadow-md text-xs overflow-hidden cursor-default flex flex-col justify-center items-center text-center",
+                                  "bg-slate-200 text-slate-600 border-slate-300" // Travel block specific style
+                                )}
+                                style={getAppointmentStyle(appt)}
+                              >
+                                <Navigation size={14} className="mb-0.5"/>
+                                <p className="font-semibold truncate leading-tight text-[10px]">Traslado a</p>
+                                <p className="truncate text-[10px] leading-tight">{destinationLocationName}</p>
+                                <p className="text-[9px] leading-tight opacity-80 mt-0.5">({appt.durationMinutes} min)</p>
+                              </div>
+                            </TooltipTrigger>
+                            <TooltipContent className="bg-popover text-popover-foreground p-2 rounded-md shadow-lg max-w-xs">
+                              <p className="font-bold text-sm">Viaje a {destinationLocationName}</p>
+                              <p><Clock size={12} className="inline mr-1"/> {format(parseISO(appt.appointmentDateTime), "HH:mm", { locale: es })} ({appt.durationMinutes} min)</p>
+                              {appt.service?.name && <p className="text-xs mt-1">Servicio: {appt.service.name}</p>}
+                              {appt.patient?.firstName && <p className="text-xs mt-0.5">Paciente: {appt.patient.firstName} {appt.patient.lastName}</p>}
+                            </TooltipContent>
+                          </Tooltip>
+                        );
                       }
+                      
+                      // Render Actual Appointment (either local or incoming external)
+                      let appointmentMainText = `${appt.patient?.firstName || ''} ${appt.patient?.lastName || ''}`.trim();
+                      if (!appointmentMainText) appointmentMainText = "Cita Reservada";
                       
                       const originLocationName = appt.isExternalProfessional && appt.externalProfessionalOriginLocationId 
                         ? LOCATIONS.find(l => l.id === appt.externalProfessionalOriginLocationId)?.name 
@@ -160,7 +201,6 @@ const DailyTimelineComponent = ({ professionals, appointments, timeSlots, onAppo
                               {appt.durationMinutes > 30 && <p className="text-[10px] leading-tight opacity-80 mt-0.5">({appt.durationMinutes} min)</p>}
                             </div>
                             
-                            {/* Badge for external professional working at this location */}
                             {appt.isExternalProfessional && appt.professionalId === prof.id && prof.locationId !== viewingLocationId && originLocationName && (
                               <Badge variant="outline" className="mt-1 text-[9px] p-0.5 h-fit bg-orange-100 text-orange-700 border-orange-300 self-start truncate">
                                 <Shuffle size={10} className="mr-1"/> De: {originLocationName}
@@ -170,12 +210,9 @@ const DailyTimelineComponent = ({ professionals, appointments, timeSlots, onAppo
                         </TooltipTrigger>
                         <TooltipContent className="bg-popover text-popover-foreground p-2 rounded-md shadow-lg max-w-xs">
                           {isApptOverlapping && <p className="text-destructive font-semibold text-xs flex items-center gap-1 mb-1"><AlertTriangle size={12} /> ¡Cita Superpuesta!</p>}
-                          
                           <p className="font-bold text-sm">{appointmentMainText}</p>
-
                           <p><User size={12} className="inline mr-1"/> {appt.service?.name}</p>
                           <p><Clock size={12} className="inline mr-1"/> {format(parseISO(appt.appointmentDateTime), "HH:mm", { locale: es })} ({appt.durationMinutes} min)</p>
-                          
                           {appt.isExternalProfessional && appt.professionalId === prof.id && prof.locationId !== viewingLocationId && originLocationName && (
                             <p className="text-orange-600 text-xs mt-1 flex items-center gap-1">
                               <Shuffle size={12} className="inline"/> Profesional de: {originLocationName}
