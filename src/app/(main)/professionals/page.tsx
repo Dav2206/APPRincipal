@@ -32,7 +32,7 @@ import {
   DialogDescription,
 } from '@/components/ui/dialog';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
-import { PlusCircle, Edit2, Briefcase, Search, Loader2, CalendarDays, Clock, Trash2, Calendar as CalendarIconLucide, AlertTriangle, Users } from 'lucide-react';
+import { PlusCircle, Edit2, Briefcase, Search, Loader2, CalendarDays, Clock, Trash2, Calendar as CalendarIconLucide, AlertTriangle, Users, Moon } from 'lucide-react';
 import { useForm, useFieldArray, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { ProfessionalFormSchema } from '@/lib/schemas';
@@ -41,7 +41,7 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { Calendar } from '@/components/ui/calendar';
 import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
-import { format, parseISO, getDay, isSameDay, differenceInDays, startOfDay } from 'date-fns';
+import { format, parseISO, getDay, isSameDay, differenceInDays, startOfDay, addDays as dateFnsAddDays } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 
@@ -98,7 +98,7 @@ export default function ProfessionalsPage() {
 
 
   const fetchProfessionals = useCallback(async () => {
-    if(!user || (!isAdminOrContador && user.role !== USER_ROLES.LOCATION_STAFF)) { 
+    if(!user || user.role === USER_ROLES.LOCATION_STAFF ) { 
       setIsLoading(false);
       setProfessionals([]);
       return;
@@ -114,8 +114,6 @@ export default function ProfessionalsPage() {
           const results = await Promise.all(allProfsPromises);
           profsToSet = results.flat();
         }
-      } else if (user?.role === USER_ROLES.LOCATION_STAFF && user.locationId) {
-         profsToSet = await getProfessionals(user.locationId);
       }
       setProfessionals(profsToSet || []);
     } catch (error) {
@@ -127,8 +125,13 @@ export default function ProfessionalsPage() {
   }, [effectiveLocationId, user, toast, isAdminOrContador]);
 
   useEffect(() => {
-    fetchProfessionals();
-  }, [fetchProfessionals]);
+    if (user?.role === USER_ROLES.ADMIN || user?.role === USER_ROLES.CONTADOR) {
+        fetchProfessionals();
+    } else {
+        setIsLoading(false);
+        setProfessionals([]);
+    }
+  }, [fetchProfessionals, user]);
 
   const handleAddProfessional = () => {
     if (user?.role !== USER_ROLES.ADMIN && user?.role !== USER_ROLES.CONTADOR) {
@@ -201,9 +204,48 @@ export default function ProfessionalsPage() {
         return;
     }
     try {
+      const professionalToSave: Omit<Professional, 'id' | 'biWeeklyEarnings'> & {id?: string} = {
+        id: data.id,
+        firstName: data.firstName,
+        lastName: data.lastName,
+        locationId: data.locationId,
+        phone: data.phone || undefined,
+        workSchedule: {},
+        rotationType: data.rotationType,
+        rotationStartDate: data.rotationStartDate ? formatISO(data.rotationStartDate, { representation: 'date'}) : null,
+        compensatoryDayOffChoice: data.compensatoryDayOffChoice === COMPENSATORY_DAY_OFF_PLACEHOLDER_VALUE ? null : (data.compensatoryDayOffChoice || null),
+        customScheduleOverrides: data.customScheduleOverrides?.map(ov => ({
+            id: ov.id || generateId(),
+            date: formatISO(ov.date, { representation: 'date' }),
+            isWorking: ov.isWorking,
+            startTime: ov.isWorking ? ov.startTime : undefined,
+            endTime: ov.isWorking ? ov.endTime : undefined,
+            notes: ov.notes,
+        })) || [],
+      };
+
+      if (data.workSchedule) {
+        (Object.keys(data.workSchedule) as Array<Exclude<DayOfWeekId, 'sunday'>>).forEach(dayId => {
+          const dayData = data.workSchedule![dayId];
+          if (dayData) {
+            professionalToSave.workSchedule[dayId] = {
+              startTime: dayData.startTime || '00:00',
+              endTime: dayData.endTime || '00:00',
+              isWorking: dayData.isWorking === undefined ? true : dayData.isWorking
+            };
+          } else {
+            professionalToSave.workSchedule[dayId] = {startTime: '00:00', endTime: '00:00', isWorking: false};
+          }
+        });
+        if (!professionalToSave.workSchedule.sunday) {
+          professionalToSave.workSchedule.sunday = { startTime: '00:00', endTime: '00:00', isWorking: false };
+        }
+      }
+
+
       const result = editingProfessional && editingProfessional.id 
-        ? await updateProfessional(editingProfessional.id, data)
-        : await addProfessional(data);
+        ? await updateProfessional(editingProfessional.id, professionalToSave as Partial<ProfessionalFormData>)
+        : await addProfessional(professionalToSave as Omit<ProfessionalFormData, 'id'>);
 
       if (result) {
          toast({ title: editingProfessional ? "Profesional Actualizado" : "Profesional Agregado", description: `${result.firstName} ${result.lastName} ${editingProfessional ? 'actualizado' : 'agregado'}.` });
@@ -238,8 +280,34 @@ export default function ProfessionalsPage() {
     );
   }
 
+  if (user.role === USER_ROLES.LOCATION_STAFF) {
+    return (
+        <Card className="shadow-md">
+            <CardHeader>
+                <CardTitle className="text-2xl flex items-center gap-2"><AlertTriangle className="text-destructive"/> Acceso Denegado</CardTitle>
+                <CardDescription>Esta sección solo está disponible para Administradores y Contadores.</CardDescription>
+            </CardHeader>
+            <CardContent>
+                <p>No tiene los permisos necesarios para ver o gestionar profesionales.</p>
+            </CardContent>
+        </Card>
+    )
+  }
+
+ const calculateNextGeneralDayOff = (prof: Professional, today: Date): Date | null => {
+  for (let i = 1; i <= 30; i++) { // Check next 30 days
+    const checkDate = dateFnsAddDays(today, i);
+    const availability = getProfessionalAvailabilityForDate(prof, checkDate);
+    if (!availability) { 
+      return checkDate;
+    }
+  }
+  return null;
+};
+
+
  const formatWorkScheduleDisplay = (prof: Professional) => {
-  const today = new Date();
+  const today = startOfDay(new Date()); // Use actual 'today' for current status
   const availabilityToday = getProfessionalAvailabilityForDate(prof, today);
 
   let todayStr = "Hoy: ";
@@ -260,14 +328,12 @@ export default function ProfessionalsPage() {
         if (weekNumberInCycle === 1) { // Compensatory week
           if (targetDayId === prof.compensatoryDayOffChoice && (getDay(today) >= 1 && getDay(today) <= 4)) {
             reason = `Desc. Compensatorio (${DAYS_OF_WEEK.find(d => d.id === prof.compensatoryDayOffChoice)?.name})`;
-          } else if (getDay(today) === 0) { // Sunday on compensatory week
+          } else if (getDay(today) === 0) { 
              reason = "Domingo (Rotación Desc.)";
           }
-        } else if (weekNumberInCycle === 0 && getDay(today) === 0) { // Sunday on work week, but no custom override and default schedule is off
-            // This case is handled by availabilityToday if they are working. If not, means base Sunday schedule is off.
         }
       }
-    } else if (!prof.workSchedule?.[DAYS_OF_WEEK[getDay(today)].id as DayOfWeekId]?.isWorking && !override) {
+    } else if (prof.workSchedule && !prof.workSchedule[DAYS_OF_WEEK[getDay(today)].id as DayOfWeekId]?.isWorking && !override) {
         reason = `Descansando (Horario base: ${DAYS_OF_WEEK[getDay(today)].name} libre)`;
     }
     todayStr += reason;
@@ -276,7 +342,7 @@ export default function ProfessionalsPage() {
   let generalStr = "";
   if (prof.rotationType === 'biWeeklySunday' && prof.compensatoryDayOffChoice) {
     const compDayName = DAYS_OF_WEEK.find(d => d.id === prof.compensatoryDayOffChoice)?.name;
-    generalStr = `Rotación Dom. (Compensa: ${compDayName || 'N/A'})`;
+    generalStr = `Rotación Dom. (Comp. ${compDayName || 'N/A'})`;
   } else {
     const activeDays = DAYS_OF_WEEK
         .filter(day => prof.workSchedule?.[day.id as DayOfWeekId]?.isWorking && day.id !== 'sunday')
@@ -288,7 +354,17 @@ export default function ProfessionalsPage() {
         generalStr = "Horario base no definido";
     }
   }
-  return `${todayStr} | ${generalStr}`;
+
+  const nextDayOffDate = calculateNextGeneralDayOff(prof, today);
+  let nextDayOffDisplayStr = "";
+  if (nextDayOffDate) {
+    const formattedDate = format(nextDayOffDate, "EEEE, d 'de' MMMM", { locale: es });
+    nextDayOffDisplayStr = ` | Próx. Desc.: ${formattedDate.charAt(0).toUpperCase() + formattedDate.slice(1)}`;
+  } else {
+    nextDayOffDisplayStr = " | Próx. Desc.: No definido próximamente";
+  }
+  
+  return `${todayStr} | ${generalStr}${nextDayOffDisplayStr}`;
 };
 
 
@@ -303,11 +379,6 @@ export default function ProfessionalsPage() {
               <div className="mt-1 text-sm text-muted-foreground">
                 Viendo: {adminSelectedLocation === 'all' ? 'Todas las sedes' : LOCATIONS.find(l => l.id === adminSelectedLocation)?.name || ''}
               </div>
-            )}
-             {user.role === USER_ROLES.LOCATION_STAFF && (
-                <div className="mt-1 text-sm text-muted-foreground">
-                    Viendo: {LOCATIONS.find(l => l.id === user.locationId)?.name || 'Sede Actual'}
-                </div>
             )}
           </div>
           {(isAdminOrContador) && ( 
@@ -336,7 +407,7 @@ export default function ProfessionalsPage() {
                 <TableRow>
                   <TableHead>Nombre Completo</TableHead>
                   <TableHead className="hidden md:table-cell">Sede</TableHead>
-                  <TableHead className="hidden lg:table-cell">Horario (Hoy/General)</TableHead>
+                  <TableHead className="hidden lg:table-cell">Horario (Hoy/General) y Próximo Descanso</TableHead>
                   <TableHead className="hidden xl:table-cell">Teléfono</TableHead>
                    {isAdminOrContador && <TableHead className="hidden xl:table-cell text-right">Ingresos Quincena (S/)</TableHead> }
                   <TableHead className="text-right">Acciones</TableHead>
@@ -399,7 +470,7 @@ export default function ProfessionalsPage() {
                     </div>
                     <FormField control={form.control} name="locationId" render={({ field }) => (
                         <FormItem className="mt-4"><FormLabel>Sede</FormLabel>
-                          <Select onValueChange={field.onChange} value={field.value} disabled={!isAdminOrContador && !!editingProfessional}>
+                          <Select onValueChange={field.onChange} value={field.value} disabled={!isAdminOrContador && !!editingProfessional && user?.role !== USER_ROLES.ADMIN}>
                             <FormControl><SelectTrigger><SelectValue placeholder="Seleccionar sede" /></SelectTrigger></FormControl>
                             <SelectContent>{LOCATIONS.map(loc => (<SelectItem key={loc.id} value={loc.id}>{loc.name}</SelectItem>))}</SelectContent>
                           </Select><FormMessage />
