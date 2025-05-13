@@ -20,13 +20,16 @@ export interface Professional extends BaseEntity {
   locationId: LocationId;
   phone?: string;
   biWeeklyEarnings?: number;
+  workDays: string[]; // e.g., ["monday", "tuesday", ..., "sunday"]
+  startTime: string; // e.g., "09:00"
+  endTime: string; // e.g., "17:00"
 }
 
 export interface Patient extends BaseEntity {
   firstName: string;
   lastName: string;
   phone?: string;
-  age?: number | null; 
+  age?: number | null;
   isDiabetic?: boolean;
   preferredProfessionalId?: string;
   notes?: string; // General notes or observations about the patient
@@ -72,7 +75,7 @@ export type AppointmentFormData = {
   patientFirstName: string;
   patientLastName: string;
   patientPhone?: string;
-  patientAge?: number | null; 
+  patientAge?: number | null;
   existingPatientId?: string | null; // To link if patient exists
   isDiabetic?: boolean;
   locationId: LocationId;
@@ -85,6 +88,9 @@ export type AppointmentFormData = {
 
 export type ProfessionalFormData = Omit<Professional, 'biWeeklyEarnings' | 'id' > & {
   id?: string;
+  workDays: string[];
+  startTime: string;
+  endTime: string;
 };
 
 
@@ -100,3 +106,4 @@ export type ServiceFormData = {
   };
   price?: number;
 };
+

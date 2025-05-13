@@ -6,10 +6,12 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '@/contexts/auth-provider';
 import { useAppState } from '@/contexts/app-state-provider';
 import { getProfessionals, addProfessional, updateProfessional } from '@/lib/data';
-import { LOCATIONS, USER_ROLES, LocationId } from '@/lib/constants';
+import { LOCATIONS, USER_ROLES, LocationId, TIME_SLOTS, DAYS_OF_WEEK } from '@/lib/constants';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Checkbox } from '@/components/ui/checkbox';
 import {
   Table,
   TableBody,
@@ -27,12 +29,13 @@ import {
   DialogClose,
 } from '@/components/ui/dialog';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
-import { PlusCircle, Edit2, Briefcase, Search, Loader2 } from 'lucide-react';
+import { PlusCircle, Edit2, Briefcase, Search, Loader2, CalendarDays, Clock } from 'lucide-react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { ProfessionalFormSchema } from '@/lib/schemas';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useToast } from '@/hooks/use-toast';
+import { cn } from '@/lib/utils';
 
 export default function ProfessionalsPage() {
   const { user } = useAuth();
@@ -44,6 +47,8 @@ export default function ProfessionalsPage() {
   const [editingProfessional, setEditingProfessional] = useState<Professional | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
 
+  const defaultWorkDays = DAYS_OF_WEEK.slice(0, 5).map(day => day.id); // Lunes a Viernes por defecto
+
   const form = useForm<ProfessionalFormData>({
     resolver: zodResolver(ProfessionalFormSchema),
     defaultValues: {
@@ -51,6 +56,9 @@ export default function ProfessionalsPage() {
       lastName: '',
       locationId: LOCATIONS[0].id,
       phone: '',
+      workDays: defaultWorkDays,
+      startTime: '09:00',
+      endTime: '17:00',
     }
   });
   
@@ -93,6 +101,9 @@ export default function ProfessionalsPage() {
       lastName: '',
       locationId: defaultLoc as LocationId,
       phone: '',
+      workDays: defaultWorkDays,
+      startTime: '09:00',
+      endTime: '17:00',
     });
     setIsFormOpen(true);
   };
@@ -102,6 +113,9 @@ export default function ProfessionalsPage() {
     form.reset({
         ...professional,
         locationId: professional.locationId as LocationId, 
+        workDays: professional.workDays || defaultWorkDays,
+        startTime: professional.startTime || '09:00',
+        endTime: professional.endTime || '17:00',
     });
     setIsFormOpen(true);
   };
@@ -147,13 +161,18 @@ export default function ProfessionalsPage() {
     );
   }
 
+  const formatWorkSchedule = (prof: Professional) => {
+    const days = prof.workDays.map(dayId => DAYS_OF_WEEK.find(d => d.id === dayId)?.name.substring(0,3)).join(', ');
+    return `${days} (${prof.startTime} - ${prof.endTime})`;
+  }
+
   return (
     <div className="space-y-6">
       <Card className="shadow-md">
         <CardHeader className="flex flex-col md:flex-row justify-between items-center">
           <div>
             <CardTitle className="text-2xl flex items-center gap-2"><Briefcase className="text-primary"/> Gestión de Profesionales</CardTitle>
-            <CardDescription>Ver, agregar o editar información de los profesionales.</CardDescription>
+            <CardDescription>Ver, agregar o editar información y horarios de los profesionales.</CardDescription>
             {isAdminOrContador && (
               <div className="mt-1 text-sm text-muted-foreground">
                 Viendo: {adminSelectedLocation === 'all' ? 'Todas las sedes' : LOCATIONS.find(l => l.id === adminSelectedLocation)?.name || ''}
@@ -184,7 +203,8 @@ export default function ProfessionalsPage() {
                 <TableRow>
                   <TableHead>Nombre Completo</TableHead>
                   <TableHead className="hidden md:table-cell">Sede</TableHead>
-                  <TableHead className="hidden lg:table-cell">Teléfono</TableHead>
+                  <TableHead className="hidden lg:table-cell">Horario Laboral</TableHead>
+                  <TableHead className="hidden xl:table-cell">Teléfono</TableHead>
                    {isAdminOrContador && <TableHead className="hidden xl:table-cell text-right">Ingresos Quincena (S/)</TableHead> }
                   <TableHead className="text-right">Acciones</TableHead>
                 </TableRow>
@@ -194,7 +214,8 @@ export default function ProfessionalsPage() {
                   <TableRow key={prof.id}>
                     <TableCell className="font-medium">{prof.firstName} {prof.lastName}</TableCell>
                     <TableCell className="hidden md:table-cell">{LOCATIONS.find(l => l.id === prof.locationId)?.name}</TableCell>
-                    <TableCell className="hidden lg:table-cell">{prof.phone || 'N/A'}</TableCell>
+                    <TableCell className="hidden lg:table-cell text-xs">{formatWorkSchedule(prof)}</TableCell>
+                    <TableCell className="hidden xl:table-cell">{prof.phone || 'N/A'}</TableCell>
                     {isAdminOrContador && <TableCell className="hidden xl:table-cell text-right">{(prof.biWeeklyEarnings ?? 0).toFixed(2)}</TableCell> }
                     <TableCell className="text-right">
                       <Button variant="ghost" size="sm" onClick={() => handleEditProfessional(prof)}>
@@ -204,7 +225,7 @@ export default function ProfessionalsPage() {
                   </TableRow>
                 )) : (
                   <TableRow>
-                    <TableCell colSpan={isAdminOrContador ? 5 : 4} className="h-24 text-center"> 
+                    <TableCell colSpan={isAdminOrContador ? 6 : 5} className="h-24 text-center"> 
                       No se encontraron profesionales.
                     </TableCell>
                   </TableRow>
@@ -222,7 +243,7 @@ export default function ProfessionalsPage() {
             <DialogTitle>{editingProfessional ? 'Editar' : 'Agregar'} Profesional</DialogTitle>
           </DialogHeader>
           <Form {...form}>
-            <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4 py-4 max-h-[70vh] overflow-y-auto pr-2">
+            <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4 py-4 max-h-[80vh] overflow-y-auto pr-2">
               {editingProfessional && <input type="hidden" {...form.register("id")} />}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <FormField control={form.control} name="firstName" render={({ field }) => (
@@ -271,6 +292,90 @@ export default function ProfessionalsPage() {
                       <FormMessage />
                   </FormItem>
                )}/>
+
+              <FormField
+                control={form.control}
+                name="workDays"
+                render={() => (
+                  <FormItem>
+                    <div className="mb-2">
+                      <FormLabel className="text-base flex items-center gap-1"><CalendarDays size={16}/> Días Laborales</FormLabel>
+                    </div>
+                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 rounded-md border p-3">
+                      {DAYS_OF_WEEK.map((day) => (
+                        <FormField
+                          key={day.id}
+                          control={form.control}
+                          name="workDays"
+                          render={({ field }) => {
+                            return (
+                              <FormItem
+                                key={day.id}
+                                className="flex flex-row items-start space-x-2 space-y-0"
+                              >
+                                <FormControl>
+                                  <Checkbox
+                                    checked={field.value?.includes(day.id)}
+                                    onCheckedChange={(checked) => {
+                                      return checked
+                                        ? field.onChange([...(field.value || []), day.id])
+                                        : field.onChange(
+                                            (field.value || []).filter(
+                                              (value) => value !== day.id
+                                            )
+                                          )
+                                    }}
+                                  />
+                                </FormControl>
+                                <FormLabel className="font-normal text-sm">
+                                  {day.name}
+                                </FormLabel>
+                              </FormItem>
+                            )
+                          }}
+                        />
+                      ))}
+                    </div>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <FormField
+                  control={form.control}
+                  name="startTime"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel className="flex items-center gap-1"><Clock size={16}/> Hora de Entrada</FormLabel>
+                      <Select onValueChange={field.onChange} value={field.value}>
+                        <FormControl><SelectTrigger><SelectValue placeholder="HH:MM" /></SelectTrigger></FormControl>
+                        <SelectContent>
+                          {TIME_SLOTS.map(slot => (<SelectItem key={`start-${slot}`} value={slot}>{slot}</SelectItem>))}
+                        </SelectContent>
+                      </Select>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={form.control}
+                  name="endTime"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel className="flex items-center gap-1"><Clock size={16}/> Hora de Salida</FormLabel>
+                       <Select onValueChange={field.onChange} value={field.value}>
+                        <FormControl><SelectTrigger><SelectValue placeholder="HH:MM" /></SelectTrigger></FormControl>
+                        <SelectContent>
+                          {TIME_SLOTS.map(slot => (<SelectItem key={`end-${slot}`} value={slot}>{slot}</SelectItem>))}
+                        </SelectContent>
+                      </Select>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
+
+
               <DialogFooter className="pt-4">
                 <DialogClose asChild><Button type="button" variant="outline">Cancelar</Button></DialogClose>
                 <Button type="submit" disabled={form.formState.isSubmitting}>{form.formState.isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}{editingProfessional ? 'Guardar Cambios' : 'Agregar Profesional'}</Button>
@@ -282,4 +387,3 @@ export default function ProfessionalsPage() {
     </div>
   );
 }
-

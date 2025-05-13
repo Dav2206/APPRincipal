@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { LOCATIONS, TIME_SLOTS, PAYMENT_METHODS, APPOINTMENT_STATUS_DISPLAY } from './constants';
+import { LOCATIONS, TIME_SLOTS, PAYMENT_METHODS, APPOINTMENT_STATUS_DISPLAY, DAYS_OF_WEEK } from './constants';
 
 export const LoginSchema = z.object({
   username: z.string().min(1, { message: 'El nombre de usuario es requerido.' }),
@@ -10,6 +10,7 @@ export type LoginFormData = z.infer<typeof LoginSchema>;
 const locationIds = LOCATIONS.map(loc => loc.id);
 const paymentMethodValues = PAYMENT_METHODS.map(pm => pm);
 const appointmentStatusKeys = Object.keys(APPOINTMENT_STATUS_DISPLAY) as (keyof typeof APPOINTMENT_STATUS_DISPLAY)[];
+const dayOfWeekIds = DAYS_OF_WEEK.map(day => day.id);
 
 
 export const PatientFormSchema = z.object({
@@ -48,6 +49,19 @@ export const ProfessionalFormSchema = z.object({
   lastName: z.string().min(2, "Apellido es requerido."),
   locationId: z.string().refine(val => locationIds.includes(val as any), { message: "Sede inválida."}),
   phone: z.string().optional().nullable(),
+  workDays: z.array(z.string().refine(val => dayOfWeekIds.includes(val as any), { message: "Día inválido."})).min(1, "Debe seleccionar al menos un día de trabajo."),
+  startTime: z.string().regex(/^([01]\d|2[0-3]):([0-5]\d)$/, "Formato de hora inválido (HH:MM)"),
+  endTime: z.string().regex(/^([01]\d|2[0-3]):([0-5]\d)$/, "Formato de hora inválido (HH:MM)"),
+}).refine(data => {
+  if (data.startTime && data.endTime) {
+    const [startHour, startMinute] = data.startTime.split(':').map(Number);
+    const [endHour, endMinute] = data.endTime.split(':').map(Number);
+    return (startHour * 60 + startMinute) < (endHour * 60 + endMinute);
+  }
+  return true;
+}, {
+  message: "La hora de inicio debe ser anterior a la hora de fin.",
+  path: ["endTime"], // Path to display the error message
 });
 export type ProfessionalFormData = z.infer<typeof ProfessionalFormSchema>;
 

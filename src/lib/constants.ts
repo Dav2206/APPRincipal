@@ -57,3 +57,15 @@ export const TIME_SLOTS = Array.from({ length: (20 - 8) * 2 }, (_, i) => { // Fr
   const minute = (i % 2) * 30;
   return `${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}`;
 });
+
+export const DAYS_OF_WEEK = [
+  { id: 'monday', name: 'Lunes' },
+  { id: 'tuesday', name: 'Martes' },
+  { id: 'wednesday', name: 'Miércoles' },
+  { id: 'thursday', name: 'Jueves' },
+  { id: 'friday', name: 'Viernes' },
+  { id: 'saturday', name: 'Sábado' },
+  { id: 'sunday', name: 'Domingo' },
+] as const;
+
+export type DayOfWeekId = typeof DAYS_OF_WEEK[number]['id'];

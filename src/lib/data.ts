@@ -1,23 +1,25 @@
 
 // src/lib/data.ts
 import type { User, Professional, Patient, Service, Appointment, AppointmentFormData, ProfessionalFormData, AppointmentStatus, ServiceFormData } from '@/types';
-import { LOCATIONS, USER_ROLES, SERVICES as SERVICES_CONSTANTS, APPOINTMENT_STATUS, LocationId, ServiceId as ConstantServiceId, APPOINTMENT_STATUS_DISPLAY, PAYMENT_METHODS } from './constants';
-import { formatISO, parseISO, addDays, setHours, setMinutes, startOfDay, endOfDay, isSameDay as dateFnsIsSameDay, startOfMonth, endOfMonth, differenceInYears, subDays, isEqual, isBefore, isAfter, getDate, getYear, getMonth, setMonth, setYear, getHours, addMinutes } from 'date-fns';
-import { firestore } from './firebase-config'; // Firebase setup - Corrected import path
-import { collection, addDoc, getDocs, doc, getDoc, updateDoc, query, where, deleteDoc, writeBatch, serverTimestamp, Timestamp, runTransaction, setDoc, QueryConstraint, orderBy, limit, startAfter,getCountFromServer, CollectionReference, DocumentData, documentId } from 'firebase/firestore';
+import { LOCATIONS, USER_ROLES, SERVICES as SERVICES_CONSTANTS, APPOINTMENT_STATUS, LocationId, ServiceId as ConstantServiceId, APPOINTMENT_STATUS_DISPLAY, PAYMENT_METHODS, TIME_SLOTS, DAYS_OF_WEEK } from './constants';
+import { formatISO, parseISO, addDays, setHours, setMinutes, startOfDay, endOfDay, isSameDay as dateFnsIsSameDay, startOfMonth, endOfMonth, differenceInYears, subDays, isEqual, isBefore, isAfter, getDate, getYear, getMonth, setMonth, setYear, getHours, addMinutes as dateFnsAddMinutes, isWithinInterval } from 'date-fns';
+import { useMockDatabase as globalUseMockDatabase } from './firebase-config'; // Centralized mock flag
+
 
 // --- Helper to convert Firestore Timestamps to ISO strings and vice-versa ---
-const fromTimestampToISO = (timestamp: Timestamp | undefined): string | undefined => timestamp?.toDate().toISOString();
-const fromDateToTimestamp = (date: Date | undefined): Timestamp | undefined => date ? Timestamp.fromDate(date) : undefined;
+// const fromTimestampToISO = (timestamp: Timestamp | undefined): string | undefined => timestamp?.toDate().toISOString();
+// const fromDateToTimestamp = (date: Date | undefined): Timestamp | undefined => date ? Timestamp.fromDate(date) : undefined;
 
 
 const ANY_PROFESSIONAL_VALUE = "_any_professional_placeholder_";
 
 // --- Mock Data Configuration ---
-export const useMockDatabase = true;
+export const useMockDatabase = globalUseMockDatabase;
 
 
 // --- Initial Mock Data Definitions ---
+const defaultWorkDays = DAYS_OF_WEEK.slice(0, 5).map(d => d.id); // Lunes a Viernes
+
 const initialMockUsersData: User[] = [
   { id: 'admin001', username: 'Admin', password: 'admin', role: USER_ROLES.ADMIN, name: 'Administrator' },
   { id: 'contador001', username: 'Contador', password: 'admin', role: USER_ROLES.CONTADOR, name: 'Contador Principal' },
@@ -38,7 +40,10 @@ const initialMockProfessionalsData: Professional[] = LOCATIONS.flatMap((location
     lastName: location.name.split(' ')[0],
     locationId: location.id,
     phone: `9876543${locIndex}${i + 1}`,
-    biWeeklyEarnings: 0, // Initialize earnings
+    biWeeklyEarnings: 0,
+    workDays: defaultWorkDays,
+    startTime: '09:00',
+    endTime: '18:00',
   }))
 );
 
@@ -191,12 +196,15 @@ export const getProfessionalById = async (id: string): Promise<Professional | un
     throw new Error("Professional retrieval not implemented for non-mock database or mockDB not available.");
 };
 
-export const addProfessional = async (data: Omit<ProfessionalFormData, 'id'>): Promise<Professional> => {
+export const addProfessional = async (data: ProfessionalFormData): Promise<Professional> => {
   const newProfessionalData: Omit<Professional, 'id' | 'biWeeklyEarnings'> = {
     firstName: data.firstName,
     lastName: data.lastName,
     locationId: data.locationId,
     phone: data.phone,
+    workDays: data.workDays,
+    startTime: data.startTime,
+    endTime: data.endTime,
   };
 
   if (useMockDatabase) {
@@ -489,7 +497,7 @@ export const getAppointments = async (filters: {
     }
 
     const newLastVisibleId = paginatedResult.length > 0 ? paginatedResult[paginatedResult.length -1].id : null;
-    return { appointments: populatedAppointmentsResult, totalCount, lastVisibleAppointmentId: newLastVisibleId };
+    return { appointments: paginatedResult, totalCount, lastVisibleAppointmentId: newLastVisibleId }; // Changed to paginatedResult
   }
   throw new Error("Appointment retrieval not implemented for non-mock database or mockDB not available.");
 };
@@ -549,7 +557,7 @@ export const addAppointment = async (data: AppointmentFormData ): Promise<Appoin
   const appointmentDateTimeObject = setMinutes(setHours(data.appointmentDate, appointmentDateHours), appointmentDateMinutes);
   const appointmentDateTime = formatISO(appointmentDateTimeObject);
   const appointmentDuration = service.defaultDuration || 60;
-  const appointmentEndTime = addMinutes(parseISO(appointmentDateTime), appointmentDuration);
+  const appointmentEndTime = dateFnsAddMinutes(parseISO(appointmentDateTime), appointmentDuration);
 
   let actualProfessionalId: string | undefined | null = undefined;
 
@@ -579,7 +587,7 @@ export const addAppointment = async (data: AppointmentFormData ): Promise<Appoin
       for (const existingAppt of existingAppointmentsForDay) {
         if (existingAppt.professionalId === prof.id) {
           const existingApptStartTime = parseISO(existingAppt.appointmentDateTime);
-          const existingApptEndTime = addMinutes(existingApptStartTime, existingAppt.durationMinutes);
+          const existingApptEndTime = dateFnsAddMinutes(existingApptStartTime, existingAppt.durationMinutes);
           if (isBefore(parseISO(appointmentDateTime), existingApptEndTime) && isAfter(appointmentEndTime, existingApptStartTime)) {
             isProfBusy = true;
             break;
@@ -695,7 +703,7 @@ export const getPatientAppointmentHistory = async (
     }
 
     const newLastVisibleId = paginatedAppointments.length > 0 ? paginatedAppointments[paginatedAppointments.length -1].id : null;
-    return { appointments: populatedHistory, totalCount, lastVisibleAppointmentId: newLastVisibleId };
+    return { appointments: paginatedAppointments, totalCount, lastVisibleAppointmentId: newLastVisibleId }; // Changed to paginatedAppointments
   }
   throw new Error("Patient appointment history retrieval not implemented for non-mock database or mockDB not available.");
 };
