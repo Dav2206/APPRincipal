@@ -166,7 +166,7 @@ export default function PatientsPage() {
     form.reset({
         ...patient,
         phone: (user?.role === USER_ROLES.ADMIN) ? patient.phone : undefined, 
-        age: patient.age || 0,
+        age: patient.age ?? 0,
         dateOfBirth: patient.dateOfBirth || '',
         isDiabetic: patient.isDiabetic || false,
     });
@@ -179,8 +179,13 @@ export default function PatientsPage() {
 
   const onSubmit = async (data: PatientFormData) => {
     try {
+      const patientDataToSave = {
+        ...data,
+        age: data.age === 0 ? undefined : data.age, // Store undefined if age is 0
+      };
+
       if (editingPatient && editingPatient.id) {
-        const patientToUpdate = { ...editingPatient, ...data };
+        const patientToUpdate = { ...editingPatient, ...patientDataToSave };
         if(user?.role !== USER_ROLES.ADMIN) {
             const originalPatient = await getPatientById(editingPatient.id);
             patientToUpdate.phone = originalPatient?.phone;
@@ -193,7 +198,7 @@ export default function PatientsPage() {
             toast({ title: "Paciente Existente", description: "Ya existe un paciente con ese nombre y apellido.", variant: "destructive" });
             return;
         }
-        const newPatientData = { ...data, isDiabetic: data.isDiabetic || false };
+        const newPatientData = { ...patientDataToSave, isDiabetic: data.isDiabetic || false };
         await addPatient(newPatientData as Omit<Patient, 'id'>);
         toast({ title: "Paciente Agregado", description: `${data.firstName} ${data.lastName} agregado.` });
       }
@@ -311,7 +316,7 @@ export default function PatientsPage() {
                       <TableCell className="hidden md:table-cell">
                         {user?.role === USER_ROLES.ADMIN ? (patient.phone || 'N/A') : 'Restringido'}
                       </TableCell>
-                      <TableCell className="hidden sm:table-cell">{patient.age > 0 ? patient.age : 'N/A'}</TableCell>
+                      <TableCell className="hidden sm:table-cell">{(patient.age && patient.age > 0) ? patient.age : 'N/A'}</TableCell>
                       <TableCell className="hidden lg:table-cell text-center">
                         {patient.isDiabetic ? <CheckSquare className="h-5 w-5 text-red-600 mx-auto" /> : <Square className="h-5 w-5 text-muted-foreground mx-auto" />}
                       </TableCell>
@@ -367,7 +372,7 @@ export default function PatientsPage() {
               </div>
                <FormField control={form.control} name="phone" render={({ field }) => (
                   <FormItem>
-                      <FormLabel>Teléfono</FormLabel>
+                      <FormLabel>Teléfono (Opcional)</FormLabel>
                       { (user?.role === USER_ROLES.ADMIN || !editingPatient) ? (
                         <FormControl><Input type="tel" placeholder="Ej: 987654321" {...field} /></FormControl>
                       ) : (
@@ -378,7 +383,7 @@ export default function PatientsPage() {
                )}/>
                 <FormField control={form.control} name="age" render={({ field }) => (
                   <FormItem>
-                      <FormLabel className="flex items-center gap-1"><UserRound size={16}/>Edad</FormLabel>
+                      <FormLabel className="flex items-center gap-1"><UserRound size={16}/>Edad (Opcional)</FormLabel>
                       <FormControl><Input type="number" placeholder="Ej: 30" {...field} onChange={e => field.onChange(parseInt(e.target.value,10) || 0)}/></FormControl>
                       <FormMessage />
                   </FormItem>

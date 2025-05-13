@@ -69,7 +69,7 @@ export function AppointmentForm({ isOpen, onOpenChange, onAppointmentCreated, in
       patientFirstName: initialData?.patientFirstName || '',
       patientLastName: initialData?.patientLastName || '',
       patientPhone: initialData?.patientPhone || '',
-      patientAge: initialData?.patientAge || 0,
+      patientAge: initialData?.patientAge ?? 0,
       patientDateOfBirth: initialData?.patientDateOfBirth || '',
       existingPatientId: initialData?.existingPatientId || null,
       isDiabetic: initialData?.isDiabetic || false,
@@ -124,7 +124,7 @@ export function AppointmentForm({ isOpen, onOpenChange, onAppointmentCreated, in
       setShowPatientHistory(!!patient);
       if (patient) {
         form.setValue('isDiabetic', patient.isDiabetic || false);
-        form.setValue('patientAge', patient.age || (patient.dateOfBirth ? differenceInYears(new Date(), parseISO(patient.dateOfBirth)) : 0));
+        form.setValue('patientAge', patient.age ?? (patient.dateOfBirth ? differenceInYears(new Date(), parseISO(patient.dateOfBirth)) : 0));
       }
     }
     if (watchExistingPatientId) {
@@ -144,7 +144,7 @@ export function AppointmentForm({ isOpen, onOpenChange, onAppointmentCreated, in
       form.setValue('patientFirstName', patient.firstName);
       form.setValue('patientLastName', patient.lastName);
       form.setValue('patientPhone', (user?.role === USER_ROLES.ADMIN ? patient.phone : "Teléfono Restringido") || '');
-      form.setValue('patientAge', patient.age || (patient.dateOfBirth ? differenceInYears(new Date(), parseISO(patient.dateOfBirth)) : 0) );
+      form.setValue('patientAge', patient.age ?? (patient.dateOfBirth ? differenceInYears(new Date(), parseISO(patient.dateOfBirth)) : 0) );
       form.setValue('patientDateOfBirth', patient.dateOfBirth || '');
       form.setValue('isDiabetic', patient.isDiabetic || false);
       setCurrentPatientForHistory(patient);
@@ -171,6 +171,7 @@ export function AppointmentForm({ isOpen, onOpenChange, onAppointmentCreated, in
         preferredProfessionalId: data.preferredProfessionalId === ANY_PROFESSIONAL_VALUE ? null : data.preferredProfessionalId,
         patientPhone: (data.existingPatientId && user?.role !== USER_ROLES.ADMIN) ? undefined : data.patientPhone,
         isDiabetic: data.isDiabetic || false,
+        patientAge: data.patientAge === 0 ? undefined : data.patientAge, // Send undefined if age is 0
       };
       console.log("Submitting appointment data:", submitData);
       await addAppointment(submitData);
@@ -325,7 +326,7 @@ export function AppointmentForm({ isOpen, onOpenChange, onAppointmentCreated, in
                     name="patientAge"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel className="flex items-center gap-1"><UserRound size={16}/>Edad</FormLabel>
+                        <FormLabel className="flex items-center gap-1"><UserRound size={16}/>Edad (Opcional)</FormLabel>
                         <FormControl><Input type="number" placeholder="Ej: 30" {...field} onChange={e => field.onChange(parseInt(e.target.value,10) || 0)} disabled={!!form.getValues("existingPatientId")} /></FormControl>
                         <FormMessage />
                       </FormItem>
