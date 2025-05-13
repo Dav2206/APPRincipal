@@ -1,4 +1,3 @@
-
 "use client";
 
 import React, { useState, useEffect, useMemo } from 'react';
@@ -6,11 +5,11 @@ import { useForm, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { AppointmentFormSchema, type AppointmentFormData as FormSchemaType } from '@/lib/schemas';
 import type { LocationId } from '@/lib/constants';
-import type { Professional, Patient, Service } from '@/types';
+import type { Professional, Patient, Service, Appointment } from '@/types';
 import { useAuth } from '@/contexts/auth-provider';
 import { useAppState } from '@/contexts/app-state-provider';
-import { USER_ROLES, LOCATIONS, TIME_SLOTS } from '@/lib/constants';
-import { getProfessionals, getServices, addAppointment, getPatientById, getProfessionalAvailabilityForDate } from '@/lib/data';
+import { USER_ROLES, LOCATIONS, TIME_SLOTS, APPOINTMENT_STATUS } from '@/lib/constants';
+import { getProfessionals, getServices, addAppointment, getPatientById, getProfessionalAvailabilityForDate, getAppointments } from '@/lib/data';
 
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -22,14 +21,15 @@ import { Calendar } from '@/components/ui/calendar';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter, DialogClose } from '@/components/ui/dialog';
-import { CalendarIcon, ClockIcon, UserPlus, Building, Briefcase, ConciergeBell, Edit3, Loader2, UserRound } from 'lucide-react';
-import { format, parse, differenceInYears, parseISO } from 'date-fns';
+import { CalendarIcon, ClockIcon, UserPlus, Building, Briefcase, ConciergeBell, Edit3, Loader2, UserRound, AlertCircle } from 'lucide-react';
+import { format, parse, differenceInYears, parseISO, addMinutes, areIntervalsOverlapping, startOfDay } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { cn } from '@/lib/utils';
 import { PatientSearchField } from './patient-search-field';
 import { PatientHistoryPanel } from './patient-history-panel';
 import { AttendancePredictionTool } from './attendance-prediction-tool';
 import { useToast } from '@/hooks/use-toast';
+import { Alert, AlertDescription } from '@/components/ui/alert';
 
 
 interface AppointmentFormProps {
@@ -41,7 +41,7 @@ interface AppointmentFormProps {
 }
 
 const ANY_PROFESSIONAL_VALUE = "_any_professional_placeholder_";
-const DEFAULT_SERVICE_ID_PLACEHOLDER = "_default_service_id_placeholder_"; 
+const DEFAULT_SERVICE_ID_PLACEHOLDER = "_default_service_id_placeholder_";
 
 
 export function AppointmentForm({ isOpen, onOpenChange, onAppointmentCreated, initialData, defaultDate }: AppointmentFormProps) {
@@ -55,6 +55,12 @@ export function AppointmentForm({ isOpen, onOpenChange, onAppointmentCreated, in
   const [isLoadingServices, setIsLoadingServices] = useState(true);
   const [showPatientHistory, setShowPatientHistory] = useState(false);
   const [currentPatientForHistory, setCurrentPatientForHistory] = useState<Patient | null>(null);
+
+  const [appointmentsForSelectedDate, setAppointmentsForSelectedDate] = useState<Appointment[]>([]);
+  const [isLoadingAppointments, setIsLoadingAppointments] = useState(false);
+  const [availableProfessionalsForTimeSlot, setAvailableProfessionalsForTimeSlot] = useState<Professional[]>([]);
+  const [slotAvailabilityMessage, setSlotAvailabilityMessage] = useState<string>('');
+
 
   const isAdminOrContador = user?.role === USER_ROLES.ADMIN || user?.role === USER_ROLES.CONTADOR;
   const defaultLocation = user?.role === USER_ROLES.LOCATION_STAFF
@@ -74,17 +80,21 @@ export function AppointmentForm({ isOpen, onOpenChange, onAppointmentCreated, in
       existingPatientId: initialData?.existingPatientId || null,
       isDiabetic: initialData?.isDiabetic || false,
       locationId: initialData?.locationId || defaultLocation || LOCATIONS[0].id,
-      serviceId: initialData?.serviceId || DEFAULT_SERVICE_ID_PLACEHOLDER, 
+      serviceId: initialData?.serviceId || DEFAULT_SERVICE_ID_PLACEHOLDER,
       appointmentDate: initialData?.appointmentDate || defaultDate || new Date(),
-      appointmentTime: initialData?.appointmentTime || TIME_SLOTS[4], 
+      appointmentTime: initialData?.appointmentTime || TIME_SLOTS[4],
       preferredProfessionalId: initialData?.preferredProfessionalId || ANY_PROFESSIONAL_VALUE,
       bookingObservations: initialData?.bookingObservations || '',
     },
   });
-  
+
   const watchLocationId = form.watch('locationId');
   const watchExistingPatientId = form.watch('existingPatientId');
   const watchAppointmentDate = form.watch('appointmentDate');
+  const watchAppointmentTime = form.watch('appointmentTime');
+  const watchServiceId = form.watch('serviceId');
+  const watchPreferredProfessionalId = form.watch('preferredProfessionalId');
+
 
   useEffect(() => {
     async function loadInitialServices() {
@@ -103,29 +113,116 @@ export function AppointmentForm({ isOpen, onOpenChange, onAppointmentCreated, in
         setIsLoadingServices(false);
       }
     }
-    if (isOpen) { 
+    if (isOpen) {
         loadInitialServices();
     }
   }, [isOpen, form, toast]);
 
   useEffect(() => {
     async function loadProfessionals(location: LocationId) {
-      const profs = await getProfessionals(location);
-      setAllProfessionals(profs || []);
+      setIsLoading(true);
+      try {
+        const profs = await getProfessionals(location);
+        setAllProfessionals(profs || []);
+      } catch (error) {
+        console.error("Failed to load professionals for location:", location, error);
+        setAllProfessionals([]);
+        toast({ title: "Error", description: `No se pudieron cargar los profesionales para ${LOCATIONS.find(l=>l.id===location)?.name}.`, variant: "destructive" });
+      } finally {
+        setIsLoading(false);
+      }
     }
-    if (watchLocationId) {
+    if (isOpen && watchLocationId) {
       loadProfessionals(watchLocationId as LocationId);
     }
-  }, [watchLocationId]);
+  }, [isOpen, watchLocationId, toast]);
 
-  const workingProfessionalsForSelectedDate = useMemo(() => {
-    if (!watchAppointmentDate || !allProfessionals.length) {
-      return allProfessionals;
+
+  useEffect(() => {
+    async function fetchAppointmentsForSlotCheck() {
+      if (!isOpen || !watchLocationId || !watchAppointmentDate) {
+        setAppointmentsForSelectedDate([]);
+        return;
+      }
+      setIsLoadingAppointments(true);
+      try {
+        const result = await getAppointments({
+          locationId: watchLocationId as LocationId,
+          date: watchAppointmentDate,
+          statuses: [APPOINTMENT_STATUS.BOOKED, APPOINTMENT_STATUS.CONFIRMED]
+        });
+        setAppointmentsForSelectedDate(result.appointments || []);
+      } catch (error) {
+        console.error("Error fetching appointments for slot check:", error);
+        setAppointmentsForSelectedDate([]);
+      } finally {
+        setIsLoadingAppointments(false);
+      }
     }
-    return allProfessionals.filter(prof => 
-      getProfessionalAvailabilityForDate(prof, watchAppointmentDate)
-    );
-  }, [watchAppointmentDate, allProfessionals]);
+    fetchAppointmentsForSlotCheck();
+  }, [isOpen, watchLocationId, watchAppointmentDate]);
+
+
+  useEffect(() => {
+    if (!isOpen || !watchAppointmentDate || !watchAppointmentTime || !watchServiceId || servicesList.length === 0 || isLoadingAppointments || !allProfessionals.length) {
+      setAvailableProfessionalsForTimeSlot(allProfessionals); // Default to all if not enough info
+      setSlotAvailabilityMessage('');
+      return;
+    }
+
+    const selectedService = servicesList.find(s => s.id === watchServiceId);
+    if (!selectedService) {
+      setAvailableProfessionalsForTimeSlot([]);
+      setSlotAvailabilityMessage('Por favor, seleccione un servicio válido.');
+      return;
+    }
+
+    const appointmentDuration = selectedService.defaultDuration;
+    const proposedStartTime = parse(`${format(watchAppointmentDate, 'yyyy-MM-dd')} ${watchAppointmentTime}`, 'yyyy-MM-dd HH:mm', new Date());
+    const proposedEndTime = addMinutes(proposedStartTime, appointmentDuration);
+
+    const availableProfs: Professional[] = [];
+
+    for (const prof of allProfessionals) {
+      const dailyAvailability = getProfessionalAvailabilityForDate(prof, watchAppointmentDate);
+      if (!dailyAvailability) continue; // Not working this day
+
+      const profWorkStartTime = parse(`${format(watchAppointmentDate, 'yyyy-MM-dd')} ${dailyAvailability.startTime}`, 'yyyy-MM-dd HH:mm', new Date());
+      const profWorkEndTime = parse(`${format(watchAppointmentDate, 'yyyy-MM-dd')} ${dailyAvailability.endTime}`, 'yyyy-MM-dd HH:mm', new Date());
+
+      // Check if proposed slot is within professional's working hours
+      if (proposedStartTime < profWorkStartTime || proposedEndTime > profWorkEndTime) {
+        continue;
+      }
+
+      // Check for conflicts with existing appointments for this professional
+      let isBusy = false;
+      const profAppointments = appointmentsForSelectedDate.filter(appt => appt.professionalId === prof.id);
+      for (const existingAppt of profAppointments) {
+        const existingApptStartTime = parseISO(existingAppt.appointmentDateTime);
+        const existingApptEndTime = addMinutes(existingApptStartTime, existingAppt.durationMinutes);
+        if (areIntervalsOverlapping(
+          { start: proposedStartTime, end: proposedEndTime },
+          { start: existingApptStartTime, end: existingApptEndTime }
+        )) {
+          isBusy = true;
+          break;
+        }
+      }
+      if (!isBusy) {
+        availableProfs.push(prof);
+      }
+    }
+
+    setAvailableProfessionalsForTimeSlot(availableProfs);
+    if (availableProfs.length === 0) {
+      setSlotAvailabilityMessage('No hay profesionales disponibles en este horario para el servicio y duración seleccionados.');
+    } else {
+      setSlotAvailabilityMessage('');
+    }
+
+  }, [isOpen, watchAppointmentDate, watchAppointmentTime, watchServiceId, servicesList, allProfessionals, appointmentsForSelectedDate, isLoadingAppointments]);
+
 
   useEffect(() => {
     async function fetchAndSetPatientForHistory(patientId: string) {
@@ -142,7 +239,7 @@ export function AppointmentForm({ isOpen, onOpenChange, onAppointmentCreated, in
     } else {
       setCurrentPatientForHistory(null);
       setShowPatientHistory(false);
-      form.setValue('isDiabetic', false); 
+      form.setValue('isDiabetic', false);
       form.setValue('patientAge', null);
     }
   }, [watchExistingPatientId, form]);
@@ -174,13 +271,13 @@ export function AppointmentForm({ isOpen, onOpenChange, onAppointmentCreated, in
   async function onSubmit(data: FormSchemaType) {
     setIsLoading(true);
     try {
-      
+
       const submitData = {
         ...data,
         preferredProfessionalId: data.preferredProfessionalId === ANY_PROFESSIONAL_VALUE ? null : data.preferredProfessionalId,
         patientPhone: (data.existingPatientId && user?.role !== USER_ROLES.ADMIN) ? undefined : data.patientPhone,
         isDiabetic: data.isDiabetic || false,
-        patientAge: data.patientAge === 0 ? null : data.patientAge, 
+        patientAge: data.patientAge === 0 ? null : data.patientAge,
       };
       console.log("Submitting appointment data:", submitData);
       await addAppointment(submitData);
@@ -220,6 +317,17 @@ export function AppointmentForm({ isOpen, onOpenChange, onAppointmentCreated, in
     }
   }
 
+  const isSubmitDisabled = useMemo(() => {
+    if (isLoading || isLoadingServices || isLoadingAppointments) return true;
+    if (servicesList.length === 0) return true;
+    if (availableProfessionalsForTimeSlot.length === 0) return true;
+    if (watchPreferredProfessionalId && watchPreferredProfessionalId !== ANY_PROFESSIONAL_VALUE) {
+      return !availableProfessionalsForTimeSlot.find(p => p.id === watchPreferredProfessionalId);
+    }
+    return false;
+  }, [isLoading, isLoadingServices, isLoadingAppointments, servicesList, availableProfessionalsForTimeSlot, watchPreferredProfessionalId]);
+
+
   if (!isOpen) return null;
 
   return (
@@ -242,6 +350,8 @@ export function AppointmentForm({ isOpen, onOpenChange, onAppointmentCreated, in
         });
         setCurrentPatientForHistory(null);
         setShowPatientHistory(false);
+        setSlotAvailabilityMessage('');
+        setAvailableProfessionalsForTimeSlot(allProfessionals);
       }
       onOpenChange(open);
     }}>
@@ -255,7 +365,7 @@ export function AppointmentForm({ isOpen, onOpenChange, onAppointmentCreated, in
             Complete los detalles para la nueva cita.
           </DialogDescription>
         </DialogHeader>
-        
+
         <div className="flex-grow overflow-y-auto pr-2 -mr-2">
           <Form {...form}>
             <form onSubmit={form.handleSubmit(onSubmit)} className="grid grid-cols-1 md:grid-cols-2 gap-6 py-4">
@@ -322,7 +432,7 @@ export function AppointmentForm({ isOpen, onOpenChange, onAppointmentCreated, in
                           placeholder={(!!form.getValues("existingPatientId") && user?.role !== USER_ROLES.ADMIN) ? "Teléfono Restringido" : "Ej: 987654321"}
                           {...field}
                           value={field.value || ''}
-                          disabled={!!form.getValues("existingPatientId")}
+                          disabled={!!form.getValues("existingPatientId") && user?.role !== USER_ROLES.ADMIN}
                         /></FormControl>
                         <FormMessage />
                       </FormItem>
@@ -449,7 +559,7 @@ export function AppointmentForm({ isOpen, onOpenChange, onAppointmentCreated, in
                               mode="single"
                               selected={field.value}
                               onSelect={field.onChange}
-                              disabled={(date) => date < new Date(new Date().setHours(0,0,0,0))}
+                              disabled={(date) => date < startOfDay(new Date())}
                               initialFocus
                             />
                           </PopoverContent>
@@ -479,8 +589,14 @@ export function AppointmentForm({ isOpen, onOpenChange, onAppointmentCreated, in
                     )}
                   />
                 </div>
+                 {slotAvailabilityMessage && (
+                  <Alert variant={availableProfessionalsForTimeSlot.length > 0 ? "default" : "destructive"} className="mt-2">
+                    <AlertCircle className="h-4 w-4" />
+                    <AlertDescription>{slotAvailabilityMessage}</AlertDescription>
+                  </Alert>
+                )}
               </div>
-              
+
               <div className="space-y-4 p-4 border rounded-lg shadow-sm bg-card">
                 <h3 className="text-lg font-semibold flex items-center gap-2"><Briefcase /> Profesional y Observaciones</h3>
                 <FormField
@@ -492,14 +608,14 @@ export function AppointmentForm({ isOpen, onOpenChange, onAppointmentCreated, in
                       <Select
                         onValueChange={(value) => field.onChange(value === ANY_PROFESSIONAL_VALUE ? null : value)}
                         value={field.value || ANY_PROFESSIONAL_VALUE}
-                        disabled={isLoadingServices || servicesList.length === 0 || workingProfessionalsForSelectedDate.length === 0}
+                        disabled={isLoadingServices || servicesList.length === 0 || isLoadingAppointments || allProfessionals.length === 0 }
                       >
                         <FormControl>
-                          <SelectTrigger><SelectValue placeholder={workingProfessionalsForSelectedDate.length > 0 ? "Cualquier profesional disponible" : "No hay profesionales disponibles"} /></SelectTrigger>
+                          <SelectTrigger><SelectValue placeholder={availableProfessionalsForTimeSlot.length > 0 ? "Cualquier profesional disponible" : "No hay profesionales disponibles"} /></SelectTrigger>
                         </FormControl>
                         <SelectContent>
                           <SelectItem value={ANY_PROFESSIONAL_VALUE}>Cualquier profesional disponible</SelectItem>
-                          {workingProfessionalsForSelectedDate.map(prof => (
+                          {availableProfessionalsForTimeSlot.map(prof => (
                             <SelectItem key={prof.id} value={prof.id}>{prof.firstName} {prof.lastName}</SelectItem>
                           ))}
                         </SelectContent>
@@ -531,7 +647,7 @@ export function AppointmentForm({ isOpen, onOpenChange, onAppointmentCreated, in
             </form>
           </Form>
         </div>
-        
+
         <DialogFooter className="pt-4 border-t">
           <DialogClose asChild>
             <Button variant="outline" onClick={() => {
@@ -552,11 +668,13 @@ export function AppointmentForm({ isOpen, onOpenChange, onAppointmentCreated, in
               });
               setCurrentPatientForHistory(null);
               setShowPatientHistory(false);
+              setSlotAvailabilityMessage('');
+              setAvailableProfessionalsForTimeSlot(allProfessionals);
               onOpenChange(false);
             }}>Cancelar</Button>
           </DialogClose>
-          <Button type="submit" onClick={form.handleSubmit(onSubmit)} disabled={isLoading || isLoadingServices || servicesList.length === 0}>
-            {(isLoading || isLoadingServices) && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+          <Button type="submit" onClick={form.handleSubmit(onSubmit)} disabled={isSubmitDisabled}>
+            {(isLoading || isLoadingServices || isLoadingAppointments) && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
             {initialData?.patientFirstName ? 'Actualizar Cita' : 'Agendar Cita'}
           </Button>
         </DialogFooter>
@@ -564,4 +682,3 @@ export function AppointmentForm({ isOpen, onOpenChange, onAppointmentCreated, in
     </Dialog>
   );
 }
-
