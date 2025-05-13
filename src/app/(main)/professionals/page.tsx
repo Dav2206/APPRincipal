@@ -1,3 +1,4 @@
+
 "use client";
 
 import type { Professional, ProfessionalFormData } from '@/types';
@@ -337,14 +338,6 @@ export default function ProfessionalsPage() {
     }
     todayStr += reason;
   }
-
-  let generalStr = "";
-  if (prof.rotationType === 'biWeeklySunday' && prof.compensatoryDayOffChoice) {
-    const compDayName = DAYS_OF_WEEK.find(d => d.id === prof.compensatoryDayOffChoice)?.name;
-    generalStr = `Rotación Dom. (Comp. ${compDayName || 'N/A'})`;
-  } else {
-    generalStr = "Horario base regular";
-  }
   
   const nextDayOffDate = calculateNextGeneralDayOff(prof, today);
   let nextDayOffDisplayStr = "";
@@ -355,7 +348,7 @@ export default function ProfessionalsPage() {
     nextDayOffDisplayStr = " | Próx. Desc.: No definido próximamente";
   }
   
-  return `${todayStr} | ${generalStr}${nextDayOffDisplayStr}`;
+  return `${todayStr}${nextDayOffDisplayStr}`;
 };
 
 
@@ -398,7 +391,7 @@ export default function ProfessionalsPage() {
                 <TableRow>
                   <TableHead>Nombre Completo</TableHead>
                   <TableHead className="hidden md:table-cell">Sede</TableHead>
-                  <TableHead className="hidden lg:table-cell">Horario (Hoy/General) y Próximo Descanso</TableHead>
+                  <TableHead className="hidden lg:table-cell">Horario (Hoy) y Próximo Descanso</TableHead>
                   <TableHead className="hidden xl:table-cell">Teléfono</TableHead>
                    {isAdminOrContador && <TableHead className="hidden xl:table-cell text-right">Ingresos Quincena (S/)</TableHead> }
                   <TableHead className="text-right">Acciones</TableHead>
@@ -669,3 +662,4 @@ export default function ProfessionalsPage() {
     </div>
   );
 }
+
