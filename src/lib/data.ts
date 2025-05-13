@@ -1,4 +1,5 @@
 
+// src/lib/data.ts
 import type { User, Professional, Patient, Service, Appointment, AppointmentFormData, ProfessionalFormData, AppointmentStatus, ServiceFormData } from '@/types';
 import { LOCATIONS, USER_ROLES, SERVICES as SERVICES_CONSTANTS, APPOINTMENT_STATUS, LocationId, ServiceId as ConstantServiceId, APPOINTMENT_STATUS_DISPLAY, PAYMENT_METHODS } from './constants';
 import { formatISO, parseISO, addDays, setHours, setMinutes, startOfDay, endOfDay, addMinutes, isSameDay as dateFnsIsSameDay, startOfMonth, endOfMonth, differenceInYears, subDays, isEqual, isBefore, isAfter, getDate, getYear, getMonth, setMonth, setYear } from 'date-fns';
@@ -10,7 +11,6 @@ const ANY_PROFESSIONAL_VALUE = "_any_professional_placeholder_";
 
 // --- Mock Data Configuration ---
 export const useMockDatabase = true; // Force mock database usage
-// console.log("Data layer: Using mock database:", useMockDatabase);
 
 
 // --- Initial Mock Data Definitions ---
@@ -178,7 +178,6 @@ export const addProfessional = async (data: Omit<ProfessionalFormData, 'id'>): P
     lastName: data.lastName,
     locationId: data.locationId,
     phone: data.phone,
-    specializations: data.specializations || [],
   };
 
   if (useMockDatabase) {

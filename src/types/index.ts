@@ -1,5 +1,5 @@
 
-import type { LocationId, UserRole, PaymentMethod, AppointmentStatus, ProfessionalSpecialization } from '@/lib/constants';
+import type { LocationId, UserRole, PaymentMethod, AppointmentStatus } from '@/lib/constants';
 
 export interface BaseEntity {
   id: string;
@@ -19,7 +19,6 @@ export interface Professional extends BaseEntity {
   lastName: string;
   locationId: LocationId;
   phone?: string;
-  specializations?: ProfessionalSpecialization[]; 
   biWeeklyEarnings?: number; 
 }
 
@@ -87,7 +86,6 @@ export type AppointmentFormData = {
 
 export type ProfessionalFormData = Omit<Professional, 'biWeeklyEarnings' | 'id' > & { 
   id?: string;
-  specializations?: ProfessionalSpecialization[];
 };
 
 

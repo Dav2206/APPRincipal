@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { LOCATIONS, TIME_SLOTS, PAYMENT_METHODS, APPOINTMENT_STATUS_DISPLAY, PROFESSIONAL_SPECIALIZATIONS } from './constants';
+import { LOCATIONS, TIME_SLOTS, PAYMENT_METHODS, APPOINTMENT_STATUS_DISPLAY } from './constants';
 
 export const LoginSchema = z.object({
   username: z.string().min(1, { message: 'El nombre de usuario es requerido.' }),

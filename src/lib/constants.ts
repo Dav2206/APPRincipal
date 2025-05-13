@@ -28,15 +28,6 @@ export const SERVICES = [
 
 export type ServiceId = typeof SERVICES[number]['id'];
 
-export const PROFESSIONAL_SPECIALIZATIONS = [
-  'Podología General',
-  'Podología Deportiva',
-  'Podología Pediátrica',
-  'Biomecánica',
-] as const;
-
-export type ProfessionalSpecialization = typeof PROFESSIONAL_SPECIALIZATIONS[number];
-
 export const PAYMENT_METHODS = ['Efectivo', 'Tarjeta de Crédito', 'Tarjeta de Débito', 'Transferencia', 'Yape/Plin'] as const;
 export type PaymentMethod = typeof PAYMENT_METHODS[number];
 

@@ -6,11 +6,10 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '@/contexts/auth-provider';
 import { useAppState } from '@/contexts/app-state-provider';
 import { getProfessionals, addProfessional, updateProfessional } from '@/lib/data';
-import { LOCATIONS, USER_ROLES, LocationId, PROFESSIONAL_SPECIALIZATIONS } from '@/lib/constants';
+import { LOCATIONS, USER_ROLES, LocationId } from '@/lib/constants';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Checkbox } from '@/components/ui/checkbox';
 import {
   Table,
   TableBody,
@@ -34,7 +33,6 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { ProfessionalFormSchema } from '@/lib/schemas';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useToast } from '@/hooks/use-toast';
-import { Badge } from '@/components/ui/badge';
 
 export default function ProfessionalsPage() {
   const { user } = useAuth();
@@ -53,7 +51,6 @@ export default function ProfessionalsPage() {
       lastName: '',
       locationId: LOCATIONS[0].id,
       phone: '',
-      specializations: [],
     }
   });
   
@@ -96,7 +93,6 @@ export default function ProfessionalsPage() {
       lastName: '',
       locationId: defaultLoc as LocationId,
       phone: '',
-      specializations: [],
     });
     setIsFormOpen(true);
   };
@@ -106,7 +102,6 @@ export default function ProfessionalsPage() {
     form.reset({
         ...professional,
         locationId: professional.locationId as LocationId, 
-        specializations: professional.specializations || [],
     });
     setIsFormOpen(true);
   };
@@ -189,7 +184,6 @@ export default function ProfessionalsPage() {
                 <TableRow>
                   <TableHead>Nombre Completo</TableHead>
                   <TableHead className="hidden md:table-cell">Sede</TableHead>
-                  <TableHead className="hidden md:table-cell">Especializaciones</TableHead>
                   <TableHead className="hidden lg:table-cell">Teléfono</TableHead>
                    {isAdminOrContador && <TableHead className="hidden xl:table-cell text-right">Ingresos Quincena (S/)</TableHead> }
                   <TableHead className="text-right">Acciones</TableHead>
@@ -200,11 +194,6 @@ export default function ProfessionalsPage() {
                   <TableRow key={prof.id}>
                     <TableCell className="font-medium">{prof.firstName} {prof.lastName}</TableCell>
                     <TableCell className="hidden md:table-cell">{LOCATIONS.find(l => l.id === prof.locationId)?.name}</TableCell>
-                    <TableCell className="hidden md:table-cell">
-                      {prof.specializations && prof.specializations.length > 0
-                        ? prof.specializations.map(spec => <Badge key={spec} variant="outline" className="mr-1 mb-1 text-xs">{spec}</Badge>)
-                        : 'N/A'}
-                    </TableCell>
                     <TableCell className="hidden lg:table-cell">{prof.phone || 'N/A'}</TableCell>
                     {isAdminOrContador && <TableCell className="hidden xl:table-cell text-right">{(prof.biWeeklyEarnings ?? 0).toFixed(2)}</TableCell> }
                     <TableCell className="text-right">
@@ -215,7 +204,7 @@ export default function ProfessionalsPage() {
                   </TableRow>
                 )) : (
                   <TableRow>
-                    <TableCell colSpan={isAdminOrContador ? 6 : 5} className="h-24 text-center"> 
+                    <TableCell colSpan={isAdminOrContador ? 5 : 4} className="h-24 text-center"> 
                       No se encontraron profesionales.
                     </TableCell>
                   </TableRow>
@@ -228,7 +217,7 @@ export default function ProfessionalsPage() {
       </Card>
 
       <Dialog open={isFormOpen} onOpenChange={setIsFormOpen}>
-        <DialogContent className="sm:max-w-2xl">
+        <DialogContent className="sm:max-w-lg">
           <DialogHeader>
             <DialogTitle>{editingProfessional ? 'Editar' : 'Agregar'} Profesional</DialogTitle>
           </DialogHeader>
@@ -282,42 +271,6 @@ export default function ProfessionalsPage() {
                       <FormMessage />
                   </FormItem>
                )}/>
-               <FormItem>
-                <FormLabel>Especializaciones (Opcional)</FormLabel>
-                <div className="grid grid-cols-2 gap-2 p-2 border rounded-md">
-                  {PROFESSIONAL_SPECIALIZATIONS.map((spec) => (
-                    <FormField
-                      key={spec}
-                      control={form.control}
-                      name="specializations"
-                      render={({ field }) => {
-                        return (
-                          <FormItem className="flex flex-row items-center space-x-2 space-y-0">
-                            <FormControl>
-                              <Checkbox
-                                checked={field.value?.includes(spec)}
-                                onCheckedChange={(checked) => {
-                                  return checked
-                                    ? field.onChange([...(field.value || []), spec])
-                                    : field.onChange(
-                                        (field.value || []).filter(
-                                          (value) => value !== spec
-                                        )
-                                      );
-                                }}
-                              />
-                            </FormControl>
-                            <FormLabel className="font-normal text-sm">
-                              {spec}
-                            </FormLabel>
-                          </FormItem>
-                        );
-                      }}
-                    />
-                  ))}
-                </div>
-                <FormMessage />
-              </FormItem>
               <DialogFooter className="pt-4">
                 <DialogClose asChild><Button type="button" variant="outline">Cancelar</Button></DialogClose>
                 <Button type="submit" disabled={form.formState.isSubmitting}>{form.formState.isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}{editingProfessional ? 'Guardar Cambios' : 'Agregar Profesional'}</Button>
@@ -329,4 +282,3 @@ export default function ProfessionalsPage() {
     </div>
   );
 }
-
