@@ -19,26 +19,26 @@ import { cn } from '@/lib/utils';
 import { AppointmentEditDialog } from '@/components/appointments/appointment-edit-dialog';
 import { AppointmentForm } from '@/components/appointments/appointment-form';
 
-const timeSlotsForView = TIME_SLOTS.filter(slot => slot >= "09:00"); 
+const timeSlotsForView = TIME_SLOTS.filter(slot => slot >= "09:00");
 
 export default function SchedulePage() {
   const { user } = useAuth();
   const { selectedLocationId: adminSelectedLocation } = useAppState();
   const [appointments, setAppointments] = useState<Appointment[]>([]);
-  const [allProfessionals, setAllProfessionals] = useState<Professional[]>([]); // All professionals in the system
-  const [workingProfessionals, setWorkingProfessionals] = useState<Professional[]>([]); // Professionals to display on timeline
-  const [currentDate, setCurrentDate] = useState<Date>(startOfDay(new Date()));
+  const [allProfessionals, setAllProfessionals] = useState<Professional[]>([]);
+  const [workingProfessionals, setWorkingProfessionals] = useState<Professional[]>([]);
+  const [currentDate, setCurrentDate] = useState<Date>(startOfDay(new Date(2025, 4, 13))); // Tuesday, May 13, 2025
   const [isLoading, setIsLoading] = useState(true);
   const [selectedAppointmentForEdit, setSelectedAppointmentForEdit] = useState<Appointment | null>(null);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
-  const [isNewAppointmentFormOpen, setIsNewAppointmentFormOpen] = useState(false); 
+  const [isNewAppointmentFormOpen, setIsNewAppointmentFormOpen] = useState(false);
 
   const isAdminOrContador = user?.role === USER_ROLES.ADMIN || user?.role === USER_ROLES.CONTADOR;
-  
-  // Ensure actualEffectiveLocationId is always a specific location for the schedule page
+
   const actualEffectiveLocationId = isAdminOrContador
-    ? (adminSelectedLocation === 'all' || !adminSelectedLocation ? LOCATIONS[0].id : adminSelectedLocation as LocationId) 
+    ? (adminSelectedLocation === 'all' || !adminSelectedLocation ? LOCATIONS[0].id : adminSelectedLocation as LocationId)
     : user?.locationId;
+
 
   const fetchData = useCallback(async () => {
     if (!user || !actualEffectiveLocationId) {
@@ -49,57 +49,53 @@ export default function SchedulePage() {
       return;
     }
     setIsLoading(true);
-    
+
     try {
-      // 1. Fetch appointments scheduled for the actualEffectiveLocationId on the currentDate
-      const fetchedAppointmentsData = await getAppointments({
-        locationId: actualEffectiveLocationId,
-        date: currentDate,
-        statuses: [APPOINTMENT_STATUS.BOOKED, APPOINTMENT_STATUS.CONFIRMED],
-      });
-      const appointmentsForLocation = fetchedAppointmentsData.appointments || [];
+      const [fetchedAppointmentsResponse, allSystemProfessionalsList] = await Promise.all([
+        getAppointments({
+          locationId: actualEffectiveLocationId,
+          date: currentDate,
+          statuses: [APPOINTMENT_STATUS.BOOKED, APPOINTMENT_STATUS.CONFIRMED],
+        }),
+        getProfessionals()
+      ]);
+
+      const appointmentsForLocation = fetchedAppointmentsResponse.appointments || [];
       setAppointments(appointmentsForLocation);
+      setAllProfessionals(allSystemProfessionalsList || []);
 
-      // 2. Get all system professionals (needed to find external ones)
-      const allSystemProfsData = await getProfessionals(); 
-      const allSystemProfessionalsList = allSystemProfsData || [];
-      setAllProfessionals(allSystemProfessionalsList);
-
-      // 3. Determine professionals to display on the timeline for this location
       const professionalsActiveAtThisLocation: Professional[] = [];
       const processedProfIds = new Set<string>();
 
-      // Add professionals who have appointments at this location (local or external)
-      const professionalIdsInAppointments = Array.from(new Set(
-        appointmentsForLocation.map(appt => appt.professionalId).filter(id => id != null) as string[]
-      ));
-
-      for (const profId of professionalIdsInAppointments) {
-        const professional = allSystemProfessionalsList.find(p => p.id === profId);
-        if (professional && !processedProfIds.has(profId)) {
-          // Check if this professional is actually available based on their schedule,
-          // or if their presence is solely due to the appointment (e.g. external forced)
-          const availability = getProfessionalAvailabilityForDate(professional, currentDate);
-          if (availability || appointmentsForLocation.some(a => a.professionalId === profId)) {
-             professionalsActiveAtThisLocation.push(professional);
-             processedProfIds.add(profId);
-          }
+      // Process professionals based at the current viewing location
+      const locationProfessionals = allSystemProfessionalsList.filter(p => p.locationId === actualEffectiveLocationId);
+      locationProfessionals.forEach(prof => {
+        const availability = getProfessionalAvailabilityForDate(prof, currentDate);
+        if (availability && !processedProfIds.has(prof.id)) {
+          professionalsActiveAtThisLocation.push(prof);
+          processedProfIds.add(prof.id);
         }
-      }
-
-      // Add professionals based at this location and working today (even if no appts yet)
-      const professionalsBasedHere = allSystemProfessionalsList.filter(p => p.locationId === actualEffectiveLocationId);
-      for (const prof of professionalsBasedHere) {
-        if (!processedProfIds.has(prof.id)) {
-          const availability = getProfessionalAvailabilityForDate(prof, currentDate);
-          if (availability) {
-            professionalsActiveAtThisLocation.push(prof);
-            processedProfIds.add(prof.id);
-          }
-        }
-      }
+      });
       
-      professionalsActiveAtThisLocation.sort((a, b) => 
+      // Include external professionals who have appointments AT the viewingLocationId for the current date
+      const externalAppointmentsAtThisLocation = appointmentsForLocation.filter(
+        appt => appt.isExternalProfessional && appt.locationId === actualEffectiveLocationId && appt.professionalId
+      );
+
+      externalAppointmentsAtThisLocation.forEach(appt => {
+        if (appt.professionalId && !processedProfIds.has(appt.professionalId)) {
+          const externalProf = allSystemProfessionalsList.find(p => p.id === appt.professionalId);
+          if (externalProf) {
+            const availability = getProfessionalAvailabilityForDate(externalProf, currentDate);
+            if (availability) {
+                 professionalsActiveAtThisLocation.push(externalProf);
+                 processedProfIds.add(externalProf.id);
+            }
+          }
+        }
+      });
+
+      professionalsActiveAtThisLocation.sort((a, b) =>
         `${a.firstName} ${a.lastName}`.localeCompare(`${b.firstName} ${b.lastName}`)
       );
       setWorkingProfessionals(professionalsActiveAtThisLocation);
@@ -107,16 +103,17 @@ export default function SchedulePage() {
     } catch (error) {
       console.error("Error fetching schedule data:", error);
       setAppointments([]);
-      // setAllProfessionals([]); // already fetched or empty if error
       setWorkingProfessionals([]);
     } finally {
       setIsLoading(false);
     }
   }, [user, actualEffectiveLocationId, currentDate]);
 
+
   useEffect(() => {
     fetchData();
   }, [fetchData]);
+
 
   const handleDateChange = (date: Date | undefined) => {
     if (date) {
@@ -126,17 +123,23 @@ export default function SchedulePage() {
 
   const handleTimelineAppointmentClick = useCallback(async (appointment: Appointment) => {
     try {
+      // Ensure appointment object and its ID are valid before proceeding
+      if (!appointment || !appointment.id) {
+        console.error("Invalid appointment object passed to handleTimelineAppointmentClick");
+        return;
+      }
       const fullAppointmentDetails = await getAppointmentById(appointment.id);
       if (fullAppointmentDetails) {
         setSelectedAppointmentForEdit(fullAppointmentDetails);
-        setIsEditModalOpen(true);
       } else {
-        setSelectedAppointmentForEdit(appointment);
-        setIsEditModalOpen(true);
-        console.warn("Could not fetch full appointment details for editing, using timeline data.");
+        // Fallback or error handling if appointment details aren't found
+        setSelectedAppointmentForEdit(appointment); // Use the basic data if full details fail
+        console.warn("Could not fetch full appointment details for editing, using timeline data for edit modal.");
       }
+      setIsEditModalOpen(true);
     } catch (error) {
-      console.error("Error fetching appointment details:", error);
+      console.error("Error fetching appointment details for edit:", error);
+      // Fallback to using the appointment data from the timeline if fetch fails
       setSelectedAppointmentForEdit(appointment);
       setIsEditModalOpen(true);
     }
@@ -144,15 +147,15 @@ export default function SchedulePage() {
 
 
   const handleAppointmentUpdated = useCallback(() => {
-    fetchData(); 
+    fetchData();
     setIsEditModalOpen(false);
   }, [fetchData]);
-  
+
   const handleNewAppointmentCreated = useCallback(async () => {
     setIsNewAppointmentFormOpen(false);
-    await fetchData(); 
+    await fetchData();
   }, [fetchData]);
-  
+
   const NoDataCard = ({ title, message }: { title: string; message: string }) => (
     <Card className="col-span-full mt-8 border-dashed border-2">
       <CardContent className="py-10 text-center">
@@ -202,9 +205,9 @@ export default function SchedulePage() {
               <Button variant="outline" size="icon" onClick={() => handleDateChange(addDays(currentDate, 1))}>
                 <ChevronRightIcon className="h-4 w-4" />
               </Button>
-              <Button 
-                variant={isEqual(currentDate, startOfDay(new Date())) ? "secondary" : "outline"}
-                onClick={() => handleDateChange(new Date())}
+              <Button
+                variant={isEqual(currentDate, startOfDay(new Date(2025,4,13))) ? "secondary" : "outline"}
+                onClick={() => handleDateChange(new Date(2025,4,13))}
                 className="hidden sm:inline-flex"
               >
                 Hoy
@@ -226,21 +229,21 @@ export default function SchedulePage() {
           {isLoading ? (
             <LoadingState />
           ) : !actualEffectiveLocationId ? (
-             <NoDataCard 
+             <NoDataCard
               title="Seleccione una sede"
               message="Por favor, seleccione una sede para ver la agenda horaria."
             />
           )
           : workingProfessionals.length === 0 ? (
-            <NoDataCard 
+            <NoDataCard
               title="No hay profesionales trabajando hoy"
               message={`No se encontraron profesionales activos para ${LOCATIONS.find(l => l.id === actualEffectiveLocationId)?.name || 'la selección actual'} en esta fecha, o no tienen citas programadas.`}
             />
           ) : (
-            <DailyTimeline 
-              professionals={workingProfessionals} 
-              appointments={appointments} 
-              timeSlots={timeSlotsForView} 
+            <DailyTimeline
+              professionals={workingProfessionals}
+              appointments={appointments}
+              timeSlots={timeSlotsForView}
               currentDate={currentDate}
               onAppointmentClick={handleTimelineAppointmentClick}
               viewingLocationId={actualEffectiveLocationId}
@@ -264,9 +267,7 @@ export default function SchedulePage() {
           onOpenChange={setIsNewAppointmentFormOpen}
           onAppointmentCreated={handleNewAppointmentCreated}
           defaultDate={currentDate}
-          // Pass all professionals for the dropdown if creating appointment
-          allProfessionals={allProfessionals} 
-          // Pass current location professionals if needed specifically by form
+          allProfessionals={allProfessionals}
           currentLocationProfessionals={allProfessionals.filter(p => p.locationId === actualEffectiveLocationId)}
         />
       )}
