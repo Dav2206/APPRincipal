@@ -16,7 +16,7 @@ import { AppointmentEditDialog } from './appointment-edit-dialog';
 import type { Professional } from '@/types';
 import { getProfessionals } from '@/lib/data';
 
-import { Form, FormField } from "@/components/ui/form";
+import { FormField } from "@/components/ui/form"; // Removed Form import as it's not directly used
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { AppointmentUpdateSchema } from '@/lib/schemas';
@@ -236,3 +236,4 @@ const AppointmentCardComponent = ({ appointment, onUpdate }: AppointmentCardProp
 
 export const AppointmentCard = React.memo(AppointmentCardComponent);
 
+```

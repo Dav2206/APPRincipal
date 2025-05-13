@@ -6,8 +6,10 @@ import React from 'react';
 import { parseISO, getHours, getMinutes, addMinutes } from 'date-fns';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { ScrollArea, ScrollBar } from '@/components/ui/scroll-area';
-import { User, Clock, AlertTriangle } from 'lucide-react';
+import { User, Clock, AlertTriangle, Shuffle } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { LOCATIONS } from '@/lib/constants';
+import { Badge } from '@/components/ui/badge';
 
 interface DailyTimelineProps {
   professionals: Professional[];
@@ -128,12 +130,16 @@ const DailyTimelineComponent = ({ professionals, appointments, timeSlots, onAppo
 
                     {professionalAppointments.map(appt => {
                       const isApptOverlapping = overlappingAppointmentIds.has(appt.id);
+                      const originLocationName = appt.isExternalProfessional && appt.externalProfessionalOriginLocationId 
+                        ? LOCATIONS.find(l => l.id === appt.externalProfessionalOriginLocationId)?.name 
+                        : null;
+
                       return (
                       <Tooltip key={appt.id} delayDuration={100}>
                         <TooltipTrigger asChild>
                           <div
                             className={cn(
-                              "absolute left-1 right-1 rounded-md p-1.5 shadow-md text-xs overflow-hidden cursor-pointer hover:opacity-80 transition-opacity flex items-start justify-between",
+                              "absolute left-1 right-1 rounded-md p-1.5 shadow-md text-xs overflow-hidden cursor-pointer hover:opacity-80 transition-opacity flex flex-col justify-between",
                               isApptOverlapping && "ring-2 ring-destructive border-destructive"
                             )}
                             style={{
@@ -146,20 +152,32 @@ const DailyTimelineComponent = ({ professionals, appointments, timeSlots, onAppo
                             onClick={() => onAppointmentClick?.(appt)}
                           >
                             <div className="flex-grow overflow-hidden">
-                              <p className="font-semibold truncate leading-tight">{appt.patient?.firstName} {appt.patient?.lastName}</p>
+                              <div className="flex justify-between items-start">
+                                <p className="font-semibold truncate leading-tight">{appt.patient?.firstName} {appt.patient?.lastName}</p>
+                                {isApptOverlapping && (
+                                  <AlertTriangle className="h-3 w-3 text-destructive-foreground bg-destructive rounded-full p-px shrink-0 ml-1" />
+                                )}
+                              </div>
                               <p className="truncate text-[10px] leading-tight opacity-90">{appt.service?.name}</p>
                               {appt.durationMinutes > 30 && <p className="text-[10px] leading-tight opacity-80 mt-0.5">({appt.durationMinutes} min)</p>}
                             </div>
-                            {isApptOverlapping && (
-                               <AlertTriangle className="h-3 w-3 text-destructive-foreground bg-destructive rounded-full p-px shrink-0 ml-1" />
+                            {originLocationName && (
+                              <Badge variant="outline" className="mt-1 text-[9px] p-0.5 h-fit bg-orange-100 text-orange-700 border-orange-300 self-start truncate">
+                                <Shuffle size={10} className="mr-1"/> Traslado: {originLocationName}
+                              </Badge>
                             )}
                           </div>
                         </TooltipTrigger>
-                        <TooltipContent className="bg-popover text-popover-foreground p-2 rounded-md shadow-lg">
+                        <TooltipContent className="bg-popover text-popover-foreground p-2 rounded-md shadow-lg max-w-xs">
                           {isApptOverlapping && <p className="text-destructive font-semibold text-xs flex items-center gap-1 mb-1"><AlertTriangle size={12} /> ¡Cita Superpuesta!</p>}
                           <p className="font-bold text-sm">{appt.patient?.firstName} {appt.patient?.lastName}</p>
                           <p><User size={12} className="inline mr-1"/> {appt.service?.name}</p>
                           <p><Clock size={12} className="inline mr-1"/> {parseISO(appt.appointmentDateTime).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})} ({appt.durationMinutes} min)</p>
+                          {originLocationName && (
+                            <p className="text-orange-600 text-xs mt-1 flex items-center gap-1">
+                              <Shuffle size={12} className="inline"/> Profesional de: {originLocationName}
+                            </p>
+                          )}
                           {appt.bookingObservations && <p className="text-xs mt-1 italic">Obs: {appt.bookingObservations}</p>}
                         </TooltipContent>
                       </Tooltip>
