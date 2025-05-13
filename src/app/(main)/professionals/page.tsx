@@ -249,7 +249,7 @@ export default function ProfessionalsPage() {
                     <Select 
                       onValueChange={field.onChange} 
                       value={field.value} 
-                      disabled={user?.role === USER_ROLES.LOCATION_STAFF || (isAdminOrContador && !!editingProfessional)}
+                      disabled={user?.role === USER_ROLES.LOCATION_STAFF}
                     >
                       <FormControl>
                         <SelectTrigger><SelectValue placeholder="Seleccionar sede" /></SelectTrigger>
@@ -282,3 +282,4 @@ export default function ProfessionalsPage() {
     </div>
   );
 }
+
