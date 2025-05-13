@@ -4,13 +4,10 @@ import type { User, Professional, Patient, Service, Appointment, AppointmentForm
 import { LOCATIONS, USER_ROLES, SERVICES as SERVICES_CONSTANTS, APPOINTMENT_STATUS, LocationId, ServiceId as ConstantServiceId, APPOINTMENT_STATUS_DISPLAY, PAYMENT_METHODS } from './constants';
 import { formatISO, parseISO, addDays, setHours, setMinutes, startOfDay, endOfDay, addMinutes, isSameDay as dateFnsIsSameDay, startOfMonth, endOfMonth, differenceInYears, subDays, isEqual, isBefore, isAfter, getDate, getYear, getMonth, setMonth, setYear } from 'date-fns';
 
-// --- Helper to convert Firestore Timestamps to ISO strings and vice-versa ---
-// Note: Firestore specific types (Timestamp, serverTimestamp etc.) are not used in mock data.
-
 const ANY_PROFESSIONAL_VALUE = "_any_professional_placeholder_";
 
 // --- Mock Data Configuration ---
-export const useMockDatabase = true; // Force mock database usage
+export const useMockDatabase = true; 
 
 
 // --- Initial Mock Data Definitions ---
@@ -34,30 +31,29 @@ const initialMockProfessionalsData: Professional[] = LOCATIONS.flatMap((location
     lastName: location.name.split(' ')[0],
     locationId: location.id,
     phone: `9876543${locIndex}${i + 1}`,
-    // biWeeklyEarnings will be calculated dynamically now
   }))
 );
 
 const initialMockPatientsData: Patient[] = [
-  { id: 'pat001', firstName: 'Ana', lastName: 'García', phone: '111222333', age: 39, dateOfBirth: '1985-05-15', preferredProfessionalId: initialMockProfessionalsData[0]?.id, notes: 'Paciente regular, prefiere citas por la mañana.', isDiabetic: false },
-  { id: 'pat002', firstName: 'Luis', lastName: 'Martínez', phone: '444555666', age: 31, dateOfBirth: '1992-11-20', notes: 'Primera visita.', isDiabetic: true },
-  { id: 'pat003', firstName: 'Elena', lastName: 'Ruiz', phone: '777888999', age: 23, dateOfBirth: '2000-07-01', isDiabetic: false },
-  { id: 'pat004', firstName: 'Carlos', lastName: 'Vargas', phone: '222333444', age: 54, dateOfBirth: '1970-03-25', isDiabetic: true, notes: "Sensibilidad en el pie izquierdo." },
-  { id: 'pat005', firstName: 'Sofía', lastName: 'Chávez', phone: '555666777', age: 25, dateOfBirth: '1998-12-05', isDiabetic: false, preferredProfessionalId: initialMockProfessionalsData[1]?.id },
+  { id: 'pat001', firstName: 'Ana', lastName: 'García', phone: '111222333', age: 39, dateOfBirth: '15-05', preferredProfessionalId: initialMockProfessionalsData[0]?.id, notes: 'Paciente regular, prefiere citas por la mañana.', isDiabetic: false },
+  { id: 'pat002', firstName: 'Luis', lastName: 'Martínez', phone: '444555666', age: 31, dateOfBirth: '20-11', notes: 'Primera visita.', isDiabetic: true },
+  { id: 'pat003', firstName: 'Elena', lastName: 'Ruiz', phone: '777888999', age: 23, dateOfBirth: '01-07', isDiabetic: false },
+  { id: 'pat004', firstName: 'Carlos', lastName: 'Vargas', phone: '222333444', age: 54, dateOfBirth: '25-03', isDiabetic: true, notes: "Sensibilidad en el pie izquierdo." },
+  { id: 'pat005', firstName: 'Sofía', lastName: 'Chávez', phone: '555666777', age: 25, dateOfBirth: '05-12', isDiabetic: false, preferredProfessionalId: initialMockProfessionalsData[1]?.id },
 ];
 
 const initialMockServicesData: Service[] = SERVICES_CONSTANTS.map((s_const, index) => ({
   id: s_const.id as string,
   name: s_const.name,
   defaultDuration: s_const.defaultDuration,
-  price: (50 + index * 10), // Deterministic price
+  price: (50 + index * 10), 
 }));
 
 const today = new Date();
 const yesterday = subDays(today, 1);
 const twoDaysAgo = subDays(today, 2);
 const tomorrow = addDays(today,1);
-const fixedFutureDateForRegistry = new Date(2025, 4, 9); // Month is 0-indexed, so 4 is May
+const fixedFutureDateForRegistry = new Date(2025, 4, 9); 
 
 const initialMockAppointmentsData: Appointment[] = [
   {
@@ -87,7 +83,7 @@ const initialMockAppointmentsData: Appointment[] = [
   { id: 'appt_registry_test_3', patientId: initialMockPatientsData[2].id, locationId: LOCATIONS[0].id, professionalId: initialMockProfessionalsData.find(p => p.locationId === LOCATIONS[0].id && p.firstName === 'Profesional 2')?.id, serviceId: initialMockServicesData[2].id, appointmentDateTime: formatISO(setHours(setMinutes(fixedFutureDateForRegistry, 0), 14)), durationMinutes: initialMockServicesData[2].defaultDuration, status: APPOINTMENT_STATUS.COMPLETED, amountPaid: initialMockServicesData[2].price, paymentMethod: PAYMENT_METHODS[2], createdAt: formatISO(fixedFutureDateForRegistry), updatedAt: formatISO(fixedFutureDateForRegistry), addedServices: [], attachedPhotos: [] }
 ];
 
-// --- Global Mock Database Store ---
+
 interface MockDB {
   users: User[];
   professionals: Professional[];
@@ -99,7 +95,6 @@ interface MockDB {
 function initializeGlobalMockStore(): MockDB {
   const globalAsAny = global as any;
   if (!globalAsAny._mockDB) {
-    // console.log("Initializing global mock DB store...");
     globalAsAny._mockDB = {
       users: [...initialMockUsersData],
       professionals: [...initialMockProfessionalsData],
@@ -117,7 +112,6 @@ const generateId = (): string => {
   return Math.random().toString(36).substr(2, 9);
 };
 
-// --- Auth ---
 export const getUserByUsername = async (username: string): Promise<User | undefined> => {
     if (useMockDatabase) {
         return mockDB.users.find(u => u.username === username);
@@ -125,14 +119,12 @@ export const getUserByUsername = async (username: string): Promise<User | undefi
     throw new Error("Real database not implemented for getUserByUsername");
 };
 
-// --- Professionals ---
 export const getProfessionals = async (locationId?: LocationId): Promise<Professional[]> => {
     if (useMockDatabase) {
         let professionalsResult = locationId 
             ? mockDB.professionals.filter(p => p.locationId === locationId)
             : [...mockDB.professionals];
 
-        // Calculate bi-weekly earnings for each professional
         const today = new Date();
         const currentYear = getYear(today);
         const currentMonth = getMonth(today);
@@ -206,7 +198,6 @@ export const updateProfessional = async (id: string, data: Partial<ProfessionalF
     throw new Error("Real database not implemented for updateProfessional");
 };
 
-// --- Patients ---
 const PATIENTS_PER_PAGE = 8;
 export const getPatients = async (options: { page?: number, limit?: number, searchTerm?: string, filterToday?: boolean, adminSelectedLocation?: LocationId | 'all', user?: User | null, lastVisiblePatientId?: string | null } = {}): Promise<{patients: Patient[], totalCount: number, lastVisiblePatientId?: string | null}> => {
   const { page = 1, limit: queryLimit = PATIENTS_PER_PAGE, searchTerm, filterToday, adminSelectedLocation, user, lastVisiblePatientId: startAfterId } = options;
@@ -276,8 +267,9 @@ export const findPatient = async (firstName: string, lastName: string): Promise<
 export const addPatient = async (data: Omit<Patient, 'id'>): Promise<Patient> => {
   const newPatientData: Omit<Patient, 'id'> = {
     ...data,
-    age: data.age || 0,
+    age: data.age === undefined ? null : data.age,
     isDiabetic: data.isDiabetic || false,
+    dateOfBirth: data.dateOfBirth || '',
   };
   if (useMockDatabase) {
     const newPatient: Patient = {
@@ -302,7 +294,6 @@ export const updatePatient = async (id: string, data: Partial<Patient>): Promise
     throw new Error("Real database not implemented for updatePatient");
 };
 
-// --- Services ---
 export const getServices = async (): Promise<Service[]> => {
     if (useMockDatabase) {
         return [...mockDB.services].sort((a, b) => a.name.localeCompare(b.name));
@@ -373,7 +364,6 @@ const populateAppointment = async (apptData: any): Promise<Appointment> => {
 };
 
 
-// --- Appointments ---
 const APPOINTMENTS_PER_PAGE_HISTORY = 8;
 export const getAppointments = async (filters: {
   locationId?: LocationId | LocationId[] | undefined;
@@ -387,7 +377,7 @@ export const getAppointments = async (filters: {
   lastVisibleAppointmentId?: string | null;
 }): Promise<{ appointments: Appointment[], totalCount: number, lastVisibleAppointmentId?: string | null }> => {
   const { page = 1, limit: queryLimitParam, lastVisibleAppointmentId: startAfterId, ...restFilters } = filters;
-  const queryLimit = queryLimitParam ?? (restFilters.statuses ? APPOINTMENTS_PER_PAGE_HISTORY : 1000); // Default high for non-history view
+  const queryLimit = queryLimitParam ?? (restFilters.statuses ? APPOINTMENTS_PER_PAGE_HISTORY : 1000); 
 
   if (useMockDatabase) { 
     let currentMockAppointments = mockDB.appointments || [];
@@ -460,7 +450,7 @@ export const getAppointments = async (filters: {
     }
     
     const newLastVisibleId = paginatedResult.length > 0 ? paginatedResult[paginatedResult.length -1].id : null;
-    return { appointments: paginatedResult, totalCount, lastVisibleAppointmentId: newLastVisibleId };
+    return { appointments: populatedAppointments, totalCount, lastVisibleAppointmentId: newLastVisibleId };
   }
   throw new Error("Real database not implemented for getAppointments");
 };
@@ -480,7 +470,7 @@ export const addAppointment = async (data: AppointmentFormData): Promise<Appoint
     let existingPatient = await findPatient(data.patientFirstName, data.patientLastName);
     if (existingPatient) {
       patientId = existingPatient.id;
-       if ((data.isDiabetic !== undefined && existingPatient.isDiabetic !== data.isDiabetic) || (data.patientAge !== undefined && existingPatient.age !== data.patientAge)) {
+       if ((data.isDiabetic !== undefined && existingPatient.isDiabetic !== data.isDiabetic) || (data.patientAge !== undefined && existingPatient.age !== data.patientAge) || (data.patientDateOfBirth && existingPatient.dateOfBirth !== data.patientDateOfBirth)) {
           await updatePatient(patientId, { isDiabetic: data.isDiabetic, age: data.patientAge, dateOfBirth: data.patientDateOfBirth });
       }
     } else {
@@ -498,7 +488,7 @@ export const addAppointment = async (data: AppointmentFormData): Promise<Appoint
     }
   } else {
       const existingPatientDetails = await getPatientById(patientId);
-      if (existingPatientDetails && ((data.isDiabetic !== undefined && data.isDiabetic !== existingPatientDetails.isDiabetic) || (data.patientAge !== undefined && data.patientAge !== existingPatientDetails.age))) {
+      if (existingPatientDetails && ((data.isDiabetic !== undefined && data.isDiabetic !== existingPatientDetails.isDiabetic) || (data.patientAge !== undefined && data.patientAge !== existingPatientDetails.age) || (data.patientDateOfBirth && existingPatientDetails.dateOfBirth !== data.patientDateOfBirth))) {
         await updatePatient(patientId, { isDiabetic: data.isDiabetic, age: data.patientAge, dateOfBirth: data.patientDateOfBirth });
       }
   }
@@ -522,20 +512,19 @@ export const addAppointment = async (data: AppointmentFormData): Promise<Appoint
     if (preferredProf && preferredProf.locationId === data.locationId) {
       actualProfessionalId = preferredProf.id;
     } else {
-      // Fall through to auto-assignment or unassigned
       actualProfessionalId = null; 
     }
   } else {
-     actualProfessionalId = null; // No preference, or "Any Professional" selected
+     actualProfessionalId = null; 
   }
 
 
-  if (actualProfessionalId === null) { // Auto-assign if no valid preference or "Any" was chosen
+  if (actualProfessionalId === null) { 
     const allProfessionalsInLocation = await getProfessionals(data.locationId);
     const appointmentsOnDateResult = await getAppointments({
       locationId: data.locationId,
       date: data.appointmentDate,
-      statuses: [APPOINTMENT_STATUS.BOOKED, APPOINTMENT_STATUS.CONFIRMED] // Consider only active appointments for conflict
+      statuses: [APPOINTMENT_STATUS.BOOKED, APPOINTMENT_STATUS.CONFIRMED] 
     });
     const existingAppointmentsForDay = appointmentsOnDateResult.appointments || [];
 
@@ -545,7 +534,6 @@ export const addAppointment = async (data: AppointmentFormData): Promise<Appoint
         if (existingAppt.professionalId === prof.id) {
           const existingApptStartTime = parseISO(existingAppt.appointmentDateTime);
           const existingApptEndTime = addMinutes(existingApptStartTime, existingAppt.durationMinutes);
-          // Check for overlap: (StartA < EndB) and (EndA > StartB)
           if (isBefore(appointmentDateTimeObject, existingApptEndTime) && isAfter(appointmentEndTime, existingApptStartTime)) {
             isProfBusy = true;
             break;
@@ -554,12 +542,8 @@ export const addAppointment = async (data: AppointmentFormData): Promise<Appoint
       }
       if (!isProfBusy) {
         actualProfessionalId = prof.id;
-        // console.log(`Auto-assigned professional ${actualProfessionalId} for appointment.`);
         break;
       }
-    }
-     if (actualProfessionalId === null) {
-        // console.warn(`No professional available for auto-assignment at ${data.locationId} on ${data.appointmentDate} at ${data.appointmentTime}. Appointment will be unassigned.`);
     }
   }
 
@@ -682,7 +666,6 @@ export const getPatientAppointmentHistory = async (
   throw new Error("Real database not implemented for getPatientAppointmentHistory");
 };
 
-// Helper function to get the start and end dates of the current quincena
 export const getCurrentQuincenaDateRange = (): { start: Date; end: Date } => {
   const today = new Date();
   const currentYear = getYear(today);
@@ -693,12 +676,10 @@ export const getCurrentQuincenaDateRange = (): { start: Date; end: Date } => {
   let endDate: Date;
 
   if (currentDay <= 15) {
-    // First quincena (1st to 15th)
     startDate = startOfMonth(setMonth(setYear(new Date(), currentYear), currentMonth));
-    endDate = addDays(startDate, 14); // Day 15
+    endDate = addDays(startDate, 14); 
   } else {
-    // Second quincena (16th to end of month)
-    startDate = addDays(startOfMonth(setMonth(setYear(new Date(), currentYear), currentMonth)), 15); // Day 16
+    startDate = addDays(startOfMonth(setMonth(setYear(new Date(), currentYear), currentMonth)), 15); 
     endDate = endOfMonth(setMonth(setYear(new Date(), currentYear), currentMonth));
   }
   return { start: startOfDay(startDate), end: endOfDay(endDate) };

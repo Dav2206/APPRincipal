@@ -7,7 +7,7 @@ import React, { useEffect, useState, useRef } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Badge } from '@/components/ui/badge';
-import { format, parseISO, differenceInDays, formatDistanceToNow, differenceInYears, addDays as dateFnsAddDays, startOfDay } from 'date-fns';
+import { format, parseISO, differenceInDays, formatDistanceToNow, addDays as dateFnsAddDays, startOfDay } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { UserSquare, CalendarDays, Stethoscope, TrendingUp, MessageSquare, AlertTriangle, Repeat, Cake, Paperclip, Camera, XIcon, ZoomIn, ZoomOut, RefreshCw, HeartPulse } from 'lucide-react';
 import { APPOINTMENT_STATUS, APPOINTMENT_STATUS_DISPLAY } from '@/lib/constants';
@@ -26,7 +26,7 @@ const PatientHistoryPanelComponent = ({ patient }: PatientHistoryPanelProps) => 
   const [loading, setLoading] = useState(true);
   const [preferredProfessionalName, setPreferredProfessionalName] = useState<string | null>(null);
   const [averageDaysBetweenVisits, setAverageDaysBetweenVisits] = useState<number | null>(null);
-  const [age, setAge] = useState<number | null>(null);
+  const [ageToDisplay, setAgeToDisplay] = useState<number | null>(null);
   const [nextRecommendedVisit, setNextRecommendedVisit] = useState<string | null>(null);
   const [selectedImageForModal, setSelectedImageForModal] = useState<string | null>(null);
   const [isImageModalOpen, setIsImageModalOpen] = useState(false);
@@ -63,17 +63,7 @@ const PatientHistoryPanelComponent = ({ patient }: PatientHistoryPanelProps) => 
         setPreferredProfessionalName(null);
       }
 
-      if (patient.dateOfBirth) {
-        try {
-          const dob = parseISO(patient.dateOfBirth);
-          setAge(differenceInYears(new Date(), dob));
-        } catch (e) {
-          console.error("Error parsing date of birth:", e);
-          setAge(null);
-        }
-      } else {
-        setAge(null);
-      }
+      setAgeToDisplay(patient.age ?? null);
       
       const completedVisits = pastAppointments.filter(appt => appt.status === APPOINTMENT_STATUS.COMPLETED)
         .sort((a,b) => parseISO(a.appointmentDateTime).getTime() - parseISO(b.appointmentDateTime).getTime());
@@ -97,10 +87,9 @@ const PatientHistoryPanelComponent = ({ patient }: PatientHistoryPanelProps) => 
         }
       } else if (completedVisits.length === 1) {
         const lastCompletedVisitDate = parseISO(completedVisits[0].appointmentDateTime);
-        // Default to 30 days if only one visit, can be adjusted
         const recommendedNextDate = dateFnsAddDays(lastCompletedVisitDate, 30); 
         setNextRecommendedVisit(format(recommendedNextDate, "PPP", { locale: es }));
-        setAverageDaysBetweenVisits(null); // Not enough data for average
+        setAverageDaysBetweenVisits(null); 
       }
        else {
         setAverageDaysBetweenVisits(null);
@@ -121,12 +110,12 @@ const PatientHistoryPanelComponent = ({ patient }: PatientHistoryPanelProps) => 
 
   const handleWheel = (e: React.WheelEvent<HTMLDivElement>) => {
     e.preventDefault();
-    const zoomFactor = e.deltaY < 0 ? 1.1 : 0.9; // Zoom in or out
-    setZoomLevel(prevZoom => Math.max(0.5, Math.min(prevZoom * zoomFactor, 5))); // Clamp zoom level
+    const zoomFactor = e.deltaY < 0 ? 1.1 : 0.9; 
+    setZoomLevel(prevZoom => Math.max(0.5, Math.min(prevZoom * zoomFactor, 5))); 
   };
 
   const handleMouseDown = (e: React.MouseEvent<HTMLDivElement>) => {
-    if (zoomLevel <= 1) return; // Panning only makes sense when zoomed in
+    if (zoomLevel <= 1) return; 
     setIsDragging(true);
     setDragStart({ x: e.clientX - imagePosition.x, y: e.clientY - imagePosition.y });
     e.currentTarget.style.cursor = 'grabbing';
@@ -161,7 +150,7 @@ const PatientHistoryPanelComponent = ({ patient }: PatientHistoryPanelProps) => 
 
 
   const appointmentsWithPhotos = history.filter(appt => appt.attachedPhotos && appt.attachedPhotos.length > 0)
-    .sort((a,b) => parseISO(b.appointmentDateTime).getTime() - parseISO(a.appointmentDateTime).getTime()); // Sort by most recent first
+    .sort((a,b) => parseISO(b.appointmentDateTime).getTime() - parseISO(a.appointmentDateTime).getTime()); 
   const lastFourAppointmentsWithPhotos = appointmentsWithPhotos.slice(0, 4);
 
   return (
@@ -185,10 +174,16 @@ const PatientHistoryPanelComponent = ({ patient }: PatientHistoryPanelProps) => 
               <p className="font-medium flex items-center gap-1"><Repeat size={16} /> Frecuencia Aprox.:</p>
               <p>{averageDaysBetweenVisits !== null && averageDaysBetweenVisits > 0 ? `Cada ${averageDaysBetweenVisits} días` : (totalVisits < 2 ? 'Pocas visitas para calcular' : 'N/A')}</p>
             </div>
-            {age !== null && (
+            {ageToDisplay !== null && (
               <div>
-                <p className="font-medium flex items-center gap-1"><Cake size={16} /> Edad:</p>
-                <p>{age} años</p>
+                <p className="font-medium flex items-center gap-1"><UserSquare size={16} /> Edad:</p>
+                <p>{ageToDisplay} años</p>
+              </div>
+            )}
+             {patient.dateOfBirth && (
+              <div>
+                <p className="font-medium flex items-center gap-1"><Cake size={16} /> Cumpleaños:</p>
+                <p>{patient.dateOfBirth}</p> {/* Display as DD-MM */}
               </div>
             )}
             <div>

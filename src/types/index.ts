@@ -26,10 +26,9 @@ export interface Patient extends BaseEntity {
   firstName: string;
   lastName: string;
   phone?: string;
-  age: number;
-  dateOfBirth?: string; // YYYY-MM-DD
+  age?: number | null; // Age is now optional and can be null
+  dateOfBirth?: string; // DD-MM format, optional
   isDiabetic?: boolean; 
-  // For "historial del paciente"
   preferredProfessionalId?: string;
   notes?: string; // General notes or observations about the patient
 }
@@ -74,8 +73,8 @@ export type AppointmentFormData = {
   patientFirstName: string;
   patientLastName: string;
   patientPhone?: string;
-  patientAge: number;
-  patientDateOfBirth?: string; // YYYY-MM-DD
+  patientAge?: number | null; // Age is optional and can be null
+  patientDateOfBirth?: string; // DD-MM format, optional
   existingPatientId?: string | null; // To link if patient exists
   isDiabetic?: boolean; 
   locationId: LocationId;
@@ -100,3 +99,4 @@ export type ServiceFormData = {
   defaultDuration: number;
   price?: number;
 };
+

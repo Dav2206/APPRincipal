@@ -18,8 +18,8 @@ export const PatientFormSchema = z.object({
   lastName: z.string().min(2, "Apellido es requerido."),
   phone: z.string().optional(),
   age: z.coerce.number().int().min(0, "La edad no puede ser negativa.").optional().nullable(),
-  dateOfBirth: z.string().optional().refine(val => !val || /^\d{4}-\d{2}-\d{2}$/.test(val), {
-    message: "Formato de fecha debe ser YYYY-MM-DD",
+  dateOfBirth: z.string().optional().refine(val => !val || /^\d{2}-\d{2}$/.test(val), {
+    message: "Formato de fecha de cumpleaños debe ser DD-MM.",
   }).or(z.literal('')),
   isDiabetic: z.boolean().optional(),
   notes: z.string().optional(),
@@ -32,8 +32,8 @@ export const AppointmentFormSchema = z.object({
   patientLastName: z.string().min(2, "Apellido del paciente es requerido (mínimo 2 caracteres)."),
   patientPhone: z.string().optional(),
   patientAge: z.coerce.number().int().min(0, "La edad del paciente no puede ser negativa.").optional().nullable(),
-  patientDateOfBirth: z.string().optional().refine(val => !val || /^\d{4}-\d{2}-\d{2}$/.test(val), { // YYYY-MM-DD format
-    message: "Formato de fecha de nacimiento debe ser YYYY-MM-DD.",
+  patientDateOfBirth: z.string().optional().refine(val => !val || /^\d{2}-\d{2}$/.test(val), { 
+    message: "Formato de fecha de cumpleaños debe ser DD-MM.",
   }).or(z.literal('')),
   existingPatientId: z.string().optional().nullable(),
   isDiabetic: z.boolean().optional(), 
@@ -84,3 +84,4 @@ export const ServiceFormSchema = z.object({
   price: z.coerce.number().positive("El precio debe ser un número positivo.").optional().nullable(),
 });
 export type ServiceFormData = z.infer<typeof ServiceFormSchema>;
+

@@ -69,7 +69,7 @@ export function AppointmentForm({ isOpen, onOpenChange, onAppointmentCreated, in
       patientFirstName: initialData?.patientFirstName || '',
       patientLastName: initialData?.patientLastName || '',
       patientPhone: initialData?.patientPhone || '',
-      patientAge: initialData?.patientAge ?? 0,
+      patientAge: initialData?.patientAge ?? null,
       patientDateOfBirth: initialData?.patientDateOfBirth || '',
       existingPatientId: initialData?.existingPatientId || null,
       isDiabetic: initialData?.isDiabetic || false,
@@ -124,7 +124,7 @@ export function AppointmentForm({ isOpen, onOpenChange, onAppointmentCreated, in
       setShowPatientHistory(!!patient);
       if (patient) {
         form.setValue('isDiabetic', patient.isDiabetic || false);
-        form.setValue('patientAge', patient.age ?? (patient.dateOfBirth ? differenceInYears(new Date(), parseISO(patient.dateOfBirth)) : 0));
+        form.setValue('patientAge', patient.age ?? null);
       }
     }
     if (watchExistingPatientId) {
@@ -133,7 +133,7 @@ export function AppointmentForm({ isOpen, onOpenChange, onAppointmentCreated, in
       setCurrentPatientForHistory(null);
       setShowPatientHistory(false);
       form.setValue('isDiabetic', false); // Reset if no existing patient
-      form.setValue('patientAge', 0);
+      form.setValue('patientAge', null);
     }
   }, [watchExistingPatientId, form]);
 
@@ -144,7 +144,7 @@ export function AppointmentForm({ isOpen, onOpenChange, onAppointmentCreated, in
       form.setValue('patientFirstName', patient.firstName);
       form.setValue('patientLastName', patient.lastName);
       form.setValue('patientPhone', (user?.role === USER_ROLES.ADMIN ? patient.phone : "Teléfono Restringido") || '');
-      form.setValue('patientAge', patient.age ?? (patient.dateOfBirth ? differenceInYears(new Date(), parseISO(patient.dateOfBirth)) : 0) );
+      form.setValue('patientAge', patient.age ?? null);
       form.setValue('patientDateOfBirth', patient.dateOfBirth || '');
       form.setValue('isDiabetic', patient.isDiabetic || false);
       setCurrentPatientForHistory(patient);
@@ -154,7 +154,7 @@ export function AppointmentForm({ isOpen, onOpenChange, onAppointmentCreated, in
       form.setValue('patientFirstName', '');
       form.setValue('patientLastName', '');
       form.setValue('patientPhone', '');
-      form.setValue('patientAge', 0);
+      form.setValue('patientAge', null);
       form.setValue('patientDateOfBirth', '');
       form.setValue('isDiabetic', false);
       setCurrentPatientForHistory(null);
@@ -171,7 +171,7 @@ export function AppointmentForm({ isOpen, onOpenChange, onAppointmentCreated, in
         preferredProfessionalId: data.preferredProfessionalId === ANY_PROFESSIONAL_VALUE ? null : data.preferredProfessionalId,
         patientPhone: (data.existingPatientId && user?.role !== USER_ROLES.ADMIN) ? undefined : data.patientPhone,
         isDiabetic: data.isDiabetic || false,
-        patientAge: data.patientAge === 0 ? undefined : data.patientAge, // Send undefined if age is 0
+        patientAge: data.patientAge === 0 ? null : data.patientAge, 
       };
       console.log("Submitting appointment data:", submitData);
       await addAppointment(submitData);
@@ -192,7 +192,7 @@ export function AppointmentForm({ isOpen, onOpenChange, onAppointmentCreated, in
         patientFirstName: '',
         patientLastName: '',
         patientPhone: '',
-        patientAge: 0,
+        patientAge: null,
         patientDateOfBirth: '',
         isDiabetic: false,
         existingPatientId: null,
@@ -227,7 +227,7 @@ export function AppointmentForm({ isOpen, onOpenChange, onAppointmentCreated, in
           patientFirstName: '',
           patientLastName: '',
           patientPhone: '',
-          patientAge: 0,
+          patientAge: null,
           patientDateOfBirth: '',
           isDiabetic: false,
           existingPatientId: null,
@@ -268,7 +268,7 @@ export function AppointmentForm({ isOpen, onOpenChange, onAppointmentCreated, in
                           form.setValue('patientFirstName', '');
                           form.setValue('patientLastName', '');
                           form.setValue('patientPhone', '');
-                          form.setValue('patientAge', 0);
+                          form.setValue('patientAge', null);
                           form.setValue('patientDateOfBirth', '');
                           form.setValue('isDiabetic', false);
                           setCurrentPatientForHistory(null);
@@ -327,7 +327,7 @@ export function AppointmentForm({ isOpen, onOpenChange, onAppointmentCreated, in
                     render={({ field }) => (
                       <FormItem>
                         <FormLabel className="flex items-center gap-1"><UserRound size={16}/>Edad (Opcional)</FormLabel>
-                        <FormControl><Input type="number" placeholder="Ej: 30" {...field} onChange={e => field.onChange(parseInt(e.target.value,10) || 0)} disabled={!!form.getValues("existingPatientId")} /></FormControl>
+                        <FormControl><Input type="number" placeholder="Ej: 30" {...field} onChange={e => field.onChange(e.target.value === '' ? null : parseInt(e.target.value,10) || null)} disabled={!!form.getValues("existingPatientId")} /></FormControl>
                         <FormMessage />
                       </FormItem>
                     )}
@@ -339,8 +339,8 @@ export function AppointmentForm({ isOpen, onOpenChange, onAppointmentCreated, in
                     name="patientDateOfBirth"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel className="flex items-center gap-1"><Cake size={16}/>Fecha de Nacimiento (Opcional)</FormLabel>
-                        <FormControl><Input type="text" placeholder="YYYY-MM-DD" {...field} disabled={!!form.getValues("existingPatientId")} /></FormControl>
+                        <FormLabel className="flex items-center gap-1"><Cake size={16}/>Fecha de Cumpleaños (DD-MM) (Opcional)</FormLabel>
+                        <FormControl><Input type="text" placeholder="DD-MM" {...field} disabled={!!form.getValues("existingPatientId")} /></FormControl>
                         <FormMessage />
                       </FormItem>
                     )}
@@ -550,7 +550,7 @@ export function AppointmentForm({ isOpen, onOpenChange, onAppointmentCreated, in
                 patientFirstName: '',
                 patientLastName: '',
                 patientPhone: '',
-                patientAge: 0,
+                patientAge: null,
                 patientDateOfBirth: '',
                 isDiabetic: false,
                 existingPatientId: null,
@@ -570,3 +570,4 @@ export function AppointmentForm({ isOpen, onOpenChange, onAppointmentCreated, in
     </Dialog>
   );
 }
+

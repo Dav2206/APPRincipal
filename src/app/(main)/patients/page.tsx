@@ -40,7 +40,7 @@ import { formatISO, startOfDay, parseISO, differenceInYears } from 'date-fns';
 import { useAppState } from '@/contexts/app-state-provider';
 import { USER_ROLES } from '@/lib/constants';
 
-const PATIENTS_PER_PAGE = 8; // Changed from 20 to 8 for optimization
+const PATIENTS_PER_PAGE = 8; 
 
 export default function PatientsPage() {
   const { user } = useAuth();
@@ -69,7 +69,7 @@ export default function PatientsPage() {
       firstName: '',
       lastName: '',
       phone: '',
-      age: 0,
+      age: null,
       dateOfBirth: '',
       isDiabetic: false,
       notes: ''
@@ -78,7 +78,7 @@ export default function PatientsPage() {
 
   const fetchPatientsData = useCallback(async (pageToFetch = 1, currentSearchTerm = searchTerm, currentFilterToday = filterPatientsWithAppointmentsToday, lastVisibleId: string | null = null) => {
     setIsLoading(true);
-    if (pageToFetch === 1) { // Reset list for new search/filter or initial load
+    if (pageToFetch === 1) { 
         setDisplayedPatients([]);
         setLastVisiblePatientId(null);
     }
@@ -111,7 +111,7 @@ export default function PatientsPage() {
 
 
   useEffect(() => {
-    fetchPatientsData(1, searchTerm, filterPatientsWithAppointmentsToday, null); // Initial load
+    fetchPatientsData(1, searchTerm, filterPatientsWithAppointmentsToday, null); 
   }, [fetchPatientsData, searchTerm, filterPatientsWithAppointmentsToday]);
 
 
@@ -157,7 +157,7 @@ export default function PatientsPage() {
 
   const handleAddPatient = () => {
     setEditingPatient(null);
-    form.reset({ firstName: '', lastName: '', phone: '', age: 0, dateOfBirth: '', isDiabetic: false, notes: '' });
+    form.reset({ firstName: '', lastName: '', phone: '', age: null, dateOfBirth: '', isDiabetic: false, notes: '' });
     setIsFormOpen(true);
   };
 
@@ -166,7 +166,7 @@ export default function PatientsPage() {
     form.reset({
         ...patient,
         phone: (user?.role === USER_ROLES.ADMIN) ? patient.phone : undefined, 
-        age: patient.age ?? 0,
+        age: patient.age ?? null,
         dateOfBirth: patient.dateOfBirth || '',
         isDiabetic: patient.isDiabetic || false,
     });
@@ -181,7 +181,7 @@ export default function PatientsPage() {
     try {
       const patientDataToSave = {
         ...data,
-        age: data.age === 0 ? undefined : data.age, // Store undefined if age is 0
+        age: data.age === 0 ? null : data.age, 
       };
 
       if (editingPatient && editingPatient.id) {
@@ -203,7 +203,7 @@ export default function PatientsPage() {
         toast({ title: "Paciente Agregado", description: `${data.firstName} ${data.lastName} agregado.` });
       }
       setIsFormOpen(false);
-      fetchPatientsData(1, searchTerm, filterPatientsWithAppointmentsToday, null); // Refresh list
+      fetchPatientsData(1, searchTerm, filterPatientsWithAppointmentsToday, null); 
 
     } catch (error) {
       toast({ title: "Error", description: "No se pudo guardar el paciente.", variant: "destructive" });
@@ -214,12 +214,10 @@ export default function PatientsPage() {
   const handleSearchTermChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const newSearchTerm = e.target.value;
     setSearchTerm(newSearchTerm);
-    // fetchPatientsData will be called by its own useEffect due to searchTerm change
   };
 
   const handleFilterTodayChange = (checked: boolean) => {
     setFilterPatientsWithAppointmentsToday(checked);
-    // fetchPatientsData will be called by its own useEffect due to filterPatientsWithAppointmentsToday change
   };
   
   const handleLoadMore = () => {
@@ -384,14 +382,14 @@ export default function PatientsPage() {
                 <FormField control={form.control} name="age" render={({ field }) => (
                   <FormItem>
                       <FormLabel className="flex items-center gap-1"><UserRound size={16}/>Edad (Opcional)</FormLabel>
-                      <FormControl><Input type="number" placeholder="Ej: 30" {...field} onChange={e => field.onChange(parseInt(e.target.value,10) || 0)}/></FormControl>
+                      <FormControl><Input type="number" placeholder="Ej: 30" {...field} onChange={e => field.onChange(e.target.value === '' ? null : parseInt(e.target.value,10) || null)}/></FormControl>
                       <FormMessage />
                   </FormItem>
                 )}/>
                <FormField control={form.control} name="dateOfBirth" render={({ field }) => (
                   <FormItem>
-                      <FormLabel className="flex items-center gap-1"><Cake size={16}/>Fecha de Nacimiento (Opcional)</FormLabel>
-                      <FormControl><Input type="text" placeholder="YYYY-MM-DD" {...field} /></FormControl>
+                      <FormLabel className="flex items-center gap-1"><Cake size={16}/>Fecha de Cumpleaños (DD-MM) (Opcional)</FormLabel>
+                      <FormControl><Input type="text" placeholder="DD-MM" {...field} /></FormControl>
                       <FormMessage />
                   </FormItem>
                )}/>
@@ -451,3 +449,4 @@ export default function PatientsPage() {
     </div>
   );
 }
+
