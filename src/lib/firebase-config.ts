@@ -26,6 +26,7 @@ console.log("Firebase Config Module: Resolved firebaseConfig.projectId for initi
 
 if (useMockDBEnv) {
   console.log("Firebase Config Module: USING MOCK DATABASE. Firebase App and Firestore instance will be undefined. No connection to Firebase services will be attempted by this module.");
+  // Ensure app and firestoreInstance are explicitly undefined if using mock
   app = undefined;
   firestoreInstance = undefined;
 } else {
@@ -39,6 +40,7 @@ if (useMockDBEnv) {
     if (!firebaseConfig.apiKey) console.error("Firebase Config Error: Missing NEXT_PUBLIC_FIREBASE_API_KEY");
     if (!firebaseConfig.authDomain) console.error("Firebase Config Error: Missing NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN");
     if (!firebaseConfig.projectId) console.error("Firebase Config Error: Missing NEXT_PUBLIC_FIREBASE_PROJECT_ID. This is crucial for Firestore connection.");
+    // Ensure app and firestoreInstance are explicitly undefined if config is missing
     app = undefined;
     firestoreInstance = undefined;
   } else {

@@ -1,39 +1,14 @@
 import type { User, Professional, Patient, Service, Appointment, AppointmentFormData, ProfessionalFormData, AppointmentStatus, ServiceFormData } from '@/types';
 import { LOCATIONS, USER_ROLES, SERVICES as SERVICES_CONSTANTS, APPOINTMENT_STATUS, LocationId, ServiceId as ConstantServiceId, APPOINTMENT_STATUS_DISPLAY, PAYMENT_METHODS } from './constants';
-import { formatISO, parseISO, addDays, setHours, setMinutes, startOfDay, endOfDay, addMinutes, isSameDay as dateFnsIsSameDay, startOfMonth, endOfMonth, differenceInYears, subDays } from 'date-fns';
-import { firestore } from './firebase-config'; 
-import { collection, addDoc, getDocs, doc, getDoc, updateDoc, query, where, deleteDoc, writeBatch, serverTimestamp, Timestamp, runTransaction, setDoc, QueryConstraint, orderBy, limit, startAfter,getCountFromServer, CollectionReference, DocumentData, documentId } from 'firebase/firestore';
+import { formatISO, parseISO, addDays, setHours, setMinutes, startOfDay, endOfDay, addMinutes, isSameDay as dateFnsIsSameDay, startOfMonth, endOfMonth, differenceInYears, subDays, isEqual, isBefore, isAfter } from 'date-fns';
 
 // --- Helper to convert Firestore Timestamps to ISO strings and vice-versa ---
-const fromTimestampToISO = (timestamp: Timestamp | undefined): string | undefined => {
-  if (!timestamp) return undefined;
-  try {
-    return timestamp.toDate().toISOString();
-  } catch (error) {
-    console.warn("Failed to convert Firestore Timestamp to ISO string:", timestamp, error);
-    return undefined;
-  }
-}
-
-const fromDateToTimestamp = (date: Date | string | undefined): Timestamp | undefined => {
-  if (!date) return undefined;
-  try {
-    const dateObj = typeof date === 'string' ? parseISO(date) : date;
-    if (isNaN(dateObj.getTime())) {
-      console.warn("Invalid date string provided for Firestore Timestamp conversion:", date);
-      return undefined;
-    }
-    return Timestamp.fromDate(dateObj);
-  } catch (error) {
-    console.warn("Failed to convert Date/ISO string to Firestore Timestamp:", date, error);
-    return undefined;
-  }
-}
+// Note: Firestore specific types (Timestamp, serverTimestamp etc.) are not used in mock data.
 
 const ANY_PROFESSIONAL_VALUE = "_any_professional_placeholder_";
 
 // --- Mock Data Configuration ---
-export const useMockDatabase = process.env.NEXT_PUBLIC_USE_MOCK_DATABASE === 'true';
+export const useMockDatabase = true; // Force mock database usage
 console.log("Data layer: Using mock database:", useMockDatabase);
 
 
@@ -81,7 +56,7 @@ const today = new Date();
 const yesterday = subDays(today, 1);
 const twoDaysAgo = subDays(today, 2);
 const tomorrow = addDays(today,1);
-const fixedFutureDateForRegistry = new Date(2025, 4, 9);
+const fixedFutureDateForRegistry = new Date(2025, 4, 9); // Month is 0-indexed, so 4 is May
 
 const initialMockAppointmentsData: Appointment[] = [
   {
@@ -143,91 +118,58 @@ const generateId = (): string => {
 
 // --- Auth ---
 export const getUserByUsername = async (username: string): Promise<User | undefined> => {
-    if (!useMockDatabase) {
-        if (!firestore) throw new Error("Firestore is not initialized.");
-        const usersRef = collection(firestore, 'users');
-        const q = query(usersRef, where('username', '==', username));
-        const querySnapshot = await getDocs(q);
-        if (!querySnapshot.empty) {
-            const userDoc = querySnapshot.docs[0];
-            return { id: userDoc.id, ...userDoc.data() } as User;
-        }
-        return undefined;
-    } else {
+    if (useMockDatabase) {
         return mockDB.users.find(u => u.username === username);
     }
+    // Real database logic would go here
+    throw new Error("Real database not implemented for getUserByUsername");
 };
 
 // --- Professionals ---
 export const getProfessionals = async (locationId?: LocationId): Promise<Professional[]> => {
-    if (!useMockDatabase) {
-        if (!firestore) throw new Error("Firestore is not initialized.");
-        const professionalsRef = collection(firestore, 'professionals');
-        let q;
-        if (locationId) {
-            q = query(professionalsRef, where('locationId', '==', locationId));
-        } else {
-            q = query(professionalsRef);
-        }
-        const querySnapshot = await getDocs(q);
-        return querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Professional));
-    } else {
+    if (useMockDatabase) {
         if (locationId) {
             return mockDB.professionals.filter(p => p.locationId === locationId);
         }
         return [...mockDB.professionals];
     }
+    // Real database logic would go here
+    throw new Error("Real database not implemented for getProfessionals");
 };
 
 export const getProfessionalById = async (id: string): Promise<Professional | undefined> => {
-    if (!useMockDatabase) {
-        if (!firestore) throw new Error("Firestore is not initialized.");
-        const docRef = doc(firestore, 'professionals', id);
-        const docSnap = await getDoc(docRef);
-        return docSnap.exists() ? { id: docSnap.id, ...docSnap.data() } as Professional : undefined;
-    } else {
+    if (useMockDatabase) {
         return mockDB.professionals.find(p => p.id === id);
     }
+    // Real database logic would go here
+    throw new Error("Real database not implemented for getProfessionalById");
 };
 
 export const addProfessional = async (data: Omit<ProfessionalFormData, 'id'>): Promise<Professional> => {
-  const newProfessionalData: Omit<Professional, 'id' | 'biWeeklyEarnings' | 'specializations'> = { // Removed specializations from here too
+  const newProfessionalData: Omit<Professional, 'id' | 'biWeeklyEarnings'> = {
     firstName: data.firstName,
     lastName: data.lastName,
     locationId: data.locationId,
     phone: data.phone,
   };
 
-  if (!useMockDatabase) {
-    if (!firestore) throw new Error("Firestore is not initialized.");
-    const docRef = await addDoc(collection(firestore, 'professionals'), newProfessionalData);
-    return { id: docRef.id, ...newProfessionalData, biWeeklyEarnings: 0, specializations: data.specializations || [] };
-  } else {
+  if (useMockDatabase) {
     const newProfessional: Professional = {
       id: generateId(),
       ...newProfessionalData,
       biWeeklyEarnings: 0,
-      specializations: data.specializations || [],
     };
     mockDB.professionals.push(newProfessional);
     return newProfessional;
   }
+  // Real database logic would go here
+  throw new Error("Real database not implemented for addProfessional");
 };
 
 export const updateProfessional = async (id: string, data: Partial<ProfessionalFormData>): Promise<Professional | undefined> => {
     const updatePayload = { ...data };
-    // Ensure specializations is handled correctly for Firestore (e.g., if it's an array)
-    if (updatePayload.specializations === undefined) {
-        delete updatePayload.specializations; // Or set to null if your schema allows
-    }
 
-    if (!useMockDatabase) {
-        if (!firestore) throw new Error("Firestore is not initialized.");
-        const docRef = doc(firestore, 'professionals', id);
-        await updateDoc(docRef, updatePayload);
-        const updatedDoc = await getDoc(docRef);
-        return updatedDoc.exists() ? { id: updatedDoc.id, ...updatedDoc.data() } as Professional : undefined;
-    } else {
+    if (useMockDatabase) {
         const index = mockDB.professionals.findIndex(p => p.id === id);
         if (index !== -1) {
             mockDB.professionals[index] = { ...mockDB.professionals[index], ...updatePayload } as Professional;
@@ -235,6 +177,8 @@ export const updateProfessional = async (id: string, data: Partial<ProfessionalF
         }
         return undefined;
     }
+    // Real database logic would go here
+    throw new Error("Real database not implemented for updateProfessional");
 };
 
 // --- Patients ---
@@ -242,73 +186,7 @@ const PATIENTS_PER_PAGE = 8;
 export const getPatients = async (options: { page?: number, limit?: number, searchTerm?: string, filterToday?: boolean, adminSelectedLocation?: LocationId | 'all', user?: User | null, lastVisiblePatientId?: string | null } = {}): Promise<{patients: Patient[], totalCount: number, lastVisiblePatientId?: string | null}> => {
   const { page = 1, limit: queryLimit = PATIENTS_PER_PAGE, searchTerm, filterToday, adminSelectedLocation, user, lastVisiblePatientId: startAfterId } = options;
 
-  if (!useMockDatabase) {
-    if (!firestore) throw new Error("Firestore is not initialized.");
-    const patientsRef = collection(firestore, 'patients') as CollectionReference<DocumentData>;
-    let constraints: QueryConstraint[] = [];
-
-    if (searchTerm) {
-      const lowerSearchTerm = searchTerm.toLowerCase();
-      // This is a simplified search. For robust search, consider dedicated search services or more complex query structures.
-      // Creating a 'searchableName' field in lowercase in your documents could help.
-      // Example: constraints.push(where('searchableName', '>=', lowerSearchTerm), where('searchableName', '<=', lowerSearchTerm + '\uf8ff'));
-      // For now, we'll stick to a lastName based search for Firestore as an example
-      constraints.push(orderBy('lastName'), where('lastName', '>=', lowerSearchTerm), where('lastName', '<=', lowerSearchTerm + '\uf8ff'));
-    }
-
-    if (filterToday && user) {
-        const todayStart = startOfDay(new Date());
-        const todayEnd = endOfDay(new Date());
-        const isAdminOrContador = user.role === USER_ROLES.ADMIN || user.role === USER_ROLES.CONTADOR;
-        const effectiveLocationId = isAdminOrContador
-            ? (adminSelectedLocation === 'all' ? undefined : adminSelectedLocation)
-            : user.locationId;
-
-        const appointmentsQueryConstraints: QueryConstraint[] = [
-            where('appointmentDateTime', '>=', fromDateToTimestamp(todayStart)),
-            where('appointmentDateTime', '<=', fromDateToTimestamp(todayEnd)),
-        ];
-        if (effectiveLocationId) {
-            appointmentsQueryConstraints.push(where('locationId', '==', effectiveLocationId));
-        }
-        const dailyAppointmentsQuery = query(collection(firestore, 'appointments'), ...appointmentsQueryConstraints);
-        const dailyAppointmentsSnap = await getDocs(dailyAppointmentsQuery);
-        const patientIdsWithAppointmentsToday = new Set(dailyAppointmentsSnap.docs.map(d => d.data().patientId as string));
-
-        if (patientIdsWithAppointmentsToday.size > 0) {
-            const patientIdsArray = Array.from(patientIdsWithAppointmentsToday).slice(0,30); // Firestore 'in' query limit
-            if(patientIdsArray.length > 0) {
-                 constraints.push(where(documentId(), 'in', patientIdsArray));
-            } else {
-                return { patients: [], totalCount: 0, lastVisiblePatientId: null };
-            }
-        } else {
-            return { patients: [], totalCount: 0, lastVisiblePatientId: null };
-        }
-    }
-    
-    const countQuery = query(patientsRef, ...constraints.filter(c => !(c.type === 'limit' || c.type === 'start_after' || c.type === 'order_by')));
-    const totalCountSnapshot = await getCountFromServer(countQuery);
-    const totalCount = totalCountSnapshot.data().count;
-
-    constraints.push(orderBy('firstName'), orderBy('lastName')); 
-    if (startAfterId) {
-        const lastVisibleDoc = await getDoc(doc(patientsRef, startAfterId));
-        if (lastVisibleDoc.exists()) {
-            constraints.push(startAfter(lastVisibleDoc));
-        }
-    }
-    constraints.push(limit(queryLimit));
-    
-    const finalQuery = query(patientsRef, ...constraints);
-    const querySnapshot = await getDocs(finalQuery);
-    
-    const fetchedPatients = querySnapshot.docs.map(d => ({ id: d.id, ...d.data() } as Patient));
-    const newLastVisibleId = fetchedPatients.length > 0 ? fetchedPatients[fetchedPatients.length - 1].id : null;
-
-    return { patients: fetchedPatients, totalCount, lastVisiblePatientId: newLastVisibleId };
-
-  } else { 
+  if (useMockDatabase) { 
     let filteredMockPatients = [...mockDB.patients];
     if (searchTerm) {
         const lowerSearchTerm = searchTerm.toLowerCase();
@@ -353,32 +231,24 @@ export const getPatients = async (options: { page?: number, limit?: number, sear
 
     return { patients: paginatedPatients, totalCount, lastVisiblePatientId: newLastVisibleId };
   }
+  // Real database logic would go here
+  throw new Error("Real database not implemented for getPatients");
 };
 
 export const getPatientById = async (id: string): Promise<Patient | undefined> => {
-    if (!useMockDatabase) {
-        if (!firestore) throw new Error("Firestore is not initialized.");
-        const docRef = doc(firestore, 'patients', id);
-        const docSnap = await getDoc(docRef);
-        return docSnap.exists() ? { id: docSnap.id, ...docSnap.data() } as Patient : undefined;
-    } else {
+    if (useMockDatabase) {
         return mockDB.patients.find(p => p.id === id);
     }
+    // Real database logic would go here
+    throw new Error("Real database not implemented for getPatientById");
 };
 
 export const findPatient = async (firstName: string, lastName: string): Promise<Patient | undefined> => {
-    if (!useMockDatabase) {
-        if (!firestore) throw new Error("Firestore is not initialized.");
-        const q = query(collection(firestore, 'patients'), where('firstName', '==', firstName), where('lastName', '==', lastName), limit(1));
-        const querySnapshot = await getDocs(q);
-        if (!querySnapshot.empty) {
-            const docSnap = querySnapshot.docs[0];
-            return { id: docSnap.id, ...docSnap.data() } as Patient;
-        }
-        return undefined;
-    } else {
+    if (useMockDatabase) {
         return mockDB.patients.find(p => p.firstName.toLowerCase() === firstName.toLowerCase() && p.lastName.toLowerCase() === lastName.toLowerCase());
     }
+    // Real database logic would go here
+    throw new Error("Real database not implemented for findPatient");
 };
 
 export const addPatient = async (data: Omit<Patient, 'id'>): Promise<Patient> => {
@@ -386,11 +256,7 @@ export const addPatient = async (data: Omit<Patient, 'id'>): Promise<Patient> =>
     ...data,
     isDiabetic: data.isDiabetic || false,
   };
-  if (!useMockDatabase) {
-    if (!firestore) throw new Error("Firestore is not initialized.");
-    const docRef = await addDoc(collection(firestore, 'patients'), newPatientData);
-    return { id: docRef.id, ...newPatientData };
-  } else {
+  if (useMockDatabase) {
     const newPatient: Patient = {
       id: generateId(),
       ...newPatientData,
@@ -398,16 +264,12 @@ export const addPatient = async (data: Omit<Patient, 'id'>): Promise<Patient> =>
     mockDB.patients.push(newPatient);
     return newPatient;
   }
+  // Real database logic would go here
+  throw new Error("Real database not implemented for addPatient");
 };
 
 export const updatePatient = async (id: string, data: Partial<Patient>): Promise<Patient | undefined> => {
-    if (!useMockDatabase) {
-        if (!firestore) throw new Error("Firestore is not initialized.");
-        const docRef = doc(firestore, 'patients', id);
-        await updateDoc(docRef, data);
-        const updatedDoc = await getDoc(docRef);
-        return updatedDoc.exists() ? { id: updatedDoc.id, ...updatedDoc.data() } as Patient : undefined;
-    } else {
+    if (useMockDatabase) {
         const index = mockDB.patients.findIndex(p => p.id === id);
         if (index !== -1) {
             mockDB.patients[index] = { ...mockDB.patients[index], ...data } as Patient;
@@ -415,30 +277,25 @@ export const updatePatient = async (id: string, data: Partial<Patient>): Promise
         }
         return undefined;
     }
+    // Real database logic would go here
+    throw new Error("Real database not implemented for updatePatient");
 };
 
 // --- Services ---
 export const getServices = async (): Promise<Service[]> => {
-    if (!useMockDatabase) {
-        if (!firestore) throw new Error("Firestore is not initialized.");
-        const servicesRef = collection(firestore, 'services');
-        const q = query(servicesRef, orderBy('name'));
-        const querySnapshot = await getDocs(q);
-        return querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Service));
-    } else {
+    if (useMockDatabase) {
         return [...mockDB.services].sort((a, b) => a.name.localeCompare(b.name));
     }
+    // Real database logic would go here
+    throw new Error("Real database not implemented for getServices");
 };
 
 export const getServiceById = async (id: string): Promise<Service | undefined> => {
-    if (!useMockDatabase) {
-        if (!firestore) throw new Error("Firestore is not initialized.");
-        const docRef = doc(firestore, 'services', id);
-        const docSnap = await getDoc(docRef);
-        return docSnap.exists() ? { id: docSnap.id, ...docSnap.data() } as Service : undefined;
-    } else {
+    if (useMockDatabase) {
         return mockDB.services.find(s => s.id === id);
     }
+    // Real database logic would go here
+    throw new Error("Real database not implemented for getServiceById");
 };
 
 export const addService = async (data: ServiceFormData): Promise<Service> => {
@@ -447,11 +304,7 @@ export const addService = async (data: ServiceFormData): Promise<Service> => {
     defaultDuration: data.defaultDuration,
     price: data.price,
   };
-  if (!useMockDatabase) {
-    if (!firestore) throw new Error("Firestore is not initialized.");
-    const docRef = await addDoc(collection(firestore, 'services'), newServiceData);
-    return { id: docRef.id, ...newServiceData };
-  } else {
+  if (useMockDatabase) {
     const newService: Service = {
       id: data.id || generateId(), 
       ...newServiceData,
@@ -459,16 +312,12 @@ export const addService = async (data: ServiceFormData): Promise<Service> => {
     mockDB.services.push(newService);
     return newService;
   }
+  // Real database logic would go here
+  throw new Error("Real database not implemented for addService");
 };
 
 export const updateService = async (id: string, data: Partial<ServiceFormData>): Promise<Service | undefined> => {
-    if (!useMockDatabase) {
-        if (!firestore) throw new Error("Firestore is not initialized.");
-        const docRef = doc(firestore, 'services', id);
-        await updateDoc(docRef, data);
-        const updatedDoc = await getDoc(docRef);
-        return updatedDoc.exists() ? { id: updatedDoc.id, ...updatedDoc.data() } as Service : undefined;
-    } else {
+    if (useMockDatabase) {
         const index = mockDB.services.findIndex(s => s.id === id);
         if (index !== -1) {
             mockDB.services[index] = { ...mockDB.services[index], ...data } as Service;
@@ -476,6 +325,8 @@ export const updateService = async (id: string, data: Partial<ServiceFormData>):
         }
         return undefined;
     }
+    // Real database logic would go here
+    throw new Error("Real database not implemented for updateService");
 };
 
 
@@ -497,9 +348,6 @@ const populateAppointment = async (apptData: any): Promise<Appointment> => {
     
     return {
         ...apptData,
-        appointmentDateTime: typeof apptData.appointmentDateTime === 'object' && apptData.appointmentDateTime.toDate ? fromTimestampToISO(apptData.appointmentDateTime as Timestamp) : apptData.appointmentDateTime,
-        createdAt: typeof apptData.createdAt === 'object' && apptData.createdAt.toDate ? fromTimestampToISO(apptData.createdAt as Timestamp) : apptData.createdAt,
-        updatedAt: typeof apptData.updatedAt === 'object' && apptData.updatedAt.toDate ? fromTimestampToISO(apptData.updatedAt as Timestamp) : apptData.updatedAt,
         patient,
         professional,
         service,
@@ -524,67 +372,7 @@ export const getAppointments = async (filters: {
   const { page = 1, limit: queryLimitParam, lastVisibleAppointmentId: startAfterId, ...restFilters } = filters;
   const queryLimit = queryLimitParam ?? (restFilters.statuses ? APPOINTMENTS_PER_PAGE_HISTORY : 1000); // Default high for non-history view
 
-  if (!useMockDatabase) {
-    if (!firestore) throw new Error("Firestore is not initialized.");
-    const appointmentsRef = collection(firestore, 'appointments') as CollectionReference<DocumentData>;
-    let constraints: QueryConstraint[] = [];
-
-    if (restFilters.locationId) {
-        const locationsToFilter = Array.isArray(restFilters.locationId) ? restFilters.locationId : [restFilters.locationId];
-        if (locationsToFilter.length > 0 && locationsToFilter[0] !== undefined) {
-            constraints.push(where('locationId', 'in', locationsToFilter));
-        }
-    }
-    if (restFilters.patientId) constraints.push(where('patientId', '==', restFilters.patientId));
-    if (restFilters.professionalId) constraints.push(where('professionalId', '==', restFilters.professionalId));
-    
-    if (restFilters.date) {
-        const targetDateStart = startOfDay(restFilters.date);
-        const targetDateEnd = endOfDay(restFilters.date);
-        constraints.push(where('appointmentDateTime', '>=', fromDateToTimestamp(targetDateStart)));
-        constraints.push(where('appointmentDateTime', '<=', fromDateToTimestamp(targetDateEnd)));
-    } else if (restFilters.dateRange) {
-        constraints.push(where('appointmentDateTime', '>=', fromDateToTimestamp(restFilters.dateRange.start)));
-        constraints.push(where('appointmentDateTime', '<=', fromDateToTimestamp(restFilters.dateRange.end)));
-    }
-
-    if (restFilters.statuses) {
-        const statusesToFilter = Array.isArray(restFilters.statuses) ? restFilters.statuses : [restFilters.statuses];
-        if (statusesToFilter.length > 0) {
-            constraints.push(where('status', 'in', statusesToFilter));
-        }
-    }
-
-    const isFetchingPastStatuses = restFilters.statuses && (
-        (Array.isArray(restFilters.statuses) && restFilters.statuses.some(s => [APPOINTMENT_STATUS.COMPLETED, APPOINTMENT_STATUS.CANCELLED_CLIENT, APPOINTMENT_STATUS.CANCELLED_STAFF, APPOINTMENT_STATUS.NO_SHOW].includes(s as AppointmentStatus))) ||
-        (typeof restFilters.statuses === 'string' && [APPOINTMENT_STATUS.COMPLETED, APPOINTMENT_STATUS.CANCELLED_CLIENT, APPOINTMENT_STATUS.CANCELLED_STAFF, APPOINTMENT_STATUS.NO_SHOW].includes(restFilters.statuses as AppointmentStatus))
-    );
-    
-    const sortOrder = isFetchingPastStatuses ? 'desc' : 'asc';
-    constraints.push(orderBy('appointmentDateTime', sortOrder));
-
-    const countQuery = query(appointmentsRef, ...constraints.filter(c => !(c.type === 'limit' || c.type === 'start_after' || c.type === 'order_by'))); 
-    const totalCountSnapshot = await getCountFromServer(countQuery);
-    const totalCount = totalCountSnapshot.data().count;
-
-    if (startAfterId) {
-        const lastVisibleDoc = await getDoc(doc(appointmentsRef, startAfterId));
-        if (lastVisibleDoc.exists()) {
-            constraints.push(startAfter(lastVisibleDoc));
-        }
-    }
-    constraints.push(limit(queryLimit));
-
-    const finalQuery = query(appointmentsRef, ...constraints);
-    const querySnapshot = await getDocs(finalQuery);
-    
-    const populatedAppointmentsPromises = querySnapshot.docs.map(d => populateAppointment({id: d.id, ...d.data()}));
-    const populatedAppointments = await Promise.all(populatedAppointmentsPromises);
-    
-    const newLastVisibleId = populatedAppointments.length > 0 ? populatedAppointments[populatedAppointments.length -1].id : null;
-    return { appointments: populatedAppointments, totalCount, lastVisibleAppointmentId: newLastVisibleId };
-
-  } else { 
+  if (useMockDatabase) { 
     let currentMockAppointments = mockDB.appointments || [];
     let filteredMockAppointments = [...currentMockAppointments];
 
@@ -657,19 +445,18 @@ export const getAppointments = async (filters: {
     const newLastVisibleId = paginatedResult.length > 0 ? paginatedResult[paginatedResult.length -1].id : null;
     return { appointments: paginatedResult, totalCount, lastVisibleAppointmentId: newLastVisibleId };
   }
+  // Real database logic would go here
+  throw new Error("Real database not implemented for getAppointments");
 };
 
 
 export const getAppointmentById = async (id: string): Promise<Appointment | undefined> => {
-    if (!useMockDatabase) {
-        if (!firestore) throw new Error("Firestore is not initialized.");
-        const docRef = doc(firestore, 'appointments', id);
-        const docSnap = await getDoc(docRef);
-        return docSnap.exists() ? populateAppointment({id: docSnap.id, ...docSnap.data()}) : undefined;
-    } else {
+    if (useMockDatabase) {
         const appt = mockDB.appointments.find(a => a.id === id);
         return appt ? populateAppointment(appt) : undefined;
     }
+    // Real database logic would go here
+    throw new Error("Real database not implemented for getAppointmentById");
 };
 
 export const addAppointment = async (data: AppointmentFormData): Promise<Appointment> => {
@@ -701,52 +488,85 @@ export const addAppointment = async (data: AppointmentFormData): Promise<Appoint
   }
 
   const service = await getServiceById(data.serviceId as string);
+  if (!service) {
+      throw new Error(`Service with ID ${data.serviceId} not found.`);
+  }
   const appointmentDateHours = parseInt(data.appointmentTime.split(':')[0]);
   const appointmentDateMinutes = parseInt(data.appointmentTime.split(':')[1]);
   
+  const appointmentDateTimeObject = setMinutes(setHours(data.appointmentDate, appointmentDateHours), appointmentDateMinutes);
+  const appointmentDateTime = formatISO(appointmentDateTimeObject);
+  const appointmentDuration = service.defaultDuration || 60;
+  const appointmentEndTime = addMinutes(appointmentDateTimeObject, appointmentDuration);
+
   let actualProfessionalId: string | undefined | null = undefined;
+
   if (data.preferredProfessionalId && data.preferredProfessionalId !== ANY_PROFESSIONAL_VALUE) {
-    const preferredProf = useMockDatabase 
-      ? mockDB.professionals.find(p => p.id === data.preferredProfessionalId && p.locationId === data.locationId)
-      : await getProfessionalById(data.preferredProfessionalId); // Assuming getProfessionalById handles location check or you do it after
-    
+    const preferredProf = await getProfessionalById(data.preferredProfessionalId);
     if (preferredProf && preferredProf.locationId === data.locationId) {
       actualProfessionalId = preferredProf.id;
     } else {
-      console.warn(`Preferred professional ${data.preferredProfessionalId} not found or not in location ${data.locationId}. Appointment will be unassigned.`);
-      actualProfessionalId = null;
+      console.warn(`Preferred professional ${data.preferredProfessionalId} not found or not in location ${data.locationId}. Attempting to auto-assign or leave unassigned.`);
+      // Fall through to auto-assignment or unassigned
+      actualProfessionalId = null; 
     }
   } else {
-    actualProfessionalId = null;
+     actualProfessionalId = null; // No preference, or "Any Professional" selected
   }
 
-  const appointmentDateTime = formatISO(setMinutes(setHours(data.appointmentDate, appointmentDateHours), appointmentDateMinutes));
 
-  const newAppointmentData: Omit<Appointment, 'id' | 'createdAt' | 'updatedAt' | 'patient' | 'service' | 'professional'> & { appointmentDateTime: string | Timestamp, createdAt?: Timestamp, updatedAt?: Timestamp } = {
+  if (actualProfessionalId === null) { // Auto-assign if no valid preference or "Any" was chosen
+    const allProfessionalsInLocation = await getProfessionals(data.locationId);
+    const appointmentsOnDateResult = await getAppointments({
+      locationId: data.locationId,
+      date: data.appointmentDate,
+      statuses: [APPOINTMENT_STATUS.BOOKED, APPOINTMENT_STATUS.CONFIRMED] // Consider only active appointments for conflict
+    });
+    const existingAppointmentsForDay = appointmentsOnDateResult.appointments || [];
+
+    for (const prof of allProfessionalsInLocation) {
+      let isProfBusy = false;
+      for (const existingAppt of existingAppointmentsForDay) {
+        if (existingAppt.professionalId === prof.id) {
+          const existingApptStartTime = parseISO(existingAppt.appointmentDateTime);
+          const existingApptEndTime = addMinutes(existingApptStartTime, existingAppt.durationMinutes);
+          // Check for overlap: (StartA < EndB) and (EndA > StartB)
+          if (isBefore(appointmentDateTimeObject, existingApptEndTime) && isAfter(appointmentEndTime, existingApptStartTime)) {
+            isProfBusy = true;
+            break;
+          }
+        }
+      }
+      if (!isProfBusy) {
+        actualProfessionalId = prof.id;
+        console.log(`Auto-assigned professional ${actualProfessionalId} for appointment.`);
+        break;
+      }
+    }
+     if (actualProfessionalId === null) {
+        console.warn(`No professional available for auto-assignment at ${data.locationId} on ${data.appointmentDate} at ${data.appointmentTime}. Appointment will be unassigned.`);
+    }
+  }
+
+
+  const newAppointmentData: Omit<Appointment, 'id' | 'createdAt' | 'updatedAt' | 'patient' | 'service' | 'professional'> = {
     patientId: patientId!,
     locationId: data.locationId,
     serviceId: data.serviceId,
     professionalId: actualProfessionalId,
-    appointmentDateTime: useMockDatabase ? appointmentDateTime : fromDateToTimestamp(appointmentDateTime)!,
-    durationMinutes: service?.defaultDuration || 60,
-    preferredProfessionalId: data.preferredProfessionalId === ANY_PROFESSIONAL_VALUE ? undefined : data.preferredProfessionalId,
+    appointmentDateTime: appointmentDateTime,
+    durationMinutes: appointmentDuration,
+    preferredProfessionalId: (data.preferredProfessionalId === ANY_PROFESSIONAL_VALUE || !data.preferredProfessionalId) ? undefined : data.preferredProfessionalId,
     bookingObservations: data.bookingObservations,
     status: APPOINTMENT_STATUS.BOOKED,
     attachedPhotos: [],
     addedServices: [],
   };
 
-  if (!useMockDatabase) {
-    if (!firestore) throw new Error("Firestore is not initialized.");
-    const submissionData = { ...newAppointmentData, createdAt: serverTimestamp(), updatedAt: serverTimestamp() };
-    const docRef = await addDoc(collection(firestore, 'appointments'), submissionData);
-    const createdDoc = await getDoc(docRef);
-    return populateAppointment({id: createdDoc.id, ...createdDoc.data()});
-  } else {
+  if (useMockDatabase) {
     const newAppointment: Appointment = {
       id: generateId(),
       ...newAppointmentData,
-      appointmentDateTime: appointmentDateTime, 
       createdAt: formatISO(new Date()),
       updatedAt: formatISO(new Date()),
     };
@@ -754,51 +574,62 @@ export const addAppointment = async (data: AppointmentFormData): Promise<Appoint
     mockDB.appointments.push(populatedNewAppointment);
     return populatedNewAppointment;
   }
+  // Real database logic would go here
+  throw new Error("Real database not implemented for addAppointment");
 };
 
 export const updateAppointment = async (id: string, data: Partial<Appointment>): Promise<Appointment | undefined> => {
-  const updateData: any = { ...data, updatedAt: useMockDatabase ? formatISO(new Date()) : serverTimestamp() };
+  const updateData: any = { ...data, updatedAt: formatISO(new Date()) };
   
-  if (data.appointmentDateTime && !useMockDatabase) {
-    updateData.appointmentDateTime = fromDateToTimestamp(data.appointmentDateTime);
-  } else if (data.appointmentDateTime && useMockDatabase) {
-    // Ensure it's a string for mock DB
-    updateData.appointmentDateTime = typeof data.appointmentDateTime === 'object' 
-        ? formatISO(data.appointmentDateTime) 
-        : data.appointmentDateTime;
-  }
-
-
-  if (!useMockDatabase) {
-    if (!firestore) throw new Error("Firestore is not initialized.");
-    const docRef = doc(firestore, 'appointments', id);
-    delete updateData.patient;
-    delete updateData.professional;
-    delete updateData.service;
-    if (updateData.addedServices) {
-        updateData.addedServices = updateData.addedServices.map((as: any) => ({
-            serviceId: as.serviceId,
-            professionalId: as.professionalId,
-            price: as.price
-        }));
-    }
-    await updateDoc(docRef, updateData);
-    const updatedDoc = await getDoc(docRef);
-    return updatedDoc.exists() ? populateAppointment({id: updatedDoc.id, ...updatedDoc.data()}) : undefined;
-  } else {
+  if (useMockDatabase) {
     const index = mockDB.appointments.findIndex(a => a.id === id);
     if (index !== -1) {
-      mockDB.appointments[index] = {
-        ...mockDB.appointments[index],
-        ...data, 
-        updatedAt: formatISO(new Date()), 
-      };
-      const updatedPopulatedAppointment = await populateAppointment(mockDB.appointments[index]);
-      mockDB.appointments[index] = updatedPopulatedAppointment;
-      return updatedPopulatedAppointment;
+        const originalAppointment = mockDB.appointments[index];
+        
+        // Handle date and time updates carefully for mock
+        let newAppointmentDateTime = originalAppointment.appointmentDateTime;
+        if (data.appointmentDate && data.appointmentTime) {
+            const datePart = data.appointmentDate; // Assuming it's already a Date object
+            const [hours, minutes] = (data.appointmentTime as string).split(':').map(Number);
+            newAppointmentDateTime = formatISO(setMinutes(setHours(datePart, hours), minutes));
+        } else if (data.appointmentDate) { // Only date changed
+            const timePart = parseISO(originalAppointment.appointmentDateTime);
+            const [hours, minutes] = [timePart.getHours(), timePart.getMinutes()];
+            newAppointmentDateTime = formatISO(setMinutes(setHours(data.appointmentDate as Date, hours), minutes));
+        } else if (data.appointmentTime) { // Only time changed
+            const datePart = parseISO(originalAppointment.appointmentDateTime);
+            const [hours, minutes] = (data.appointmentTime as string).split(':').map(Number);
+            newAppointmentDateTime = formatISO(setMinutes(setHours(datePart, hours), minutes));
+        }
+        
+        const updatedAppointmentRaw = {
+            ...originalAppointment,
+            ...data,
+            appointmentDateTime: newAppointmentDateTime, // Use the re-calculated ISO string
+            updatedAt: formatISO(new Date()),
+        };
+        
+        // Remove properties that should not be directly on the raw appointment object before populating
+        delete updatedAppointmentRaw.patient;
+        delete updatedAppointmentRaw.professional;
+        delete updatedAppointmentRaw.service;
+        if (updatedAppointmentRaw.addedServices) {
+            updatedAppointmentRaw.addedServices = updatedAppointmentRaw.addedServices.map((as: any) => ({
+                serviceId: as.serviceId,
+                professionalId: as.professionalId,
+                price: as.price
+            }));
+        }
+
+
+        const populatedAppointment = await populateAppointment(updatedAppointmentRaw);
+        mockDB.appointments[index] = populatedAppointment;
+        return populatedAppointment;
     }
     return undefined;
   }
+  // Real database logic would go here
+  throw new Error("Real database not implemented for updateAppointment");
 };
 
 export const getPatientAppointmentHistory = async (
@@ -809,38 +640,7 @@ export const getPatientAppointmentHistory = async (
   const todayDate = startOfDay(new Date());
   const pastStatuses: AppointmentStatus[] = [APPOINTMENT_STATUS.COMPLETED, APPOINTMENT_STATUS.NO_SHOW, APPOINTMENT_STATUS.CANCELLED_CLIENT, APPOINTMENT_STATUS.CANCELLED_STAFF];
 
-  if (!useMockDatabase) {
-    if (!firestore) throw new Error("Firestore is not initialized.");
-    const appointmentsRef = collection(firestore, 'appointments') as CollectionReference<DocumentData>;
-    let constraints: QueryConstraint[] = [
-        where('patientId', '==', patientId),
-        where('appointmentDateTime', '<', fromDateToTimestamp(todayDate)!),
-        where('status', 'in', pastStatuses),
-        orderBy('appointmentDateTime', 'desc')
-    ];
-
-    const countQuery = query(appointmentsRef, ...constraints.filter(c => !(c.type === 'limit' || c.type === 'start_after' || c.type === 'order_by')));
-    const totalCountSnapshot = await getCountFromServer(countQuery);
-    const totalCount = totalCountSnapshot.data().count;
-
-    if (startAfterId) {
-        const lastVisibleDoc = await getDoc(doc(appointmentsRef, startAfterId));
-        if (lastVisibleDoc.exists()) {
-            constraints.push(startAfter(lastVisibleDoc));
-        }
-    }
-    constraints.push(limit(queryLimit));
-
-    const finalQuery = query(appointmentsRef, ...constraints);
-    const querySnapshot = await getDocs(finalQuery);
-    
-    const populatedAppointmentsPromises = querySnapshot.docs.map(d => populateAppointment({id: d.id, ...d.data()}));
-    const populatedAppointments = await Promise.all(populatedAppointmentsPromises);
-    
-    const newLastVisibleId = populatedAppointments.length > 0 ? populatedAppointments[populatedAppointments.length -1].id : null;
-    return { appointments: populatedAppointments, totalCount, lastVisibleAppointmentId: newLastVisibleId };
-
-  } else { 
+  if (useMockDatabase) { 
     const historyAppointments = (mockDB.appointments || []).filter(appt =>
       appt.patientId === patientId &&
       appt.appointmentDateTime && parseISO(appt.appointmentDateTime) < todayDate &&
@@ -868,4 +668,6 @@ export const getPatientAppointmentHistory = async (
     const newLastVisibleId = paginatedAppointments.length > 0 ? paginatedAppointments[paginatedAppointments.length -1].id : null;
     return { appointments: paginatedAppointments, totalCount, lastVisibleAppointmentId: newLastVisibleId };
   }
+  // Real database logic would go here
+  throw new Error("Real database not implemented for getPatientAppointmentHistory");
 };
