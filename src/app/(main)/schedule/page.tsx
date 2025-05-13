@@ -5,7 +5,7 @@ import type { Appointment, Professional } from '@/types';
 import React, { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '@/contexts/auth-provider';
 import { useAppState } from '@/contexts/app-state-provider';
-import { getAppointments, getProfessionals, getAppointmentById } from '@/lib/data';
+import { getAppointments, getProfessionals, getAppointmentById, getProfessionalAvailabilityForDate } from '@/lib/data';
 import { LOCATIONS, USER_ROLES, TIME_SLOTS, LocationId, APPOINTMENT_STATUS } from '@/lib/constants';
 import { DailyTimeline } from '@/components/schedule/daily-timeline';
 import { Button } from '@/components/ui/button';
@@ -25,7 +25,8 @@ export default function SchedulePage() {
   const { user } = useAuth();
   const { selectedLocationId: adminSelectedLocation } = useAppState();
   const [appointments, setAppointments] = useState<Appointment[]>([]);
-  const [professionals, setProfessionals] = useState<Professional[]>([]);
+  const [allProfessionals, setAllProfessionals] = useState<Professional[]>([]);
+  const [workingProfessionals, setWorkingProfessionals] = useState<Professional[]>([]);
   const [currentDate, setCurrentDate] = useState<Date>(startOfDay(new Date()));
   const [isLoading, setIsLoading] = useState(true);
   const [selectedAppointmentForEdit, setSelectedAppointmentForEdit] = useState<Appointment | null>(null);
@@ -41,7 +42,8 @@ export default function SchedulePage() {
     if (!user) {
       setIsLoading(false);
       setAppointments([]);
-      setProfessionals([]); // Ensure professionals are also cleared
+      setAllProfessionals([]);
+      setWorkingProfessionals([]);
       return;
     }
     setIsLoading(true);
@@ -51,16 +53,25 @@ export default function SchedulePage() {
         getAppointments({
           locationId: effectiveLocationId,
           date: currentDate,
-          statuses: [APPOINTMENT_STATUS.BOOKED, APPOINTMENT_STATUS.CONFIRMED, APPOINTMENT_STATUS.COMPLETED], // Fetch only active or completed appointments
+          statuses: [APPOINTMENT_STATUS.BOOKED, APPOINTMENT_STATUS.CONFIRMED],
         }),
         getProfessionals(effectiveLocationId)
       ]);
-      setAppointments(fetchedAppointmentsData.appointments || []); // Ensure it's an array
-      setProfessionals(fetchedProfessionalsResult || []); // Ensure it's an array
+      setAppointments(fetchedAppointmentsData.appointments || []);
+      setAllProfessionals(fetchedProfessionalsResult || []);
+      
+      // Filter professionals working on the current date
+      const currentlyWorkingProfessionals = (fetchedProfessionalsResult || []).filter(prof => {
+        const availability = getProfessionalAvailabilityForDate(prof, currentDate);
+        return !!availability; // True if they have any working hours defined for the day
+      });
+      setWorkingProfessionals(currentlyWorkingProfessionals);
+
     } catch (error) {
       console.error("Error fetching schedule data:", error);
       setAppointments([]);
-      setProfessionals([]); // Ensure professionals are also cleared on error
+      setAllProfessionals([]);
+      setWorkingProfessionals([]);
     } finally {
       setIsLoading(false);
     }
@@ -78,20 +89,17 @@ export default function SchedulePage() {
 
   const handleTimelineAppointmentClick = useCallback(async (appointment: Appointment) => {
     try {
-      // Ensure we fetch the full appointment details if the one from timeline is partial
       const fullAppointmentDetails = await getAppointmentById(appointment.id);
       if (fullAppointmentDetails) {
         setSelectedAppointmentForEdit(fullAppointmentDetails);
         setIsEditModalOpen(true);
       } else {
-        // Fallback to the potentially partial appointment from the timeline if full fetch fails
         setSelectedAppointmentForEdit(appointment);
         setIsEditModalOpen(true);
         console.warn("Could not fetch full appointment details for editing, using timeline data.");
       }
     } catch (error) {
       console.error("Error fetching appointment details:", error);
-      // Fallback to the potentially partial appointment from the timeline on error
       setSelectedAppointmentForEdit(appointment);
       setIsEditModalOpen(true);
     }
@@ -99,13 +107,13 @@ export default function SchedulePage() {
 
 
   const handleAppointmentUpdated = useCallback(() => {
-    fetchData(); // Re-fetch all appointments for the current day and location
+    fetchData(); 
     setIsEditModalOpen(false);
   }, [fetchData]);
   
   const handleNewAppointmentCreated = useCallback(async () => {
-    setIsNewAppointmentFormOpen(false); // Close the form
-    await fetchData(); // Re-fetch data after new appointment is created
+    setIsNewAppointmentFormOpen(false);
+    await fetchData(); 
   }, [fetchData]);
   
   const NoDataCard = ({ title, message }: { title: string; message: string }) => (
@@ -180,14 +188,14 @@ export default function SchedulePage() {
         <CardContent>
           {isLoading ? (
             <LoadingState />
-          ) : professionals.length === 0 ? (
+          ) : workingProfessionals.length === 0 ? (
             <NoDataCard 
-              title="No hay profesionales"
-              message={`No se encontraron profesionales para ${effectiveLocationId ? LOCATIONS.find(l => l.id === effectiveLocationId)?.name : 'la selección actual'}.`}
+              title="No hay profesionales trabajando hoy"
+              message={`No se encontraron profesionales activos para ${effectiveLocationId ? LOCATIONS.find(l => l.id === effectiveLocationId)?.name : 'la selección actual'} en esta fecha.`}
             />
           ) : (
             <DailyTimeline 
-              professionals={professionals} 
+              professionals={workingProfessionals} 
               appointments={appointments} 
               timeSlots={timeSlotsForView} 
               currentDate={currentDate}
