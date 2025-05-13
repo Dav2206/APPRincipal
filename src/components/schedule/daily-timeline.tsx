@@ -1,7 +1,7 @@
 
 "use client";
 
-import type { Appointment, Professional } from '@/types';
+import type { Appointment, Professional, LocationId } from '@/types';
 import React from 'react';
 import { parseISO, getHours, getMinutes, addMinutes, format } from 'date-fns';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
@@ -18,6 +18,7 @@ interface DailyTimelineProps {
   timeSlots: string[]; // e.g., ["09:00", "09:30", ..., "19:30"]
   currentDate: Date;
   onAppointmentClick?: (appointment: Appointment) => void;
+  viewingLocationId: LocationId; // Add this prop
 }
 
 const PIXELS_PER_MINUTE = 1.5; 
@@ -36,10 +37,10 @@ const isOverlapping = (apptA: Appointment, apptB: Appointment): boolean => {
   return startA < endB && endA > startB;
 };
 
-const DailyTimelineComponent = ({ professionals, appointments, timeSlots, onAppointmentClick }: DailyTimelineProps) => {
+const DailyTimelineComponent = ({ professionals, appointments, timeSlots, onAppointmentClick, viewingLocationId }: DailyTimelineProps) => {
   
   if (professionals.length === 0) {
-    return <p className="text-muted-foreground text-center py-8">No hay profesionales para mostrar en esta sede.</p>;
+    return <p className="text-muted-foreground text-center py-8">No hay profesionales para mostrar en esta sede para la fecha seleccionada.</p>;
   }
 
   const getAppointmentStyle = (appointment: Appointment) => {
@@ -85,7 +86,7 @@ const DailyTimelineComponent = ({ professionals, appointments, timeSlots, onAppo
           <div className="flex flex-nowrap">
             {professionals.map(prof => {
               const professionalAppointments = appointments
-                .filter(appt => appt.professionalId === prof.id)
+                .filter(appt => appt.professionalId === prof.id && appt.locationId === viewingLocationId)
                 .sort((a, b) => parseISO(a.appointmentDateTime).getTime() - parseISO(b.appointmentDateTime).getTime());
 
               const overlappingAppointmentIds = new Set<string>();
@@ -123,13 +124,10 @@ const DailyTimelineComponent = ({ professionals, appointments, timeSlots, onAppo
                       const isApptOverlapping = overlappingAppointmentIds.has(appt.id);
                       
                       let appointmentMainText = `${appt.patient?.firstName || ''} ${appt.patient?.lastName || ''}`.trim();
-                      if (prof.id === appt.professionalId && appt.isExternalProfessional && appt.locationId !== prof.locationId) {
-                        const destinationSedeName = LOCATIONS.find(l => l.id === appt.locationId)?.name || 'Sede Desconocida';
-                        appointmentMainText = `Traslado a: ${destinationSedeName}`;
-                      } else if (!appointmentMainText) {
+                      if (!appointmentMainText) {
                         appointmentMainText = "Cita Reservada";
                       }
-
+                      
                       const originLocationName = appt.isExternalProfessional && appt.externalProfessionalOriginLocationId 
                         ? LOCATIONS.find(l => l.id === appt.externalProfessionalOriginLocationId)?.name 
                         : null;
@@ -161,14 +159,11 @@ const DailyTimelineComponent = ({ professionals, appointments, timeSlots, onAppo
                               <p className="truncate text-[10px] leading-tight opacity-90">{appt.service?.name}</p>
                               {appt.durationMinutes > 30 && <p className="text-[10px] leading-tight opacity-80 mt-0.5">({appt.durationMinutes} min)</p>}
                             </div>
-                            {originLocationName && appt.isExternalProfessional && appt.locationId !== prof.locationId && ( 
+                            
+                            {/* Badge for external professional working at this location */}
+                            {appt.isExternalProfessional && appt.professionalId === prof.id && prof.locationId !== viewingLocationId && originLocationName && (
                               <Badge variant="outline" className="mt-1 text-[9px] p-0.5 h-fit bg-orange-100 text-orange-700 border-orange-300 self-start truncate">
                                 <Shuffle size={10} className="mr-1"/> De: {originLocationName}
-                              </Badge>
-                            )}
-                             {originLocationName && appt.isExternalProfessional && appt.locationId === prof.locationId && appt.externalProfessionalOriginLocationId === prof.id && ( 
-                               <Badge variant="outline" className="mt-1 text-[9px] p-0.5 h-fit bg-green-100 text-green-700 border-green-300 self-start truncate">
-                                <Shuffle size={10} className="mr-1"/> Cubriendo (Origen: {originLocationName})
                               </Badge>
                             )}
                           </div>
@@ -176,25 +171,16 @@ const DailyTimelineComponent = ({ professionals, appointments, timeSlots, onAppo
                         <TooltipContent className="bg-popover text-popover-foreground p-2 rounded-md shadow-lg max-w-xs">
                           {isApptOverlapping && <p className="text-destructive font-semibold text-xs flex items-center gap-1 mb-1"><AlertTriangle size={12} /> ¡Cita Superpuesta!</p>}
                           
-                          {appointmentMainText.startsWith("Traslado a:") ? (
-                             <p className="font-bold text-sm">{appointmentMainText}</p>
-                          ) : (
-                             <p className="font-bold text-sm">{appt.patient?.firstName} {appt.patient?.lastName}</p>
-                          )}
+                          <p className="font-bold text-sm">{appointmentMainText}</p>
 
                           <p><User size={12} className="inline mr-1"/> {appt.service?.name}</p>
                           <p><Clock size={12} className="inline mr-1"/> {format(parseISO(appt.appointmentDateTime), "HH:mm", { locale: es })} ({appt.durationMinutes} min)</p>
                           
-                          {originLocationName && appt.isExternalProfessional && appt.locationId !== prof.locationId && (
+                          {appt.isExternalProfessional && appt.professionalId === prof.id && prof.locationId !== viewingLocationId && originLocationName && (
                             <p className="text-orange-600 text-xs mt-1 flex items-center gap-1">
                               <Shuffle size={12} className="inline"/> Profesional de: {originLocationName}
                             </p>
                           )}
-                           {originLocationName && appt.isExternalProfessional && appt.locationId === prof.locationId && appt.externalProfessionalOriginLocationId === prof.id && (
-                             <p className="text-green-600 text-xs mt-1 flex items-center gap-1">
-                              <Shuffle size={12} className="inline"/> Cubriendo (Profesional de: {originLocationName})
-                            </p>
-                           )}
                           {appt.bookingObservations && <p className="text-xs mt-1 italic">Obs: {appt.bookingObservations}</p>}
                         </TooltipContent>
                       </Tooltip>
