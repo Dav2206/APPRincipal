@@ -1,4 +1,3 @@
-
 // src/lib/data.ts
 import type { User, Professional, Patient, Service, Appointment, AppointmentFormData, ProfessionalFormData, AppointmentStatus, ServiceFormData } from '@/types';
 import { LOCATIONS, USER_ROLES, SERVICES as SERVICES_CONSTANTS, APPOINTMENT_STATUS, LocationId, ServiceId as ConstantServiceId, APPOINTMENT_STATUS_DISPLAY, PAYMENT_METHODS, TIME_SLOTS, DAYS_OF_WEEK } from './constants';
@@ -39,7 +38,7 @@ const professionalCounts: Record<LocationId, number> = {
 };
 
 const initialMockProfessionalsData: Professional[] = LOCATIONS.flatMap((location, locIndex) => {
-  const numProfessionals = professionalCounts[location.id] || 2; 
+  const numProfessionals = professionalCounts[location.id] || 2;
   return Array.from({ length: numProfessionals }, (_, i) => {
     const baseSchedule: { [key in DayOfWeekId]?: { startTime: string; endTime: string; isWorking?: boolean } | null } = {
       monday: { startTime: '10:00', endTime: '19:00', isWorking: true },
@@ -48,14 +47,14 @@ const initialMockProfessionalsData: Professional[] = LOCATIONS.flatMap((location
       thursday: { startTime: '10:00', endTime: '19:00', isWorking: true },
       friday: { startTime: '10:00', endTime: '19:00', isWorking: true },
       saturday: { startTime: '09:00', endTime: '18:00', isWorking: true },
-      sunday: { isWorking: false, startTime: '00:00', endTime: '00:00' }, 
+      sunday: { isWorking: false, startTime: '00:00', endTime: '00:00' },
     };
 
     const isFirstProfHiguereta = location.id === 'higuereta' && i === 0;
     const isSecondProfHiguereta = location.id === 'higuereta' && i === 1;
 
-    let rotationStartDateForDemo = startOfDay(new Date());
-    while (getDay(rotationStartDateForDemo) !== 0) { 
+    let rotationStartDateForDemo = startOfDay(new Date(2025, 4, 13)); // Tuesday, May 13, 2025
+    while (getDay(rotationStartDateForDemo) !== 0) { // Find the next Sunday from this date
         rotationStartDateForDemo = addDays(rotationStartDateForDemo,1);
     }
 
@@ -72,8 +71,8 @@ const initialMockProfessionalsData: Professional[] = LOCATIONS.flatMap((location
       rotationStartDate: isFirstProfHiguereta ? formatISO(rotationStartDateForDemo, { representation: 'date' }) : null,
       compensatoryDayOffChoice: isFirstProfHiguereta ? 'monday' : null,
       customScheduleOverrides: isSecondProfHiguereta ? [
-        { id: generateId(), date: formatISO(addDays(new Date(), 7), { representation: 'date' }), isWorking: true, startTime: '10:00', endTime: '14:00', notes: 'Turno especial' },
-        { id: generateId(), date: formatISO(addDays(new Date(), 3 ), { representation: 'date' }), isWorking: false, notes: 'Día libre' }
+        { id: generateId(), date: formatISO(addDays(new Date(2025, 4, 13), 7), { representation: 'date' }), isWorking: true, startTime: '10:00', endTime: '14:00', notes: 'Turno especial' },
+        { id: generateId(), date: formatISO(addDays(new Date(2025, 4, 13), 3 ), { representation: 'date' }), isWorking: false, notes: 'Día libre' }
       ] : [],
     };
   });
@@ -95,35 +94,35 @@ const initialMockServicesData: Service[] = SERVICES_CONSTANTS.map((s_const, inde
   price: (50 + index * 10),
 }));
 
-const today = new Date();
-const yesterday = subDays(today, 1);
-const twoDaysAgo = subDays(today, 2);
-const tomorrow = addDays(today,1);
+const todayMock = new Date(2025, 4, 13); // Tuesday, May 13, 2025
+const yesterdayMock = subDays(todayMock, 1);
+const twoDaysAgoMock = subDays(todayMock, 2);
+const tomorrowMock = addDays(todayMock,1);
 const fixedFutureDateForRegistry = new Date(2025, 4, 9); // May 9, 2025
 
 const initialMockAppointmentsData: Appointment[] = [
   {
-    id: 'appt001', patientId: 'pat001', locationId: LOCATIONS[0].id, professionalId: initialMockProfessionalsData.find(p => p.locationId === LOCATIONS[0].id)?.id || initialMockProfessionalsData[0]?.id, serviceId: initialMockServicesData[0].id, appointmentDateTime: formatISO(setHours(setMinutes(yesterday, 0), 10)), durationMinutes: initialMockServicesData[0].defaultDuration, status: APPOINTMENT_STATUS.COMPLETED, amountPaid: initialMockServicesData[0].price, paymentMethod: PAYMENT_METHODS[0], staffNotes: "Tratamiento exitoso, paciente refiere mejoría.", attachedPhotos: ["https://picsum.photos/seed/appt001_1/200/200"], addedServices: [{ serviceId: initialMockServicesData[2].id, price: initialMockServicesData[2].price, service: initialMockServicesData[2] }], createdAt: formatISO(subDays(yesterday,1)), updatedAt: formatISO(yesterday),
+    id: 'appt001', patientId: 'pat001', locationId: LOCATIONS[0].id, professionalId: initialMockProfessionalsData.find(p => p.locationId === LOCATIONS[0].id)?.id || initialMockProfessionalsData[0]?.id, serviceId: initialMockServicesData[0].id, appointmentDateTime: formatISO(setHours(setMinutes(yesterdayMock, 0), 10)), durationMinutes: initialMockServicesData[0].defaultDuration, status: APPOINTMENT_STATUS.COMPLETED, amountPaid: initialMockServicesData[0].price, paymentMethod: PAYMENT_METHODS[0], staffNotes: "Tratamiento exitoso, paciente refiere mejoría.", attachedPhotos: ["https://picsum.photos/seed/appt001_1/200/200"], addedServices: [{ serviceId: initialMockServicesData[2].id, price: initialMockServicesData[2].price, service: initialMockServicesData[2] }], createdAt: formatISO(subDays(yesterdayMock,1)), updatedAt: formatISO(yesterdayMock),
   },
   {
-    id: 'appt002', patientId: 'pat002', locationId: LOCATIONS[1].id, professionalId: initialMockProfessionalsData.find(p => p.locationId === LOCATIONS[1].id)?.id || initialMockProfessionalsData[1]?.id, serviceId: initialMockServicesData[1].id, appointmentDateTime: formatISO(setHours(setMinutes(startOfDay(today), 30), 9)), durationMinutes: initialMockServicesData[1].defaultDuration, status: APPOINTMENT_STATUS.BOOKED, bookingObservations: "Paciente refiere dolor agudo.", createdAt: formatISO(subDays(today,1)), updatedAt: formatISO(subDays(today,1)), attachedPhotos: [], addedServices: [],
+    id: 'appt002', patientId: 'pat002', locationId: LOCATIONS[1].id, professionalId: initialMockProfessionalsData.find(p => p.locationId === LOCATIONS[1].id)?.id || initialMockProfessionalsData[1]?.id, serviceId: initialMockServicesData[1].id, appointmentDateTime: formatISO(setHours(setMinutes(startOfDay(todayMock), 30), 9)), durationMinutes: initialMockServicesData[1].defaultDuration, status: APPOINTMENT_STATUS.BOOKED, bookingObservations: "Paciente refiere dolor agudo.", createdAt: formatISO(subDays(todayMock,1)), updatedAt: formatISO(subDays(todayMock,1)), attachedPhotos: [], addedServices: [],
   },
   {
-    id: 'appt003', patientId: 'pat003', locationId: LOCATIONS[0].id, professionalId: initialMockProfessionalsData.find(p => p.locationId === LOCATIONS[0].id && p.id !== (initialMockProfessionalsData.find(pr => pr.locationId === LOCATIONS[0].id)?.id || initialMockProfessionalsData[0]?.id))?.id || initialMockProfessionalsData[0]?.id, serviceId: initialMockServicesData[2].id, appointmentDateTime: formatISO(setHours(setMinutes(startOfDay(today), 0), 14)), durationMinutes: initialMockServicesData[2].defaultDuration, status: APPOINTMENT_STATUS.CONFIRMED, actualArrivalTime: "13:55", createdAt: formatISO(subDays(today,2)), updatedAt: formatISO(startOfDay(today)), attachedPhotos: ["https://picsum.photos/seed/appt003_1/200/200"], addedServices: [],
+    id: 'appt003', patientId: 'pat003', locationId: LOCATIONS[0].id, professionalId: initialMockProfessionalsData.find(p => p.locationId === LOCATIONS[0].id && p.id !== (initialMockProfessionalsData.find(pr => pr.locationId === LOCATIONS[0].id)?.id || initialMockProfessionalsData[0]?.id))?.id || initialMockProfessionalsData[0]?.id, serviceId: initialMockServicesData[2].id, appointmentDateTime: formatISO(setHours(setMinutes(startOfDay(todayMock), 0), 14)), durationMinutes: initialMockServicesData[2].defaultDuration, status: APPOINTMENT_STATUS.CONFIRMED, actualArrivalTime: "13:55", createdAt: formatISO(subDays(todayMock,2)), updatedAt: formatISO(startOfDay(todayMock)), attachedPhotos: ["https://picsum.photos/seed/appt003_1/200/200"], addedServices: [],
   },
   {
-    id: 'appt004', patientId: 'pat004', locationId: LOCATIONS[2].id, professionalId: initialMockProfessionalsData.find(p => p.locationId === LOCATIONS[2].id)?.id || initialMockProfessionalsData[2]?.id, serviceId: initialMockServicesData[3].id, appointmentDateTime: formatISO(setHours(setMinutes(twoDaysAgo, 0), 11)), durationMinutes: initialMockServicesData[3].defaultDuration, status: APPOINTMENT_STATUS.COMPLETED, amountPaid: initialMockServicesData[3].price, paymentMethod: PAYMENT_METHODS[1], staffNotes: "Todo en orden. Próxima revisión en 1 mes.", createdAt: formatISO(subDays(twoDaysAgo,1)), updatedAt: formatISO(twoDaysAgo), attachedPhotos: ["https://picsum.photos/seed/appt004_1/200/200", "https://picsum.photos/seed/appt004_2/200/200"], addedServices: [],
+    id: 'appt004', patientId: 'pat004', locationId: LOCATIONS[2].id, professionalId: initialMockProfessionalsData.find(p => p.locationId === LOCATIONS[2].id)?.id || initialMockProfessionalsData[2]?.id, serviceId: initialMockServicesData[3].id, appointmentDateTime: formatISO(setHours(setMinutes(twoDaysAgoMock, 0), 11)), durationMinutes: initialMockServicesData[3].defaultDuration, status: APPOINTMENT_STATUS.COMPLETED, amountPaid: initialMockServicesData[3].price, paymentMethod: PAYMENT_METHODS[1], staffNotes: "Todo en orden. Próxima revisión en 1 mes.", createdAt: formatISO(subDays(twoDaysAgoMock,1)), updatedAt: formatISO(twoDaysAgoMock), attachedPhotos: ["https://picsum.photos/seed/appt004_1/200/200", "https://picsum.photos/seed/appt004_2/200/200"], addedServices: [],
   },
   {
-    id: 'appt005', patientId: 'pat005', locationId: LOCATIONS[1].id, professionalId: null, serviceId: initialMockServicesData[0].id, appointmentDateTime: formatISO(setHours(setMinutes(startOfDay(tomorrow), 0), 16)), durationMinutes: initialMockServicesData[0].defaultDuration, status: APPOINTMENT_STATUS.BOOKED, createdAt: formatISO(startOfDay(today)), updatedAt: formatISO(startOfDay(today)), attachedPhotos: [], addedServices: [],
+    id: 'appt005', patientId: 'pat005', locationId: LOCATIONS[1].id, professionalId: null, serviceId: initialMockServicesData[0].id, appointmentDateTime: formatISO(setHours(setMinutes(startOfDay(tomorrowMock), 0), 16)), durationMinutes: initialMockServicesData[0].defaultDuration, status: APPOINTMENT_STATUS.BOOKED, createdAt: formatISO(startOfDay(todayMock)), updatedAt: formatISO(startOfDay(todayMock)), attachedPhotos: [], addedServices: [],
   },
   {
-    id: 'appt006', patientId: 'pat001', locationId: LOCATIONS[0].id, professionalId: initialMockProfessionalsData.find(p => p.locationId === LOCATIONS[0].id)?.id || initialMockProfessionalsData[0]?.id, serviceId: initialMockServicesData[4].id, appointmentDateTime: formatISO(setHours(setMinutes(startOfDay(today), 30), 11)), durationMinutes: initialMockServicesData[4].defaultDuration, status: APPOINTMENT_STATUS.BOOKED, bookingObservations: "Estudio de pisada solicitado por el Dr. Pérez.", createdAt: formatISO(startOfDay(today)), updatedAt: formatISO(startOfDay(today)), attachedPhotos: [], addedServices: [],
+    id: 'appt006', patientId: 'pat001', locationId: LOCATIONS[0].id, professionalId: initialMockProfessionalsData.find(p => p.locationId === LOCATIONS[0].id)?.id || initialMockProfessionalsData[0]?.id, serviceId: initialMockServicesData[4].id, appointmentDateTime: formatISO(setHours(setMinutes(startOfDay(todayMock), 30), 11)), durationMinutes: initialMockServicesData[4].defaultDuration, status: APPOINTMENT_STATUS.BOOKED, bookingObservations: "Estudio de pisada solicitado por el Dr. Pérez.", createdAt: formatISO(startOfDay(todayMock)), updatedAt: formatISO(startOfDay(todayMock)), attachedPhotos: [], addedServices: [],
   },
-  { id: 'appt007', patientId: 'pat002', locationId: LOCATIONS[3].id, professionalId: initialMockProfessionalsData.find(p => p.locationId === LOCATIONS[3].id)?.id, serviceId: initialMockServicesData[0].id, appointmentDateTime: formatISO(setHours(setMinutes(subDays(startOfDay(today), 3), 0), 15)), durationMinutes: initialMockServicesData[0].defaultDuration, status: APPOINTMENT_STATUS.COMPLETED, amountPaid: initialMockServicesData[0].price, paymentMethod: PAYMENT_METHODS[2], staffNotes: "Paciente nuevo, buena primera impresión.", createdAt: formatISO(subDays(startOfDay(today), 4)), updatedAt: formatISO(subDays(startOfDay(today), 3)), attachedPhotos: ["https://picsum.photos/seed/appt007_1/200/200"], addedServices: [], },
-  { id: 'appt008', patientId: 'pat003', locationId: LOCATIONS[4].id, professionalId: initialMockProfessionalsData.find(p => p.locationId === LOCATIONS[4].id)?.id, serviceId: initialMockServicesData[1].id, appointmentDateTime: formatISO(setHours(setMinutes(startOfDay(today), 0), 10)), durationMinutes: initialMockServicesData[1].defaultDuration, status: APPOINTMENT_STATUS.BOOKED, createdAt: formatISO(subDays(startOfDay(today), 1)), updatedAt: formatISO(subDays(startOfDay(today), 1)), attachedPhotos: [], addedServices: [], },
-  { id: 'appt009', patientId: 'pat004', locationId: LOCATIONS[5].id, professionalId: initialMockProfessionalsData.find(p => p.locationId === LOCATIONS[5].id)?.id, serviceId: initialMockServicesData[2].id, appointmentDateTime: formatISO(setHours(setMinutes(subDays(startOfDay(today), 5), 30), 14)), durationMinutes: initialMockServicesData[2].defaultDuration, status: APPOINTMENT_STATUS.COMPLETED, amountPaid: initialMockServicesData[2].price ? initialMockServicesData[2].price! + 20 : 70, paymentMethod: PAYMENT_METHODS[3], staffNotes: "Se realizó quiropodia y tratamiento adicional para uña encarnada.", addedServices: [{ serviceId: initialMockServicesData[1].id, price: 20, service: initialMockServicesData[1] }], attachedPhotos: ["https://picsum.photos/seed/appt009_1/200/200"], createdAt: formatISO(subDays(startOfDay(today), 6)), updatedAt: formatISO(subDays(startOfDay(today), 5)), },
-  { id: 'appt010', patientId: 'pat005', locationId: LOCATIONS[0].id, serviceId: initialMockServicesData[3].id, appointmentDateTime: formatISO(setHours(setMinutes(addDays(startOfDay(today), 2), 0), 17)), durationMinutes: initialMockServicesData[3].defaultDuration, status: APPOINTMENT_STATUS.BOOKED, preferredProfessionalId: initialMockProfessionalsData.find(p => p.locationId === LOCATIONS[0].id && p.lastName.includes('Higuereta'))?.id, bookingObservations: "Solo puede por la tarde.", createdAt: formatISO(startOfDay(today)), updatedAt: formatISO(startOfDay(today)), attachedPhotos: [], addedServices: [], },
+  { id: 'appt007', patientId: 'pat002', locationId: LOCATIONS[3].id, professionalId: initialMockProfessionalsData.find(p => p.locationId === LOCATIONS[3].id)?.id, serviceId: initialMockServicesData[0].id, appointmentDateTime: formatISO(setHours(setMinutes(subDays(startOfDay(todayMock), 3), 0), 15)), durationMinutes: initialMockServicesData[0].defaultDuration, status: APPOINTMENT_STATUS.COMPLETED, amountPaid: initialMockServicesData[0].price, paymentMethod: PAYMENT_METHODS[2], staffNotes: "Paciente nuevo, buena primera impresión.", createdAt: formatISO(subDays(startOfDay(todayMock), 4)), updatedAt: formatISO(subDays(startOfDay(todayMock), 3)), attachedPhotos: ["https://picsum.photos/seed/appt007_1/200/200"], addedServices: [], },
+  { id: 'appt008', patientId: 'pat003', locationId: LOCATIONS[4].id, professionalId: initialMockProfessionalsData.find(p => p.locationId === LOCATIONS[4].id)?.id, serviceId: initialMockServicesData[1].id, appointmentDateTime: formatISO(setHours(setMinutes(startOfDay(todayMock), 0), 10)), durationMinutes: initialMockServicesData[1].defaultDuration, status: APPOINTMENT_STATUS.BOOKED, createdAt: formatISO(subDays(startOfDay(todayMock), 1)), updatedAt: formatISO(subDays(startOfDay(todayMock), 1)), attachedPhotos: [], addedServices: [], },
+  { id: 'appt009', patientId: 'pat004', locationId: LOCATIONS[5].id, professionalId: initialMockProfessionalsData.find(p => p.locationId === LOCATIONS[5].id)?.id, serviceId: initialMockServicesData[2].id, appointmentDateTime: formatISO(setHours(setMinutes(subDays(startOfDay(todayMock), 5), 30), 14)), durationMinutes: initialMockServicesData[2].defaultDuration, status: APPOINTMENT_STATUS.COMPLETED, amountPaid: initialMockServicesData[2].price ? initialMockServicesData[2].price! + 20 : 70, paymentMethod: PAYMENT_METHODS[3], staffNotes: "Se realizó quiropodia y tratamiento adicional para uña encarnada.", addedServices: [{ serviceId: initialMockServicesData[1].id, price: 20, service: initialMockServicesData[1] }], attachedPhotos: ["https://picsum.photos/seed/appt009_1/200/200"], createdAt: formatISO(subDays(startOfDay(todayMock), 6)), updatedAt: formatISO(subDays(startOfDay(todayMock), 5)), },
+  { id: 'appt010', patientId: 'pat005', locationId: LOCATIONS[0].id, serviceId: initialMockServicesData[3].id, appointmentDateTime: formatISO(setHours(setMinutes(addDays(startOfDay(todayMock), 2), 0), 17)), durationMinutes: initialMockServicesData[3].defaultDuration, status: APPOINTMENT_STATUS.BOOKED, preferredProfessionalId: initialMockProfessionalsData.find(p => p.locationId === LOCATIONS[0].id && p.lastName.includes('Higuereta'))?.id, bookingObservations: "Solo puede por la tarde.", createdAt: formatISO(startOfDay(todayMock)), updatedAt: formatISO(startOfDay(todayMock)), attachedPhotos: [], addedServices: [], },
   { id: 'appt_registry_test_1', patientId: initialMockPatientsData[0].id, locationId: LOCATIONS[0].id, professionalId: initialMockProfessionalsData.find(p => p.locationId === LOCATIONS[0].id && p.firstName === 'Profesional 1')?.id, serviceId: initialMockServicesData[0].id, appointmentDateTime: formatISO(setHours(setMinutes(fixedFutureDateForRegistry, 0), 10)), durationMinutes: initialMockServicesData[0].defaultDuration, status: APPOINTMENT_STATUS.COMPLETED, amountPaid: initialMockServicesData[0].price, paymentMethod: PAYMENT_METHODS[0], createdAt: formatISO(fixedFutureDateForRegistry), updatedAt: formatISO(fixedFutureDateForRegistry), addedServices: [], attachedPhotos: [] },
   { id: 'appt_registry_test_2', patientId: initialMockPatientsData[1].id, locationId: LOCATIONS[1].id, professionalId: initialMockProfessionalsData.find(p => p.locationId === LOCATIONS[1].id && p.firstName === 'Profesional 1')?.id, serviceId: initialMockServicesData[1].id, appointmentDateTime: formatISO(setHours(setMinutes(fixedFutureDateForRegistry, 30), 11)), durationMinutes: initialMockServicesData[1].defaultDuration, status: APPOINTMENT_STATUS.COMPLETED, amountPaid: initialMockServicesData[1].price, paymentMethod: PAYMENT_METHODS[1], createdAt: formatISO(fixedFutureDateForRegistry), updatedAt: formatISO(fixedFutureDateForRegistry), addedServices: [], attachedPhotos: [] },
   { id: 'appt_registry_test_3', patientId: initialMockPatientsData[2].id, locationId: LOCATIONS[0].id, professionalId: initialMockProfessionalsData.find(p => p.locationId === LOCATIONS[0].id && p.firstName === 'Profesional 2')?.id, serviceId: initialMockServicesData[2].id, appointmentDateTime: formatISO(setHours(setMinutes(fixedFutureDateForRegistry, 0), 14)), durationMinutes: initialMockServicesData[2].defaultDuration, status: APPOINTMENT_STATUS.COMPLETED, amountPaid: initialMockServicesData[2].price, paymentMethod: PAYMENT_METHODS[2], createdAt: formatISO(fixedFutureDateForRegistry), updatedAt: formatISO(fixedFutureDateForRegistry), addedServices: [], attachedPhotos: [] }
@@ -183,7 +182,7 @@ export const getProfessionals = async (locationId?: LocationId): Promise<Profess
             ? mockDB.professionals.filter(p => p.locationId === locationId)
             : [...mockDB.professionals]; // Return all if no locationId specified
 
-        const today = new Date();
+        const today = new Date(2025, 4, 13); // Tuesday, May 13, 2025
         const currentYear = getYear(today);
         const currentMonth = getMonth(today);
         const currentDay = getDate(today);
@@ -285,16 +284,16 @@ export const updateProfessional = async (id: string, data: Partial<ProfessionalF
             professionalToUpdate.phone = data.phone || undefined;
 
             if (data.workSchedule) {
-                professionalToUpdate.workSchedule = { ...professionalToUpdate.workSchedule }; 
+                professionalToUpdate.workSchedule = { ...professionalToUpdate.workSchedule };
                  (Object.keys(data.workSchedule) as Array<Exclude<DayOfWeekId, 'sunday'>>).forEach(dayId => {
                     const dayData = data.workSchedule![dayId];
                     if (dayData) {
                         professionalToUpdate.workSchedule[dayId] = {
-                            startTime: dayData.startTime || '00:00', 
+                            startTime: dayData.startTime || '00:00',
                             endTime: dayData.endTime || '00:00',
-                            isWorking: dayData.isWorking === undefined ? true : dayData.isWorking 
+                            isWorking: dayData.isWorking === undefined ? true : dayData.isWorking
                         };
-                    } else { 
+                    } else {
                          professionalToUpdate.workSchedule[dayId] = {startTime: '00:00', endTime: '00:00', isWorking: false};
                     }
                 });
@@ -303,14 +302,14 @@ export const updateProfessional = async (id: string, data: Partial<ProfessionalF
                  }
             }
 
-            if (data.hasOwnProperty('rotationType')) professionalToUpdate.rotationType = data.rotationType!; 
+            if (data.hasOwnProperty('rotationType')) professionalToUpdate.rotationType = data.rotationType!;
             professionalToUpdate.rotationStartDate = data.rotationStartDate ? formatISO(data.rotationStartDate, {representation: 'date'}) : null;
             professionalToUpdate.compensatoryDayOffChoice = data.compensatoryDayOffChoice === "--none--" ? null : (data.compensatoryDayOffChoice || null);
 
 
             if (data.customScheduleOverrides) {
                 professionalToUpdate.customScheduleOverrides = data.customScheduleOverrides.map(ov => ({
-                    id: ov.id || generateId(), 
+                    id: ov.id || generateId(),
                     date: formatISO(ov.date, { representation: 'date' }),
                     isWorking: ov.isWorking,
                     startTime: ov.isWorking ? ov.startTime : undefined,
@@ -343,7 +342,7 @@ export const getPatients = async (options: { page?: number, limit?: number, sear
         );
     }
     if (filterToday && user) {
-        const todayIsoDate = startOfDay(new Date());
+        const todayIsoDate = startOfDay(new Date(2025, 4, 13)); // Tuesday, May 13, 2025
         const isAdminOrContador = user.role === USER_ROLES.ADMIN || user.role === USER_ROLES.CONTADOR;
         const effectiveLocationId = isAdminOrContador
         ? (adminSelectedLocation === 'all' ? undefined : adminSelectedLocation)
@@ -529,11 +528,13 @@ export const getAppointments = async (filters: {
     let filteredMockAppointments = [...currentMockAppointments];
 
     if (restFilters.locationId) {
-        const locationsToFilter = Array.isArray(restFilters.locationId) ? restFilters.locationId : [restFilters.locationId];
-        if (locationsToFilter.length > 0 && locationsToFilter[0] !== undefined) {
-            filteredMockAppointments = filteredMockAppointments.filter(appt => locationsToFilter.includes(appt.locationId));
-        }
+      const targetLocation = restFilters.locationId as LocationId; // Will not be 'all' or array if this block is hit
+      filteredMockAppointments = filteredMockAppointments.filter(appt =>
+          appt.locationId === targetLocation ||
+          (appt.isExternalProfessional && appt.externalProfessionalOriginLocationId === targetLocation)
+      );
     }
+
     if (restFilters.patientId) {
         filteredMockAppointments = filteredMockAppointments.filter(appt => appt.patientId === restFilters.patientId);
     }
@@ -661,46 +662,50 @@ export const addAppointment = async (data: AppointmentFormData & { isExternalPro
 
   if (data.preferredProfessionalId && data.preferredProfessionalId !== ANY_PROFESSIONAL_VALUE) {
     const preferredProf = await getProfessionalById(data.preferredProfessionalId);
-    if (preferredProf) { // Check if professional exists
-        // If searching external, or if local prof, assign
+    if (preferredProf) {
         if (data.searchExternal || preferredProf.locationId === data.locationId) {
             actualProfessionalId = preferredProf.id;
+            if (data.searchExternal && preferredProf.locationId !== data.locationId) {
+                data.isExternalProfessional = true;
+                data.externalProfessionalOriginLocationId = preferredProf.locationId;
+            } else {
+                data.isExternalProfessional = false;
+                data.externalProfessionalOriginLocationId = null;
+            }
         } else {
-            actualProfessionalId = null; // Preferred is local, but not matching or not available for this slot
+            actualProfessionalId = null;
         }
-    } else { 
-      actualProfessionalId = null; // Preferred professional not found
+    } else {
+      actualProfessionalId = null;
     }
-  } else { 
-     actualProfessionalId = null; // "Any professional" selected or no preference
+  } else {
+     actualProfessionalId = null;
   }
 
 
-  if (actualProfessionalId === null) { // If no specific professional is set, or "Any" was chosen and external search is not on.
-    const professionalsToConsider = data.searchExternal 
-      ? await getProfessionals() // Get all professionals if searching external
-      : await getProfessionals(data.locationId); // Otherwise, only from target location
+  if (actualProfessionalId === null) {
+    const professionalsToConsider = data.searchExternal
+      ? await getProfessionals()
+      : await getProfessionals(data.locationId);
 
     const appointmentsOnDateResult = await getAppointments({
-      locationId: data.searchExternal ? undefined : data.locationId, // Broader search if external
+      locationId: data.searchExternal ? undefined : data.locationId,
       date: data.appointmentDate,
       statuses: [APPOINTMENT_STATUS.BOOKED, APPOINTMENT_STATUS.CONFIRMED]
     });
     const existingAppointmentsForDay = appointmentsOnDateResult.appointments || [];
 
     for (const prof of professionalsToConsider) {
-      // If searching external, we allow prof.locationId to be different.
-      // If not searching external, prof.locationId must match data.locationId (already filtered if getProfessionals was called with locationId).
       if (!data.searchExternal && prof.locationId !== data.locationId) continue;
 
       const availability = getProfessionalAvailabilityForDate(prof, data.appointmentDate);
-      if (!availability) continue; 
+      if (!availability) continue;
 
       const profWorkStartTime = parse(`${format(data.appointmentDate, 'yyyy-MM-dd')} ${availability.startTime}`, 'yyyy-MM-dd HH:mm', new Date());
       const profWorkEndTime = parse(`${format(data.appointmentDate, 'yyyy-MM-dd')} ${availability.endTime}`, 'yyyy-MM-dd HH:mm', new Date());
 
-      if (!isWithinInterval(appointmentDateTimeObject, { start: profWorkStartTime, end: dateFnsAddMinutes(profWorkEndTime, -appointmentDuration +1) })) { 
-          continue; 
+      if (!isWithinInterval(appointmentDateTimeObject, { start: profWorkStartTime, end: dateFnsAddMinutes(profWorkEndTime, -appointmentDuration +1) })) {
+          continue;
       }
 
       let isProfBusy = false;
@@ -723,8 +728,11 @@ export const addAppointment = async (data: AppointmentFormData & { isExternalPro
         if (data.searchExternal && prof.locationId !== data.locationId) {
             data.isExternalProfessional = true;
             data.externalProfessionalOriginLocationId = prof.locationId;
+        } else {
+            data.isExternalProfessional = false;
+            data.externalProfessionalOriginLocationId = null;
         }
-        break; 
+        break;
       }
     }
   }
@@ -733,7 +741,7 @@ export const addAppointment = async (data: AppointmentFormData & { isExternalPro
     patientId: patientId!,
     locationId: data.locationId,
     serviceId: data.serviceId,
-    professionalId: actualProfessionalId, // This might be null if no one is found
+    professionalId: actualProfessionalId,
     appointmentDateTime: appointmentDateTime,
     durationMinutes: appointmentDuration,
     preferredProfessionalId: (data.preferredProfessionalId === ANY_PROFESSIONAL_VALUE || !data.preferredProfessionalId) ? undefined : data.preferredProfessionalId,
@@ -749,8 +757,8 @@ export const addAppointment = async (data: AppointmentFormData & { isExternalPro
     const newAppointment: Appointment = {
       id: generateId(),
       ...newAppointmentData,
-      createdAt: formatISO(new Date()),
-      updatedAt: formatISO(new Date()),
+      createdAt: formatISO(new Date(2025, 4, 13)), // Tuesday, May 13, 2025
+      updatedAt: formatISO(new Date(2025, 4, 13)), // Tuesday, May 13, 2025
     };
     const populatedNewAppointment = await populateAppointment(newAppointment);
     mockDB.appointments.push(populatedNewAppointment);
@@ -768,7 +776,7 @@ export const updateAppointment = async (id: string, data: Partial<Appointment>):
       let updatedAppointmentRaw = {
         ...originalAppointment,
         ...data,
-        updatedAt: formatISO(new Date()),
+        updatedAt: formatISO(new Date(2025, 4, 13)), // Tuesday, May 13, 2025
       };
 
       if (data.patientId && originalAppointment.patient?.id !== data.patientId) {
@@ -778,7 +786,7 @@ export const updateAppointment = async (id: string, data: Partial<Appointment>):
           delete (updatedAppointmentRaw as any).professional;
       }
        if (data.hasOwnProperty('professionalId') && data.professionalId === null && originalAppointment.professional){
-          delete (updatedAppointmentRaw as any).professional; 
+          delete (updatedAppointmentRaw as any).professional;
       }
       if (data.serviceId && originalAppointment.service?.id !== data.serviceId) {
           delete (updatedAppointmentRaw as any).service;
@@ -791,8 +799,7 @@ export const updateAppointment = async (id: string, data: Partial<Appointment>):
           price: as.price,
         }));
       }
-      
-      // Handle external professional fields if present in data
+
       if (data.hasOwnProperty('isExternalProfessional')) {
         updatedAppointmentRaw.isExternalProfessional = data.isExternalProfessional;
       }
@@ -815,7 +822,7 @@ export const getPatientAppointmentHistory = async (
   options: { page?: number, limit?: number, lastVisibleAppointmentId?: string | null } = {}
 ): Promise<{ appointments: Appointment[], totalCount: number, lastVisibleAppointmentId?: string | null }> => {
   const { page = 1, limit: queryLimit = APPOINTMENTS_PER_PAGE_HISTORY, lastVisibleAppointmentId: startAfterId } = options;
-  const todayDate = startOfDay(new Date());
+  const todayDate = startOfDay(new Date(2025, 4, 13)); // Tuesday, May 13, 2025
   const pastStatuses: AppointmentStatus[] = [APPOINTMENT_STATUS.COMPLETED, APPOINTMENT_STATUS.NO_SHOW, APPOINTMENT_STATUS.CANCELLED_CLIENT, APPOINTMENT_STATUS.CANCELLED_STAFF];
 
   if (useMockDatabase) {
@@ -850,7 +857,7 @@ export const getPatientAppointmentHistory = async (
 };
 
 export const getCurrentQuincenaDateRange = (): { start: Date; end: Date } => {
-  const today = new Date();
+  const today = new Date(2025, 4, 13); // Tuesday, May 13, 2025
   const currentYear = getYear(today);
   const currentMonth = getMonth(today);
   const currentDay = getDate(today);
@@ -891,7 +898,7 @@ export function getProfessionalAvailabilityForDate(
   targetDate: Date
 ): { startTime: string; endTime: string; notes?: string } | null {
   const targetDateString = format(targetDate, 'yyyy-MM-dd');
-  const targetDayOfWeekJs = getDay(targetDate); 
+  const targetDayOfWeekJs = getDay(targetDate);
 
   if (professional.customScheduleOverrides) {
     const override = professional.customScheduleOverrides.find(
@@ -901,16 +908,16 @@ export function getProfessionalAvailabilityForDate(
       if (override.isWorking && override.startTime && override.endTime) {
         return { startTime: override.startTime, endTime: override.endTime, notes: override.notes };
       }
-      return null; 
+      return null;
     }
   }
 
   if (professional.rotationType === 'biWeeklySunday' && professional.rotationStartDate && professional.compensatoryDayOffChoice) {
-    const rotationAnchorDate = parseISO(professional.rotationStartDate); 
+    const rotationAnchorDate = parseISO(professional.rotationStartDate);
     const daysDiff = differenceInDays(startOfDay(targetDate), startOfDay(rotationAnchorDate));
 
-    if (daysDiff >= 0) { 
-        const weekNumberInCycle = Math.floor(daysDiff / 7) % 2; 
+    if (daysDiff >= 0) {
+        const weekNumberInCycle = Math.floor(daysDiff / 7) % 2;
 
         if (weekNumberInCycle === 0) { // "Work Sunday" week
             if (targetDayOfWeekJs === 0) { // It's Sunday on a "Work Sunday" week
@@ -919,14 +926,14 @@ export function getProfessionalAvailabilityForDate(
             // For other days of this "Work Sunday" week, use base schedule
         }
         else if (weekNumberInCycle === 1) { // "Compensatory Day Off" week (and Sunday off)
-            const compensatoryDayId = professional.compensatoryDayOffChoice; 
-            const targetDayConstant = DAYS_OF_WEEK[targetDayOfWeekJs]; 
+            const compensatoryDayId = professional.compensatoryDayOffChoice;
+            const targetDayConstant = DAYS_OF_WEEK[targetDayOfWeekJs];
 
             if (targetDayConstant && targetDayConstant.id === compensatoryDayId && (targetDayOfWeekJs >= 1 && targetDayOfWeekJs <= 4) /* Mon-Thu */) {
                 return null; // It's their compensatory day off
             }
             if (targetDayOfWeekJs === 0) { // It's Sunday on a "Compensatory/Off Sunday" week
-                return null; 
+                return null;
             }
             // For other days of this "Compensatory" week (that are not the comp day or Sunday), use base schedule
         }
@@ -940,7 +947,7 @@ export function getProfessionalAvailabilityForDate(
 
     if (dailySchedule) {
       if (dailySchedule.isWorking === false) return null; // Explicitly not working on base schedule
-      
+
       // If isWorking is true or undefined (assume true), and times are present
       if (dailySchedule.startTime && dailySchedule.endTime) {
         return { startTime: dailySchedule.startTime, endTime: dailySchedule.endTime };
@@ -950,4 +957,3 @@ export function getProfessionalAvailabilityForDate(
 
   return null; // Default to not working if no specific schedule found
 }
-
