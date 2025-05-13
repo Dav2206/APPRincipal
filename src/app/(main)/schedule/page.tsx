@@ -6,7 +6,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '@/contexts/auth-provider';
 import { useAppState } from '@/contexts/app-state-provider';
 import { getAppointments, getProfessionals, getAppointmentById } from '@/lib/data';
-import { LOCATIONS, USER_ROLES, TIME_SLOTS, LocationId } from '@/lib/constants';
+import { LOCATIONS, USER_ROLES, TIME_SLOTS, LocationId, APPOINTMENT_STATUS } from '@/lib/constants';
 import { DailyTimeline } from '@/components/schedule/daily-timeline';
 import { Button } from '@/components/ui/button';
 import { Calendar } from '@/components/ui/calendar';
@@ -51,6 +51,7 @@ export default function SchedulePage() {
         getAppointments({
           locationId: effectiveLocationId,
           date: currentDate,
+          statuses: [APPOINTMENT_STATUS.BOOKED, APPOINTMENT_STATUS.CONFIRMED, APPOINTMENT_STATUS.COMPLETED], // Fetch only active or completed appointments
         }),
         getProfessionals(effectiveLocationId)
       ]);
