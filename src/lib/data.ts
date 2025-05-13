@@ -264,12 +264,16 @@ export const findPatient = async (firstName: string, lastName: string): Promise<
     throw new Error("Real database not implemented for findPatient");
 };
 
-export const addPatient = async (data: Omit<Patient, 'id'>): Promise<Patient> => {
+export const addPatient = async (data: Partial<Omit<Patient, 'id'>>): Promise<Patient> => {
   const newPatientData: Omit<Patient, 'id'> = {
-    ...data,
+    firstName: data.firstName!,
+    lastName: data.lastName!,
+    phone: data.phone,
     age: data.age === undefined ? null : data.age,
     isDiabetic: data.isDiabetic || false,
-    dateOfBirth: data.dateOfBirth || '',
+    dateOfBirth: (data as any).birthDay && (data as any).birthMonth ? `${(data as any).birthDay}-${(data as any).birthMonth}` : data.dateOfBirth,
+    notes: data.notes,
+    preferredProfessionalId: data.preferredProfessionalId,
   };
   if (useMockDatabase) {
     const newPatient: Patient = {
@@ -286,7 +290,18 @@ export const updatePatient = async (id: string, data: Partial<Patient>): Promise
     if (useMockDatabase) {
         const index = mockDB.patients.findIndex(p => p.id === id);
         if (index !== -1) {
-            mockDB.patients[index] = { ...mockDB.patients[index], ...data } as Patient;
+            const patientToUpdate = { ...mockDB.patients[index], ...data };
+            if ((data as any).birthDay && (data as any).birthMonth) {
+                patientToUpdate.dateOfBirth = `${(data as any).birthDay}-${(data as any).birthMonth}`;
+            } else if (data.dateOfBirth === undefined && ((data as any).birthDay || (data as any).birthMonth)) {
+                // If only one part of birthday is provided, or it's meant to be cleared
+                patientToUpdate.dateOfBirth = undefined;
+            }
+            // Remove temporary fields if they exist
+            delete (patientToUpdate as any).birthDay;
+            delete (patientToUpdate as any).birthMonth;
+
+            mockDB.patients[index] = patientToUpdate;
             return mockDB.patients[index];
         }
         return undefined;
@@ -339,17 +354,17 @@ export const updateService = async (id: string, data: Partial<ServiceFormData>):
 
 
 const populateAppointment = async (apptData: any): Promise<Appointment> => {
-    const patient = useMockDatabase ? mockDB.patients.find(p => p.id === apptData.patientId) : await getPatientById(apptData.patientId);
-    const professional = apptData.professionalId ? (useMockDatabase ? mockDB.professionals.find(p => p.id === apptData.professionalId) : await getProfessionalById(apptData.professionalId)) : undefined;
-    const service = apptData.serviceId ? (useMockDatabase ? mockDB.services.find(s => s.id === apptData.serviceId) : await getServiceById(apptData.serviceId as string)) : undefined;
+    const patient = useMockDatabase ? mockDB.patients.find(p => p.id === apptData.patientId) : undefined; /* await getPatientById(apptData.patientId); */
+    const professional = apptData.professionalId ? (useMockDatabase ? mockDB.professionals.find(p => p.id === apptData.professionalId) : undefined /* await getProfessionalById(apptData.professionalId) */) : undefined;
+    const service = apptData.serviceId ? (useMockDatabase ? mockDB.services.find(s => s.id === apptData.serviceId) : undefined /* await getServiceById(apptData.serviceId as string) */) : undefined;
 
     let addedServicesPopulated = [];
     if (apptData.addedServices && Array.isArray(apptData.addedServices)) {
         addedServicesPopulated = await Promise.all(
             apptData.addedServices.map(async (as: any) => ({
                 ...as,
-                service: as.serviceId ? (useMockDatabase ? mockDB.services.find(s => s.id === as.serviceId) : await getServiceById(as.serviceId as string)) : undefined,
-                professional: as.professionalId ? (useMockDatabase ? mockDB.professionals.find(p => p.id === as.professionalId) : await getProfessionalById(as.professionalId)) : undefined,
+                service: as.serviceId ? (useMockDatabase ? mockDB.services.find(s => s.id === as.serviceId) : undefined /* await getServiceById(as.serviceId as string) */) : undefined,
+                professional: as.professionalId ? (useMockDatabase ? mockDB.professionals.find(p => p.id === as.professionalId) : undefined /* await getProfessionalById(as.professionalId) */) : undefined,
             }))
         );
     }
@@ -464,14 +479,18 @@ export const getAppointmentById = async (id: string): Promise<Appointment | unde
     throw new Error("Real database not implemented for getAppointmentById");
 };
 
-export const addAppointment = async (data: AppointmentFormData): Promise<Appointment> => {
+export const addAppointment = async (data: AppointmentFormData & { patientDateOfBirth?: string }): Promise<Appointment> => {
   let patientId = data.existingPatientId;
   if (!patientId) {
     let existingPatient = await findPatient(data.patientFirstName, data.patientLastName);
     if (existingPatient) {
       patientId = existingPatient.id;
-       if ((data.isDiabetic !== undefined && existingPatient.isDiabetic !== data.isDiabetic) || (data.patientAge !== undefined && existingPatient.age !== data.patientAge) || (data.patientDateOfBirth && existingPatient.dateOfBirth !== data.patientDateOfBirth)) {
-          await updatePatient(patientId, { isDiabetic: data.isDiabetic, age: data.patientAge, dateOfBirth: data.patientDateOfBirth });
+       const patientUpdates: Partial<Patient> = {};
+       if (data.isDiabetic !== undefined && existingPatient.isDiabetic !== data.isDiabetic) patientUpdates.isDiabetic = data.isDiabetic;
+       if (data.patientAge !== undefined && existingPatient.age !== data.patientAge) patientUpdates.age = data.patientAge;
+       if (data.patientDateOfBirth && existingPatient.dateOfBirth !== data.patientDateOfBirth) patientUpdates.dateOfBirth = data.patientDateOfBirth;
+       if (Object.keys(patientUpdates).length > 0) {
+          await updatePatient(patientId, patientUpdates);
       }
     } else {
       const newPatient = await addPatient({
@@ -488,8 +507,14 @@ export const addAppointment = async (data: AppointmentFormData): Promise<Appoint
     }
   } else {
       const existingPatientDetails = await getPatientById(patientId);
-      if (existingPatientDetails && ((data.isDiabetic !== undefined && data.isDiabetic !== existingPatientDetails.isDiabetic) || (data.patientAge !== undefined && data.patientAge !== existingPatientDetails.age) || (data.patientDateOfBirth && existingPatientDetails.dateOfBirth !== data.patientDateOfBirth))) {
-        await updatePatient(patientId, { isDiabetic: data.isDiabetic, age: data.patientAge, dateOfBirth: data.patientDateOfBirth });
+      if (existingPatientDetails) {
+        const patientUpdates: Partial<Patient> = {};
+        if (data.isDiabetic !== undefined && data.isDiabetic !== existingPatientDetails.isDiabetic) patientUpdates.isDiabetic = data.isDiabetic;
+        if (data.patientAge !== undefined && data.patientAge !== existingPatientDetails.age) patientUpdates.age = data.patientAge;
+        if (data.patientDateOfBirth && existingPatientDetails.dateOfBirth !== data.patientDateOfBirth) patientUpdates.dateOfBirth = data.patientDateOfBirth;
+        if (Object.keys(patientUpdates).length > 0) {
+          await updatePatient(patientId, patientUpdates);
+        }
       }
   }
 
@@ -556,7 +581,7 @@ export const addAppointment = async (data: AppointmentFormData): Promise<Appoint
     appointmentDateTime: appointmentDateTime,
     durationMinutes: appointmentDuration,
     preferredProfessionalId: (data.preferredProfessionalId === ANY_PROFESSIONAL_VALUE || !data.preferredProfessionalId) ? undefined : data.preferredProfessionalId,
-    bookingObservations: data.bookingObservations,
+    bookingObservations: data.bookingObservations || undefined,
     status: APPOINTMENT_STATUS.BOOKED,
     attachedPhotos: [],
     addedServices: [],
@@ -661,7 +686,7 @@ export const getPatientAppointmentHistory = async (
     }
 
     const newLastVisibleId = paginatedAppointments.length > 0 ? paginatedAppointments[paginatedAppointments.length -1].id : null;
-    return { appointments: paginatedAppointments, totalCount, lastVisibleAppointmentId: newLastVisibleId };
+    return { appointments: populatedAppointments, totalCount, lastVisibleAppointmentId: newLastVisibleId };
   }
   throw new Error("Real database not implemented for getPatientAppointmentHistory");
 };
@@ -684,3 +709,4 @@ export const getCurrentQuincenaDateRange = (): { start: Date; end: Date } => {
   }
   return { start: startOfDay(startDate), end: endOfDay(endDate) };
 };
+

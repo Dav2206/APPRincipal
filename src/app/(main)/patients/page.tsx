@@ -11,6 +11,7 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '@/components/ui/label';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import {
   Table,
   TableBody,
@@ -42,6 +43,13 @@ import { USER_ROLES } from '@/lib/constants';
 
 const PATIENTS_PER_PAGE = 8; 
 
+const days = Array.from({ length: 31 }, (_, i) => String(i + 1).padStart(2, '0'));
+const months = Array.from({ length: 12 }, (_, i) => ({
+  value: String(i + 1).padStart(2, '0'),
+  label: new Date(2000, i, 1).toLocaleString('es', { month: 'long' }),
+}));
+
+
 export default function PatientsPage() {
   const { user } = useAuth();
   const { selectedLocationId: adminSelectedLocation } = useAppState();
@@ -70,7 +78,8 @@ export default function PatientsPage() {
       lastName: '',
       phone: '',
       age: null,
-      dateOfBirth: '',
+      birthDay: '',
+      birthMonth: '',
       isDiabetic: false,
       notes: ''
     }
@@ -133,7 +142,7 @@ export default function PatientsPage() {
         date: today,
         locationId: effectiveLocationId 
       });
-      const patientIds = new Set(dailyAppointments.map(app => app.patientId));
+      const patientIds = new Set((dailyAppointments || []).map(app => app.patientId));
       setPatientsWithAppointmentsTodayIds(patientIds);
       fetchPatientsData(1, searchTerm, true, null); 
     } catch (error) {
@@ -157,17 +166,22 @@ export default function PatientsPage() {
 
   const handleAddPatient = () => {
     setEditingPatient(null);
-    form.reset({ firstName: '', lastName: '', phone: '', age: null, dateOfBirth: '', isDiabetic: false, notes: '' });
+    form.reset({ firstName: '', lastName: '', phone: '', age: null, birthDay: '', birthMonth: '', isDiabetic: false, notes: '' });
     setIsFormOpen(true);
   };
 
   const handleEditPatient = (patient: Patient) => {
     setEditingPatient(patient);
+    let day = '', month = '';
+    if (patient.dateOfBirth && patient.dateOfBirth.includes('-')) {
+        [day, month] = patient.dateOfBirth.split('-');
+    }
     form.reset({
         ...patient,
-        phone: (user?.role === USER_ROLES.ADMIN) ? patient.phone : undefined, 
+        phone: (user?.role === USER_ROLES.ADMIN) ? patient.phone || '' : undefined, 
         age: patient.age ?? null,
-        dateOfBirth: patient.dateOfBirth || '',
+        birthDay: day || '',
+        birthMonth: month || '',
         isDiabetic: patient.isDiabetic || false,
     });
     setIsFormOpen(true);
@@ -179,17 +193,30 @@ export default function PatientsPage() {
 
   const onSubmit = async (data: PatientFormData) => {
     try {
-      const patientDataToSave = {
-        ...data,
-        age: data.age === 0 ? null : data.age, 
+      const patientDateOfBirth = (data.birthDay && data.birthMonth) ? `${data.birthDay}-${data.birthMonth}` : undefined;
+      const patientDataToSave: Partial<Patient> = {
+        firstName: data.firstName,
+        lastName: data.lastName,
+        phone: data.phone,
+        age: data.age === 0 ? null : data.age,
+        dateOfBirth: patientDateOfBirth,
+        isDiabetic: data.isDiabetic || false,
+        notes: data.notes,
       };
 
+
       if (editingPatient && editingPatient.id) {
-        const patientToUpdate = { ...editingPatient, ...patientDataToSave };
+        let patientToUpdate = { ...editingPatient, ...patientDataToSave };
         if(user?.role !== USER_ROLES.ADMIN) {
             const originalPatient = await getPatientById(editingPatient.id);
             patientToUpdate.phone = originalPatient?.phone;
         }
+        // Ensure phone is not nullified if restricted and not submitted
+        if(user?.role !== USER_ROLES.ADMIN && patientToUpdate.phone === undefined) {
+          const originalPatient = await getPatientById(editingPatient.id);
+          patientToUpdate.phone = originalPatient?.phone;
+        }
+        
         await updatePatient(editingPatient.id, patientToUpdate);
         toast({ title: "Paciente Actualizado", description: `${data.firstName} ${data.lastName} actualizado.` });
       } else {
@@ -198,8 +225,7 @@ export default function PatientsPage() {
             toast({ title: "Paciente Existente", description: "Ya existe un paciente con ese nombre y apellido.", variant: "destructive" });
             return;
         }
-        const newPatientData = { ...patientDataToSave, isDiabetic: data.isDiabetic || false };
-        await addPatient(newPatientData as Omit<Patient, 'id'>);
+        await addPatient(patientDataToSave as Omit<Patient, 'id'>);
         toast({ title: "Paciente Agregado", description: `${data.firstName} ${data.lastName} agregado.` });
       }
       setIsFormOpen(false);
@@ -372,7 +398,7 @@ export default function PatientsPage() {
                   <FormItem>
                       <FormLabel>Teléfono (Opcional)</FormLabel>
                       { (user?.role === USER_ROLES.ADMIN || !editingPatient) ? (
-                        <FormControl><Input type="tel" placeholder="Ej: 987654321" {...field} /></FormControl>
+                        <FormControl><Input type="tel" placeholder="Ej: 987654321" {...field} value={field.value || ''} /></FormControl>
                       ) : (
                         <p className="pt-2 text-sm text-muted-foreground">Restringido</p>
                       )}
@@ -386,13 +412,46 @@ export default function PatientsPage() {
                       <FormMessage />
                   </FormItem>
                 )}/>
-               <FormField control={form.control} name="dateOfBirth" render={({ field }) => (
-                  <FormItem>
-                      <FormLabel className="flex items-center gap-1"><Cake size={16}/>Fecha de Cumpleaños (DD-MM) (Opcional)</FormLabel>
-                      <FormControl><Input type="text" placeholder="DD-MM" {...field} /></FormControl>
-                      <FormMessage />
-                  </FormItem>
-               )}/>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-end">
+                <FormField
+                    control={form.control}
+                    name="birthDay"
+                    render={({ field }) => (
+                    <FormItem>
+                        <FormLabel className="flex items-center gap-1"><Cake size={16}/>Día de Cumpleaños (Opcional)</FormLabel>
+                        <Select onValueChange={field.onChange} value={field.value || ""}>
+                        <FormControl>
+                            <SelectTrigger><SelectValue placeholder="Día" /></SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                            <SelectItem value="">-- Día --</SelectItem>
+                            {days.map(d => <SelectItem key={d} value={d}>{d}</SelectItem>)}
+                        </SelectContent>
+                        </Select>
+                        <FormMessage />
+                    </FormItem>
+                    )}
+                />
+                <FormField
+                    control={form.control}
+                    name="birthMonth"
+                    render={({ field }) => (
+                    <FormItem>
+                         <FormLabel>Mes de Cumpleaños (Opcional)</FormLabel>
+                        <Select onValueChange={field.onChange} value={field.value || ""}>
+                        <FormControl>
+                            <SelectTrigger><SelectValue placeholder="Mes" /></SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                             <SelectItem value="">-- Mes --</SelectItem>
+                            {months.map(m => <SelectItem key={m.value} value={m.value}>{m.label}</SelectItem>)}
+                        </SelectContent>
+                        </Select>
+                        <FormMessage />
+                    </FormItem>
+                    )}
+                />
+              </div>
                 <FormField
                     control={form.control}
                     name="isDiabetic"
@@ -416,7 +475,7 @@ export default function PatientsPage() {
                <FormField control={form.control} name="notes" render={({ field }) => (
                   <FormItem>
                       <FormLabel>Notas Adicionales (Opcional)</FormLabel>
-                      <FormControl><Textarea placeholder="Preferencias, alergias, etc." {...field} /></FormControl>
+                      <FormControl><Textarea placeholder="Preferencias, alergias, etc." {...field} value={field.value || ''} /></FormControl>
                       <FormMessage />
                   </FormItem>
                )}/>

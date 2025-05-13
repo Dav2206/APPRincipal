@@ -16,13 +16,12 @@ export const PatientFormSchema = z.object({
   id: z.string().optional(),
   firstName: z.string().min(2, "Nombre es requerido."),
   lastName: z.string().min(2, "Apellido es requerido."),
-  phone: z.string().optional(),
+  phone: z.string().optional().nullable(),
   age: z.coerce.number().int().min(0, "La edad no puede ser negativa.").optional().nullable(),
-  dateOfBirth: z.string().optional().refine(val => !val || /^\d{2}-\d{2}$/.test(val), {
-    message: "Formato de fecha de cumpleaños debe ser DD-MM.",
-  }).or(z.literal('')),
+  birthDay: z.string().optional().nullable(), // DD
+  birthMonth: z.string().optional().nullable(), // MM
   isDiabetic: z.boolean().optional(),
-  notes: z.string().optional(),
+  notes: z.string().optional().nullable(),
 });
 export type PatientFormData = z.infer<typeof PatientFormSchema>;
 
@@ -30,11 +29,10 @@ export type PatientFormData = z.infer<typeof PatientFormSchema>;
 export const AppointmentFormSchema = z.object({
   patientFirstName: z.string().min(2, "Nombre del paciente es requerido (mínimo 2 caracteres)."),
   patientLastName: z.string().min(2, "Apellido del paciente es requerido (mínimo 2 caracteres)."),
-  patientPhone: z.string().optional(),
+  patientPhone: z.string().optional().nullable(),
   patientAge: z.coerce.number().int().min(0, "La edad del paciente no puede ser negativa.").optional().nullable(),
-  patientDateOfBirth: z.string().optional().refine(val => !val || /^\d{2}-\d{2}$/.test(val), { 
-    message: "Formato de fecha de cumpleaños debe ser DD-MM.",
-  }).or(z.literal('')),
+  patientBirthDay: z.string().optional().nullable(), // DD
+  patientBirthMonth: z.string().optional().nullable(), // MM
   existingPatientId: z.string().optional().nullable(),
   isDiabetic: z.boolean().optional(), 
   
@@ -43,7 +41,7 @@ export const AppointmentFormSchema = z.object({
   appointmentDate: z.date({ required_error: "Fecha de la cita es requerida."}),
   appointmentTime: z.string().refine(val => TIME_SLOTS.includes(val), { message: "Hora inválida."}),
   preferredProfessionalId: z.string().optional().nullable(),
-  bookingObservations: z.string().optional(),
+  bookingObservations: z.string().optional().nullable(),
 });
 
 export type AppointmentFormData = z.infer<typeof AppointmentFormSchema>;
@@ -53,7 +51,7 @@ export const ProfessionalFormSchema = z.object({
   firstName: z.string().min(2, "Nombre es requerido."),
   lastName: z.string().min(2, "Apellido es requerido."),
   locationId: z.string().refine(val => locationIds.includes(val as any), { message: "Sede inválida."}),
-  phone: z.string().optional(),
+  phone: z.string().optional().nullable(),
 });
 export type ProfessionalFormData = z.infer<typeof ProfessionalFormSchema>;
 
@@ -84,4 +82,5 @@ export const ServiceFormSchema = z.object({
   price: z.coerce.number().positive("El precio debe ser un número positivo.").optional().nullable(),
 });
 export type ServiceFormData = z.infer<typeof ServiceFormSchema>;
+
 

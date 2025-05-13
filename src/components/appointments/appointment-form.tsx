@@ -41,7 +41,14 @@ interface AppointmentFormProps {
 }
 
 const ANY_PROFESSIONAL_VALUE = "_any_professional_placeholder_";
-const DEFAULT_SERVICE_ID_PLACEHOLDER = "_default_service_id_placeholder_"; // Placeholder for initial load
+const DEFAULT_SERVICE_ID_PLACEHOLDER = "_default_service_id_placeholder_"; 
+
+const days = Array.from({ length: 31 }, (_, i) => String(i + 1).padStart(2, '0'));
+const months = Array.from({ length: 12 }, (_, i) => ({
+  value: String(i + 1).padStart(2, '0'),
+  label: new Date(2000, i, 1).toLocaleString('es', { month: 'long' }),
+}));
+
 
 export function AppointmentForm({ isOpen, onOpenChange, onAppointmentCreated, initialData, defaultDate }: AppointmentFormProps) {
   const { user } = useAuth();
@@ -70,13 +77,14 @@ export function AppointmentForm({ isOpen, onOpenChange, onAppointmentCreated, in
       patientLastName: initialData?.patientLastName || '',
       patientPhone: initialData?.patientPhone || '',
       patientAge: initialData?.patientAge ?? null,
-      patientDateOfBirth: initialData?.patientDateOfBirth || '',
+      patientBirthDay: initialData?.patientBirthDay || '',
+      patientBirthMonth: initialData?.patientBirthMonth || '',
       existingPatientId: initialData?.existingPatientId || null,
       isDiabetic: initialData?.isDiabetic || false,
       locationId: initialData?.locationId || defaultLocation || LOCATIONS[0].id,
-      serviceId: initialData?.serviceId || DEFAULT_SERVICE_ID_PLACEHOLDER, // Use placeholder initially
+      serviceId: initialData?.serviceId || DEFAULT_SERVICE_ID_PLACEHOLDER, 
       appointmentDate: initialData?.appointmentDate || defaultDate || new Date(),
-      appointmentTime: initialData?.appointmentTime || TIME_SLOTS[4], // Default to 10:00 AM
+      appointmentTime: initialData?.appointmentTime || TIME_SLOTS[4], 
       preferredProfessionalId: initialData?.preferredProfessionalId || ANY_PROFESSIONAL_VALUE,
       bookingObservations: initialData?.bookingObservations || '',
     },
@@ -102,7 +110,7 @@ export function AppointmentForm({ isOpen, onOpenChange, onAppointmentCreated, in
         setIsLoadingServices(false);
       }
     }
-    if (isOpen) { // Only load if the form is open
+    if (isOpen) { 
         loadInitialServices();
     }
   }, [isOpen, form, toast]);
@@ -125,6 +133,14 @@ export function AppointmentForm({ isOpen, onOpenChange, onAppointmentCreated, in
       if (patient) {
         form.setValue('isDiabetic', patient.isDiabetic || false);
         form.setValue('patientAge', patient.age ?? null);
+        if (patient.dateOfBirth && patient.dateOfBirth.includes('-')) {
+          const [day, month] = patient.dateOfBirth.split('-');
+          form.setValue('patientBirthDay', day);
+          form.setValue('patientBirthMonth', month);
+        } else {
+          form.setValue('patientBirthDay', '');
+          form.setValue('patientBirthMonth', '');
+        }
       }
     }
     if (watchExistingPatientId) {
@@ -132,8 +148,10 @@ export function AppointmentForm({ isOpen, onOpenChange, onAppointmentCreated, in
     } else {
       setCurrentPatientForHistory(null);
       setShowPatientHistory(false);
-      form.setValue('isDiabetic', false); // Reset if no existing patient
+      form.setValue('isDiabetic', false); 
       form.setValue('patientAge', null);
+      form.setValue('patientBirthDay', '');
+      form.setValue('patientBirthMonth', '');
     }
   }, [watchExistingPatientId, form]);
 
@@ -145,7 +163,14 @@ export function AppointmentForm({ isOpen, onOpenChange, onAppointmentCreated, in
       form.setValue('patientLastName', patient.lastName);
       form.setValue('patientPhone', (user?.role === USER_ROLES.ADMIN ? patient.phone : "Teléfono Restringido") || '');
       form.setValue('patientAge', patient.age ?? null);
-      form.setValue('patientDateOfBirth', patient.dateOfBirth || '');
+      if (patient.dateOfBirth && patient.dateOfBirth.includes('-')) {
+        const [day, month] = patient.dateOfBirth.split('-');
+        form.setValue('patientBirthDay', day);
+        form.setValue('patientBirthMonth', month);
+      } else {
+        form.setValue('patientBirthDay', '');
+        form.setValue('patientBirthMonth', '');
+      }
       form.setValue('isDiabetic', patient.isDiabetic || false);
       setCurrentPatientForHistory(patient);
       setShowPatientHistory(true);
@@ -155,7 +180,8 @@ export function AppointmentForm({ isOpen, onOpenChange, onAppointmentCreated, in
       form.setValue('patientLastName', '');
       form.setValue('patientPhone', '');
       form.setValue('patientAge', null);
-      form.setValue('patientDateOfBirth', '');
+      form.setValue('patientBirthDay', '');
+      form.setValue('patientBirthMonth', '');
       form.setValue('isDiabetic', false);
       setCurrentPatientForHistory(null);
       setShowPatientHistory(false);
@@ -166,8 +192,13 @@ export function AppointmentForm({ isOpen, onOpenChange, onAppointmentCreated, in
   async function onSubmit(data: FormSchemaType) {
     setIsLoading(true);
     try {
+      const patientDateOfBirth = (data.patientBirthDay && data.patientBirthMonth) 
+        ? `${data.patientBirthDay}-${data.patientBirthMonth}` 
+        : undefined;
+
       const submitData = {
         ...data,
+        patientDateOfBirth: patientDateOfBirth, // This field is not directly in AppointmentFormSchema, but constructed for addAppointment
         preferredProfessionalId: data.preferredProfessionalId === ANY_PROFESSIONAL_VALUE ? null : data.preferredProfessionalId,
         patientPhone: (data.existingPatientId && user?.role !== USER_ROLES.ADMIN) ? undefined : data.patientPhone,
         isDiabetic: data.isDiabetic || false,
@@ -193,7 +224,8 @@ export function AppointmentForm({ isOpen, onOpenChange, onAppointmentCreated, in
         patientLastName: '',
         patientPhone: '',
         patientAge: null,
-        patientDateOfBirth: '',
+        patientBirthDay: '',
+        patientBirthMonth: '',
         isDiabetic: false,
         existingPatientId: null,
         bookingObservations: '',
@@ -228,7 +260,8 @@ export function AppointmentForm({ isOpen, onOpenChange, onAppointmentCreated, in
           patientLastName: '',
           patientPhone: '',
           patientAge: null,
-          patientDateOfBirth: '',
+          patientBirthDay: '',
+          patientBirthMonth: '',
           isDiabetic: false,
           existingPatientId: null,
           bookingObservations: '',
@@ -269,7 +302,8 @@ export function AppointmentForm({ isOpen, onOpenChange, onAppointmentCreated, in
                           form.setValue('patientLastName', '');
                           form.setValue('patientPhone', '');
                           form.setValue('patientAge', null);
-                          form.setValue('patientDateOfBirth', '');
+                          form.setValue('patientBirthDay', '');
+                          form.setValue('patientBirthMonth', '');
                           form.setValue('isDiabetic', false);
                           setCurrentPatientForHistory(null);
                           setShowPatientHistory(false);
@@ -315,6 +349,7 @@ export function AppointmentForm({ isOpen, onOpenChange, onAppointmentCreated, in
                           type="tel"
                           placeholder={(!!form.getValues("existingPatientId") && user?.role !== USER_ROLES.ADMIN) ? "Teléfono Restringido" : "Ej: 987654321"}
                           {...field}
+                          value={field.value || ''}
                           disabled={!!form.getValues("existingPatientId")}
                         /></FormControl>
                         <FormMessage />
@@ -334,22 +369,50 @@ export function AppointmentForm({ isOpen, onOpenChange, onAppointmentCreated, in
                   />
                 </div>
                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 items-end">
-                  <FormField
+                 <FormField
                     control={form.control}
-                    name="patientDateOfBirth"
+                    name="patientBirthDay"
                     render={({ field }) => (
-                      <FormItem>
-                        <FormLabel className="flex items-center gap-1"><Cake size={16}/>Fecha de Cumpleaños (DD-MM) (Opcional)</FormLabel>
-                        <FormControl><Input type="text" placeholder="DD-MM" {...field} disabled={!!form.getValues("existingPatientId")} /></FormControl>
+                    <FormItem>
+                        <FormLabel className="flex items-center gap-1"><Cake size={16}/>Día de Cumpleaños (Opcional)</FormLabel>
+                        <Select onValueChange={field.onChange} value={field.value || ""} disabled={!!form.getValues("existingPatientId")}>
+                        <FormControl>
+                            <SelectTrigger><SelectValue placeholder="Día" /></SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                            <SelectItem value="">-- Día --</SelectItem>
+                            {days.map(d => <SelectItem key={`day-${d}`} value={d}>{d}</SelectItem>)}
+                        </SelectContent>
+                        </Select>
                         <FormMessage />
-                      </FormItem>
+                    </FormItem>
                     )}
                   />
-                 <FormField
+                  <FormField
+                    control={form.control}
+                    name="patientBirthMonth"
+                    render={({ field }) => (
+                    <FormItem>
+                         <FormLabel>Mes de Cumpleaños (Opcional)</FormLabel>
+                        <Select onValueChange={field.onChange} value={field.value || ""} disabled={!!form.getValues("existingPatientId")}>
+                        <FormControl>
+                            <SelectTrigger><SelectValue placeholder="Mes" /></SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                             <SelectItem value="">-- Mes --</SelectItem>
+                            {months.map(m => <SelectItem key={`month-${m.value}`} value={m.value}>{m.label}</SelectItem>)}
+                        </SelectContent>
+                        </Select>
+                        <FormMessage />
+                    </FormItem>
+                    )}
+                />
+                </div>
+                <FormField
                     control={form.control}
                     name="isDiabetic"
                     render={({ field }) => (
-                    <FormItem className="flex flex-row items-center space-x-3 space-y-0 rounded-md border p-3 shadow-sm h-fit mb-1">
+                    <FormItem className="flex flex-row items-center space-x-3 space-y-0 rounded-md border p-3 shadow-sm h-fit">
                         <FormControl>
                         <Checkbox
                             checked={field.value}
@@ -366,7 +429,6 @@ export function AppointmentForm({ isOpen, onOpenChange, onAppointmentCreated, in
                     </FormItem>
                     )}
                   />
-                </div>
 
 
                 {showPatientHistory && currentPatientForHistory && (
@@ -525,6 +587,7 @@ export function AppointmentForm({ isOpen, onOpenChange, onAppointmentCreated, in
                           placeholder="Ej: El paciente tiene movilidad reducida, requiere un podólogo con experiencia en pie diabético, etc."
                           className="resize-none"
                           {...field}
+                          value={field.value || ''}
                           disabled={isLoadingServices || servicesList.length === 0}
                         />
                       </FormControl>
@@ -551,7 +614,8 @@ export function AppointmentForm({ isOpen, onOpenChange, onAppointmentCreated, in
                 patientLastName: '',
                 patientPhone: '',
                 patientAge: null,
-                patientDateOfBirth: '',
+                patientBirthDay: '',
+                patientBirthMonth: '',
                 isDiabetic: false,
                 existingPatientId: null,
                 bookingObservations: '',
