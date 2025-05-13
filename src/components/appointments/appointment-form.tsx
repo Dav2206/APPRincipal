@@ -1,7 +1,7 @@
 
 "use client";
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useForm, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { AppointmentFormSchema, type AppointmentFormData as FormSchemaType } from '@/lib/schemas';
@@ -10,7 +10,7 @@ import type { Professional, Patient, Service } from '@/types';
 import { useAuth } from '@/contexts/auth-provider';
 import { useAppState } from '@/contexts/app-state-provider';
 import { USER_ROLES, LOCATIONS, TIME_SLOTS } from '@/lib/constants';
-import { getProfessionals, getServices, addAppointment, getPatientById } from '@/lib/data';
+import { getProfessionals, getServices, addAppointment, getPatientById, getProfessionalAvailabilityForDate } from '@/lib/data';
 
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -49,7 +49,7 @@ export function AppointmentForm({ isOpen, onOpenChange, onAppointmentCreated, in
   const { selectedLocationId: adminSelectedLocation } = useAppState();
   const { toast } = useToast();
 
-  const [professionals, setProfessionals] = useState<Professional[]>([]);
+  const [allProfessionals, setAllProfessionals] = useState<Professional[]>([]);
   const [servicesList, setServicesList] = useState<Service[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [isLoadingServices, setIsLoadingServices] = useState(true);
@@ -84,6 +84,7 @@ export function AppointmentForm({ isOpen, onOpenChange, onAppointmentCreated, in
   
   const watchLocationId = form.watch('locationId');
   const watchExistingPatientId = form.watch('existingPatientId');
+  const watchAppointmentDate = form.watch('appointmentDate');
 
   useEffect(() => {
     async function loadInitialServices() {
@@ -110,12 +111,21 @@ export function AppointmentForm({ isOpen, onOpenChange, onAppointmentCreated, in
   useEffect(() => {
     async function loadProfessionals(location: LocationId) {
       const profs = await getProfessionals(location);
-      setProfessionals(profs || []);
+      setAllProfessionals(profs || []);
     }
     if (watchLocationId) {
       loadProfessionals(watchLocationId as LocationId);
     }
   }, [watchLocationId]);
+
+  const workingProfessionalsForSelectedDate = useMemo(() => {
+    if (!watchAppointmentDate || !allProfessionals.length) {
+      return allProfessionals;
+    }
+    return allProfessionals.filter(prof => 
+      getProfessionalAvailabilityForDate(prof, watchAppointmentDate)
+    );
+  }, [watchAppointmentDate, allProfessionals]);
 
   useEffect(() => {
     async function fetchAndSetPatientForHistory(patientId: string) {
@@ -482,14 +492,14 @@ export function AppointmentForm({ isOpen, onOpenChange, onAppointmentCreated, in
                       <Select
                         onValueChange={(value) => field.onChange(value === ANY_PROFESSIONAL_VALUE ? null : value)}
                         value={field.value || ANY_PROFESSIONAL_VALUE}
-                        disabled={isLoadingServices || servicesList.length === 0 || professionals.length === 0}
+                        disabled={isLoadingServices || servicesList.length === 0 || workingProfessionalsForSelectedDate.length === 0}
                       >
                         <FormControl>
-                          <SelectTrigger><SelectValue placeholder={professionals.length > 0 ? "Cualquier profesional" : "No hay profesionales"} /></SelectTrigger>
+                          <SelectTrigger><SelectValue placeholder={workingProfessionalsForSelectedDate.length > 0 ? "Cualquier profesional disponible" : "No hay profesionales disponibles"} /></SelectTrigger>
                         </FormControl>
                         <SelectContent>
-                          <SelectItem value={ANY_PROFESSIONAL_VALUE}>Cualquier profesional</SelectItem>
-                          {professionals.map(prof => (
+                          <SelectItem value={ANY_PROFESSIONAL_VALUE}>Cualquier profesional disponible</SelectItem>
+                          {workingProfessionalsForSelectedDate.map(prof => (
                             <SelectItem key={prof.id} value={prof.id}>{prof.firstName} {prof.lastName}</SelectItem>
                           ))}
                         </SelectContent>
