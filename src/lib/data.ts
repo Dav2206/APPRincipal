@@ -1,3 +1,4 @@
+
 // src/lib/data.ts
 import type { User, Professional, Patient, Service, Appointment, AppointmentFormData, ProfessionalFormData, AppointmentStatus, ServiceFormData, Contract } from '@/types';
 import { LOCATIONS, USER_ROLES, SERVICES as SERVICES_CONSTANTS, APPOINTMENT_STATUS, LocationId, ServiceId as ConstantServiceId, APPOINTMENT_STATUS_DISPLAY, PAYMENT_METHODS, TIME_SLOTS, DAYS_OF_WEEK } from './constants';
@@ -13,6 +14,7 @@ const generateId = (): string => {
 
 const ANY_PROFESSIONAL_VALUE = "_any_professional_placeholder_";
 export const useMockDatabase = globalUseMockDatabase;
+
 
 // --- Initial Mock Data Definitions ---
 const initialMockUsersData: User[] = [
@@ -328,11 +330,13 @@ export const updateProfessional = async (id: string, data: Partial<ProfessionalF
         const index = mockDB.professionals.findIndex(p => p.id === id);
         if (index !== -1) {
             const professionalToUpdate = { ...mockDB.professionals[index] };
+            const oldContract = professionalToUpdate.currentContract ? { ...professionalToUpdate.currentContract } : null;
             
             if(data.firstName) professionalToUpdate.firstName = data.firstName;
             if(data.lastName) professionalToUpdate.lastName = data.lastName;
             if(data.locationId) professionalToUpdate.locationId = data.locationId;
-            professionalToUpdate.phone = data.phone || undefined;
+            professionalToUpdate.phone = data.phone === null ? undefined : (data.phone ?? professionalToUpdate.phone);
+
 
             if (data.workSchedule) {
                 professionalToUpdate.workSchedule = { ...professionalToUpdate.workSchedule };
@@ -360,59 +364,87 @@ export const updateProfessional = async (id: string, data: Partial<ProfessionalF
                     notes: ov.notes,
                 }));
             }
-
-            const oldContract = professionalToUpdate.currentContract;
+            
             let newProposedContractData: Partial<Contract> = {};
-            let contractFieldsTouched = false;
+            let contractFieldsTouchedInPayload = false;
 
             if (data.hasOwnProperty('currentContract_startDate')) {
                 newProposedContractData.startDate = data.currentContract_startDate ? formatISO(data.currentContract_startDate, { representation: 'date' }) : undefined;
-                contractFieldsTouched = true;
+                contractFieldsTouchedInPayload = true;
             }
             if (data.hasOwnProperty('currentContract_endDate')) {
                 newProposedContractData.endDate = data.currentContract_endDate ? formatISO(data.currentContract_endDate, { representation: 'date' }) : undefined;
-                contractFieldsTouched = true;
+                contractFieldsTouchedInPayload = true;
             }
-             if (data.hasOwnProperty('currentContract_notes')) {
-                newProposedContractData.notes = data.currentContract_notes || undefined;
-                contractFieldsTouched = true;
+            if (data.hasOwnProperty('currentContract_notes')) {
+                newProposedContractData.notes = data.currentContract_notes ?? undefined; 
+                contractFieldsTouchedInPayload = true;
             }
             if (data.hasOwnProperty('currentContract_empresa')) {
-                newProposedContractData.empresa = data.currentContract_empresa || undefined;
-                contractFieldsTouched = true;
+                newProposedContractData.empresa = data.currentContract_empresa ?? undefined; 
+                contractFieldsTouchedInPayload = true;
             }
 
-            if (contractFieldsTouched) {
+            if (contractFieldsTouchedInPayload) {
                 if (newProposedContractData.startDate && newProposedContractData.endDate) {
                     const newContract: Contract = {
                         startDate: newProposedContractData.startDate,
                         endDate: newProposedContractData.endDate,
-                        notes: newProposedContractData.notes ?? oldContract?.notes,
-                        empresa: newProposedContractData.empresa ?? oldContract?.empresa,
+                        notes: newProposedContractData.notes, // Already string | undefined
+                        empresa: newProposedContractData.empresa, // Already string | undefined
                     };
-                    if (oldContract && (oldContract.startDate !== newContract.startDate || oldContract.endDate !== newContract.endDate || oldContract.notes !== newContract.notes || oldContract.empresa !== newContract.empresa)) {
+
+                    // Archive old contract if it existed AND is different from the new one.
+                    if (oldContract && (
+                        oldContract.startDate !== newContract.startDate ||
+                        oldContract.endDate !== newContract.endDate ||
+                        (oldContract.notes ?? undefined) !== (newContract.notes ?? undefined) || // Compare undefined for notes
+                        (oldContract.empresa ?? undefined) !== (newContract.empresa ?? undefined) // Compare undefined for empresa
+                    )) {
                         professionalToUpdate.contractHistory = [...(professionalToUpdate.contractHistory || []), oldContract];
                     }
                     professionalToUpdate.currentContract = newContract;
-                } else if (!newProposedContractData.startDate && !newProposedContractData.endDate && !newProposedContractData.notes && !newProposedContractData.empresa) {
-                    // All contract fields are cleared
+                } else if (
+                    !newProposedContractData.startDate && 
+                    !newProposedContractData.endDate &&
+                    newProposedContractData.notes === undefined && // Check for undefined explicitly
+                    newProposedContractData.empresa === undefined   // Check for undefined explicitly
+                ) {
+                    // All contract fields are cleared from payload, so clear currentContract
                     if (oldContract) {
                         professionalToUpdate.contractHistory = [...(professionalToUpdate.contractHistory || []), oldContract];
                     }
                     professionalToUpdate.currentContract = null;
-                } else {
-                     // Partial update to existing contract or invalid state, keep existing and apply partial if makes sense
-                    if(professionalToUpdate.currentContract){
-                        professionalToUpdate.currentContract = {
-                            ...professionalToUpdate.currentContract,
-                            ...newProposedContractData
-                        }
-                    } else if (newProposedContractData.startDate && newProposedContractData.endDate) {
-                        // If no current contract, but new one is valid
-                         professionalToUpdate.currentContract = newProposedContractData as Contract;
+                } else if (professionalToUpdate.currentContract) { 
+                    // Partial update to existing currentContract if not all fields were cleared
+                    // and not all fields for a NEW contract were provided
+                    professionalToUpdate.currentContract = {
+                        ...professionalToUpdate.currentContract,
+                        ...newProposedContractData // Apply what was provided
+                    };
+                     // If this partial update makes it different from original oldContract, archive original.
+                    if (oldContract && (
+                        oldContract.startDate !== professionalToUpdate.currentContract.startDate ||
+                        oldContract.endDate !== professionalToUpdate.currentContract.endDate ||
+                        (oldContract.notes ?? undefined) !== (professionalToUpdate.currentContract.notes ?? undefined) ||
+                        (oldContract.empresa ?? undefined) !== (professionalToUpdate.currentContract.empresa ?? undefined)
+                    ) && !professionalToUpdate.contractHistory?.some(h => 
+                        h.startDate === oldContract.startDate && h.endDate === oldContract.endDate && 
+                        (h.notes ?? undefined) === (oldContract.notes ?? undefined) && (h.empresa ?? undefined) === (oldContract.empresa ?? undefined)
+                    ) ) {
+                         professionalToUpdate.contractHistory = [...(professionalToUpdate.contractHistory || []), oldContract];
                     }
+                } else if (newProposedContractData.startDate && newProposedContractData.endDate) {
+                    // Scenario: No current contract, but a new valid one is being added partially (e.g. only start/end dates)
+                    professionalToUpdate.currentContract = {
+                         startDate: newProposedContractData.startDate,
+                         endDate: newProposedContractData.endDate,
+                         notes: newProposedContractData.notes,
+                         empresa: newProposedContractData.empresa,
+                    };
                 }
             }
+
 
             mockDB.professionals[index] = professionalToUpdate;
             return professionalToUpdate;
@@ -518,6 +550,9 @@ export const updatePatient = async (id: string, data: Partial<Patient>): Promise
         const index = mockDB.patients.findIndex(p => p.id === id);
         if (index !== -1) {
             const patientToUpdate = { ...mockDB.patients[index], ...data };
+             if (data.hasOwnProperty('age') && data.age === null) { // Explicitly allow setting age to null
+                patientToUpdate.age = null;
+            }
             mockDB.patients[index] = patientToUpdate;
             return mockDB.patients[index];
         }
@@ -1023,28 +1058,19 @@ export function getProfessionalAvailabilityForDate(
     // Map JS day of week to our DayOfWeekId (monday, tuesday, etc.)
     // JS: Sun=0, Mon=1, Tue=2, Wed=3, Thu=4, Fri=5, Sat=6
     // Our DAYS_OF_WEEK: Mon=0, Tue=1, ..., Sun=6 (index based on array)
-    // Need to adjust: (targetDayOfWeekJs + 6) % 7 maps JS Sunday (0) to our Sunday (6) etc.
-    // Or simpler: use our DAYS_OF_WEEK array directly.
-    const dayKey = DAYS_OF_WEEK[targetDayOfWeekJs].id as DayOfWeekId; // This might need adjustment if your DAYS_OF_WEEK order is different
+    const dayKey = DAYS_OF_WEEK[(targetDayOfWeekJs + 6) % 7].id as DayOfWeekId; 
     
     if (dayKey) { // Ensure dayKey is valid
         const dailySchedule = professional.workSchedule[dayKey];
         if (dailySchedule) { // Check if schedule exists for this day
-        // If isWorking is explicitly false, they are not working.
-        // If isWorking is undefined or true, AND startTime/endTime exist, they are working.
         if (dailySchedule.isWorking === false) return null;
 
         if (dailySchedule.startTime && dailySchedule.endTime) {
             return { startTime: dailySchedule.startTime, endTime: dailySchedule.endTime };
         }
-        // If isWorking is true/undefined but no times, assume not working for safety, or handle as error
-        // For now, if isWorking is not explicitly false, but times are missing, we'll consider them not working.
-        // This could be stricter if needed.
         return null; 
         }
     }
   }
-
-  // If no specific override and no base schedule for the day, assume not working
   return null; 
 }
