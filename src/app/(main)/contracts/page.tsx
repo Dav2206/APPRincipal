@@ -29,7 +29,7 @@ import {
   DialogClose,
 } from '@/components/ui/dialog';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
-import { Loader2, AlertTriangle, FileSpreadsheet, Eye, ChevronsDown, Edit3, Calendar as CalendarIconLucide, Building, PlusCircle, Filter } from 'lucide-react';
+import { Loader2, AlertTriangle, FileSpreadsheet, Eye, ChevronsDown, Edit3, Calendar as CalendarIconLucide, Filter, PlusCircle } from 'lucide-react'; // Changed Building to Filter
 import { format, parseISO } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { useRouter } from 'next/navigation';
@@ -43,11 +43,12 @@ import { Calendar } from '@/components/ui/calendar';
 import { cn } from '@/lib/utils';
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Separator } from '@/components/ui/separator'; // Added Separator
 
 const CONTRACTS_PER_PAGE = 10;
 const ALL_EMPRESAS_VALUE = "all_empresas_placeholder";
-const NINGUNA_EMPRESA_FORM_VALUE = null; // Represents the actual value to store for "Ninguna"
-const NINGUNA_EMPRESA_SELECT_ITEM_VALUE = "_select_item_ninguna_empresa_"; // Unique value for the SelectItem
+const NINGUNA_EMPRESA_FORM_VALUE = null;
+const NINGUNA_EMPRESA_SELECT_ITEM_VALUE = "_select_item_ninguna_empresa_";
 
 export default function ContractsPage() {
   const { user, isLoading: authIsLoading } = useAuth();
@@ -65,7 +66,7 @@ export default function ContractsPage() {
   const [selectedEmpresa, setSelectedEmpresa] = useState<string>(ALL_EMPRESAS_VALUE);
   const [uniqueEmpresas, setUniqueEmpresas] = useState<string[]>([]);
   const [manuallyAddedEmpresas, setManuallyAddedEmpresas] = useState<string[]>([]);
-  const [isAddEmpresaModalOpen, setIsAddEmpresaModalOpen] = useState(false);
+  const [isManageEmpresasModalOpen, setIsManageEmpresasModalOpen] = useState(false); // Renamed
   const [newEmpresaNameInput, setNewEmpresaNameInput] = useState('');
 
   const [selectedProfessionalForHistory, setSelectedProfessionalForHistory] = useState<(Professional & { contractDisplayStatus: ContractDisplayStatus }) | null>(null);
@@ -81,7 +82,7 @@ export default function ContractsPage() {
     defaultValues: {
       startDate: null,
       endDate: null,
-      empresa: '', // Default to empty string, which will show placeholder
+      empresa: NINGUNA_EMPRESA_FORM_VALUE, 
     },
   });
 
@@ -130,26 +131,68 @@ export default function ContractsPage() {
   useEffect(() => {
     const derivedEmpresas = new Set<string>();
     allProfessionalsWithContracts.forEach(prof => {
-      if (prof.currentContract?.empresa) {
-        derivedEmpresas.add(prof.currentContract.empresa);
+      if (prof.currentContract?.empresa && prof.currentContract.empresa.trim() !== '') {
+        derivedEmpresas.add(prof.currentContract.empresa.trim());
       }
       prof.contractHistory?.forEach(ch => {
-        if (ch.empresa) {
-          derivedEmpresas.add(ch.empresa);
+        if (ch.empresa && ch.empresa.trim() !== '') {
+          derivedEmpresas.add(ch.empresa.trim());
         }
       });
     });
-    const combinedEmpresas = new Set([...Array.from(derivedEmpresas), ...manuallyAddedEmpresas].filter(e => e && e.trim() !== '')); // Filter out empty strings
+    const combinedEmpresas = new Set([...Array.from(derivedEmpresas), ...manuallyAddedEmpresas.map(e => e.trim())].filter(e => e));
     setUniqueEmpresas(Array.from(combinedEmpresas).sort((a,b) => a.toLowerCase().localeCompare(b.toLowerCase())));
   }, [allProfessionalsWithContracts, manuallyAddedEmpresas]);
 
   const handleAddEmpresaToManualList = () => {
-    if (newEmpresaNameInput.trim() !== '' && !uniqueEmpresas.includes(newEmpresaNameInput.trim())) {
-      setManuallyAddedEmpresas(prev => [...prev, newEmpresaNameInput.trim()]);
+    const trimmedNewEmpresaName = newEmpresaNameInput.trim();
+    if (trimmedNewEmpresaName !== '') {
+      if (!uniqueEmpresas.some(e => e.toLowerCase() === trimmedNewEmpresaName.toLowerCase()) && !manuallyAddedEmpresas.some(e => e.toLowerCase() === trimmedNewEmpresaName.toLowerCase())) {
+        setManuallyAddedEmpresas(prev => [...prev, trimmedNewEmpresaName]);
+        toast({ title: "Empresa Añadida", description: `"${trimmedNewEmpresaName}" se ha añadido a la lista de filtros.` });
+      } else {
+        toast({ title: "Empresa ya existe", description: `"${trimmedNewEmpresaName}" ya está en la lista.`, variant: "default" });
+      }
     }
     setNewEmpresaNameInput('');
-    setIsAddEmpresaModalOpen(false);
+    // No cerramos el modal para permitir añadir más o quitar.
   };
+
+  const handleRemoveManuallyAddedEmpresa = (empresaNameToRemove: string) => {
+    const wasManuallyAdded = manuallyAddedEmpresas.includes(empresaNameToRemove);
+    setManuallyAddedEmpresas(prev => prev.filter(e => e !== empresaNameToRemove));
+  
+    const companyStillInUse = allProfessionalsWithContracts.some(prof =>
+      prof.currentContract?.empresa === empresaNameToRemove ||
+      prof.contractHistory?.some(ch => ch.empresa === empresaNameToRemove)
+    );
+  
+    if (wasManuallyAdded) {
+      if (companyStillInUse) {
+        toast({
+          title: "Empresa quitada de la lista manual",
+          description: `"${empresaNameToRemove}" se quitó de las opciones añadidas manualmente, pero sigue apareciendo porque está en uso en contratos existentes.`,
+          variant: "default",
+          duration: 5000,
+        });
+      } else {
+        toast({
+          title: "Empresa quitada",
+          description: `"${empresaNameToRemove}" se ha quitado de la lista de opciones.`,
+          variant: "default",
+        });
+      }
+    } else {
+      // This case happens if it was only derived from contracts and user tries to remove it from the "manage" list
+      toast({
+        title: "No se puede quitar completamente",
+        description: `"${empresaNameToRemove}" no se puede eliminar de la lista de filtros porque está definida en contratos existentes. Edite los contratos directamente si desea cambiarla.`,
+        variant: "default", // Changed to default to be less alarming
+        duration: 6000,
+      });
+    }
+  };
+
 
   const filteredAndSortedProfessionals = React.useMemo(() => {
     return allProfessionalsWithContracts
@@ -157,7 +200,7 @@ export default function ContractsPage() {
         (`${p.firstName} ${p.lastName}`.toLowerCase().includes(searchTerm.toLowerCase()) ||
         (p.currentContract?.notes && p.currentContract.notes.toLowerCase().includes(searchTerm.toLowerCase())) ||
         (p.currentContract?.empresa && p.currentContract.empresa.toLowerCase().includes(searchTerm.toLowerCase()))) &&
-        (selectedEmpresa === ALL_EMPRESAS_VALUE || p.currentContract?.empresa === selectedEmpresa)
+        (selectedEmpresa === ALL_EMPRESAS_VALUE || p.currentContract?.empresa === selectedEmpresa || (selectedEmpresa === NINGUNA_EMPRESA_SELECT_ITEM_VALUE && !p.currentContract?.empresa))
       )
       .sort((a, b) => {
         const statusOrder: Record<ContractDisplayStatus, number> = {
@@ -190,7 +233,7 @@ export default function ContractsPage() {
     contractEditForm.reset({
       startDate: professional.currentContract?.startDate ? parseISO(professional.currentContract.startDate) : null,
       endDate: professional.currentContract?.endDate ? parseISO(professional.currentContract.endDate) : null,
-      empresa: professional.currentContract?.empresa || NINGUNA_EMPRESA_FORM_VALUE, // Use null for "Ninguna" in form state
+      empresa: professional.currentContract?.empresa || NINGUNA_EMPRESA_FORM_VALUE,
     });
     setIsContractEditModalOpen(true);
   };
@@ -201,7 +244,7 @@ export default function ContractsPage() {
     contractEditForm.reset({
       startDate: null,
       endDate: null,
-      empresa: NINGUNA_EMPRESA_FORM_VALUE, // Default to "Ninguna" for new contracts
+      empresa: NINGUNA_EMPRESA_FORM_VALUE,
     });
     setIsContractEditModalOpen(true);
   };
@@ -215,7 +258,6 @@ export default function ContractsPage() {
       const updatePayload: Partial<ProfessionalFormData> = {
         currentContract_startDate: data.startDate,
         currentContract_endDate: data.endDate,
-        // `data.empresa` will be `null` if "Ninguna" was selected, or the company string
         currentContract_empresa: data.empresa, 
       };
 
@@ -295,13 +337,14 @@ export default function ContractsPage() {
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value={ALL_EMPRESAS_VALUE}>Todas las Empresas</SelectItem>
+                 <SelectItem value={NINGUNA_EMPRESA_SELECT_ITEM_VALUE}>Ninguna Empresa</SelectItem>
                 {uniqueEmpresas.map(empresa => (
                   <SelectItem key={empresa} value={empresa}>{empresa}</SelectItem>
                 ))}
               </SelectContent>
             </Select>
-            <Button variant="outline" className="w-full sm:w-auto" onClick={() => setIsAddEmpresaModalOpen(true)}>
-              <Building className="mr-2 h-4 w-4"/> Añadir Nueva Empresa
+            <Button variant="outline" className="w-full sm:w-auto" onClick={() => setIsManageEmpresasModalOpen(true)}>
+              <Filter className="mr-2 h-4 w-4"/> Gestionar Empresas
             </Button>
           </div>
 
@@ -450,7 +493,7 @@ export default function ContractsPage() {
                   name="empresa"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel className="flex items-center gap-1"><Building size={16}/>Empresa</FormLabel>
+                      <FormLabel className="flex items-center gap-1"><Filter size={16}/>Empresa</FormLabel>
                       <Select
                         onValueChange={(value) => {
                           field.onChange(value === NINGUNA_EMPRESA_SELECT_ITEM_VALUE ? NINGUNA_EMPRESA_FORM_VALUE : value);
@@ -486,25 +529,61 @@ export default function ContractsPage() {
         </Dialog>
       )}
 
-      {/* Add Empresa Modal */}
-      <Dialog open={isAddEmpresaModalOpen} onOpenChange={setIsAddEmpresaModalOpen}>
-        <DialogContent className="sm:max-w-md">
+      {/* Manage Empresas Modal */}
+      <Dialog open={isManageEmpresasModalOpen} onOpenChange={setIsManageEmpresasModalOpen}>
+        <DialogContent className="sm:max-w-lg">
           <DialogHeader>
-            <DialogTitle>Añadir Nueva Empresa al Filtro</DialogTitle>
+            <DialogTitle>Gestionar Nombres de Empresas</DialogTitle>
             <DialogDescription>
-              Ingrese el nombre de la nueva empresa. Estará disponible en el filtro de empresas y en el formulario de contratos.
+              Añada nuevas empresas a la lista de filtros o elimine las que añadió manualmente.
+              Las empresas en uso en contratos no se pueden eliminar de esta lista.
             </DialogDescription>
           </DialogHeader>
-          <div className="space-y-4 py-2">
-            <Input
-              placeholder="Nombre de la nueva empresa"
-              value={newEmpresaNameInput}
-              onChange={(e) => setNewEmpresaNameInput(e.target.value)}
-            />
+          <div className="py-4 space-y-6">
+            <div>
+              <h4 className="text-md font-semibold mb-2">Añadir Nueva Empresa</h4>
+              <div className="flex gap-2 items-center">
+                <Input
+                  placeholder="Nombre de la nueva empresa"
+                  value={newEmpresaNameInput}
+                  onChange={(e) => setNewEmpresaNameInput(e.target.value)}
+                  className="flex-grow"
+                />
+                <Button type="button" onClick={handleAddEmpresaToManualList}>Añadir</Button>
+              </div>
+            </div>
+
+            <Separator />
+
+            <div>
+              <h4 className="text-md font-semibold mb-2">Empresas en la Lista de Filtros</h4>
+              {uniqueEmpresas.length > 0 ? (
+                <ScrollArea className="h-[200px] border rounded-md p-2">
+                  <ul className="space-y-1">
+                    {uniqueEmpresas.map((empresa) => (
+                      <li key={empresa} className="flex justify-between items-center p-1.5 hover:bg-muted/50 rounded">
+                        <span className="text-sm">{empresa}</span>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="text-xs text-destructive hover:text-destructive/80 hover:bg-destructive/10 h-auto px-2 py-1"
+                          onClick={() => handleRemoveManuallyAddedEmpresa(empresa)}
+                        >
+                          Quitar
+                        </Button>
+                      </li>
+                    ))}
+                  </ul>
+                </ScrollArea>
+              ) : (
+                <p className="text-sm text-muted-foreground text-center py-4">No hay empresas personalizadas añadidas. Las empresas de contratos existentes aparecerán aquí automáticamente.</p>
+              )}
+            </div>
           </div>
           <DialogFooter className="pt-4">
-            <DialogClose asChild><Button type="button" variant="outline">Cancelar</Button></DialogClose>
-            <Button type="button" onClick={handleAddEmpresaToManualList}>Añadir</Button>
+            <DialogClose asChild>
+              <Button type="button" variant="outline">Cerrar</Button>
+            </DialogClose>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -565,4 +644,3 @@ export default function ContractsPage() {
     </div>
   );
 }
-
