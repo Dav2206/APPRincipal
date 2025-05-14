@@ -1,3 +1,4 @@
+
 // src/lib/data.ts
 import type { User, Professional, Patient, Service, Appointment, AppointmentFormData, ProfessionalFormData, AppointmentStatus, ServiceFormData } from '@/types';
 import { LOCATIONS, USER_ROLES, SERVICES as SERVICES_CONSTANTS, APPOINTMENT_STATUS, LocationId, ServiceId as ConstantServiceId, APPOINTMENT_STATUS_DISPLAY, PAYMENT_METHODS, TIME_SLOTS, DAYS_OF_WEEK } from './constants';
@@ -47,7 +48,7 @@ const initialMockProfessionalsData: Professional[] = LOCATIONS.flatMap((location
       thursday: { startTime: '10:00', endTime: '19:00', isWorking: true },
       friday: { startTime: '10:00', endTime: '19:00', isWorking: true },
       saturday: { startTime: '09:00', endTime: '18:00', isWorking: true },
-      sunday: { isWorking: false, startTime: '00:00', endTime: '00:00' }, // Sunday usually off by default
+      sunday: { isWorking: false, startTime: '10:00', endTime: '18:00' }, // Default Sunday off
     };
     
     const isSecondProfHiguereta = location.id === 'higuereta' && i === 1;
@@ -231,7 +232,7 @@ export const addProfessional = async (data: ProfessionalFormData): Promise<Profe
     };
 
     if (data.workSchedule) {
-      (Object.keys(data.workSchedule) as Array<Exclude<DayOfWeekId, 'sunday'>>).forEach(dayId => {
+      (Object.keys(data.workSchedule) as Array<DayOfWeekId>).forEach(dayId => {
         const dayData = data.workSchedule![dayId];
         if (dayData) {
           professionalToSave.workSchedule[dayId] = {
@@ -243,12 +244,7 @@ export const addProfessional = async (data: ProfessionalFormData): Promise<Profe
           professionalToSave.workSchedule[dayId] = {startTime: '00:00', endTime: '00:00', isWorking: false};
         }
       });
-      // Ensure Sunday is explicitly set if not in the form data (it's filtered out in the form)
-      if (!professionalToSave.workSchedule.sunday) {
-          professionalToSave.workSchedule.sunday = { startTime: '00:00', endTime: '00:00', isWorking: false };
-      }
     } else {
-      // Default work schedule if not provided (though schema makes it optional, good to have a base)
        DAYS_OF_WEEK.forEach(day => {
            professionalToSave.workSchedule[day.id] = {startTime: '00:00', endTime: '00:00', isWorking: false};
        });
@@ -279,7 +275,7 @@ export const updateProfessional = async (id: string, data: Partial<ProfessionalF
 
             if (data.workSchedule) {
                 professionalToUpdate.workSchedule = { ...professionalToUpdate.workSchedule };
-                 (Object.keys(data.workSchedule) as Array<Exclude<DayOfWeekId, 'sunday'>>).forEach(dayId => {
+                 (Object.keys(data.workSchedule) as Array<DayOfWeekId>).forEach(dayId => {
                     const dayData = data.workSchedule![dayId];
                     if (dayData) {
                         professionalToUpdate.workSchedule[dayId] = {
@@ -291,10 +287,6 @@ export const updateProfessional = async (id: string, data: Partial<ProfessionalF
                          professionalToUpdate.workSchedule[dayId] = {startTime: '00:00', endTime: '00:00', isWorking: false};
                     }
                 });
-                 // Ensure Sunday is explicitly set if not in the form data
-                 if (!professionalToUpdate.workSchedule.sunday) {
-                     professionalToUpdate.workSchedule.sunday = {startTime: '00:00', endTime: '00:00', isWorking: false};
-                 }
             }
 
             if (data.customScheduleOverrides) {
@@ -843,8 +835,8 @@ export const getPatientAppointmentHistory = async (
         paginatedAppointments = populatedHistory.slice(startIndex, startIndex + queryLimit);
     }
 
-    const newLastVisibleId = paginatedAppointments.length > 0 ? populatedAppointments[populatedAppointments.length -1].id : null;
-    return { appointments: populatedAppointments, totalCount, lastVisibleAppointmentId: newLastVisibleId };
+    const newLastVisibleId = paginatedAppointments.length > 0 ? populatedHistory[populatedHistory.length -1].id : null;
+    return { appointments: populatedHistory, totalCount, lastVisibleAppointmentId: newLastVisibleId };
   }
   throw new Error("Patient appointment history retrieval not implemented for non-mock database or mockDB not available.");
 };
@@ -909,16 +901,13 @@ export function getProfessionalAvailabilityForDate(
   
   // 2. Fallback to base weekly schedule
   if (professional.workSchedule) {
-    // Map JS day of week (0-6) to our DayOfWeekId string ('sunday', 'monday', ...)
-    const dayKey = DAYS_OF_WEEK.find(d => getDay(new Date(2000, 0, d.id === 'sunday' ? 3 : (DAYS_OF_WEEK.findIndex(dw => dw.id === d.id) + 2))) === targetDayOfWeekJs)?.id as DayOfWeekId;
+    const dayKey = DAYS_OF_WEEK[targetDayOfWeekJs].id as DayOfWeekId;
     
     if (dayKey) {
         const dailySchedule = professional.workSchedule[dayKey];
         if (dailySchedule) {
-        // If isWorking is explicitly false, they are not working
         if (dailySchedule.isWorking === false) return null;
 
-        // If isWorking is true or undefined (assume true), and times are present
         if (dailySchedule.startTime && dailySchedule.endTime) {
             return { startTime: dailySchedule.startTime, endTime: dailySchedule.endTime };
         }
@@ -926,6 +915,6 @@ export function getProfessionalAvailabilityForDate(
     }
   }
 
-  return null; // Default to not working if no specific schedule found
+  return null; 
 }
 

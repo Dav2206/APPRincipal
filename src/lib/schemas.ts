@@ -68,16 +68,12 @@ export const ProfessionalFormSchema = z.object({
   phone: z.string().optional().nullable(),
 
   workSchedule: z.object(
-    DAYS_OF_WEEK.filter(day => day.id !== 'sunday') // Base schedule for Mon-Sat
-      .reduce((acc, day) => {
-        acc[day.id as Exclude<DayOfWeekId, 'sunday'>] = DayScheduleSchema.optional();
+    DAYS_OF_WEEK.reduce((acc, day) => { // Base schedule for all days including Sunday
+        acc[day.id as DayOfWeekId] = DayScheduleSchema.optional();
         return acc;
-      }, {} as Record<Exclude<DayOfWeekId, 'sunday'>, z.ZodOptional<typeof DayScheduleSchema>>)
+      }, {} as Record<DayOfWeekId, z.ZodOptional<typeof DayScheduleSchema>>)
   ).optional(),
   
-  // Sunday schedule can be part of customScheduleOverrides if needed, or a specific field if simple.
-  // For now, removing rotationType, rotationStartDate, compensatoryDayOffChoice
-
   customScheduleOverrides: z.array(
     z.object({
       id: z.string(),

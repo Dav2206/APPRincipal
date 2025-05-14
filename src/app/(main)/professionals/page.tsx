@@ -68,6 +68,7 @@ export default function ProfessionalsPage() {
     thursday: { isWorking: true, startTime: '10:00', endTime: '19:00' },
     friday: { isWorking: true, startTime: '10:00', endTime: '19:00' },
     saturday: { isWorking: true, startTime: '09:00', endTime: '18:00' },
+    sunday: { isWorking: false, startTime: '10:00', endTime: '18:00' }, // Sunday typically non-working
   };
 
 
@@ -172,8 +173,8 @@ export default function ProfessionalsPage() {
     setEditingProfessional(professional);
     
     const formWorkSchedule: ProfessionalFormData['workSchedule'] = {};
-    DAYS_OF_WEEK.filter(d => d.id !== 'sunday').forEach(day => {
-      const dayId = day.id as Exclude<DayOfWeekId, 'sunday'>;
+    DAYS_OF_WEEK.forEach(day => { // Include Sunday in base schedule form
+      const dayId = day.id as DayOfWeekId;
       const schedule = professional.workSchedule?.[dayId];
       formWorkSchedule[dayId] = schedule 
         ? { isWorking: schedule.isWorking, startTime: schedule.startTime, endTime: schedule.endTime }
@@ -226,7 +227,7 @@ export default function ProfessionalsPage() {
       };
 
       if (data.workSchedule) {
-        (Object.keys(data.workSchedule) as Array<Exclude<DayOfWeekId, 'sunday'>>).forEach(dayId => {
+        (Object.keys(data.workSchedule) as Array<DayOfWeekId>).forEach(dayId => { // Process all days including Sunday
           const dayData = data.workSchedule![dayId];
           if (dayData) {
             professionalToSave.workSchedule[dayId] = {
@@ -238,10 +239,6 @@ export default function ProfessionalsPage() {
             professionalToSave.workSchedule[dayId] = {startTime: '00:00', endTime: '00:00', isWorking: false};
           }
         });
-        // Ensure Sunday is explicitly set to non-working as it's not in the form for base schedule
-        if (!professionalToSave.workSchedule.sunday) {
-          professionalToSave.workSchedule.sunday = { startTime: '00:00', endTime: '00:00', isWorking: false };
-        }
       }
 
 
@@ -467,10 +464,10 @@ export default function ProfessionalsPage() {
                 </AccordionItem>
 
                 <AccordionItem value="base-schedule">
-                  <AccordionTrigger className="text-lg font-semibold">Horario Semanal Base (Lunes a Sábado)</AccordionTrigger>
+                  <AccordionTrigger className="text-lg font-semibold">Horario Semanal Base (Lunes a Domingo)</AccordionTrigger>
                   <AccordionContent className="space-y-4 pt-2">
-                      {DAYS_OF_WEEK.filter(day => day.id !== 'sunday').map((day) => { // Exclude Sunday from base schedule form
-                          const dayId = day.id as Exclude<DayOfWeekId, 'sunday'>;
+                      {DAYS_OF_WEEK.map((day) => { 
+                          const dayId = day.id as DayOfWeekId;
                           return (
                               <div key={dayId} className="p-3 border rounded-md bg-muted/30">
                                   <FormField
@@ -522,8 +519,6 @@ export default function ProfessionalsPage() {
                   </AccordionContent>
                 </AccordionItem>
                 
-                {/* Sunday rotation and compensatory day off section removed */}
-
                 <AccordionItem value="custom-overrides">
                   <AccordionTrigger className="text-lg font-semibold">Anulaciones de Horario / Horarios Específicos (Opcional)</AccordionTrigger>
                   <AccordionContent className="space-y-4 pt-2">

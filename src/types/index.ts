@@ -101,7 +101,7 @@ export type ProfessionalFormData = {
   phone?: string | null;
   
   workSchedule: {
-    [key in Exclude<DayOfWeekId, 'sunday'>]?: { startTime?: string; endTime?: string; isWorking?: boolean };
+    [key in DayOfWeekId]?: { startTime?: string; endTime?: string; isWorking?: boolean };
   };
   
   customScheduleOverrides?: Array<{
