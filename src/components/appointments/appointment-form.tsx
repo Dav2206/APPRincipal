@@ -10,7 +10,7 @@ import type { Professional, Patient, Service, Appointment } from '@/types';
 import { useAuth } from '@/contexts/auth-provider';
 import { useAppState } from '@/contexts/app-state-provider';
 import { USER_ROLES, LOCATIONS, TIME_SLOTS, APPOINTMENT_STATUS } from '@/lib/constants';
-import { getProfessionals, getServices, addAppointment, getPatientById, getProfessionalAvailabilityForDate, getAppointments } from '@/lib/data';
+import { getProfessionals, getServices, addAppointment, getPatientById, getProfessionalAvailabilityForDate, getAppointments, getContractDisplayStatus } from '@/lib/data';
 
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -39,8 +39,8 @@ interface AppointmentFormProps {
   onAppointmentCreated: () => void;
   initialData?: Partial<FormSchemaType>;
   defaultDate?: Date;
-  allProfessionals: Professional[]; // Pass all professionals for external search
-  currentLocationProfessionals: Professional[]; // Professionals based at the current form's location context
+  allProfessionals: Professional[]; 
+  currentLocationProfessionals: Professional[]; 
 }
 
 const ANY_PROFESSIONAL_VALUE = "_any_professional_placeholder_";
@@ -53,22 +53,19 @@ export function AppointmentForm({
   onAppointmentCreated, 
   initialData, 
   defaultDate,
-  allProfessionals: allSystemProfessionals, // Renamed for clarity within the component
-  currentLocationProfessionals: professionalsForCurrentLocation // Renamed for clarity
+  allProfessionals: allSystemProfessionals, 
+  currentLocationProfessionals: professionalsForCurrentLocation 
 }: AppointmentFormProps) {
   const { user } = useAuth();
   const { selectedLocationId: adminSelectedLocation } = useAppState();
   const { toast } = useToast();
 
-  // Removed local state for professionals as they are now passed as props
   const [servicesList, setServicesList] = useState<Service[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [isLoadingServices, setIsLoadingServices] = useState(true);
-  // isLoadingCurrentLocationProfs and isLoadingAllSystemProfs are removed as profs are props
   const [showPatientHistory, setShowPatientHistory] = useState(false);
   const [currentPatientForHistory, setCurrentPatientForHistory] = useState<Patient | null>(null);
-  // searchInOtherLocations is now directly controlled by form.watch('searchExternal')
-
+  
   const [appointmentsForSelectedDate, setAppointmentsForSelectedDate] = useState<Appointment[]>([]);
   const [isLoadingAppointments, setIsLoadingAppointments] = useState(false);
   const [availableProfessionalsForTimeSlot, setAvailableProfessionalsForTimeSlot] = useState<Professional[]>([]);
@@ -95,7 +92,7 @@ export function AppointmentForm({
       locationId: initialData?.locationId || defaultLocation || LOCATIONS[0].id,
       serviceId: initialData?.serviceId || DEFAULT_SERVICE_ID_PLACEHOLDER,
       appointmentDate: initialData?.appointmentDate || defaultDate || new Date(),
-      appointmentTime: initialData?.appointmentTime || TIME_SLOTS[4], // Default to 10:00 AM
+      appointmentTime: initialData?.appointmentTime || TIME_SLOTS[4], 
       preferredProfessionalId: initialData?.preferredProfessionalId || ANY_PROFESSIONAL_VALUE,
       bookingObservations: initialData?.bookingObservations || '',
       searchExternal: initialData?.searchExternal || false,
@@ -134,7 +131,6 @@ export function AppointmentForm({
   }, [isOpen, form, toast]);
 
   useEffect(() => {
-    // When locationId changes, reset searchExternal and preferredProfessional
     if (isOpen) {
         form.setValue('searchExternal', false);
         form.setValue('preferredProfessionalId', ANY_PROFESSIONAL_VALUE);
@@ -171,7 +167,7 @@ export function AppointmentForm({
 
   useEffect(() => {
     if (!isOpen || !watchAppointmentDate || !watchAppointmentTime || !watchServiceId || servicesList.length === 0 || isLoadingAppointments ) {
-      setAvailableProfessionalsForTimeSlot(professionalsForCurrentLocation); 
+      setAvailableProfessionalsForTimeSlot(professionalsForCurrentLocation.filter(prof => getProfessionalAvailabilityForDate(prof, watchAppointmentDate) !== null)); 
       setSlotAvailabilityMessage('');
       return;
     }
@@ -191,13 +187,10 @@ export function AppointmentForm({
     const availableProfs: Professional[] = [];
 
     for (const prof of professionalsToConsider) {
-      // If searching external, only consider professionals NOT based at the current form's locationId
       if (watchSearchExternal && prof.locationId === watchLocationId) continue;
-      // If NOT searching external, only consider professionals based at the current form's locationId
       if (!watchSearchExternal && prof.locationId !== watchLocationId) continue;
 
-
-      const dailyAvailability = getProfessionalAvailabilityForDate(prof, watchAppointmentDate);
+      const dailyAvailability = getProfessionalAvailabilityForDate(prof, watchAppointmentDate); // This now checks contract status too
       if (!dailyAvailability) continue; 
 
       const profWorkStartTime = parse(`${format(watchAppointmentDate, 'yyyy-MM-dd')} ${dailyAvailability.startTime}`, 'yyyy-MM-dd HH:mm', new Date());
@@ -334,7 +327,6 @@ export function AppointmentForm({
       });
       setCurrentPatientForHistory(null);
       setShowPatientHistory(false);
-      //setSearchInOtherLocations(false); // This state is removed, directly use form.watch
     } catch (error) {
       console.error("Error creating appointment:", error);
       toast({
@@ -354,14 +346,14 @@ export function AppointmentForm({
     if (!watchSearchExternal && availableProfessionalsForTimeSlot.length === 0) return true;
 
     if (watchPreferredProfessionalId && watchPreferredProfessionalId !== ANY_PROFESSIONAL_VALUE) {
-      const listToSearch = watchSearchExternal ? allSystemProfessionals : availableProfessionalsForTimeSlot;
+      const listToSearch = watchSearchExternal ? allSystemProfessionals.filter(p => getProfessionalAvailabilityForDate(p, watchAppointmentDate) !== null) : availableProfessionalsForTimeSlot;
       return !listToSearch.find(p => p.id === watchPreferredProfessionalId);
     }
     
     if (watchPreferredProfessionalId === ANY_PROFESSIONAL_VALUE && !watchSearchExternal && availableProfessionalsForTimeSlot.length === 0) return true;
 
     return false;
-  }, [isLoading, isLoadingServices, isLoadingAppointments, servicesList, availableProfessionalsForTimeSlot, watchPreferredProfessionalId, watchSearchExternal, allSystemProfessionals, form]);
+  }, [isLoading, isLoadingServices, isLoadingAppointments, servicesList, availableProfessionalsForTimeSlot, watchPreferredProfessionalId, watchSearchExternal, allSystemProfessionals, form, watchAppointmentDate]);
 
 
   if (!isOpen) return null;
@@ -688,7 +680,7 @@ export function AppointmentForm({
                         </FormControl>
                         <SelectContent>
                           <SelectItem value={ANY_PROFESSIONAL_VALUE}>Cualquier profesional disponible</SelectItem>
-                          {(watchSearchExternal ? allSystemProfessionals : availableProfessionalsForTimeSlot).map(prof => (
+                          {(watchSearchExternal ? allSystemProfessionals.filter(p => getProfessionalAvailabilityForDate(p, watchAppointmentDate) !== null) : availableProfessionalsForTimeSlot).map(prof => (
                             <SelectItem key={prof.id} value={prof.id}>
                                 {prof.firstName} {prof.lastName} {watchSearchExternal && prof.locationId !== watchLocationId ? `(Sede: ${LOCATIONS.find(l=>l.id === prof.locationId)?.name})` : ''}
                             </SelectItem>

@@ -27,7 +27,7 @@ export default function SchedulePage() {
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [allSystemProfessionals, setAllSystemProfessionals] = useState<Professional[]>([]);
   const [workingProfessionals, setWorkingProfessionals] = useState<Professional[]>([]);
-  const [currentDate, setCurrentDate] = useState<Date>(startOfDay(new Date())); // Use actual current date
+  const [currentDate, setCurrentDate] = useState<Date>(startOfDay(new Date())); 
   const [isLoading, setIsLoading] = useState(true);
   const [selectedAppointmentForEdit, setSelectedAppointmentForEdit] = useState<Appointment | null>(null);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
@@ -52,8 +52,8 @@ export default function SchedulePage() {
 
     try {
       const [allSystemProfs, allRelevantAppointmentsTodayResponse] = await Promise.all([
-        getProfessionals(), // Fetches all professionals system-wide
-        getAppointments({ // Fetches all relevant (booked/confirmed) appointments for the current date across all locations
+        getProfessionals(), 
+        getAppointments({ 
           date: currentDate,
           statuses: [APPOINTMENT_STATUS.BOOKED, APPOINTMENT_STATUS.CONFIRMED],
         }),
@@ -66,36 +66,38 @@ export default function SchedulePage() {
       const professionalsForColumns: Professional[] = [];
       const processedProfIdsForColumns = new Set<string>();
 
-      // 1. Process appointments happening AT the current viewing location
+      
       allRelevantAppointmentsToday
         .filter(appt => appt.locationId === actualEffectiveLocationId)
         .forEach(appt => {
           displayableAppointments.push(appt);
           if (appt.professionalId && !processedProfIdsForColumns.has(appt.professionalId)) {
             const prof = allSystemProfs.find(p => p.id === appt.professionalId);
-            // Ensure professional is actually available on this date before adding to columns
-            if (prof && getProfessionalAvailabilityForDate(prof, currentDate)) {
+            if (prof && getProfessionalAvailabilityForDate(prof, currentDate)) { // This now checks contract
               professionalsForColumns.push(prof);
               processedProfIdsForColumns.add(prof.id);
             }
           }
         });
 
-      // 2. Process professionals BASED at this location: add them if working, and find their travel blocks
+      
       allSystemProfs
-        .filter(prof => prof.locationId === actualEffectiveLocationId && getProfessionalAvailabilityForDate(prof, currentDate))
+        .filter(prof => {
+            const availability = getProfessionalAvailabilityForDate(prof, currentDate); // This now checks contract
+            return prof.locationId === actualEffectiveLocationId && availability;
+        })
         .forEach(localProf => {
           if (!processedProfIdsForColumns.has(localProf.id)) {
             professionalsForColumns.push(localProf);
             processedProfIdsForColumns.add(localProf.id);
           }
-          // Find travel blocks for this local professional
+          
           allRelevantAppointmentsToday
             .filter(appt => appt.professionalId === localProf.id && appt.isExternalProfessional && appt.locationId !== actualEffectiveLocationId)
             .forEach(travelAppt => {
               displayableAppointments.push({
                 ...travelAppt,
-                id: `travel-${travelAppt.id}-${localProf.id}`, // Ensure unique key for travel block
+                id: `travel-${travelAppt.id}-${localProf.id}`, 
                 isTravelBlock: true,
               });
             });
@@ -130,7 +132,7 @@ export default function SchedulePage() {
   };
 
   const handleTimelineAppointmentClick = useCallback(async (appointment: Appointment) => {
-    if (appointment.isTravelBlock) return; // Do not open edit for travel blocks
+    if (appointment.isTravelBlock) return; 
 
     try {
       if (!appointment || !appointment.id || appointment.id.startsWith('travel-')) {
@@ -154,13 +156,13 @@ export default function SchedulePage() {
 
 
   const handleAppointmentUpdated = useCallback(() => {
-    fetchData(); // Refetch all data to ensure schedule is up-to-date
+    fetchData(); 
     setIsEditModalOpen(false);
   }, [fetchData]);
 
   const handleNewAppointmentCreated = useCallback(async () => {
     setIsNewAppointmentFormOpen(false);
-    await fetchData(); // Refetch all data
+    await fetchData(); 
   }, [fetchData]);
 
   const NoDataCard = ({ title, message }: { title: string; message: string }) => (
@@ -249,7 +251,7 @@ export default function SchedulePage() {
           ) : (
             <DailyTimeline
               professionals={workingProfessionals}
-              appointments={appointments} // This now includes appointments at this location AND travel blocks for local profs
+              appointments={appointments} 
               timeSlots={timeSlotsForView}
               currentDate={currentDate}
               onAppointmentClick={handleTimelineAppointmentClick}
@@ -281,4 +283,3 @@ export default function SchedulePage() {
     </div>
   );
 }
-

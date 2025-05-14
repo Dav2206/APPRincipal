@@ -5,7 +5,7 @@ import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import type { Appointment, Professional, LocationId, Service } from '@/types';
 import { useAuth } from '@/contexts/auth-provider';
 import { useAppState } from '@/contexts/app-state-provider';
-import { getAppointments, getProfessionals, getServices } from '@/lib/data';
+import { getAppointments, getProfessionals, getServices, getProfessionalAvailabilityForDate, getContractDisplayStatus } from '@/lib/data';
 import { LOCATIONS, USER_ROLES, APPOINTMENT_STATUS, SERVICES as ALL_SERVICES_CONSTANTS } from '@/lib/constants';
 
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -14,7 +14,7 @@ import { Calendar } from '@/components/ui/calendar';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow, TableCaption } from '@/components/ui/table';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { format, startOfDay, getMonth, getDate, startOfMonth, endOfMonth, addDays, getYear, subDays, setYear, setMonth, isSameDay, isAfter, subMonths } from 'date-fns';
+import { format, startOfDay, getMonth, getDate, startOfMonth, endOfMonth, addDays, getYear, subDays, setYear, setMonth, isSameDay, isAfter, subMonths, parseISO } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { CalendarIcon, Loader2, AlertTriangle, FileText, DollarSign, ChevronLeft, ChevronRight, ListChecks } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -27,7 +27,7 @@ interface DailyActivityReportItem {
   type: 'daily';
   professionalId: string;
   professionalName: string;
-  locationId: LocationId; // Added to ensure consistency
+  locationId: LocationId; 
   locationName: string;
   totalServicesCount: number;
   servicesBreakdown: Array<{ serviceName: string; count: number }>;
@@ -120,14 +120,19 @@ export default function RegistryPage() {
 
   useEffect(() => {
     const generateDailyReport = async () => {
-      if (!user || !allServices?.length) { // Safely access length
+      if (!user || !allServices || allServices.length === 0) { 
         setIsLoading(false);
         return;
       }
       setIsLoading(true);
 
       const profContext = isAdminOrContador ? (adminSelectedLocation === 'all' ? 'all' : effectiveLocationId) : user?.locationId;
-      const currentProfessionals = await fetchProfessionalsForReportContext(profContext);
+      const currentProfessionalsRaw = await fetchProfessionalsForReportContext(profContext);
+      
+      const currentProfessionals = currentProfessionalsRaw.filter(prof => 
+        getProfessionalAvailabilityForDate(prof, selectedDate) !== null
+      );
+
 
       let appointmentsForDateResponse: { appointments: Appointment[] };
       if (isAdminOrContador && adminSelectedLocation === 'all') {
@@ -149,7 +154,8 @@ export default function RegistryPage() {
       const dailyReportMap = new Map<string, Omit<DailyActivityReportItem, 'professionalName' | 'locationName' | 'type' | 'servicesBreakdown' | 'totalServicesCount' > & { locationId: LocationId, services: Map<string, { serviceName: string, count: number }> }>();
 
       appointmentsForDate.forEach(appt => {
-        if (appt.professionalId && appt.status === APPOINTMENT_STATUS.COMPLETED && allServices) {
+        const professionalForAppt = currentProfessionals.find(p => p.id === appt.professionalId);
+        if (appt.professionalId && professionalForAppt && appt.status === APPOINTMENT_STATUS.COMPLETED && allServices) { // Ensure professional is active today
           const reportEntry = dailyReportMap.get(appt.professionalId) || {
             professionalId: appt.professionalId,
             locationId: appt.locationId,
@@ -203,19 +209,24 @@ export default function RegistryPage() {
     };
 
     const generateBiWeeklyReport = async () => {
-      if (!user || !allServices?.length) { // Safely access length
+      if (!user || !allServices || allServices.length === 0) { 
          setIsLoading(false);
          return;
       }
       setIsLoading(true);
 
       const profContext = isAdminOrContador ? (adminSelectedLocation === 'all' ? 'all' : effectiveLocationId) : user?.locationId;
-      const professionalsList = await fetchProfessionalsForReportContext(profContext);
+      const professionalsListRaw = await fetchProfessionalsForReportContext(profContext);
       
       const baseDate = setMonth(setYear(new Date(), selectedYear), selectedMonth);
       const startDate = selectedQuincena === 1 ? startOfMonth(baseDate) : addDays(startOfMonth(baseDate), 15);
       const endDate = selectedQuincena === 1 ? addDays(startOfMonth(baseDate), 14) : endOfMonth(baseDate);
       
+      // Filter professionals: must have an active contract at the END of the quincena to be included in earnings
+      const professionalsList = professionalsListRaw.filter(prof => 
+         getContractDisplayStatus(prof.currentContract, endDate) === 'Activo'
+      );
+
       let appointmentsForPeriodResponse: { appointments: Appointment[] };
       if (isAdminOrContador && adminSelectedLocation === 'all') {
          const promises = LOCATIONS.map(loc =>
@@ -242,14 +253,17 @@ export default function RegistryPage() {
 
       const biWeeklyReportMap = new Map<string, { professionalId: string, locationId: LocationId, biWeeklyEarnings: number }>();
 
+      // Initialize map only for active professionals for the period
       professionalsList.forEach(prof => {
          biWeeklyReportMap.set(prof.id, { professionalId: prof.id, locationId: prof.locationId, biWeeklyEarnings: 0 });
       });
       
       appointmentsForPeriod.forEach(appt => {
-        if (appt.professionalId && appt.status === APPOINTMENT_STATUS.COMPLETED) {
+        // Ensure the appointment's professional has an active contract AT THE TIME OF THE APPOINTMENT
+        const professionalForAppt = professionalsListRaw.find(p => p.id === appt.professionalId); // Check against raw list
+        if (appt.professionalId && professionalForAppt && appt.status === APPOINTMENT_STATUS.COMPLETED && getContractDisplayStatus(professionalForAppt.currentContract, parseISO(appt.appointmentDateTime)) === 'Activo') {
             const entry = biWeeklyReportMap.get(appt.professionalId);
-            if (entry) {
+            if (entry) { // Only sum if the professional is in our active list for the period
                 entry.biWeeklyEarnings += appt.amountPaid || 0;
                 biWeeklyReportMap.set(appt.professionalId, entry);
             }
@@ -262,7 +276,7 @@ export default function RegistryPage() {
         const locationTotals = new Map<LocationId, number>();
 
         Array.from(biWeeklyReportMap.values()).forEach(item => {
-          const professional = professionalsList.find(p => p.id === item.professionalId);
+          const professional = professionalsList.find(p => p.id === item.professionalId); // Ensure using the filtered list
           const location = LOCATIONS.find(l => l.id === item.locationId);
           if (!professional || !location) return;
 
@@ -300,7 +314,7 @@ export default function RegistryPage() {
         setReportData(groupedResult);
       } else {
         const finalReport: BiWeeklyEarningsReportItem[] = Array.from(biWeeklyReportMap.values()).map(item => {
-            const professional = professionalsList.find(p => p.id === item.professionalId);
+            const professional = professionalsList.find(p => p.id === item.professionalId); // Ensure using the filtered list
             const location = LOCATIONS.find(l => l.id === item.locationId);
             return {
             type: 'biWeekly',
@@ -383,7 +397,7 @@ export default function RegistryPage() {
 
     if (currentQNumber === 2) {
         earliestAllowedQuincena = 1;
-    } else { // currentQNumber === 1
+    } else { 
         earliestAllowedQuincena = 2;
         const prevMonthDate = subMonths(today, 1);
         earliestAllowedMonth = getMonth(prevMonthDate);
@@ -434,7 +448,7 @@ export default function RegistryPage() {
       if (targetValue < earliestValue || targetValue > latestValue) {
         return;
       }
-    } else { // Admin/Contador logic
+    } else { 
       const today = new Date();
       const firstDayOfNewQuincena = newQuincena === 1 ? startOfMonth(setMonth(setYear(new Date(),newYear), newMonth)) : addDays(startOfMonth(setMonth(setYear(new Date(),newYear), newMonth)),15);
       
@@ -481,10 +495,8 @@ export default function RegistryPage() {
         selectedQuincena === earliestAllowed.quincena
       );
     }
-    // Admin/Contador logic
     let prevQYear = selectedYear;
-    // Determine the year of the previous quincena for comparison with availableYearsForAdmin
-    if (selectedQuincena === 1 && selectedMonth === 0) { // If 1st quincena of Jan, previous is 2nd quincena of Dec of prev year
+    if (selectedQuincena === 1 && selectedMonth === 0) { 
         prevQYear -= 1;
     }
     return prevQYear < availableYearsForAdmin[availableYearsForAdmin.length-1];
@@ -593,12 +605,12 @@ export default function RegistryPage() {
                         ? `Resumen del ${format(selectedDate, "PPP", { locale: es })}. Total Servicios Atendidos: ${totalServicesOverall}`
                         : `Resumen del ${format(selectedDate, "PPP", { locale: es })}. Total Servicios Atendidos: ${totalServicesOverall}, Total Ingresos: S/ ${totalRevenueOverall.toFixed(2)}`
                       )
-                    : ( // reportType === 'biWeekly'
+                    : ( 
                         isStaffRestrictedView
                         ? `Resumen Quincenal (${getBiWeeklyPeriodDescription()}).`
                         : `Resumen Quincenal (${getBiWeeklyPeriodDescription()}). Total Ingresos Quincenales: S/ ${totalRevenueOverall.toFixed(2)}`
                       )
-                  : reportType === 'daily' // No data part
+                  : reportType === 'daily' 
                     ? `No hay datos para el ${format(selectedDate, "PPP", { locale: es })}.`
                     : `No hay datos quincenales para el periodo ${getBiWeeklyPeriodDescription()}.`
                 }
@@ -625,7 +637,7 @@ export default function RegistryPage() {
                             <TableCell className="text-right">{(item.biWeeklyEarnings || 0).toFixed(2)}</TableCell>
                           </TableRow>
                         ))}
-                        <TableRow className="bg-muted/50 font-semibold" key={`total-row-${group.locationId}-${index}`}>
+                        <TableRow className="bg-muted/50 font-semibold" key={`total-row-${group.locationId}-grouped-report-${index}`}>
                           <TableCell colSpan={2}>Total {group.locationName}</TableCell>
                           <TableCell className="text-right">{(group.locationTotalEarnings || 0).toFixed(2)}</TableCell>
                         </TableRow>
@@ -633,7 +645,7 @@ export default function RegistryPage() {
                     ))
                   ) : (
                     (reportData as (DailyActivityReportItem | BiWeeklyEarningsReportItem)[]).map((item, idx) => (
-                      <TableRow key={item.professionalId + '-' + (item as any).locationName + '-' + item.type + '-' + idx}>
+                      <TableRow key={`${item.professionalId}-${(item as any).locationName || idx}-${item.type}-${idx}`}>
                         <TableCell className="font-medium">{item.professionalName}</TableCell>
                         {(isAdminOrContador && adminSelectedLocation === 'all' && item.type !== 'biWeeklyGrouped') && <TableCell>{item.locationName}</TableCell>}
                         {item.type === 'daily' && (
@@ -676,4 +688,3 @@ export default function RegistryPage() {
     </div>
   );
 }
-

@@ -17,6 +17,15 @@ export const useMockDatabase = globalUseMockDatabase;
 
 
 // --- Initial Mock Data Definitions ---
+// todayMock is used for consistent mock data generation relative to a fixed point in time.
+// For dynamic calculations (e.g., current contract status, current quincena), use new Date().
+const todayMock = new Date(2025, 4, 13); // Tuesday, May 13, 2025
+const yesterdayMock = subDays(todayMock, 1);
+const twoDaysAgoMock = subDays(todayMock, 2);
+const tomorrowMock = addDays(todayMock,1);
+const fixedFutureDateForRegistry = new Date(2025, 4, 9); // May 9, 2025
+
+
 const initialMockUsersData: User[] = [
   { id: 'admin001', username: 'Admin', password: 'admin', role: USER_ROLES.ADMIN, name: 'Administrator' },
   { id: 'contador001', username: 'Contador', password: 'admin', role: USER_ROLES.CONTADOR, name: 'Contador Principal' },
@@ -56,14 +65,15 @@ const initialMockProfessionalsData: Professional[] = LOCATIONS.flatMap((location
     const isThirdProfHiguereta = location.id === 'higuereta' && i === 2;
 
     let currentContract: Contract | null = null;
-    if (i % 2 === 0) { // Every other professional gets an active contract
-        const contractStartDate = subDays(new Date(2025, 4, 13), 90); // 3 months ago
-        const contractEndDate = addDays(new Date(2025, 4, 13), (i % 3 === 0) ? 10 : ( (i % 3 === 1) ? 45 : 90) ); // expires in 10, 45 or 90 days
+    if (i % 2 === 0) { 
+        const contractStartDate = subDays(todayMock, 90); 
+        const contractEndDate = addDays(todayMock, (i % 3 === 0) ? 10 : ( (i % 3 === 1) ? 45 : 90) ); 
         currentContract = {
+            id: generateId(),
             startDate: formatISO(contractStartDate, { representation: 'date' }),
             endDate: formatISO(contractEndDate, { representation: 'date' }),
             notes: `Contrato estándar ${i + 1}`,
-            empresa: (i % 4 === 0) ? 'Empresa A' : 'Empresa B', // Assign a company
+            empresa: (i % 4 === 0) ? 'Empresa A' : 'Empresa B',
         };
     }
 
@@ -77,15 +87,16 @@ const initialMockProfessionalsData: Professional[] = LOCATIONS.flatMap((location
       biWeeklyEarnings: Math.random() * 1500 + 500,
       workSchedule: baseSchedule,
       customScheduleOverrides: isSecondProfHiguereta ? [
-        { id: generateId(), date: formatISO(addDays(new Date(2025, 4, 13), 7), { representation: 'date' }), isWorking: true, startTime: '10:00', endTime: '14:00', notes: 'Turno especial Tarde' },
-        { id: generateId(), date: formatISO(addDays(new Date(2025, 4, 13), 3 ), { representation: 'date' }), isWorking: false, notes: 'Día libre por compensación' }
+        { id: generateId(), date: formatISO(addDays(todayMock, 7), { representation: 'date' }), isWorking: true, startTime: '10:00', endTime: '14:00', notes: 'Turno especial Tarde' },
+        { id: generateId(), date: formatISO(addDays(todayMock, 3 ), { representation: 'date' }), isWorking: false, notes: 'Día libre por compensación' }
       ] : isThirdProfHiguereta ? [
-        { id: generateId(), date: formatISO(new Date(2025, 4, 14), { representation: 'date' }), isWorking: false, notes: 'Descanso programado' } 
+        { id: generateId(), date: formatISO(addDays(todayMock,1), { representation: 'date' }), isWorking: false, notes: 'Descanso programado' } 
       ] : [],
       currentContract: currentContract,
-      contractHistory: currentContract && i % 4 === 0 ? [{ // Some professionals get a past contract
-        startDate: formatISO(subDays(new Date(2025, 4, 13), 180), { representation: 'date' }),
-        endDate: formatISO(subDays(new Date(2025, 4, 13), 91), { representation: 'date' }),
+      contractHistory: currentContract && i % 4 === 0 ? [{ 
+        id: generateId(),
+        startDate: formatISO(subDays(todayMock, 180), { representation: 'date' }),
+        endDate: formatISO(subDays(todayMock, 91), { representation: 'date' }),
         notes: 'Contrato anterior',
         empresa: 'Empresa Antigua C',
       }] : [],
@@ -109,24 +120,19 @@ const initialMockServicesData: Service[] = SERVICES_CONSTANTS.map((s_const, inde
   price: (50 + index * 10),
 }));
 
-const todayMock = new Date(2025, 4, 13); // Tuesday, May 13, 2025
-const yesterdayMock = subDays(todayMock, 1);
-const twoDaysAgoMock = subDays(todayMock, 2);
-const tomorrowMock = addDays(todayMock,1);
-const fixedFutureDateForRegistry = new Date(2025, 4, 9); // May 9, 2025
 
 const initialMockAppointmentsData: Appointment[] = [
   {
-    id: 'appt001', patientId: 'pat001', locationId: LOCATIONS[0].id, professionalId: initialMockProfessionalsData.find(p => p.locationId === LOCATIONS[0].id)?.id || initialMockProfessionalsData[0]?.id, serviceId: initialMockServicesData[0].id, appointmentDateTime: formatISO(setHours(setMinutes(yesterdayMock, 0), 10)), durationMinutes: initialMockServicesData[0].defaultDuration, status: APPOINTMENT_STATUS.COMPLETED, amountPaid: initialMockServicesData[0].price, paymentMethod: PAYMENT_METHODS[0], staffNotes: "Tratamiento exitoso, paciente refiere mejoría.", attachedPhotos: ["https://picsum.photos/seed/appt001_1/200/200"], addedServices: [{ serviceId: initialMockServicesData[2].id, price: initialMockServicesData[2].price, service: initialMockServicesData[2] }], createdAt: formatISO(subDays(yesterdayMock,1)), updatedAt: formatISO(yesterdayMock),
+    id: 'appt001', patientId: 'pat001', locationId: LOCATIONS[0].id, professionalId: initialMockProfessionalsData.find(p => p.locationId === LOCATIONS[0].id)?.id || initialMockProfessionalsData[0]?.id, serviceId: initialMockServicesData[0].id, appointmentDateTime: formatISO(setHours(setMinutes(yesterdayMock, 0), 10)), durationMinutes: initialMockServicesData[0].defaultDuration, status: APPOINTMENT_STATUS.COMPLETED, amountPaid: initialMockServicesData[0].price, paymentMethod: PAYMENT_METHODS[0], staffNotes: "Tratamiento exitoso, paciente refiere mejoría.", attachedPhotos: ["https://placehold.co/200x200.png?text=Appt001"], addedServices: [{ serviceId: initialMockServicesData[2].id, price: initialMockServicesData[2].price, service: initialMockServicesData[2] }], createdAt: formatISO(subDays(yesterdayMock,1)), updatedAt: formatISO(yesterdayMock),
   },
   {
     id: 'appt002', patientId: 'pat002', locationId: LOCATIONS[1].id, professionalId: initialMockProfessionalsData.find(p => p.locationId === LOCATIONS[1].id)?.id || initialMockProfessionalsData[1]?.id, serviceId: initialMockServicesData[1].id, appointmentDateTime: formatISO(setHours(setMinutes(startOfDay(todayMock), 30), 9)), durationMinutes: initialMockServicesData[1].defaultDuration, status: APPOINTMENT_STATUS.BOOKED, bookingObservations: "Paciente refiere dolor agudo.", createdAt: formatISO(subDays(todayMock,1)), updatedAt: formatISO(subDays(todayMock,1)), attachedPhotos: [], addedServices: [],
   },
   {
-    id: 'appt003', patientId: 'pat003', locationId: LOCATIONS[0].id, professionalId: initialMockProfessionalsData.find(p => p.locationId === LOCATIONS[0].id && p.id !== (initialMockProfessionalsData.find(pr => pr.locationId === LOCATIONS[0].id)?.id || initialMockProfessionalsData[0]?.id))?.id || initialMockProfessionalsData[0]?.id, serviceId: initialMockServicesData[2].id, appointmentDateTime: formatISO(setHours(setMinutes(startOfDay(todayMock), 0), 14)), durationMinutes: initialMockServicesData[2].defaultDuration, status: APPOINTMENT_STATUS.CONFIRMED, actualArrivalTime: "13:55", createdAt: formatISO(subDays(todayMock,2)), updatedAt: formatISO(startOfDay(todayMock)), attachedPhotos: ["https://picsum.photos/seed/appt003_1/200/200"], addedServices: [],
+    id: 'appt003', patientId: 'pat003', locationId: LOCATIONS[0].id, professionalId: initialMockProfessionalsData.find(p => p.locationId === LOCATIONS[0].id && p.id !== (initialMockProfessionalsData.find(pr => pr.locationId === LOCATIONS[0].id)?.id || initialMockProfessionalsData[0]?.id))?.id || initialMockProfessionalsData[0]?.id, serviceId: initialMockServicesData[2].id, appointmentDateTime: formatISO(setHours(setMinutes(startOfDay(todayMock), 0), 14)), durationMinutes: initialMockServicesData[2].defaultDuration, status: APPOINTMENT_STATUS.CONFIRMED, actualArrivalTime: "13:55", createdAt: formatISO(subDays(todayMock,2)), updatedAt: formatISO(startOfDay(todayMock)), attachedPhotos: ["https://placehold.co/200x200.png?text=Appt003"], addedServices: [],
   },
   {
-    id: 'appt004', patientId: 'pat004', locationId: LOCATIONS[2].id, professionalId: initialMockProfessionalsData.find(p => p.locationId === LOCATIONS[2].id)?.id || initialMockProfessionalsData[2]?.id, serviceId: initialMockServicesData[3].id, appointmentDateTime: formatISO(setHours(setMinutes(twoDaysAgoMock, 0), 11)), durationMinutes: initialMockServicesData[3].defaultDuration, status: APPOINTMENT_STATUS.COMPLETED, amountPaid: initialMockServicesData[3].price, paymentMethod: PAYMENT_METHODS[1], staffNotes: "Todo en orden. Próxima revisión en 1 mes.", createdAt: formatISO(subDays(twoDaysAgoMock,1)), updatedAt: formatISO(twoDaysAgoMock), attachedPhotos: ["https://picsum.photos/seed/appt004_1/200/200", "https://picsum.photos/seed/appt004_2/200/200"], addedServices: [],
+    id: 'appt004', patientId: 'pat004', locationId: LOCATIONS[2].id, professionalId: initialMockProfessionalsData.find(p => p.locationId === LOCATIONS[2].id)?.id || initialMockProfessionalsData[2]?.id, serviceId: initialMockServicesData[3].id, appointmentDateTime: formatISO(setHours(setMinutes(twoDaysAgoMock, 0), 11)), durationMinutes: initialMockServicesData[3].defaultDuration, status: APPOINTMENT_STATUS.COMPLETED, amountPaid: initialMockServicesData[3].price, paymentMethod: PAYMENT_METHODS[1], staffNotes: "Todo en orden. Próxima revisión en 1 mes.", createdAt: formatISO(subDays(twoDaysAgoMock,1)), updatedAt: formatISO(twoDaysAgoMock), attachedPhotos: ["https://placehold.co/200x200.png?text=Appt004_1", "https://placehold.co/200x200.png?text=Appt004_2"], addedServices: [],
   },
   {
     id: 'appt005', patientId: 'pat005', locationId: LOCATIONS[1].id, professionalId: null, serviceId: initialMockServicesData[0].id, appointmentDateTime: formatISO(setHours(setMinutes(startOfDay(tomorrowMock), 0), 16)), durationMinutes: initialMockServicesData[0].defaultDuration, status: APPOINTMENT_STATUS.BOOKED, createdAt: formatISO(startOfDay(todayMock)), updatedAt: formatISO(startOfDay(todayMock)), attachedPhotos: [], addedServices: [],
@@ -134,9 +140,9 @@ const initialMockAppointmentsData: Appointment[] = [
   {
     id: 'appt006', patientId: 'pat001', locationId: LOCATIONS[0].id, professionalId: initialMockProfessionalsData.find(p => p.locationId === LOCATIONS[0].id)?.id || initialMockProfessionalsData[0]?.id, serviceId: initialMockServicesData[4].id, appointmentDateTime: formatISO(setHours(setMinutes(startOfDay(todayMock), 30), 11)), durationMinutes: initialMockServicesData[4].defaultDuration, status: APPOINTMENT_STATUS.BOOKED, bookingObservations: "Estudio de pisada solicitado por el Dr. Pérez.", createdAt: formatISO(startOfDay(todayMock)), updatedAt: formatISO(startOfDay(todayMock)), attachedPhotos: [], addedServices: [],
   },
-  { id: 'appt007', patientId: 'pat002', locationId: LOCATIONS[3].id, professionalId: initialMockProfessionalsData.find(p => p.locationId === LOCATIONS[3].id)?.id, serviceId: initialMockServicesData[0].id, appointmentDateTime: formatISO(setHours(setMinutes(subDays(startOfDay(todayMock), 3), 0), 15)), durationMinutes: initialMockServicesData[0].defaultDuration, status: APPOINTMENT_STATUS.COMPLETED, amountPaid: initialMockServicesData[0].price, paymentMethod: PAYMENT_METHODS[2], staffNotes: "Paciente nuevo, buena primera impresión.", createdAt: formatISO(subDays(startOfDay(todayMock), 4)), updatedAt: formatISO(subDays(startOfDay(todayMock), 3)), attachedPhotos: ["https://picsum.photos/seed/appt007_1/200/200"], addedServices: [], },
+  { id: 'appt007', patientId: 'pat002', locationId: LOCATIONS[3].id, professionalId: initialMockProfessionalsData.find(p => p.locationId === LOCATIONS[3].id)?.id, serviceId: initialMockServicesData[0].id, appointmentDateTime: formatISO(setHours(setMinutes(subDays(startOfDay(todayMock), 3), 0), 15)), durationMinutes: initialMockServicesData[0].defaultDuration, status: APPOINTMENT_STATUS.COMPLETED, amountPaid: initialMockServicesData[0].price, paymentMethod: PAYMENT_METHODS[2], staffNotes: "Paciente nuevo, buena primera impresión.", createdAt: formatISO(subDays(startOfDay(todayMock), 4)), updatedAt: formatISO(subDays(startOfDay(todayMock), 3)), attachedPhotos: ["https://placehold.co/200x200.png?text=Appt007"], addedServices: [], },
   { id: 'appt008', patientId: 'pat003', locationId: LOCATIONS[4].id, professionalId: initialMockProfessionalsData.find(p => p.locationId === LOCATIONS[4].id)?.id, serviceId: initialMockServicesData[1].id, appointmentDateTime: formatISO(setHours(setMinutes(startOfDay(todayMock), 0), 10)), durationMinutes: initialMockServicesData[1].defaultDuration, status: APPOINTMENT_STATUS.BOOKED, createdAt: formatISO(subDays(startOfDay(todayMock), 1)), updatedAt: formatISO(subDays(startOfDay(todayMock), 1)), attachedPhotos: [], addedServices: [], },
-  { id: 'appt009', patientId: 'pat004', locationId: LOCATIONS[5].id, professionalId: initialMockProfessionalsData.find(p => p.locationId === LOCATIONS[5].id)?.id, serviceId: initialMockServicesData[2].id, appointmentDateTime: formatISO(setHours(setMinutes(subDays(startOfDay(todayMock), 5), 30), 14)), durationMinutes: initialMockServicesData[2].defaultDuration, status: APPOINTMENT_STATUS.COMPLETED, amountPaid: initialMockServicesData[2].price ? initialMockServicesData[2].price! + 20 : 70, paymentMethod: PAYMENT_METHODS[3], staffNotes: "Se realizó quiropodia y tratamiento adicional para uña encarnada.", addedServices: [{ serviceId: initialMockServicesData[1].id, price: 20, service: initialMockServicesData[1] }], attachedPhotos: ["https://picsum.photos/seed/appt009_1/200/200"], createdAt: formatISO(subDays(startOfDay(todayMock), 6)), updatedAt: formatISO(subDays(startOfDay(todayMock), 5)), },
+  { id: 'appt009', patientId: 'pat004', locationId: LOCATIONS[5].id, professionalId: initialMockProfessionalsData.find(p => p.locationId === LOCATIONS[5].id)?.id, serviceId: initialMockServicesData[2].id, appointmentDateTime: formatISO(setHours(setMinutes(subDays(startOfDay(todayMock), 5), 30), 14)), durationMinutes: initialMockServicesData[2].defaultDuration, status: APPOINTMENT_STATUS.COMPLETED, amountPaid: initialMockServicesData[2].price ? initialMockServicesData[2].price! + 20 : 70, paymentMethod: PAYMENT_METHODS[3], staffNotes: "Se realizó quiropodia y tratamiento adicional para uña encarnada.", addedServices: [{ serviceId: initialMockServicesData[1].id, price: 20, service: initialMockServicesData[1] }], attachedPhotos: ["https://placehold.co/200x200.png?text=Appt009"], createdAt: formatISO(subDays(startOfDay(todayMock), 6)), updatedAt: formatISO(subDays(startOfDay(todayMock), 5)), },
   { id: 'appt010', patientId: 'pat005', locationId: LOCATIONS[0].id, serviceId: initialMockServicesData[3].id, appointmentDateTime: formatISO(setHours(setMinutes(addDays(startOfDay(todayMock), 2), 0), 17)), durationMinutes: initialMockServicesData[3].defaultDuration, status: APPOINTMENT_STATUS.BOOKED, preferredProfessionalId: initialMockProfessionalsData.find(p => p.locationId === LOCATIONS[0].id && p.lastName.includes('Higuereta'))?.id, bookingObservations: "Solo puede por la tarde.", createdAt: formatISO(startOfDay(todayMock)), updatedAt: formatISO(startOfDay(todayMock)), attachedPhotos: [], addedServices: [], },
   { id: 'appt_registry_test_1', patientId: initialMockPatientsData[0].id, locationId: LOCATIONS[0].id, professionalId: initialMockProfessionalsData.find(p => p.locationId === LOCATIONS[0].id && p.firstName === 'Profesional 1')?.id, serviceId: initialMockServicesData[0].id, appointmentDateTime: formatISO(setHours(setMinutes(fixedFutureDateForRegistry, 0), 10)), durationMinutes: initialMockServicesData[0].defaultDuration, status: APPOINTMENT_STATUS.COMPLETED, amountPaid: initialMockServicesData[0].price, paymentMethod: PAYMENT_METHODS[0], createdAt: formatISO(fixedFutureDateForRegistry), updatedAt: formatISO(fixedFutureDateForRegistry), addedServices: [], attachedPhotos: [] },
   { id: 'appt_registry_test_2', patientId: initialMockPatientsData[1].id, locationId: LOCATIONS[1].id, professionalId: initialMockProfessionalsData.find(p => p.locationId === LOCATIONS[1].id && p.firstName === 'Profesional 1')?.id, serviceId: initialMockServicesData[1].id, appointmentDateTime: formatISO(setHours(setMinutes(fixedFutureDateForRegistry, 30), 11)), durationMinutes: initialMockServicesData[1].defaultDuration, status: APPOINTMENT_STATUS.COMPLETED, amountPaid: initialMockServicesData[1].price, paymentMethod: PAYMENT_METHODS[1], createdAt: formatISO(fixedFutureDateForRegistry), updatedAt: formatISO(fixedFutureDateForRegistry), addedServices: [], attachedPhotos: [] },
@@ -192,17 +198,17 @@ export const getUserByUsername = async (username: string): Promise<User | undefi
 
 export type ContractDisplayStatus = 'Activo' | 'Próximo a Vencer' | 'Vencido' | 'Sin Contrato';
 
-const getContractDisplayStatus = (contract: Contract | null | undefined): ContractDisplayStatus => {
+export const getContractDisplayStatus = (contract: Contract | null | undefined, referenceDateParam?: Date): ContractDisplayStatus => {
+    const referenceDate = startOfDay(referenceDateParam || new Date());
     if (!contract || !contract.endDate) {
         return 'Sin Contrato';
     }
-    const today = startOfDay(todayMock); 
     const endDate = parseISO(contract.endDate);
 
-    if (isBefore(endDate, today)) {
+    if (isBefore(endDate, referenceDate)) {
         return 'Vencido';
     }
-    const daysUntilExpiry = differenceInCalendarDays(endDate, today);
+    const daysUntilExpiry = differenceInCalendarDays(endDate, referenceDate);
     if (daysUntilExpiry <= 15) {
         return 'Próximo a Vencer';
     }
@@ -216,7 +222,7 @@ export const getProfessionals = async (locationId?: LocationId): Promise<(Profes
             ? mockDB.professionals.filter(p => p.locationId === locationId)
             : [...mockDB.professionals];
 
-        const today = todayMock;
+        const today = startOfDay(new Date()); // Use actual current date for biWeeklyEarnings context
         const currentYear = getYear(today);
         const currentMonth = getMonth(today);
         const currentDay = getDate(today);
@@ -244,7 +250,7 @@ export const getProfessionals = async (locationId?: LocationId): Promise<(Profes
             return { 
                 ...prof, 
                 biWeeklyEarnings: earnings,
-                contractDisplayStatus: getContractDisplayStatus(prof.currentContract) 
+                contractDisplayStatus: getContractDisplayStatus(prof.currentContract, new Date()) // Use current date for display status
             };
         });
 
@@ -257,7 +263,8 @@ export const getProfessionalById = async (id: string): Promise<Professional | un
     if (useMockDatabase) {
         const prof = mockDB.professionals.find(p => p.id === id);
         if (prof) {
-            return { ...prof, contractDisplayStatus: getContractDisplayStatus(prof.currentContract) } as Professional & { contractDisplayStatus: ContractDisplayStatus};
+            // Pass current date to getContractDisplayStatus for accurate status
+            return { ...prof, contractDisplayStatus: getContractDisplayStatus(prof.currentContract, new Date()) } as Professional & { contractDisplayStatus: ContractDisplayStatus};
         }
         return undefined;
     }
@@ -269,6 +276,7 @@ export const addProfessional = async (data: ProfessionalFormData): Promise<Profe
     let currentContract: Contract | null = null;
     if (data.currentContract_startDate && data.currentContract_endDate) {
         currentContract = {
+            id: generateId(),
             startDate: formatISO(data.currentContract_startDate, { representation: 'date' }),
             endDate: formatISO(data.currentContract_endDate, { representation: 'date' }),
             notes: data.currentContract_notes || undefined,
@@ -388,55 +396,61 @@ export const updateProfessional = async (id: string, data: Partial<ProfessionalF
             if (contractFieldsTouchedInPayload) {
                 if (newProposedContractData.startDate && newProposedContractData.endDate) {
                     const newContract: Contract = {
+                        id: oldContract?.id || generateId(), // Reuse ID if editing, else new
                         startDate: newProposedContractData.startDate,
                         endDate: newProposedContractData.endDate,
-                        notes: newProposedContractData.notes, // Already string | undefined
-                        empresa: newProposedContractData.empresa, // Already string | undefined
+                        notes: newProposedContractData.notes, 
+                        empresa: newProposedContractData.empresa, 
                     };
 
-                    // Archive old contract if it existed AND is different from the new one.
+                    // Check if this is a "new" contract action or an "edit" of current
+                    // If oldContract exists and the new one is different from it OR if this is meant to be a new contract creation on top of existing
                     if (oldContract && (
                         oldContract.startDate !== newContract.startDate ||
                         oldContract.endDate !== newContract.endDate ||
-                        (oldContract.notes ?? undefined) !== (newContract.notes ?? undefined) || // Compare undefined for notes
-                        (oldContract.empresa ?? undefined) !== (newContract.empresa ?? undefined) // Compare undefined for empresa
+                        (oldContract.notes ?? '') !== (newContract.notes ?? '') || // Compare empty string for notes
+                        (oldContract.empresa ?? '') !== (newContract.empresa ?? '') // Compare empty string for empresa
                     )) {
+                         // If the modal explicitly intended to create a "new" contract (e.g., if a flag was passed from UI)
+                         // OR if significant fields like dates changed, we archive.
+                         // For simpler logic from ProfessionalsPage's form, we assume any change creating a valid new contract
+                         // archives the old one if it's different.
                         professionalToUpdate.contractHistory = [...(professionalToUpdate.contractHistory || []), oldContract];
+                        newContract.id = generateId(); // It's a distinctly new contract if dates changed significantly or if it was "new contract" action
                     }
                     professionalToUpdate.currentContract = newContract;
+
                 } else if (
                     !newProposedContractData.startDate && 
                     !newProposedContractData.endDate &&
-                    newProposedContractData.notes === undefined && // Check for undefined explicitly
-                    newProposedContractData.empresa === undefined   // Check for undefined explicitly
+                    newProposedContractData.notes === undefined && 
+                    newProposedContractData.empresa === undefined  
                 ) {
-                    // All contract fields are cleared from payload, so clear currentContract
                     if (oldContract) {
                         professionalToUpdate.contractHistory = [...(professionalToUpdate.contractHistory || []), oldContract];
                     }
                     professionalToUpdate.currentContract = null;
                 } else if (professionalToUpdate.currentContract) { 
-                    // Partial update to existing currentContract if not all fields were cleared
-                    // and not all fields for a NEW contract were provided
-                    professionalToUpdate.currentContract = {
+                    const updatedExistingContract = {
                         ...professionalToUpdate.currentContract,
-                        ...newProposedContractData // Apply what was provided
+                        ...newProposedContractData 
                     };
-                     // If this partial update makes it different from original oldContract, archive original.
-                    if (oldContract && (
-                        oldContract.startDate !== professionalToUpdate.currentContract.startDate ||
-                        oldContract.endDate !== professionalToUpdate.currentContract.endDate ||
-                        (oldContract.notes ?? undefined) !== (professionalToUpdate.currentContract.notes ?? undefined) ||
-                        (oldContract.empresa ?? undefined) !== (professionalToUpdate.currentContract.empresa ?? undefined)
+                     if (oldContract && (
+                        oldContract.startDate !== updatedExistingContract.startDate ||
+                        oldContract.endDate !== updatedExistingContract.endDate ||
+                        (oldContract.notes ?? '') !== (updatedExistingContract.notes ?? '') ||
+                        (oldContract.empresa ?? '') !== (updatedExistingContract.empresa ?? '')
                     ) && !professionalToUpdate.contractHistory?.some(h => 
-                        h.startDate === oldContract.startDate && h.endDate === oldContract.endDate && 
-                        (h.notes ?? undefined) === (oldContract.notes ?? undefined) && (h.empresa ?? undefined) === (oldContract.empresa ?? undefined)
+                        h.id === oldContract!.id // Check by ID to avoid duplicate archiving
                     ) ) {
                          professionalToUpdate.contractHistory = [...(professionalToUpdate.contractHistory || []), oldContract];
+                         // If it's a modification of the existing one, keep its ID
+                         updatedExistingContract.id = oldContract.id; 
                     }
+                    professionalToUpdate.currentContract = updatedExistingContract;
                 } else if (newProposedContractData.startDate && newProposedContractData.endDate) {
-                    // Scenario: No current contract, but a new valid one is being added partially (e.g. only start/end dates)
                     professionalToUpdate.currentContract = {
+                         id: generateId(),
                          startDate: newProposedContractData.startDate,
                          endDate: newProposedContractData.endDate,
                          notes: newProposedContractData.notes,
@@ -469,14 +483,14 @@ export const getPatients = async (options: { page?: number, limit?: number, sear
         );
     }
     if (filterToday && user) {
-        const todayIsoDate = startOfDay(todayMock); 
+        const today = startOfDay(new Date()); 
         const isAdminOrContador = user.role === USER_ROLES.ADMIN || user.role === USER_ROLES.CONTADOR;
         const effectiveLocationId = isAdminOrContador
         ? (adminSelectedLocation === 'all' ? undefined : adminSelectedLocation)
         : user.locationId;
 
         const dailyAppointments = (mockDB.appointments || []).filter(appt =>
-          appt.appointmentDateTime && dateFnsIsSameDay(parseISO(appt.appointmentDateTime), todayIsoDate) &&
+          appt.appointmentDateTime && dateFnsIsSameDay(parseISO(appt.appointmentDateTime), today) &&
           (effectiveLocationId ? appt.locationId === effectiveLocationId : true) &&
           (appt.status === APPOINTMENT_STATUS.BOOKED || appt.status === APPOINTMENT_STATUS.CONFIRMED)
         );
@@ -893,8 +907,8 @@ export const addAppointment = async (data: AppointmentFormData & { isExternalPro
     const newAppointment: Appointment = {
       id: generateId(),
       ...newAppointmentData,
-      createdAt: formatISO(todayMock), 
-      updatedAt: formatISO(todayMock),
+      createdAt: formatISO(new Date()), 
+      updatedAt: formatISO(new Date()),
     };
     const populatedNewAppointment = await populateAppointment(newAppointment);
     mockDB.appointments.push(populatedNewAppointment);
@@ -912,7 +926,7 @@ export const updateAppointment = async (id: string, data: Partial<Appointment>):
       let updatedAppointmentRaw = {
         ...originalAppointment,
         ...data,
-        updatedAt: formatISO(todayMock), 
+        updatedAt: formatISO(new Date()), 
       };
 
       if (data.patientId && originalAppointment.patient?.id !== data.patientId) {
@@ -958,13 +972,13 @@ export const getPatientAppointmentHistory = async (
   options: { page?: number, limit?: number, lastVisibleAppointmentId?: string | null } = {}
 ): Promise<{ appointments: Appointment[], totalCount: number, lastVisibleAppointmentId?: string | null }> => {
   const { page = 1, limit: queryLimit = APPOINTMENTS_PER_PAGE_HISTORY, lastVisibleAppointmentId: startAfterId } = options;
-  const todayDate = startOfDay(todayMock); 
+  const today = startOfDay(new Date()); 
   const pastStatuses: AppointmentStatus[] = [APPOINTMENT_STATUS.COMPLETED, APPOINTMENT_STATUS.NO_SHOW, APPOINTMENT_STATUS.CANCELLED_CLIENT, APPOINTMENT_STATUS.CANCELLED_STAFF];
 
   if (useMockDatabase) {
     let historyAppointments = (mockDB.appointments || []).filter(appt =>
       appt.patientId === patientId &&
-      appt.appointmentDateTime && parseISO(appt.appointmentDateTime) < todayDate &&
+      appt.appointmentDateTime && parseISO(appt.appointmentDateTime) < today &&
       pastStatuses.includes(appt.status)
     );
     
@@ -996,7 +1010,7 @@ export const getPatientAppointmentHistory = async (
 };
 
 export const getCurrentQuincenaDateRange = (): { start: Date; end: Date } => {
-  const today = todayMock; 
+  const today = new Date(); 
   const currentYear = getYear(today);
   const currentMonth = getMonth(today);
   const currentDay = getDate(today);
@@ -1036,6 +1050,13 @@ export function getProfessionalAvailabilityForDate(
   professional: Professional,
   targetDate: Date 
 ): { startTime: string; endTime: string; notes?: string } | null {
+  
+  // First, check if the professional has an active contract on the targetDate
+  const contractStatus = getContractDisplayStatus(professional.currentContract, targetDate);
+  if (contractStatus !== 'Activo') {
+    return null; // Not working if contract is not active
+  }
+
   const dateToCheck = startOfDay(targetDate); 
   const targetDateString = format(dateToCheck, 'yyyy-MM-dd');
   const targetDayOfWeekJs = getDay(dateToCheck); // 0 (Sunday) to 6 (Saturday)
@@ -1057,12 +1078,11 @@ export function getProfessionalAvailabilityForDate(
   if (professional.workSchedule) {
     // Map JS day of week to our DayOfWeekId (monday, tuesday, etc.)
     // JS: Sun=0, Mon=1, Tue=2, Wed=3, Thu=4, Fri=5, Sat=6
-    // Our DAYS_OF_WEEK: Mon=0, Tue=1, ..., Sun=6 (index based on array)
     const dayKey = DAYS_OF_WEEK[(targetDayOfWeekJs + 6) % 7].id as DayOfWeekId; 
     
-    if (dayKey) { // Ensure dayKey is valid
+    if (dayKey) { 
         const dailySchedule = professional.workSchedule[dayKey];
-        if (dailySchedule) { // Check if schedule exists for this day
+        if (dailySchedule) { 
         if (dailySchedule.isWorking === false) return null;
 
         if (dailySchedule.startTime && dailySchedule.endTime) {
