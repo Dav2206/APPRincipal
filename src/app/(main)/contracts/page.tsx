@@ -41,6 +41,7 @@ import { useToast } from '@/hooks/use-toast';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Calendar } from '@/components/ui/calendar';
 import { cn } from '@/lib/utils';
+import { Badge } from '@/components/ui/badge';
 
 const CONTRACTS_PER_PAGE = 10;
 
@@ -306,7 +307,7 @@ export default function ContractsPage() {
                                <Edit3 className="mr-1 h-3 w-3" /> Editar Actual
                              </Button>
                            )}
-                          <Button variant="outline" size="xs" onClick={() => handleViewHistory(prof)} disabled={!prof.contractHistory || prof.contractHistory.length === 0}>
+                          <Button variant="outline" size="xs" onClick={() => handleViewHistory(prof)} disabled={!prof.currentContract && (!prof.contractHistory || prof.contractHistory.length === 0)}>
                             <Eye className="mr-1 h-3 w-3" /> Historial
                           </Button>
                         </TableCell>
@@ -426,13 +427,14 @@ export default function ContractsPage() {
           <DialogContent className="sm:max-w-xl">
             <DialogHeader>
               <DialogTitle>Historial de Contratos de {selectedProfessionalForHistory.firstName} {selectedProfessionalForHistory.lastName}</DialogTitle>
-              <DialogDescription>Lista de contratos anteriores del profesional.</DialogDescription>
+              <DialogDescription>Lista de contratos anteriores y el contrato vigente del profesional.</DialogDescription>
             </DialogHeader>
             <ScrollArea className="max-h-[60vh]">
-              {selectedProfessionalForHistory.contractHistory && selectedProfessionalForHistory.contractHistory.length > 0 ? (
+              {(selectedProfessionalForHistory.currentContract || (selectedProfessionalForHistory.contractHistory && selectedProfessionalForHistory.contractHistory.length > 0)) ? (
                 <Table>
                   <TableHeader>
                     <TableRow>
+                      <TableHead>Estado</TableHead>
                       <TableHead>Fecha Inicio</TableHead>
                       <TableHead>Fecha Fin</TableHead>
                       <TableHead>Empresa</TableHead>
@@ -440,8 +442,18 @@ export default function ContractsPage() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {selectedProfessionalForHistory.contractHistory.sort((a,b) => parseISO(b.startDate).getTime() - parseISO(a.startDate).getTime()).map((contract, index) => (
+                    {selectedProfessionalForHistory.currentContract && (
+                      <TableRow className="bg-primary/5 hover:bg-primary/10">
+                        <TableCell><Badge variant="default">Vigente</Badge></TableCell>
+                        <TableCell className="text-xs">{format(parseISO(selectedProfessionalForHistory.currentContract.startDate), 'dd/MM/yyyy')}</TableCell>
+                        <TableCell className="text-xs">{format(parseISO(selectedProfessionalForHistory.currentContract.endDate), 'dd/MM/yyyy')}</TableCell>
+                        <TableCell className="text-xs">{selectedProfessionalForHistory.currentContract.empresa || '-'}</TableCell>
+                        <TableCell className="text-xs">{selectedProfessionalForHistory.currentContract.notes || '-'}</TableCell>
+                      </TableRow>
+                    )}
+                    {selectedProfessionalForHistory.contractHistory && selectedProfessionalForHistory.contractHistory.sort((a,b) => parseISO(b.startDate).getTime() - parseISO(a.startDate).getTime()).map((contract, index) => (
                       <TableRow key={index}>
+                        <TableCell><Badge variant="outline">Archivado</Badge></TableCell>
                         <TableCell className="text-xs">{format(parseISO(contract.startDate), 'dd/MM/yyyy')}</TableCell>
                         <TableCell className="text-xs">{format(parseISO(contract.endDate), 'dd/MM/yyyy')}</TableCell>
                         <TableCell className="text-xs">{contract.empresa || '-'}</TableCell>
@@ -451,7 +463,7 @@ export default function ContractsPage() {
                   </TableBody>
                 </Table>
               ) : (
-                <p className="text-sm text-muted-foreground text-center py-4">No hay historial de contratos para este profesional.</p>
+                <p className="text-sm text-muted-foreground text-center py-4">No hay historial de contratos ni contrato vigente para este profesional.</p>
               )}
             </ScrollArea>
             <DialogFooter>
@@ -466,3 +478,5 @@ export default function ContractsPage() {
   );
 }
 
+
+    
