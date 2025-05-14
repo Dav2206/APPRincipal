@@ -315,29 +315,7 @@ export default function DashboardPage() {
         )}
       </div>
 
-      <Card className="mt-8">
-        <CardHeader>
-          <CardTitle>Próximamente</CardTitle>
-        </CardHeader>
-        <CardContent className="flex flex-col md:flex-row items-center gap-6">
-          <Image 
-            src="https://placehold.co/600x300.png" 
-            alt="Feature promotion" 
-            width={300} 
-            height={150} 
-            className="rounded-lg shadow-md"
-            data-ai-hint="office schedule" 
-          />
-          <div>
-            <h3 className="text-xl font-semibold mb-2">Reportes Avanzados y Estadísticas</h3>
-            <p className="text-muted-foreground mb-4">
-              Estamos trabajando en nuevas herramientas de análisis para ayudarte a optimizar la gestión de tu centro podológico. 
-              Pronto podrás acceder a reportes detallados sobre rendimiento, ingresos por profesional, y mucho más.
-            </p>
-            <Button variant="outline">Más Información</Button>
-          </div>
-        </CardContent>
-      </Card>
     </div>
   );
 }
+
