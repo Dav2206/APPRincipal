@@ -2,7 +2,7 @@
 "use client";
 
 import type { Professional, Contract, ContractEditFormData, ProfessionalFormData } from '@/types';
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '@/contexts/auth-provider';
 import { useAppState } from '@/contexts/app-state-provider';
 import { getProfessionals, updateProfessional } from '@/lib/data';
@@ -29,8 +29,8 @@ import {
   DialogClose,
 } from '@/components/ui/dialog';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
-import { Loader2, AlertTriangle, FileSpreadsheet, Eye, ChevronsDown, Edit3, Calendar as CalendarIconLucide, Building } from 'lucide-react';
-import { format, parseISO, formatISO as dateFnsFormatISO } from 'date-fns';
+import { Loader2, AlertTriangle, FileSpreadsheet, Eye, ChevronsDown, Edit3, Calendar as CalendarIconLucide, Building, PlusCircle } from 'lucide-react';
+import { format, parseISO } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { useRouter } from 'next/navigation';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -61,6 +61,8 @@ export default function ContractsPage() {
   
   const [isContractEditModalOpen, setIsContractEditModalOpen] = useState(false);
   const [editingContractProfessional, setEditingContractProfessional] = useState<(Professional & { contractDisplayStatus: ContractDisplayStatus }) | null>(null);
+  const [modalMode, setModalMode] = useState<'edit' | 'new'>('new');
+
 
   const contractEditForm = useForm<ContractEditFormData>({
     resolver: zodResolver(ContractEditFormSchema),
@@ -113,7 +115,7 @@ export default function ContractsPage() {
     }
   }, [fetchContractData, user, isAdminOrContador]);
 
-  const filteredAndSortedProfessionals = useMemo(() => {
+  const filteredAndSortedProfessionals = React.useMemo(() => {
     return allProfessionalsWithContracts
       .filter(p =>
         `${p.firstName} ${p.lastName}`.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -147,6 +149,7 @@ export default function ContractsPage() {
 
   const handleEditContract = (professional: Professional & { contractDisplayStatus: ContractDisplayStatus }) => {
     setEditingContractProfessional(professional);
+    setModalMode('edit');
     contractEditForm.reset({
       startDate: professional.currentContract?.startDate ? parseISO(professional.currentContract.startDate) : null,
       endDate: professional.currentContract?.endDate ? parseISO(professional.currentContract.endDate) : null,
@@ -154,6 +157,18 @@ export default function ContractsPage() {
     });
     setIsContractEditModalOpen(true);
   };
+
+  const handleNewContract = (professional: Professional & { contractDisplayStatus: ContractDisplayStatus }) => {
+    setEditingContractProfessional(professional);
+    setModalMode('new');
+    contractEditForm.reset({
+      startDate: null,
+      endDate: null,
+      empresa: '',
+    });
+    setIsContractEditModalOpen(true);
+  };
+
 
   const onContractEditSubmit = async (data: ContractEditFormData) => {
     if (!editingContractProfessional) return;
@@ -164,21 +179,24 @@ export default function ContractsPage() {
         currentContract_startDate: data.startDate,
         currentContract_endDate: data.endDate,
         currentContract_empresa: data.empresa,
-        currentContract_notes: editingContractProfessional.currentContract?.notes 
+        // Notes are not part of this form currently, data.ts will handle existing notes.
       };
 
       const updatedProf = await updateProfessional(professionalId, updatePayload);
 
       if (updatedProf) {
-        toast({ title: "Contrato Actualizado", description: `El contrato de ${updatedProf.firstName} ${updatedProf.lastName} ha sido actualizado.` });
+        toast({ 
+            title: modalMode === 'edit' ? "Contrato Actualizado" : "Nuevo Contrato Creado", 
+            description: `El contrato de ${updatedProf.firstName} ${updatedProf.lastName} ha sido ${modalMode === 'edit' ? 'actualizado' : 'creado'}.` 
+        });
         setIsContractEditModalOpen(false);
         fetchContractData(); 
       } else {
-        toast({ title: "Error", description: "No se pudo actualizar el contrato.", variant: "destructive" });
+        toast({ title: "Error", description: "No se pudo guardar el contrato.", variant: "destructive" });
       }
     } catch (error) {
-      console.error("Error updating contract:", error);
-      toast({ title: "Error Inesperado", description: "Ocurrió un error al actualizar el contrato.", variant: "destructive" });
+      console.error("Error saving contract:", error);
+      toast({ title: "Error Inesperado", description: "Ocurrió un error al guardar el contrato.", variant: "destructive" });
     }
   };
 
@@ -218,7 +236,7 @@ export default function ContractsPage() {
       <Card className="shadow-md">
         <CardHeader>
           <CardTitle className="text-2xl flex items-center gap-2"><FileSpreadsheet className="text-primary"/> Gestión de Contratos</CardTitle>
-          <CardDescription>Visualizar y editar el estado de los contratos de los profesionales y su historial.</CardDescription>
+          <CardDescription>Visualizar, editar y crear contratos para los profesionales. Consultar historial.</CardDescription>
           {isAdminOrContador && (
             <div className="mt-1 text-sm text-muted-foreground">
               Viendo: {adminSelectedLocation === 'all' ? 'Todas las sedes' : LOCATIONS.find(l => l.id === adminSelectedLocation)?.name || ''}
@@ -280,9 +298,14 @@ export default function ContractsPage() {
                           {prof.currentContract?.endDate ? format(parseISO(prof.currentContract.endDate), 'dd/MM/yyyy') : 'N/A'}
                         </TableCell>
                         <TableCell className="text-right space-x-1">
-                           <Button variant="outline" size="xs" onClick={() => handleEditContract(prof)} disabled={prof.contractDisplayStatus === 'Sin Contrato' && (!prof.currentContract?.startDate && !prof.currentContract?.endDate)}>
-                            <Edit3 className="mr-1 h-3 w-3" /> {prof.contractDisplayStatus === 'Sin Contrato' ? 'Agregar' : 'Editar'}
+                          <Button variant="outline" size="xs" onClick={() => handleNewContract(prof)} className="mr-1">
+                            <PlusCircle className="mr-1 h-3 w-3" /> Nuevo
                           </Button>
+                          {prof.contractDisplayStatus !== 'Sin Contrato' && (
+                             <Button variant="outline" size="xs" onClick={() => handleEditContract(prof)}>
+                               <Edit3 className="mr-1 h-3 w-3" /> Editar Actual
+                             </Button>
+                           )}
                           <Button variant="outline" size="xs" onClick={() => handleViewHistory(prof)} disabled={!prof.contractHistory || prof.contractHistory.length === 0}>
                             <Eye className="mr-1 h-3 w-3" /> Historial
                           </Button>
@@ -305,13 +328,17 @@ export default function ContractsPage() {
         </CardContent>
       </Card>
 
-      {/* Contract Edit Modal */}
+      {/* Contract Edit/New Modal */}
       {editingContractProfessional && (
         <Dialog open={isContractEditModalOpen} onOpenChange={setIsContractEditModalOpen}>
           <DialogContent className="sm:max-w-md">
             <DialogHeader>
-              <DialogTitle>Editar Contrato de {editingContractProfessional.firstName} {editingContractProfessional.lastName}</DialogTitle>
-              <DialogDescription>Actualice los detalles del contrato actual.</DialogDescription>
+               <DialogTitle>
+                {modalMode === 'edit' ? `Editar Contrato de ${editingContractProfessional.firstName} ${editingContractProfessional.lastName}` : `Nuevo Contrato para ${editingContractProfessional.firstName} ${editingContractProfessional.lastName}`}
+              </DialogTitle>
+              <DialogDescription>
+                {modalMode === 'edit' ? 'Actualice los detalles del contrato actual.' : 'Ingrese los detalles para el nuevo contrato. El contrato actual (si existe) será archivado.'}
+              </DialogDescription>
             </DialogHeader>
             <Form {...contractEditForm}>
               <form onSubmit={contractEditForm.handleSubmit(onContractEditSubmit)} className="space-y-4 py-2">
@@ -382,9 +409,9 @@ export default function ContractsPage() {
                 />
                 <DialogFooter className="pt-4">
                   <DialogClose asChild><Button type="button" variant="outline">Cancelar</Button></DialogClose>
-                  <Button type="submit" disabled={contractEditForm.formState.isSubmitting}>
+                   <Button type="submit" disabled={contractEditForm.formState.isSubmitting}>
                     {contractEditForm.formState.isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                    Guardar Cambios
+                    {modalMode === 'edit' ? 'Guardar Cambios' : 'Crear Contrato'}
                   </Button>
                 </DialogFooter>
               </form>
