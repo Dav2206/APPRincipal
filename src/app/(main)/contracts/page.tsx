@@ -59,8 +59,12 @@ export default function ContractsPage() {
   
   const [isLoading, setIsLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
+  
   const [selectedEmpresa, setSelectedEmpresa] = useState<string>(ALL_EMPRESAS_VALUE);
   const [uniqueEmpresas, setUniqueEmpresas] = useState<string[]>([]);
+  const [manuallyAddedEmpresas, setManuallyAddedEmpresas] = useState<string[]>([]);
+  const [isAddEmpresaModalOpen, setIsAddEmpresaModalOpen] = useState(false);
+  const [newEmpresaNameInput, setNewEmpresaNameInput] = useState('');
 
   const [selectedProfessionalForHistory, setSelectedProfessionalForHistory] = useState<(Professional & { contractDisplayStatus: ContractDisplayStatus }) | null>(null);
   const [isHistoryModalOpen, setIsHistoryModalOpen] = useState(false);
@@ -122,19 +126,28 @@ export default function ContractsPage() {
   }, [fetchContractData, user, isAdminOrContador]);
 
   useEffect(() => {
-    const empresas = new Set<string>();
+    const derivedEmpresas = new Set<string>();
     allProfessionalsWithContracts.forEach(prof => {
       if (prof.currentContract?.empresa) {
-        empresas.add(prof.currentContract.empresa);
+        derivedEmpresas.add(prof.currentContract.empresa);
       }
       prof.contractHistory?.forEach(ch => {
         if (ch.empresa) {
-          empresas.add(ch.empresa);
+          derivedEmpresas.add(ch.empresa);
         }
       });
     });
-    setUniqueEmpresas(Array.from(empresas).sort());
-  }, [allProfessionalsWithContracts]);
+    const combinedEmpresas = new Set([...Array.from(derivedEmpresas), ...manuallyAddedEmpresas]);
+    setUniqueEmpresas(Array.from(combinedEmpresas).sort());
+  }, [allProfessionalsWithContracts, manuallyAddedEmpresas]);
+
+  const handleAddEmpresaToManualList = () => {
+    if (newEmpresaNameInput.trim() !== '' && !uniqueEmpresas.includes(newEmpresaNameInput.trim())) {
+      setManuallyAddedEmpresas(prev => [...prev, newEmpresaNameInput.trim()]);
+    }
+    setNewEmpresaNameInput('');
+    setIsAddEmpresaModalOpen(false);
+  };
 
   const filteredAndSortedProfessionals = React.useMemo(() => {
     return allProfessionalsWithContracts
@@ -201,7 +214,6 @@ export default function ContractsPage() {
         currentContract_startDate: data.startDate,
         currentContract_endDate: data.endDate,
         currentContract_empresa: data.empresa,
-        // Notes are not part of this form currently, data.ts will handle existing notes.
       };
 
       const updatedProf = await updateProfessional(professionalId, updatePayload);
@@ -285,7 +297,7 @@ export default function ContractsPage() {
                 ))}
               </SelectContent>
             </Select>
-            <Button variant="outline" className="w-full sm:w-auto"> {/* Placeholder for functionality */}
+            <Button variant="outline" className="w-full sm:w-auto" onClick={() => setIsAddEmpresaModalOpen(true)}>
               <Building className="mr-2 h-4 w-4"/> Añadir Nueva Empresa
             </Button>
           </div>
@@ -456,6 +468,29 @@ export default function ContractsPage() {
         </Dialog>
       )}
 
+      {/* Add Empresa Modal */}
+      <Dialog open={isAddEmpresaModalOpen} onOpenChange={setIsAddEmpresaModalOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Añadir Nueva Empresa al Filtro</DialogTitle>
+            <DialogDescription>
+              Ingrese el nombre de la nueva empresa. Estará disponible en el filtro de empresas.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <Input
+              placeholder="Nombre de la nueva empresa"
+              value={newEmpresaNameInput}
+              onChange={(e) => setNewEmpresaNameInput(e.target.value)}
+            />
+          </div>
+          <DialogFooter className="pt-4">
+            <DialogClose asChild><Button type="button" variant="outline">Cancelar</Button></DialogClose>
+            <Button type="button" onClick={handleAddEmpresaToManualList}>Añadir</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       {/* Contract History Modal */}
       {selectedProfessionalForHistory && (
         <Dialog open={isHistoryModalOpen} onOpenChange={setIsHistoryModalOpen}>
@@ -512,3 +547,6 @@ export default function ContractsPage() {
     </div>
   );
 }
+
+
+    
