@@ -8,7 +8,7 @@ import { es } from 'date-fns/locale';
 import { useMockDatabase as globalUseMockDatabase } from './firebase-config'; // Centralized mock flag
 
 
-const generateId = (): string => {
+const generateId = (): string => { // Moved to top
   return Math.random().toString(36).substr(2, 9);
 };
 
@@ -104,6 +104,22 @@ const initialMockProfessionalsData: Professional[] = LOCATIONS.flatMap((location
         // else: no contract for this one (i % 3 === 2)
     }
 
+    // Add some birthdays for testing upcoming birthdays feature
+    let birthDay: number | null = null;
+    let birthMonth: number | null = null;
+    if (i === 0 && location.id === 'higuereta') { // Prof 1 Higuereta birthday soon
+        const upcomingBday = addDays(todayMock, 5);
+        birthDay = getDate(upcomingBday);
+        birthMonth = getMonth(upcomingBday) + 1;
+    } else if (i === 1 && location.id === 'san_antonio') { // Prof 2 San Antonio birthday also soon
+        const upcomingBday = addDays(todayMock, 10);
+        birthDay = getDate(upcomingBday);
+        birthMonth = getMonth(upcomingBday) + 1;
+    } else if (i % 4 === 0) { // Some other random birthdays
+        birthDay = (i % 28) + 1; // Keep day within valid range for all months
+        birthMonth = (i % 12) + 1;
+    }
+
 
     return {
       id: `prof-${location.id}-${i + 1}`,
@@ -111,8 +127,8 @@ const initialMockProfessionalsData: Professional[] = LOCATIONS.flatMap((location
       lastName: location.name.split(' ')[0],
       locationId: location.id,
       phone: `9876543${locIndex}${i + 1}`,
-      birthDay: (i % 4 === 0) ? (i % 30) + 1 : null, // Some have birthdays
-      birthMonth: (i % 4 === 0) ? (i % 12) + 1 : null,
+      birthDay: birthDay, 
+      birthMonth: birthMonth,
       biWeeklyEarnings: Math.random() * 1500 + 500,
       workSchedule: baseSchedule,
       customScheduleOverrides: isSecondProfHiguereta ? [
@@ -466,16 +482,13 @@ export const updateProfessional = async (id: string, data: Partial<ProfessionalF
 
 
             if (contractFieldsTouchedInPayload) {
-                 // This logic handles both new contracts and modifications to existing ones.
-                // A "new" contract is created if start/end dates are provided and they differ from an existing one,
-                // or if no current contract exists.
                 const isCreatingNewContractInstance = 
                     (newProposedContractData.startDate && newProposedContractData.endDate) && 
                     (!oldContract || 
                      oldContract.startDate !== newProposedContractData.startDate || 
                      oldContract.endDate !== newProposedContractData.endDate ||
-                     (oldContract.notes || '') !== (newProposedContractData.notes || '') ||  // Consider notes/empresa changes for new instance
-                     (oldContract.empresa || '') !== (newProposedContractData.empresa || '')
+                     (oldContract.notes || undefined) !== (newProposedContractData.notes || undefined) ||
+                     (oldContract.empresa || undefined) !== (newProposedContractData.empresa || undefined)
                     );
 
                 if (isCreatingNewContractInstance) {
@@ -483,21 +496,25 @@ export const updateProfessional = async (id: string, data: Partial<ProfessionalF
                         professionalToUpdate.contractHistory = [...(professionalToUpdate.contractHistory || []), oldContract];
                     }
                     professionalToUpdate.currentContract = {
-                        id: generateId(), // New contract instance gets a new ID
+                        id: generateId(), 
                         startDate: newProposedContractData.startDate!,
                         endDate: newProposedContractData.endDate!,
                         notes: newProposedContractData.notes,
                         empresa: newProposedContractData.empresa,
                     };
-                } else if (oldContract && (newProposedContractData.notes !== undefined || newProposedContractData.empresa !== undefined)) {
-                    // Just updating notes/empresa on the existing current contract
+                } else if (oldContract && (newProposedContractData.notes !== undefined || newProposedContractData.empresa !== undefined || newProposedContractData.startDate !== undefined || newProposedContractData.endDate !== undefined)) {
                     professionalToUpdate.currentContract = {
                         ...oldContract,
+                        startDate: newProposedContractData.startDate !== undefined ? newProposedContractData.startDate : oldContract.startDate,
+                        endDate: newProposedContractData.endDate !== undefined ? newProposedContractData.endDate : oldContract.endDate,
                         notes: newProposedContractData.notes !== undefined ? newProposedContractData.notes : oldContract.notes,
                         empresa: newProposedContractData.empresa !== undefined ? newProposedContractData.empresa : oldContract.empresa,
                     };
-                } else if (!newProposedContractData.startDate && !newProposedContractData.endDate && !newProposedContractData.notes && !newProposedContractData.empresa && oldContract) {
-                     // This case should mean fields were cleared to remove the contract
+                 } else if (!newProposedContractData.startDate && !newProposedContractData.endDate && !contractFieldsTouchedInPayload && oldContract) {
+                    // No contract data provided in payload, but old contract exists: keep it as is
+                     professionalToUpdate.currentContract = oldContract;
+                } else if ((!newProposedContractData.startDate || !newProposedContractData.endDate) && contractFieldsTouchedInPayload) {
+                    // Contract fields were touched to remove the contract
                     if (oldContract && oldContract.id && !professionalToUpdate.contractHistory?.find(h => h.id === oldContract!.id)) {
                         professionalToUpdate.contractHistory = [...(professionalToUpdate.contractHistory || []), oldContract];
                     }
@@ -1140,3 +1157,4 @@ export function getProfessionalAvailabilityForDate(
   }
   return null; // No schedule defined for the day
 }
+
