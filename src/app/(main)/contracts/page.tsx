@@ -1,7 +1,7 @@
 
 "use client";
 
-import type { Professional, Contract, ContractEditFormData } from '@/types';
+import type { Professional, Contract, ContractEditFormData, ProfessionalFormData } from '@/types';
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useAuth } from '@/contexts/auth-provider';
 import { useAppState } from '@/contexts/app-state-provider';
@@ -31,7 +31,7 @@ import {
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Loader2, AlertTriangle, FileSpreadsheet, Eye, ChevronsDown, Edit3, Calendar as CalendarIconLucide, Building } from 'lucide-react';
 import { format, parseISO, formatISO as dateFnsFormatISO } from 'date-fns';
-import { es } from '@/lib/utils';
+import { es } from 'date-fns/locale';
 import { useRouter } from 'next/navigation';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { ContractEditFormSchema } from '@/lib/schemas';
@@ -160,12 +160,10 @@ export default function ContractsPage() {
 
     try {
       const professionalId = editingContractProfessional.id;
-      // We send ProfessionalFormData structure even if only contract part is changed
       const updatePayload: Partial<ProfessionalFormData> = {
         currentContract_startDate: data.startDate,
         currentContract_endDate: data.endDate,
         currentContract_empresa: data.empresa,
-        // Pass existing notes to avoid clearing them if not edited here
         currentContract_notes: editingContractProfessional.currentContract?.notes 
       };
 
@@ -174,7 +172,7 @@ export default function ContractsPage() {
       if (updatedProf) {
         toast({ title: "Contrato Actualizado", description: `El contrato de ${updatedProf.firstName} ${updatedProf.lastName} ha sido actualizado.` });
         setIsContractEditModalOpen(false);
-        fetchContractData(); // Refetch to update the list
+        fetchContractData(); 
       } else {
         toast({ title: "Error", description: "No se pudo actualizar el contrato.", variant: "destructive" });
       }
@@ -282,8 +280,8 @@ export default function ContractsPage() {
                           {prof.currentContract?.endDate ? format(parseISO(prof.currentContract.endDate), 'dd/MM/yyyy') : 'N/A'}
                         </TableCell>
                         <TableCell className="text-right space-x-1">
-                           <Button variant="outline" size="xs" onClick={() => handleEditContract(prof)} disabled={prof.contractDisplayStatus === 'Sin Contrato'}>
-                            <Edit3 className="mr-1 h-3 w-3" /> Editar
+                           <Button variant="outline" size="xs" onClick={() => handleEditContract(prof)} disabled={prof.contractDisplayStatus === 'Sin Contrato' && (!prof.currentContract?.startDate && !prof.currentContract?.endDate)}>
+                            <Edit3 className="mr-1 h-3 w-3" /> {prof.contractDisplayStatus === 'Sin Contrato' ? 'Agregar' : 'Editar'}
                           </Button>
                           <Button variant="outline" size="xs" onClick={() => handleViewHistory(prof)} disabled={!prof.contractHistory || prof.contractHistory.length === 0}>
                             <Eye className="mr-1 h-3 w-3" /> Historial
@@ -440,3 +438,4 @@ export default function ContractsPage() {
     </div>
   );
 }
+
