@@ -1,8 +1,7 @@
-
 "use client";
 
 import type { Professional, ProfessionalFormData } from '@/types';
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useAuth } from '@/contexts/auth-provider';
 import { useAppState } from '@/contexts/app-state-provider';
 import { getProfessionals, addProfessional, updateProfessional, getProfessionalAvailabilityForDate } from '@/lib/data';
@@ -32,7 +31,7 @@ import {
   DialogDescription,
 } from '@/components/ui/dialog';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
-import { PlusCircle, Edit2, Briefcase, Search, Loader2, CalendarDays, Clock, Trash2, Calendar as CalendarIconLucide, AlertTriangle, Users, Moon } from 'lucide-react';
+import { PlusCircle, Edit2, Briefcase, Search, Loader2, CalendarDays, Clock, Trash2, Calendar as CalendarIconLucide, AlertTriangle, Users, Moon, ChevronsDown } from 'lucide-react';
 import { useForm, useFieldArray, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { ProfessionalFormSchema } from '@/lib/schemas';
@@ -41,18 +40,22 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { Calendar } from '@/components/ui/calendar';
 import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
-import { format, parseISO, getDay, isSameDay, differenceInDays, startOfDay, addDays as dateFnsAddDays, formatISO } from 'date-fns';
+import { format, parseISO, getDay, isSameDay, differenceInDays, startOfDay, addDays as dateFnsAddDays, formatISO as dateFnsFormatISO } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 
 
 const COMPENSATORY_DAY_OFF_PLACEHOLDER_VALUE = "--none--";
+const PROFESSIONALS_PER_PAGE = 5;
 
 export default function ProfessionalsPage() {
   const { user } = useAuth();
   const { toast } = useToast();
   const { selectedLocationId: adminSelectedLocation } = useAppState();
-  const [professionals, setProfessionals] = useState<Professional[]>([]);
+  const [allProfessionals, setAllProfessionals] = useState<Professional[]>([]);
+  const [displayedProfessionals, setDisplayedProfessionals] = useState<Professional[]>([]);
+  const [currentPage, setCurrentPage] = useState(1);
+
   const [isLoading, setIsLoading] = useState(true);
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [editingProfessional, setEditingProfessional] = useState<Professional | null>(null);
@@ -100,7 +103,7 @@ export default function ProfessionalsPage() {
   const fetchProfessionals = useCallback(async () => {
     if(!user || user.role === USER_ROLES.LOCATION_STAFF ) { 
       setIsLoading(false);
-      setProfessionals([]);
+      setAllProfessionals([]);
       return;
     }
     setIsLoading(true);
@@ -115,10 +118,10 @@ export default function ProfessionalsPage() {
           profsToSet = results.flat();
         }
       }
-      setProfessionals(profsToSet || []);
+      setAllProfessionals(profsToSet || []);
     } catch (error) {
       console.error("Failed to fetch professionals:", error);
-      setProfessionals([]);
+      setAllProfessionals([]);
       toast({ title: "Error", description: "No se pudieron cargar los profesionales.", variant: "destructive" });
     }
     setIsLoading(false);
@@ -129,9 +132,21 @@ export default function ProfessionalsPage() {
         fetchProfessionals();
     } else {
         setIsLoading(false);
-        setProfessionals([]);
+        setAllProfessionals([]);
     }
   }, [fetchProfessionals, user]);
+
+  const filteredProfessionals = useMemo(() => {
+    return allProfessionals.filter(p =>
+      `${p.firstName} ${p.lastName}`.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (p.phone && p.phone.includes(searchTerm))
+    );
+  }, [allProfessionals, searchTerm]);
+
+  useEffect(() => {
+    setDisplayedProfessionals(filteredProfessionals.slice(0, PROFESSIONALS_PER_PAGE * currentPage));
+  }, [filteredProfessionals, currentPage]);
+
 
   const handleAddProfessional = () => {
     if (user?.role !== USER_ROLES.ADMIN && user?.role !== USER_ROLES.CONTADOR) {
@@ -212,11 +227,11 @@ export default function ProfessionalsPage() {
         phone: data.phone || undefined,
         workSchedule: {},
         rotationType: data.rotationType,
-        rotationStartDate: data.rotationStartDate ? formatISO(data.rotationStartDate, { representation: 'date'}) : null,
+        rotationStartDate: data.rotationStartDate ? dateFnsFormatISO(data.rotationStartDate, { representation: 'date'}) : null,
         compensatoryDayOffChoice: data.compensatoryDayOffChoice === COMPENSATORY_DAY_OFF_PLACEHOLDER_VALUE ? null : (data.compensatoryDayOffChoice || null),
         customScheduleOverrides: data.customScheduleOverrides?.map(ov => ({
             id: ov.id || generateId(),
-            date: formatISO(ov.date, { representation: 'date' }),
+            date: dateFnsFormatISO(ov.date, { representation: 'date' }),
             isWorking: ov.isWorking,
             startTime: ov.isWorking ? ov.startTime : undefined,
             endTime: ov.isWorking ? ov.endTime : undefined,
@@ -253,17 +268,13 @@ export default function ProfessionalsPage() {
           toast({ title: "Error", description: `No se pudo ${editingProfessional ? 'actualizar' : 'agregar'} a ${data.firstName}.`, variant: "destructive" });
       }
       setIsFormOpen(false);
+      setCurrentPage(1); // Reset to first page to see changes
       fetchProfessionals();
     } catch (error) {
       toast({ title: "Error", description: "No se pudo guardar el profesional.", variant: "destructive" });
       console.error(error);
     }
   };
-
-  const filteredProfessionals = professionals.filter(p =>
-    `${p.firstName} ${p.lastName}`.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    (p.phone && p.phone.includes(searchTerm))
-  );
   
   const LoadingState = () => (
      <div className="flex flex-col items-center justify-center h-64 col-span-full">
@@ -271,6 +282,10 @@ export default function ProfessionalsPage() {
         <p className="mt-4 text-muted-foreground">Cargando profesionales...</p>
       </div>
   );
+
+  const handleLoadMore = () => {
+    setCurrentPage(prev => prev + 1);
+  };
   
   if (!user) { 
     return (
@@ -323,12 +338,12 @@ export default function ProfessionalsPage() {
       const rotationAnchorDate = parseISO(prof.rotationStartDate);
       const daysDiff = differenceInDays(startOfDay(today), startOfDay(rotationAnchorDate));
       if (daysDiff >= 0) {
-        const weekNumberInCycle = Math.floor(daysDiff / 7) % 2;
+        const weekNumberInCycle = Math.floor(daysDiff / 7) % 2; // 0 for work Sunday week, 1 for compensatory week
         const targetDayId = DAYS_OF_WEEK[getDay(today)].id;
         if (weekNumberInCycle === 1) { // Compensatory week
-          if (targetDayId === prof.compensatoryDayOffChoice && (getDay(today) >= 1 && getDay(today) <= 4)) {
+          if (targetDayId === prof.compensatoryDayOffChoice && (getDay(today) >= 1 && getDay(today) <= 4)) { // Mon-Thu
             reason = `Desc. Compensatorio (${DAYS_OF_WEEK.find(d => d.id === prof.compensatoryDayOffChoice)?.name})`;
-          } else if (getDay(today) === 0) { 
+          } else if (getDay(today) === 0) { // Sunday of compensatory week
              reason = "Domingo (Rotación Desc.)";
           }
         }
@@ -379,51 +394,63 @@ export default function ProfessionalsPage() {
                 type="search"
                 placeholder="Buscar profesionales por nombre o teléfono..."
                 value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
+                onChange={(e) => { setSearchTerm(e.target.value); setCurrentPage(1); }}
                 className="pl-8 w-full"
               />
             </div>
           </div>
           {isLoading ? <LoadingState/> : (
-          <div className="rounded-md border">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Nombre Completo</TableHead>
-                  <TableHead className="hidden md:table-cell">Sede</TableHead>
-                  <TableHead className="hidden lg:table-cell">Horario (Hoy) y Próximo Descanso</TableHead>
-                  <TableHead className="hidden xl:table-cell">Teléfono</TableHead>
-                   {isAdminOrContador && <TableHead className="hidden xl:table-cell text-right">Ingresos Quincena (S/)</TableHead> }
-                  <TableHead className="text-right">Acciones</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {filteredProfessionals.length > 0 ? filteredProfessionals.map(prof => (
-                  <TableRow key={prof.id}>
-                    <TableCell className="font-medium">{prof.firstName} {prof.lastName}</TableCell>
-                    <TableCell className="hidden md:table-cell">{LOCATIONS.find(l => l.id === prof.locationId)?.name}</TableCell>
-                    <TableCell className="hidden lg:table-cell text-xs">{formatWorkScheduleDisplay(prof)}</TableCell>
-                    <TableCell className="hidden xl:table-cell">{prof.phone || 'N/A'}</TableCell>
-                    {(isAdminOrContador && !isContadorOnly) && <TableCell className="hidden xl:table-cell text-right">{(prof.biWeeklyEarnings ?? 0).toFixed(2)}</TableCell> }
-                    {isContadorOnly && <TableCell className="hidden xl:table-cell text-right">{(prof.biWeeklyEarnings ?? 0).toFixed(2)}</TableCell> }
-                    <TableCell className="text-right">
-                     {(isAdminOrContador) && ( 
-                      <Button variant="ghost" size="sm" onClick={() => handleEditProfessional(prof)}>
-                        <Edit2 className="h-4 w-4" /> <span className="sr-only">Editar</span>
-                      </Button>
-                     )}
-                    </TableCell>
-                  </TableRow>
-                )) : (
-                  <TableRow>
-                    <TableCell colSpan={(isAdminOrContador && !isContadorOnly) ? 6 : (isContadorOnly ? 6 : 5)} className="h-24 text-center"> 
-                      <AlertTriangle className="inline-block mr-2 h-5 w-5 text-muted-foreground" /> No se encontraron profesionales.
-                    </TableCell>
-                  </TableRow>
-                )}
-              </TableBody>
-            </Table>
-          </div>
+            <>
+              <p className="text-sm text-muted-foreground mb-2">
+                Mostrando {displayedProfessionals.length} de {filteredProfessionals.length} profesionales.
+              </p>
+              <div className="rounded-md border">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Nombre Completo</TableHead>
+                      <TableHead className="hidden md:table-cell">Sede</TableHead>
+                      <TableHead className="hidden lg:table-cell">Horario (Hoy) y Próximo Descanso</TableHead>
+                      <TableHead className="hidden xl:table-cell">Teléfono</TableHead>
+                      {isAdminOrContador && <TableHead className="hidden xl:table-cell text-right">Ingresos Quincena (S/)</TableHead> }
+                      <TableHead className="text-right">Acciones</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {displayedProfessionals.length > 0 ? displayedProfessionals.map(prof => (
+                      <TableRow key={prof.id}>
+                        <TableCell className="font-medium">{prof.firstName} {prof.lastName}</TableCell>
+                        <TableCell className="hidden md:table-cell">{LOCATIONS.find(l => l.id === prof.locationId)?.name}</TableCell>
+                        <TableCell className="hidden lg:table-cell text-xs">{formatWorkScheduleDisplay(prof)}</TableCell>
+                        <TableCell className="hidden xl:table-cell">{prof.phone || 'N/A'}</TableCell>
+                        {(isAdminOrContador && !isContadorOnly) && <TableCell className="hidden xl:table-cell text-right">{(prof.biWeeklyEarnings ?? 0).toFixed(2)}</TableCell> }
+                        {isContadorOnly && <TableCell className="hidden xl:table-cell text-right">{(prof.biWeeklyEarnings ?? 0).toFixed(2)}</TableCell> }
+                        <TableCell className="text-right">
+                        {(isAdminOrContador) && ( 
+                          <Button variant="ghost" size="sm" onClick={() => handleEditProfessional(prof)}>
+                            <Edit2 className="h-4 w-4" /> <span className="sr-only">Editar</span>
+                          </Button>
+                        )}
+                        </TableCell>
+                      </TableRow>
+                    )) : (
+                      <TableRow>
+                        <TableCell colSpan={(isAdminOrContador && !isContadorOnly) ? 6 : (isContadorOnly ? 6 : 5)} className="h-24 text-center"> 
+                          <AlertTriangle className="inline-block mr-2 h-5 w-5 text-muted-foreground" /> No se encontraron profesionales.
+                        </TableCell>
+                      </TableRow>
+                    )}
+                  </TableBody>
+                </Table>
+              </div>
+              {displayedProfessionals.length < filteredProfessionals.length && (
+                <div className="mt-6 text-center">
+                  <Button onClick={handleLoadMore} variant="outline">
+                    <ChevronsDown className="mr-2 h-4 w-4"/> Cargar Más
+                  </Button>
+                </div>
+              )}
+            </>
           )}
         </CardContent>
       </Card>
@@ -662,5 +689,4 @@ export default function ProfessionalsPage() {
     </div>
   );
 }
-
 
