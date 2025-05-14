@@ -68,7 +68,7 @@ export default function ProfessionalsPage() {
     thursday: { isWorking: true, startTime: '10:00', endTime: '19:00' },
     friday: { isWorking: true, startTime: '10:00', endTime: '19:00' },
     saturday: { isWorking: true, startTime: '09:00', endTime: '18:00' },
-    sunday: { isWorking: false, startTime: '10:00', endTime: '18:00' }, // Sunday typically non-working
+    sunday: { isWorking: false, startTime: '10:00', endTime: '18:00' }, 
   };
 
 
@@ -173,7 +173,7 @@ export default function ProfessionalsPage() {
     setEditingProfessional(professional);
     
     const formWorkSchedule: ProfessionalFormData['workSchedule'] = {};
-    DAYS_OF_WEEK.forEach(day => { // Include Sunday in base schedule form
+    DAYS_OF_WEEK.forEach(day => { 
       const dayId = day.id as DayOfWeekId;
       const schedule = professional.workSchedule?.[dayId];
       formWorkSchedule[dayId] = schedule 
@@ -227,7 +227,7 @@ export default function ProfessionalsPage() {
       };
 
       if (data.workSchedule) {
-        (Object.keys(data.workSchedule) as Array<DayOfWeekId>).forEach(dayId => { // Process all days including Sunday
+        (Object.keys(data.workSchedule) as Array<DayOfWeekId>).forEach(dayId => { 
           const dayData = data.workSchedule![dayId];
           if (dayData) {
             professionalToSave.workSchedule[dayId] = {
@@ -252,7 +252,7 @@ export default function ProfessionalsPage() {
           toast({ title: "Error", description: `No se pudo ${editingProfessional ? 'actualizar' : 'agregar'} a ${data.firstName}.`, variant: "destructive" });
       }
       setIsFormOpen(false);
-      setCurrentPage(1); // Reset to first page to see changes
+      setCurrentPage(1); 
       fetchProfessionals();
     } catch (error) {
       toast({ title: "Error", description: "No se pudo guardar el profesional.", variant: "destructive" });
@@ -294,7 +294,7 @@ export default function ProfessionalsPage() {
   }
 
  const calculateNextGeneralDayOff = (prof: Professional, referenceDate: Date): Date | null => {
-  for (let i = 0; i <= 30; i++) { // Check next 30 days, including today
+  for (let i = 0; i <= 30; i++) { 
     const checkDate = dateFnsAddDays(referenceDate, i);
     const availability = getProfessionalAvailabilityForDate(prof, checkDate);
     if (!availability) { 
@@ -317,7 +317,7 @@ export default function ProfessionalsPage() {
     let reason = "Descansando";
     const override = prof.customScheduleOverrides?.find(ov => isSameDay(parseISO(ov.date), today) && !ov.isWorking);
     if (override) {
-      reason = `Anulación${override.notes ? ` (${override.notes})` : ''}`;
+      reason = `Descansando (Anulación${override.notes ? `: ${override.notes}` : ''})`;
     } else if (prof.workSchedule && !prof.workSchedule[DAYS_OF_WEEK[getDay(today)].id as DayOfWeekId]?.isWorking && !override) {
         reason = `Descansando (Horario base: ${DAYS_OF_WEEK[getDay(today)].name} libre)`;
     }
@@ -520,7 +520,7 @@ export default function ProfessionalsPage() {
                 </AccordionItem>
                 
                 <AccordionItem value="custom-overrides">
-                  <AccordionTrigger className="text-lg font-semibold">Anulaciones de Horario / Horarios Específicos (Opcional)</AccordionTrigger>
+                  <AccordionTrigger className="text-lg font-semibold">Registrar Días de Descanso / Horarios Especiales</AccordionTrigger>
                   <AccordionContent className="space-y-4 pt-2">
                     {customScheduleFields.map((field, index) => (
                       <div key={field.id} className="p-4 border rounded-lg space-y-3 relative bg-muted/30">
@@ -559,12 +559,12 @@ export default function ProfessionalsPage() {
                           </div>
                         )}
                         <FormField control={form.control} name={`customScheduleOverrides.${index}.notes`} render={({ field: notesField }) => (
-                          <FormItem><FormLabel className="text-xs">Notas (Opcional)</FormLabel><FormControl><Textarea placeholder="Ej: Turno especial, Domingo quincenal" {...notesField} value={notesField.value || ''} /></FormControl><FormMessage /></FormItem>
+                          <FormItem><FormLabel className="text-xs">Notas (Razón del descanso o detalle del horario especial)</FormLabel><FormControl><Textarea placeholder="Ej: Descanso compensatorio, Turno especial tarde, Vacaciones" {...notesField} value={notesField.value || ''} /></FormControl><FormMessage /></FormItem>
                         )}/>
                       </div>
                     ))}
-                    <Button type="button" variant="outline" size="sm" className="mt-4" onClick={() => appendCustomSchedule({ id: generateId(), date: new Date(), isWorking: true, startTime: '09:00', endTime: '17:00', notes: '' })}>
-                      <PlusCircle className="mr-2 h-4 w-4" /> Agregar Horario Específico
+                    <Button type="button" variant="outline" size="sm" className="mt-4" onClick={() => appendCustomSchedule({ id: generateId(), date: new Date(), isWorking: false, startTime: undefined, endTime: undefined, notes: 'Descanso' })}>
+                      <PlusCircle className="mr-2 h-4 w-4" /> Agregar Descanso / Horario Especial
                     </Button>
                   </AccordionContent>
                 </AccordionItem>
