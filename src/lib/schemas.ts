@@ -14,7 +14,6 @@ const paymentMethodValues = PAYMENT_METHODS.map(pm => pm);
 const appointmentStatusKeys = Object.keys(APPOINTMENT_STATUS_DISPLAY) as (keyof typeof APPOINTMENT_STATUS_DISPLAY)[];
 const dayOfWeekIds = DAYS_OF_WEEK.map(day => day.id);
 
-const COMPENSATORY_DAY_OFF_PLACEHOLDER_VALUE = "--none--";
 
 export const PatientFormSchema = z.object({
   id: z.string().optional(),
@@ -69,18 +68,15 @@ export const ProfessionalFormSchema = z.object({
   phone: z.string().optional().nullable(),
 
   workSchedule: z.object(
-    DAYS_OF_WEEK.filter(day => day.id !== 'sunday')
+    DAYS_OF_WEEK.filter(day => day.id !== 'sunday') // Base schedule for Mon-Sat
       .reduce((acc, day) => {
         acc[day.id as Exclude<DayOfWeekId, 'sunday'>] = DayScheduleSchema.optional();
         return acc;
       }, {} as Record<Exclude<DayOfWeekId, 'sunday'>, z.ZodOptional<typeof DayScheduleSchema>>)
   ).optional(),
   
-  rotationType: z.enum(['none', 'biWeeklySunday']).default('none'),
-  rotationStartDate: z.date().optional().nullable(),
-  compensatoryDayOffChoice: z.enum(['monday', 'tuesday', 'wednesday', 'thursday', COMPENSATORY_DAY_OFF_PLACEHOLDER_VALUE]).optional().nullable()
-    .transform(value => value === COMPENSATORY_DAY_OFF_PLACEHOLDER_VALUE ? null : value),
-
+  // Sunday schedule can be part of customScheduleOverrides if needed, or a specific field if simple.
+  // For now, removing rotationType, rotationStartDate, compensatoryDayOffChoice
 
   customScheduleOverrides: z.array(
     z.object({
@@ -100,22 +96,6 @@ export const ProfessionalFormSchema = z.object({
       path: ["startTime"], 
     })
   ).optional().nullable(),
-}).refine(data => {
-  if (data.rotationType === 'biWeeklySunday') {
-    if (!data.rotationStartDate) {
-      return false; 
-    }
-    if (getDay(data.rotationStartDate) !== 0) {
-      return false; 
-    }
-    if (data.compensatoryDayOffChoice === null || data.compensatoryDayOffChoice === COMPENSATORY_DAY_OFF_PLACEHOLDER_VALUE) { // After transform, null means it was placeholder
-        return false; 
-    }
-  }
-  return true;
-}, {
-  message: "Para rotación bi-semanal de domingo, se requiere una fecha de inicio (que sea domingo) y un día de compensación (Lunes-Jueves).",
-  path: ["rotationStartDate"], 
 });
 export type ProfessionalFormData = z.infer<typeof ProfessionalFormSchema>;
 

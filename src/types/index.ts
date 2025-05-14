@@ -23,10 +23,6 @@ export interface Professional extends BaseEntity {
     [key in DayOfWeekId]?: { startTime: string; endTime: string; isWorking?: boolean; } | null;
   };
 
-  rotationType: 'none' | 'biWeeklySunday';
-  rotationStartDate: string | null; 
-  compensatoryDayOffChoice: DayOfWeekId | null; 
-
   customScheduleOverrides?: Array<{
     id: string;
     date: string; 
@@ -108,10 +104,6 @@ export type ProfessionalFormData = {
     [key in Exclude<DayOfWeekId, 'sunday'>]?: { startTime?: string; endTime?: string; isWorking?: boolean };
   };
   
-  rotationType: 'none' | 'biWeeklySunday';
-  rotationStartDate?: Date | null; 
-  compensatoryDayOffChoice?: DayOfWeekId | null;
-  
   customScheduleOverrides?: Array<{
     id: string;
     date: Date;
@@ -133,3 +125,4 @@ export type ServiceFormData = {
   };
   price?: number;
 };
+

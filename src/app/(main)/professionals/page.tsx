@@ -1,3 +1,4 @@
+
 "use client";
 
 import type { Professional, ProfessionalFormData } from '@/types';
@@ -45,7 +46,6 @@ import { es } from 'date-fns/locale';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 
 
-const COMPENSATORY_DAY_OFF_PLACEHOLDER_VALUE = "--none--";
 const PROFESSIONALS_PER_PAGE = 5;
 
 export default function ProfessionalsPage() {
@@ -79,15 +79,10 @@ export default function ProfessionalsPage() {
       locationId: LOCATIONS[0].id,
       phone: '',
       workSchedule: defaultBaseWorkSchedule,
-      rotationType: 'none',
-      rotationStartDate: null,
-      compensatoryDayOffChoice: COMPENSATORY_DAY_OFF_PLACEHOLDER_VALUE as any, 
       customScheduleOverrides: [],
     }
   });
   
-  const watchRotationType = form.watch("rotationType");
-
   const { fields: customScheduleFields, append: appendCustomSchedule, remove: removeCustomSchedule } = useFieldArray({
     control: form.control,
     name: "customScheduleOverrides"
@@ -164,9 +159,6 @@ export default function ProfessionalsPage() {
       locationId: defaultLoc as LocationId,
       phone: '',
       workSchedule: defaultBaseWorkSchedule,
-      rotationType: 'none',
-      rotationStartDate: null,
-      compensatoryDayOffChoice: COMPENSATORY_DAY_OFF_PLACEHOLDER_VALUE as any,
       customScheduleOverrides: [],
     });
     setIsFormOpen(true);
@@ -195,9 +187,6 @@ export default function ProfessionalsPage() {
         locationId: professional.locationId as LocationId, 
         phone: professional.phone || '',
         workSchedule: formWorkSchedule,
-        rotationType: professional.rotationType || 'none',
-        rotationStartDate: professional.rotationStartDate ? parseISO(professional.rotationStartDate) : null,
-        compensatoryDayOffChoice: professional.compensatoryDayOffChoice || (COMPENSATORY_DAY_OFF_PLACEHOLDER_VALUE as any),
         customScheduleOverrides: professional.customScheduleOverrides?.map(ov => ({
             id: ov.id || generateId(), 
             date: parseISO(ov.date),
@@ -226,9 +215,6 @@ export default function ProfessionalsPage() {
         locationId: data.locationId,
         phone: data.phone || undefined,
         workSchedule: {},
-        rotationType: data.rotationType,
-        rotationStartDate: data.rotationStartDate ? dateFnsFormatISO(data.rotationStartDate, { representation: 'date'}) : null,
-        compensatoryDayOffChoice: data.compensatoryDayOffChoice === COMPENSATORY_DAY_OFF_PLACEHOLDER_VALUE ? null : (data.compensatoryDayOffChoice || null),
         customScheduleOverrides: data.customScheduleOverrides?.map(ov => ({
             id: ov.id || generateId(),
             date: dateFnsFormatISO(ov.date, { representation: 'date' }),
@@ -252,6 +238,7 @@ export default function ProfessionalsPage() {
             professionalToSave.workSchedule[dayId] = {startTime: '00:00', endTime: '00:00', isWorking: false};
           }
         });
+        // Ensure Sunday is explicitly set to non-working as it's not in the form for base schedule
         if (!professionalToSave.workSchedule.sunday) {
           professionalToSave.workSchedule.sunday = { startTime: '00:00', endTime: '00:00', isWorking: false };
         }
@@ -334,20 +321,6 @@ export default function ProfessionalsPage() {
     const override = prof.customScheduleOverrides?.find(ov => isSameDay(parseISO(ov.date), today) && !ov.isWorking);
     if (override) {
       reason = `Anulación${override.notes ? ` (${override.notes})` : ''}`;
-    } else if (prof.rotationType === 'biWeeklySunday' && prof.rotationStartDate && prof.compensatoryDayOffChoice) {
-      const rotationAnchorDate = parseISO(prof.rotationStartDate);
-      const daysDiff = differenceInDays(startOfDay(today), startOfDay(rotationAnchorDate));
-      if (daysDiff >= 0) {
-        const weekNumberInCycle = Math.floor(daysDiff / 7) % 2; // 0 for work Sunday week, 1 for compensatory week
-        const targetDayId = DAYS_OF_WEEK[getDay(today)].id;
-        if (weekNumberInCycle === 1) { // Compensatory week
-          if (targetDayId === prof.compensatoryDayOffChoice && (getDay(today) >= 1 && getDay(today) <= 4)) { // Mon-Thu
-            reason = `Desc. Compensatorio (${DAYS_OF_WEEK.find(d => d.id === prof.compensatoryDayOffChoice)?.name})`;
-          } else if (getDay(today) === 0) { // Sunday of compensatory week
-             reason = "Domingo (Rotación Desc.)";
-          }
-        }
-      }
     } else if (prof.workSchedule && !prof.workSchedule[DAYS_OF_WEEK[getDay(today)].id as DayOfWeekId]?.isWorking && !override) {
         reason = `Descansando (Horario base: ${DAYS_OF_WEEK[getDay(today)].name} libre)`;
     }
@@ -496,7 +469,7 @@ export default function ProfessionalsPage() {
                 <AccordionItem value="base-schedule">
                   <AccordionTrigger className="text-lg font-semibold">Horario Semanal Base (Lunes a Sábado)</AccordionTrigger>
                   <AccordionContent className="space-y-4 pt-2">
-                      {DAYS_OF_WEEK.filter(day => day.id !== 'sunday').map((day) => {
+                      {DAYS_OF_WEEK.filter(day => day.id !== 'sunday').map((day) => { // Exclude Sunday from base schedule form
                           const dayId = day.id as Exclude<DayOfWeekId, 'sunday'>;
                           return (
                               <div key={dayId} className="p-3 border rounded-md bg-muted/30">
@@ -548,84 +521,8 @@ export default function ProfessionalsPage() {
                       })}
                   </AccordionContent>
                 </AccordionItem>
-
-                <AccordionItem value="sunday-rotation">
-                  <AccordionTrigger className="text-lg font-semibold">Rotación de Domingo y Horario Compensatorio</AccordionTrigger>
-                  <AccordionContent className="space-y-4 pt-2">
-                    <FormField
-                        control={form.control}
-                        name="rotationType"
-                        render={({ field }) => (
-                            <FormItem>
-                                <FormLabel>Tipo de Rotación de Domingo</FormLabel>
-                                <Select onValueChange={field.onChange} value={field.value}>
-                                    <FormControl><SelectTrigger><SelectValue placeholder="Seleccionar tipo de rotación" /></SelectTrigger></FormControl>
-                                    <SelectContent>
-                                        <SelectItem value="none">Ninguna (Domingo según horario base o libre)</SelectItem>
-                                        <SelectItem value="biWeeklySunday">Domingo Bi-Semananal (con compensatorio)</SelectItem>
-                                    </SelectContent>
-                                </Select>
-                                <FormMessage />
-                            </FormItem>
-                        )}
-                    />
-                    {watchRotationType === 'biWeeklySunday' && (
-                        <div className="space-y-4 mt-4 pl-4 border-l-2 border-primary">
-                            <p className="text-sm text-muted-foreground">
-                                El profesional trabajará un domingo sí y uno no (10:00 AM - 06:00 PM), con un día de descanso compensatorio la semana siguiente al domingo trabajado.
-                            </p>
-                            <FormField
-                                control={form.control}
-                                name="rotationStartDate"
-                                render={({ field }) => (
-                                    <FormItem className="flex flex-col">
-                                        <FormLabel>Fecha de Inicio de Rotación (Primer Domingo que trabaja)</FormLabel>
-                                        <Popover>
-                                            <PopoverTrigger asChild>
-                                                <FormControl>
-                                                    <Button variant={"outline"} className={cn("w-full pl-3 text-left font-normal", !field.value && "text-muted-foreground")}>
-                                                        {field.value ? format(field.value, "PPP", {locale: es}) : <span>Seleccionar fecha</span>}
-                                                        <CalendarIconLucide className="ml-auto h-4 w-4 opacity-50" />
-                                                    </Button>
-                                                </FormControl>
-                                            </PopoverTrigger>
-                                            <PopoverContent className="w-auto p-0" align="start">
-                                                <Calendar
-                                                    mode="single"
-                                                    selected={field.value}
-                                                    onSelect={field.onChange}
-                                                    disabled={(date) => getDay(date) !== 0} 
-                                                    initialFocus
-                                                />
-                                            </PopoverContent>
-                                        </Popover>
-                                        <FormMessage />
-                                    </FormItem>
-                                )}
-                            />
-                            <FormField
-                                control={form.control}
-                                name="compensatoryDayOffChoice"
-                                render={({ field }) => (
-                                    <FormItem>
-                                        <FormLabel>Día de Descanso Compensatorio (Semana SIGUIENTE al Domingo trabajado)</FormLabel>
-                                        <Select onValueChange={field.onChange} value={field.value === null ? COMPENSATORY_DAY_OFF_PLACEHOLDER_VALUE : field.value || COMPENSATORY_DAY_OFF_PLACEHOLDER_VALUE}>
-                                            <FormControl><SelectTrigger><SelectValue placeholder="Seleccionar día de compensación" /></SelectTrigger></FormControl>
-                                            <SelectContent>
-                                                <SelectItem value={COMPENSATORY_DAY_OFF_PLACEHOLDER_VALUE}>Seleccionar día...</SelectItem>
-                                                {DAYS_OF_WEEK.filter(d => ['monday', 'tuesday', 'wednesday', 'thursday'].includes(d.id)).map(day => (
-                                                    <SelectItem key={day.id} value={day.id}>{day.name}</SelectItem>
-                                                ))}
-                                            </SelectContent>
-                                        </Select>
-                                        <FormMessage />
-                                    </FormItem>
-                                )}
-                            />
-                        </div>
-                    )}
-                  </AccordionContent>
-                </AccordionItem>
+                
+                {/* Sunday rotation and compensatory day off section removed */}
 
                 <AccordionItem value="custom-overrides">
                   <AccordionTrigger className="text-lg font-semibold">Anulaciones de Horario / Horarios Específicos (Opcional)</AccordionTrigger>
