@@ -1,4 +1,3 @@
-
 "use client";
 
 import Link from 'next/link';
@@ -20,7 +19,8 @@ import {
   CalendarClock,
   Landmark, 
   ClipboardList, 
-  FileText, // Added for Registry
+  FileText,
+  FileSpreadsheet, // Added for Contratos
 } from 'lucide-react';
 import { USER_ROLES } from '@/lib/constants';
 
@@ -32,6 +32,7 @@ const navItems = [
   { href: '/patients', label: 'Pacientes', icon: Users, roles: [USER_ROLES.ADMIN, USER_ROLES.LOCATION_STAFF, USER_ROLES.CONTADOR] },
   { href: '/registry', label: 'Registro Diario', icon: FileText, roles: [USER_ROLES.ADMIN, USER_ROLES.LOCATION_STAFF, USER_ROLES.CONTADOR] },
   { href: '/professionals', label: 'Profesionales', icon: Briefcase, roles: [USER_ROLES.ADMIN, USER_ROLES.CONTADOR] },
+  { href: '/contracts', label: 'Contratos', icon: FileSpreadsheet, roles: [USER_ROLES.ADMIN, USER_ROLES.CONTADOR] },
   { href: '/services', label: 'Servicios', icon: ClipboardList, roles: [USER_ROLES.ADMIN] }, 
   { href: '/finances', label: 'Finanzas', icon: Landmark, roles: [USER_ROLES.CONTADOR] },
 ];
@@ -82,18 +83,7 @@ export function AppSidebar() {
                 finalIsActive = false;
               }
               
-              // For specific routes that might have sub-routes but should only be active for their specific page or direct children
-              // Example: /appointments, /schedule, /finances, /services, /registry
-              // The general startsWith check handles common cases like /patients/ID.
-              // If a route needs to be active ONLY for its exact path, use: `pathname === href`
-              // If it also needs to be active for children, current `finalIsActive` logic is generally good.
-
-              // The current logic: if /appointments is active, and user navigates to /appointments/new, it stays active.
-              // If user navigates to /dashboard, /appointments should not be active.
-              // The condition `href !== '/dashboard'` in `pathname.startsWith(href)` check helps avoid /dashboard being active for all other /d... routes.
-              
-              // Refined logic for specific non-parent-like routes:
-              const specificExactMatchRoutes = ['/appointments', '/schedule', '/finances', '/services', '/registry'];
+              const specificExactMatchRoutes = ['/appointments', '/schedule', '/finances', '/services', '/registry', '/contracts'];
               if (specificExactMatchRoutes.includes(href)) {
                 finalIsActive = pathname === href || pathname.startsWith(`${href}/`);
               }
@@ -123,4 +113,3 @@ export function AppSidebar() {
     </>
   );
 }
-

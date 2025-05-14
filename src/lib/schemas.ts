@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import { LOCATIONS, TIME_SLOTS, PAYMENT_METHODS, APPOINTMENT_STATUS_DISPLAY, DAYS_OF_WEEK } from './constants';
 import type { DayOfWeekId } from './constants';
-import { getDay } from 'date-fns';
+import { getDay, differenceInCalendarDays } from 'date-fns';
 
 export const LoginSchema = z.object({
   username: z.string().min(1, { message: 'El nombre de usuario es requerido.' }),
@@ -68,7 +68,7 @@ export const ProfessionalFormSchema = z.object({
   phone: z.string().optional().nullable(),
 
   workSchedule: z.object(
-    DAYS_OF_WEEK.reduce((acc, day) => { // Base schedule for all days including Sunday
+    DAYS_OF_WEEK.reduce((acc, day) => { 
         acc[day.id as DayOfWeekId] = DayScheduleSchema.optional();
         return acc;
       }, {} as Record<DayOfWeekId, z.ZodOptional<typeof DayScheduleSchema>>)
@@ -92,6 +92,18 @@ export const ProfessionalFormSchema = z.object({
       path: ["startTime"], 
     })
   ).optional().nullable(),
+
+  currentContract_startDate: z.date().optional().nullable(),
+  currentContract_endDate: z.date().optional().nullable(),
+  currentContract_notes: z.string().max(100, "Notas del contrato no deben exceder 100 caracteres.").optional().nullable(),
+}).refine(data => {
+  if (data.currentContract_startDate && data.currentContract_endDate) {
+    return data.currentContract_endDate >= data.currentContract_startDate;
+  }
+  return true;
+}, {
+  message: "La fecha de fin del contrato debe ser igual o posterior a la fecha de inicio.",
+  path: ["currentContract_endDate"],
 });
 export type ProfessionalFormData = z.infer<typeof ProfessionalFormSchema>;
 
@@ -128,4 +140,3 @@ export const ServiceFormSchema = z.object({
   price: z.coerce.number().positive("El precio debe ser un número positivo.").optional().nullable(),
 });
 export type ServiceFormData = z.infer<typeof ServiceFormSchema>;
-

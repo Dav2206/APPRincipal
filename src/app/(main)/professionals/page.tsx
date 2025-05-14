@@ -1,11 +1,11 @@
-
 "use client";
 
-import type { Professional, ProfessionalFormData } from '@/types';
+import type { Professional, ProfessionalFormData, Contract } from '@/types';
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useAuth } from '@/contexts/auth-provider';
 import { useAppState } from '@/contexts/app-state-provider';
 import { getProfessionals, addProfessional, updateProfessional, getProfessionalAvailabilityForDate } from '@/lib/data';
+import type { ContractDisplayStatus } from '@/lib/data';
 import { LOCATIONS, USER_ROLES, LocationId, TIME_SLOTS, DAYS_OF_WEEK } from '@/lib/constants';
 import type { DayOfWeekId } from '@/lib/constants';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -32,7 +32,7 @@ import {
   DialogDescription,
 } from '@/components/ui/dialog';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
-import { PlusCircle, Edit2, Briefcase, Search, Loader2, CalendarDays, Clock, Trash2, Calendar as CalendarIconLucide, AlertTriangle, Users, Moon, ChevronsDown } from 'lucide-react';
+import { PlusCircle, Edit2, Briefcase, Search, Loader2, CalendarDays, Clock, Trash2, Calendar as CalendarIconLucide, AlertTriangle, Users, Moon, ChevronsDown, FileText } from 'lucide-react';
 import { useForm, useFieldArray, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { ProfessionalFormSchema } from '@/lib/schemas';
@@ -52,13 +52,13 @@ export default function ProfessionalsPage() {
   const { user } = useAuth();
   const { toast } = useToast();
   const { selectedLocationId: adminSelectedLocation } = useAppState();
-  const [allProfessionals, setAllProfessionals] = useState<Professional[]>([]);
-  const [displayedProfessionals, setDisplayedProfessionals] = useState<Professional[]>([]);
+  const [allProfessionals, setAllProfessionals] = useState<(Professional & { contractDisplayStatus: ContractDisplayStatus })[]>([]);
+  const [displayedProfessionals, setDisplayedProfessionals] = useState<(Professional & { contractDisplayStatus: ContractDisplayStatus })[]>([]);
   const [currentPage, setCurrentPage] = useState(1);
 
   const [isLoading, setIsLoading] = useState(true);
   const [isFormOpen, setIsFormOpen] = useState(false);
-  const [editingProfessional, setEditingProfessional] = useState<Professional | null>(null);
+  const [editingProfessional, setEditingProfessional] = useState<(Professional & { contractDisplayStatus: ContractDisplayStatus }) | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
 
   const defaultBaseWorkSchedule: ProfessionalFormData['workSchedule'] = {
@@ -68,7 +68,7 @@ export default function ProfessionalsPage() {
     thursday: { isWorking: true, startTime: '10:00', endTime: '19:00' },
     friday: { isWorking: true, startTime: '10:00', endTime: '19:00' },
     saturday: { isWorking: true, startTime: '09:00', endTime: '18:00' },
-    sunday: { isWorking: false, startTime: '10:00', endTime: '18:00' }, 
+    sunday: { isWorking: true, startTime: '10:00', endTime: '18:00' }, 
   };
 
 
@@ -81,6 +81,9 @@ export default function ProfessionalsPage() {
       phone: '',
       workSchedule: defaultBaseWorkSchedule,
       customScheduleOverrides: [],
+      currentContract_startDate: null,
+      currentContract_endDate: null,
+      currentContract_notes: '',
     }
   });
   
@@ -104,7 +107,7 @@ export default function ProfessionalsPage() {
     }
     setIsLoading(true);
     try {
-      let profsToSet: Professional[] = [];
+      let profsToSet: (Professional & { contractDisplayStatus: ContractDisplayStatus })[] = [];
       if (isAdminOrContador) {
         if (effectiveLocationId) {
           profsToSet = await getProfessionals(effectiveLocationId);
@@ -161,11 +164,14 @@ export default function ProfessionalsPage() {
       phone: '',
       workSchedule: defaultBaseWorkSchedule,
       customScheduleOverrides: [],
+      currentContract_startDate: null,
+      currentContract_endDate: null,
+      currentContract_notes: '',
     });
     setIsFormOpen(true);
   };
 
-  const handleEditProfessional = (professional: Professional) => {
+  const handleEditProfessional = (professional: Professional & { contractDisplayStatus: ContractDisplayStatus }) => {
      if (user?.role !== USER_ROLES.ADMIN && user?.role !== USER_ROLES.CONTADOR) {
         toast({ title: "Acción no permitida", description: "Solo administradores o contadores pueden editar profesionales.", variant: "destructive" });
         return;
@@ -196,6 +202,9 @@ export default function ProfessionalsPage() {
             endTime: ov.endTime || undefined,
             notes: ov.notes || undefined,
         })) || [],
+        currentContract_startDate: professional.currentContract?.startDate ? parseISO(professional.currentContract.startDate) : null,
+        currentContract_endDate: professional.currentContract?.endDate ? parseISO(professional.currentContract.endDate) : null,
+        currentContract_notes: professional.currentContract?.notes || '',
     });
     setIsFormOpen(true);
   };
@@ -209,6 +218,16 @@ export default function ProfessionalsPage() {
         return;
     }
     try {
+      
+      let currentContract: Contract | null = null;
+      if (data.currentContract_startDate && data.currentContract_endDate) {
+        currentContract = {
+          startDate: dateFnsFormatISO(data.currentContract_startDate, { representation: 'date' }),
+          endDate: dateFnsFormatISO(data.currentContract_endDate, { representation: 'date' }),
+          notes: data.currentContract_notes || undefined,
+        };
+      }
+
       const professionalToSave: Omit<Professional, 'id' | 'biWeeklyEarnings'> & {id?: string} = {
         id: data.id,
         firstName: data.firstName,
@@ -224,6 +243,8 @@ export default function ProfessionalsPage() {
             endTime: ov.isWorking ? ov.endTime : undefined,
             notes: ov.notes,
         })) || [],
+        currentContract: currentContract,
+        contractHistory: editingProfessional?.contractHistory || [], // Preserve existing history
       };
 
       if (data.workSchedule) {
@@ -240,7 +261,6 @@ export default function ProfessionalsPage() {
           }
         });
       }
-
 
       const result = editingProfessional && editingProfessional.id 
         ? await updateProfessional(editingProfessional.id, professionalToSave as Partial<ProfessionalFormData>)
@@ -306,7 +326,7 @@ export default function ProfessionalsPage() {
 
 
  const formatWorkScheduleDisplay = (prof: Professional) => {
-  const today = startOfDay(new Date()); 
+  const today = startOfDay(todayMock); 
   const availabilityToday = getProfessionalAvailabilityForDate(prof, today);
 
   let todayStr = "Hoy: ";
@@ -343,7 +363,7 @@ export default function ProfessionalsPage() {
         <CardHeader className="flex flex-col md:flex-row justify-between items-center">
           <div>
             <CardTitle className="text-2xl flex items-center gap-2"><Users className="text-primary"/> Gestión de Profesionales</CardTitle>
-            <CardDescription>Ver, agregar o editar información y horarios de los profesionales.</CardDescription>
+            <CardDescription>Ver, agregar o editar información, horarios y contratos de los profesionales.</CardDescription>
             {isAdminOrContador && (
               <div className="mt-1 text-sm text-muted-foreground">
                 Viendo: {adminSelectedLocation === 'all' ? 'Todas las sedes' : LOCATIONS.find(l => l.id === adminSelectedLocation)?.name || ''}
@@ -382,6 +402,8 @@ export default function ProfessionalsPage() {
                       <TableHead className="hidden md:table-cell">Sede</TableHead>
                       <TableHead className="hidden lg:table-cell">Horario (Hoy) y Próximo Descanso</TableHead>
                       <TableHead className="hidden xl:table-cell">Teléfono</TableHead>
+                      <TableHead className="hidden md:table-cell">Estado Contrato</TableHead>
+                      <TableHead className="hidden md:table-cell">Fin Contrato</TableHead>
                       {isAdminOrContador && <TableHead className="hidden xl:table-cell text-right">Ingresos Quincena (S/)</TableHead> }
                       <TableHead className="text-right">Acciones</TableHead>
                     </TableRow>
@@ -393,6 +415,20 @@ export default function ProfessionalsPage() {
                         <TableCell className="hidden md:table-cell">{LOCATIONS.find(l => l.id === prof.locationId)?.name}</TableCell>
                         <TableCell className="hidden lg:table-cell text-xs">{formatWorkScheduleDisplay(prof)}</TableCell>
                         <TableCell className="hidden xl:table-cell">{prof.phone || 'N/A'}</TableCell>
+                        <TableCell className="hidden md:table-cell text-xs">
+                          <span className={cn(
+                            prof.contractDisplayStatus === 'Activo' && 'text-green-600',
+                            prof.contractDisplayStatus === 'Próximo a Vencer' && 'text-orange-500',
+                            prof.contractDisplayStatus === 'Vencido' && 'text-red-600',
+                            prof.contractDisplayStatus === 'Sin Contrato' && 'text-muted-foreground',
+                          )}>
+                            {prof.contractDisplayStatus === 'Próximo a Vencer' || prof.contractDisplayStatus === 'Vencido' ? <AlertTriangle className="inline-block mr-1 h-3 w-3" /> : null}
+                            {prof.contractDisplayStatus}
+                          </span>
+                        </TableCell>
+                        <TableCell className="hidden md:table-cell text-xs">
+                          {prof.currentContract?.endDate ? format(parseISO(prof.currentContract.endDate), 'dd/MM/yyyy') : 'N/A'}
+                        </TableCell>
                         {(isAdminOrContador && !isContadorOnly) && <TableCell className="hidden xl:table-cell text-right">{(prof.biWeeklyEarnings ?? 0).toFixed(2)}</TableCell> }
                         {isContadorOnly && <TableCell className="hidden xl:table-cell text-right">{(prof.biWeeklyEarnings ?? 0).toFixed(2)}</TableCell> }
                         <TableCell className="text-right">
@@ -405,7 +441,7 @@ export default function ProfessionalsPage() {
                       </TableRow>
                     )) : (
                       <TableRow>
-                        <TableCell colSpan={(isAdminOrContador && !isContadorOnly) ? 6 : (isContadorOnly ? 6 : 5)} className="h-24 text-center"> 
+                        <TableCell colSpan={(isAdminOrContador && !isContadorOnly) ? 8 : (isContadorOnly ? 8 : 7)} className="h-24 text-center"> 
                           <AlertTriangle className="inline-block mr-2 h-5 w-5 text-muted-foreground" /> No se encontraron profesionales.
                         </TableCell>
                       </TableRow>
@@ -430,14 +466,14 @@ export default function ProfessionalsPage() {
           <DialogHeader>
             <DialogTitle>{editingProfessional ? 'Editar' : 'Agregar'} Profesional</DialogTitle>
             <DialogDescription>
-                {editingProfessional ? 'Modifique la información y horarios del profesional.' : 'Complete la información para el nuevo profesional.'}
+                {editingProfessional ? 'Modifique la información, horarios y contrato del profesional.' : 'Complete la información para el nuevo profesional.'}
             </DialogDescription>
           </DialogHeader>
           <Form {...form}>
             <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-1 py-4 max-h-[80vh] overflow-y-auto pr-2">
               {editingProfessional && <input type="hidden" {...form.register("id")} />}
               
-              <Accordion type="multiple" defaultValue={['personal-info', 'base-schedule']} className="w-full">
+              <Accordion type="multiple" defaultValue={['personal-info', 'base-schedule', 'contract-info']} className="w-full">
                 <AccordionItem value="personal-info">
                   <AccordionTrigger className="text-lg font-semibold">Información Personal</AccordionTrigger>
                   <AccordionContent className="space-y-4 pt-2">
@@ -568,6 +604,59 @@ export default function ProfessionalsPage() {
                     </Button>
                   </AccordionContent>
                 </AccordionItem>
+
+                <AccordionItem value="contract-info">
+                    <AccordionTrigger className="text-lg font-semibold">Información del Contrato</AccordionTrigger>
+                    <AccordionContent className="space-y-4 pt-2">
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <FormField control={form.control} name="currentContract_startDate" render={({ field }) => (
+                                <FormItem className="flex flex-col">
+                                    <FormLabel>Fecha Inicio Contrato</FormLabel>
+                                    <Popover>
+                                        <PopoverTrigger asChild>
+                                            <FormControl>
+                                                <Button variant={"outline"} className={cn("w-full pl-3 text-left font-normal", !field.value && "text-muted-foreground")}>
+                                                    {field.value ? format(field.value, "PPP", {locale: es}) : <span>Seleccionar fecha</span>}
+                                                    <CalendarIconLucide className="ml-auto h-4 w-4 opacity-50" />
+                                                </Button>
+                                            </FormControl>
+                                        </PopoverTrigger>
+                                        <PopoverContent className="w-auto p-0" align="start">
+                                            <Calendar mode="single" selected={field.value} onSelect={field.onChange} initialFocus />
+                                        </PopoverContent>
+                                    </Popover>
+                                    <FormMessage />
+                                </FormItem>
+                            )}/>
+                            <FormField control={form.control} name="currentContract_endDate" render={({ field }) => (
+                                <FormItem className="flex flex-col">
+                                    <FormLabel>Fecha Fin Contrato</FormLabel>
+                                    <Popover>
+                                        <PopoverTrigger asChild>
+                                            <FormControl>
+                                                <Button variant={"outline"} className={cn("w-full pl-3 text-left font-normal", !field.value && "text-muted-foreground")}>
+                                                    {field.value ? format(field.value, "PPP", {locale: es}) : <span>Seleccionar fecha</span>}
+                                                    <CalendarIconLucide className="ml-auto h-4 w-4 opacity-50" />
+                                                </Button>
+                                            </FormControl>
+                                        </PopoverTrigger>
+                                        <PopoverContent className="w-auto p-0" align="start">
+                                            <Calendar mode="single" selected={field.value} onSelect={field.onChange} disabled={(date) => form.getValues("currentContract_startDate") ? date < form.getValues("currentContract_startDate")! : false} initialFocus />
+                                        </PopoverContent>
+                                    </Popover>
+                                    <FormMessage />
+                                </FormItem>
+                            )}/>
+                        </div>
+                        <FormField control={form.control} name="currentContract_notes" render={({ field }) => (
+                            <FormItem>
+                                <FormLabel>Notas del Contrato (Opcional)</FormLabel>
+                                <FormControl><Textarea placeholder="Ej: Renovación, Contrato temporal, etc." {...field} value={field.value || ''}/></FormControl>
+                                <FormMessage />
+                            </FormItem>
+                        )}/>
+                    </AccordionContent>
+                </AccordionItem>
               </Accordion>
 
               <DialogFooter className="pt-6">
@@ -581,4 +670,3 @@ export default function ProfessionalsPage() {
     </div>
   );
 }
-

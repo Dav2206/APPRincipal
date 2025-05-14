@@ -1,9 +1,8 @@
-
 // src/lib/data.ts
-import type { User, Professional, Patient, Service, Appointment, AppointmentFormData, ProfessionalFormData, AppointmentStatus, ServiceFormData } from '@/types';
+import type { User, Professional, Patient, Service, Appointment, AppointmentFormData, ProfessionalFormData, AppointmentStatus, ServiceFormData, Contract } from '@/types';
 import { LOCATIONS, USER_ROLES, SERVICES as SERVICES_CONSTANTS, APPOINTMENT_STATUS, LocationId, ServiceId as ConstantServiceId, APPOINTMENT_STATUS_DISPLAY, PAYMENT_METHODS, TIME_SLOTS, DAYS_OF_WEEK } from './constants';
 import type { DayOfWeekId } from './constants';
-import { formatISO, parseISO, addDays, setHours, setMinutes, startOfDay, endOfDay, isSameDay as dateFnsIsSameDay, startOfMonth, endOfMonth, differenceInYears, subDays, isEqual, isBefore, isAfter, getDate, getYear, getMonth, setMonth, setYear, getHours, addMinutes as dateFnsAddMinutes, isWithinInterval, getDay, format, differenceInDays, areIntervalsOverlapping, parse } from 'date-fns';
+import { formatISO, parseISO, addDays, setHours, setMinutes, startOfDay, endOfDay, isSameDay as dateFnsIsSameDay, startOfMonth, endOfMonth, differenceInYears, subDays, isEqual, isBefore, isAfter, getDate, getYear, getMonth, setMonth, setYear, getHours, addMinutes as dateFnsAddMinutes, isWithinInterval, getDay, format, differenceInCalendarDays, areIntervalsOverlapping, parse } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { useMockDatabase as globalUseMockDatabase } from './firebase-config'; // Centralized mock flag
 
@@ -48,11 +47,23 @@ const initialMockProfessionalsData: Professional[] = LOCATIONS.flatMap((location
       thursday: { startTime: '10:00', endTime: '19:00', isWorking: true },
       friday: { startTime: '10:00', endTime: '19:00', isWorking: true },
       saturday: { startTime: '09:00', endTime: '18:00', isWorking: true },
-      sunday: { isWorking: false, startTime: '10:00', endTime: '18:00' }, 
+      sunday: { isWorking: true, startTime: '10:00', endTime: '18:00' },
     };
     
     const isSecondProfHiguereta = location.id === 'higuereta' && i === 1;
     const isThirdProfHiguereta = location.id === 'higuereta' && i === 2;
+
+    let currentContract: Contract | null = null;
+    if (i % 2 === 0) { // Every other professional gets an active contract
+        const contractStartDate = subDays(new Date(2025, 4, 13), 90); // 3 months ago
+        const contractEndDate = addDays(new Date(2025, 4, 13), (i % 3 === 0) ? 10 : ( (i % 3 === 1) ? 45 : 90) ); // expires in 10, 45 or 90 days
+        currentContract = {
+            startDate: formatISO(contractStartDate, { representation: 'date' }),
+            endDate: formatISO(contractEndDate, { representation: 'date' }),
+            notes: `Contrato estándar ${i + 1}`
+        };
+    }
+
 
     return {
       id: `prof-${location.id}-${i + 1}`,
@@ -68,6 +79,12 @@ const initialMockProfessionalsData: Professional[] = LOCATIONS.flatMap((location
       ] : isThirdProfHiguereta ? [
         { id: generateId(), date: formatISO(new Date(2025, 4, 14), { representation: 'date' }), isWorking: false, notes: 'Descanso programado' } 
       ] : [],
+      currentContract: currentContract,
+      contractHistory: currentContract && i % 4 === 0 ? [{ // Some professionals get a past contract
+        startDate: formatISO(subDays(new Date(2025, 4, 13), 180), { representation: 'date' }),
+        endDate: formatISO(subDays(new Date(2025, 4, 13), 91), { representation: 'date' }),
+        notes: 'Contrato anterior'
+      }] : [],
     };
   });
 });
@@ -169,13 +186,33 @@ export const getUserByUsername = async (username: string): Promise<User | undefi
     throw new Error("User retrieval not implemented for non-mock database or mockDB not available.");
 };
 
-export const getProfessionals = async (locationId?: LocationId): Promise<Professional[]> => {
+export type ContractDisplayStatus = 'Activo' | 'Próximo a Vencer' | 'Vencido' | 'Sin Contrato';
+
+const getContractDisplayStatus = (contract: Contract | null | undefined): ContractDisplayStatus => {
+    if (!contract || !contract.endDate) {
+        return 'Sin Contrato';
+    }
+    const today = startOfDay(todayMock); // Use consistent mock date
+    const endDate = parseISO(contract.endDate);
+
+    if (isBefore(endDate, today)) {
+        return 'Vencido';
+    }
+    const daysUntilExpiry = differenceInCalendarDays(endDate, today);
+    if (daysUntilExpiry <= 15) {
+        return 'Próximo a Vencer';
+    }
+    return 'Activo';
+};
+
+
+export const getProfessionals = async (locationId?: LocationId): Promise<(Professional & { contractDisplayStatus: ContractDisplayStatus })[]> => {
     if (useMockDatabase) {
         let professionalsResult = locationId
             ? mockDB.professionals.filter(p => p.locationId === locationId)
-            : [...mockDB.professionals]; 
+            : [...mockDB.professionals];
 
-        const today = todayMock; 
+        const today = todayMock;
         const currentYear = getYear(today);
         const currentMonth = getMonth(today);
         const currentDay = getDate(today);
@@ -197,26 +234,43 @@ export const getProfessionals = async (locationId?: LocationId): Promise<Profess
                    (locationId ? appt.locationId === locationId : true); 
         });
 
-        professionalsResult = professionalsResult.map(prof => {
+        const professionalsWithStatus = professionalsResult.map(prof => {
             const profAppointments = appointmentsForPeriod.filter(appt => appt.professionalId === prof.id);
             const earnings = profAppointments.reduce((sum, appt) => sum + (appt.amountPaid || 0), 0);
-            return { ...prof, biWeeklyEarnings: earnings };
+            return { 
+                ...prof, 
+                biWeeklyEarnings: earnings,
+                contractDisplayStatus: getContractDisplayStatus(prof.currentContract) 
+            };
         });
 
-        return professionalsResult;
+        return professionalsWithStatus;
     }
     throw new Error("Professional retrieval not implemented for non-mock database or mockDB not available.");
 };
 
 export const getProfessionalById = async (id: string): Promise<Professional | undefined> => {
     if (useMockDatabase) {
-        return mockDB.professionals.find(p => p.id === id);
+        const prof = mockDB.professionals.find(p => p.id === id);
+        if (prof) {
+            return { ...prof, contractDisplayStatus: getContractDisplayStatus(prof.currentContract) } as Professional & { contractDisplayStatus: ContractDisplayStatus};
+        }
+        return undefined;
     }
     throw new Error("Professional retrieval not implemented for non-mock database or mockDB not available.");
 };
 
 export const addProfessional = async (data: ProfessionalFormData): Promise<Professional> => {
   if (useMockDatabase) {
+    let currentContract: Contract | null = null;
+    if (data.currentContract_startDate && data.currentContract_endDate) {
+        currentContract = {
+            startDate: formatISO(data.currentContract_startDate, { representation: 'date' }),
+            endDate: formatISO(data.currentContract_endDate, { representation: 'date' }),
+            notes: data.currentContract_notes || undefined
+        };
+    }
+
     const professionalToSave: Omit<Professional, 'id' | 'biWeeklyEarnings'> = {
         firstName: data.firstName,
         lastName: data.lastName,
@@ -231,6 +285,8 @@ export const addProfessional = async (data: ProfessionalFormData): Promise<Profe
             endTime: ov.isWorking ? ov.endTime : undefined,
             notes: ov.notes,
         })) || [],
+        currentContract: currentContract,
+        contractHistory: [], // New professionals start with an empty history
     };
 
     if (data.workSchedule) {
@@ -269,12 +325,14 @@ export const updateProfessional = async (id: string, data: Partial<ProfessionalF
         const index = mockDB.professionals.findIndex(p => p.id === id);
         if (index !== -1) {
             const professionalToUpdate = { ...mockDB.professionals[index] };
-
+            
+            // Update basic fields
             if(data.firstName) professionalToUpdate.firstName = data.firstName;
             if(data.lastName) professionalToUpdate.lastName = data.lastName;
             if(data.locationId) professionalToUpdate.locationId = data.locationId;
             professionalToUpdate.phone = data.phone || undefined;
 
+            // Update work schedule
             if (data.workSchedule) {
                 professionalToUpdate.workSchedule = { ...professionalToUpdate.workSchedule };
                  (Object.keys(data.workSchedule) as Array<DayOfWeekId>).forEach(dayId => {
@@ -291,6 +349,7 @@ export const updateProfessional = async (id: string, data: Partial<ProfessionalF
                 });
             }
 
+            // Update custom schedule overrides
             if (data.customScheduleOverrides) {
                 professionalToUpdate.customScheduleOverrides = data.customScheduleOverrides.map(ov => ({
                     id: ov.id || generateId(),
@@ -301,6 +360,34 @@ export const updateProfessional = async (id: string, data: Partial<ProfessionalF
                     notes: ov.notes,
                 }));
             }
+
+            // Handle contract update
+            const oldContract = professionalToUpdate.currentContract;
+            let newCurrentContract: Contract | null = null;
+
+            if (data.currentContract_startDate && data.currentContract_endDate) {
+                newCurrentContract = {
+                    startDate: formatISO(data.currentContract_startDate, { representation: 'date' }),
+                    endDate: formatISO(data.currentContract_endDate, { representation: 'date' }),
+                    notes: data.currentContract_notes || undefined
+                };
+            } else if (data.hasOwnProperty('currentContract_startDate') || data.hasOwnProperty('currentContract_endDate')) {
+                // If one is provided but not the other, or if they are cleared, set currentContract to null
+                newCurrentContract = null;
+            } else {
+                 newCurrentContract = professionalToUpdate.currentContract; // Keep existing if no form fields touched it
+            }
+
+
+            // If new contract is different from old one, and old one existed, move old to history
+            if (oldContract && (JSON.stringify(oldContract) !== JSON.stringify(newCurrentContract))) {
+                 if (!professionalToUpdate.contractHistory) {
+                    professionalToUpdate.contractHistory = [];
+                }
+                professionalToUpdate.contractHistory.push(oldContract);
+            }
+            professionalToUpdate.currentContract = newCurrentContract;
+
 
             mockDB.professionals[index] = professionalToUpdate;
             return mockDB.professionals[index];
@@ -915,4 +1002,3 @@ export function getProfessionalAvailabilityForDate(
 
   return null; 
 }
-
