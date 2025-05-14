@@ -33,7 +33,7 @@ import {
   DialogDescription,
 } from '@/components/ui/dialog';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
-import { PlusCircle, Edit2, Briefcase, Search, Loader2, CalendarDays, Clock, Trash2, Calendar as CalendarIconLucide, AlertTriangle, Users, Moon, ChevronsDown, FileText } from 'lucide-react';
+import { PlusCircle, Edit2, Briefcase, Search, Loader2, CalendarDays, Clock, Trash2, Calendar as CalendarIconLucide, AlertTriangle, Users, Moon, ChevronsDown, FileText, Building } from 'lucide-react';
 import { useForm, useFieldArray, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { ProfessionalFormSchema } from '@/lib/schemas';
@@ -85,6 +85,7 @@ export default function ProfessionalsPage() {
       currentContract_startDate: null,
       currentContract_endDate: null,
       currentContract_notes: '',
+      currentContract_empresa: '',
     }
   });
   
@@ -96,7 +97,7 @@ export default function ProfessionalsPage() {
   const isAdminOrContador = user?.role === USER_ROLES.ADMIN || user?.role === USER_ROLES.CONTADOR;
   const isContadorOnly = user?.role === USER_ROLES.CONTADOR;
   const effectiveLocationId = isAdminOrContador
-    ? (adminSelectedLocation === 'all' ? undefined : adminSelectedLocation as LocationId) 
+    ? (adminSelectedLocation && adminSelectedLocation !== 'all' ? adminSelectedLocation : LOCATIONS[0].id)
     : user?.locationId;
 
 
@@ -168,6 +169,7 @@ export default function ProfessionalsPage() {
       currentContract_startDate: null,
       currentContract_endDate: null,
       currentContract_notes: '',
+      currentContract_empresa: '',
     });
     setIsFormOpen(true);
   };
@@ -206,6 +208,7 @@ export default function ProfessionalsPage() {
         currentContract_startDate: professional.currentContract?.startDate ? parseISO(professional.currentContract.startDate) : null,
         currentContract_endDate: professional.currentContract?.endDate ? parseISO(professional.currentContract.endDate) : null,
         currentContract_notes: professional.currentContract?.notes || '',
+        currentContract_empresa: professional.currentContract?.empresa || '',
     });
     setIsFormOpen(true);
   };
@@ -226,6 +229,7 @@ export default function ProfessionalsPage() {
           startDate: dateFnsFormatISO(data.currentContract_startDate, { representation: 'date' }),
           endDate: dateFnsFormatISO(data.currentContract_endDate, { representation: 'date' }),
           notes: data.currentContract_notes || undefined,
+          empresa: data.currentContract_empresa || undefined,
         };
       }
 
@@ -245,7 +249,7 @@ export default function ProfessionalsPage() {
             notes: ov.notes,
         })) || [],
         currentContract: currentContract,
-        contractHistory: editingProfessional?.contractHistory || [], // Preserve existing history
+        contractHistory: editingProfessional?.contractHistory || [],
       };
 
       if (data.workSchedule) {
@@ -327,7 +331,7 @@ export default function ProfessionalsPage() {
 
 
  const formatWorkScheduleDisplay = (prof: Professional) => {
-  const today = startOfDay(new Date()); // Use actual current date
+  const today = startOfDay(todayMock); 
   const availabilityToday = getProfessionalAvailabilityForDate(prof, today);
 
   let todayStr = "Hoy: ";
@@ -404,6 +408,7 @@ export default function ProfessionalsPage() {
                       <TableHead className="hidden lg:table-cell">Horario (Hoy) y Próximo Descanso</TableHead>
                       <TableHead className="hidden xl:table-cell">Teléfono</TableHead>
                       <TableHead className="hidden md:table-cell">Estado Contrato</TableHead>
+                       <TableHead className="hidden md:table-cell">Empresa</TableHead>
                       <TableHead className="hidden md:table-cell">Fin Contrato</TableHead>
                       {isAdminOrContador && <TableHead className="hidden xl:table-cell text-right">Ingresos Quincena (S/)</TableHead> }
                       <TableHead className="text-right">Acciones</TableHead>
@@ -427,6 +432,7 @@ export default function ProfessionalsPage() {
                             {prof.contractDisplayStatus}
                           </span>
                         </TableCell>
+                        <TableCell className="hidden md:table-cell text-xs">{prof.currentContract?.empresa || 'N/A'}</TableCell>
                         <TableCell className="hidden md:table-cell text-xs">
                           {prof.currentContract?.endDate ? format(parseISO(prof.currentContract.endDate), 'dd/MM/yyyy') : 'N/A'}
                         </TableCell>
@@ -442,7 +448,7 @@ export default function ProfessionalsPage() {
                       </TableRow>
                     )) : (
                       <TableRow>
-                        <TableCell colSpan={(isAdminOrContador && !isContadorOnly) ? 8 : (isContadorOnly ? 8 : 7)} className="h-24 text-center"> 
+                        <TableCell colSpan={(isAdminOrContador && !isContadorOnly) ? 9 : (isContadorOnly ? 9 : 8)} className="h-24 text-center"> 
                           <AlertTriangle className="inline-block mr-2 h-5 w-5 text-muted-foreground" /> No se encontraron profesionales.
                         </TableCell>
                       </TableRow>
@@ -607,7 +613,7 @@ export default function ProfessionalsPage() {
                 </AccordionItem>
 
                 <AccordionItem value="contract-info">
-                    <AccordionTrigger className="text-lg font-semibold">Información del Contrato</AccordionTrigger>
+                    <AccordionTrigger className="text-lg font-semibold flex items-center gap-2"><FileText /> Información del Contrato</AccordionTrigger>
                     <AccordionContent className="space-y-4 pt-2">
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                             <FormField control={form.control} name="currentContract_startDate" render={({ field }) => (
@@ -649,6 +655,13 @@ export default function ProfessionalsPage() {
                                 </FormItem>
                             )}/>
                         </div>
+                        <FormField control={form.control} name="currentContract_empresa" render={({ field }) => (
+                            <FormItem>
+                                <FormLabel className="flex items-center gap-1"><Building size={16}/>Empresa (Opcional)</FormLabel>
+                                <FormControl><Input placeholder="Ej: Footprints SAC" {...field} value={field.value || ''}/></FormControl>
+                                <FormMessage />
+                            </FormItem>
+                        )}/>
                         <FormField control={form.control} name="currentContract_notes" render={({ field }) => (
                             <FormItem>
                                 <FormLabel>Notas del Contrato (Opcional)</FormLabel>

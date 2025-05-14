@@ -1,11 +1,11 @@
 
 "use client";
 
-import type { Professional, Contract } from '@/types';
+import type { Professional, Contract, ContractEditFormData } from '@/types';
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useAuth } from '@/contexts/auth-provider';
 import { useAppState } from '@/contexts/app-state-provider';
-import { getProfessionals } from '@/lib/data';
+import { getProfessionals, updateProfessional } from '@/lib/data';
 import type { ContractDisplayStatus } from '@/lib/data';
 import { LOCATIONS, USER_ROLES, LocationId } from '@/lib/constants';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -28,12 +28,19 @@ import {
   DialogFooter,
   DialogClose,
 } from '@/components/ui/dialog';
-import { Loader2, AlertTriangle, FileSpreadsheet, Eye, ChevronsDown } from 'lucide-react';
-import { format, parseISO } from 'date-fns';
-import { es } from 'date-fns/locale';
-import { cn } from '@/lib/utils';
+import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
+import { Loader2, AlertTriangle, FileSpreadsheet, Eye, ChevronsDown, Edit3, Calendar as CalendarIconLucide, Building } from 'lucide-react';
+import { format, parseISO, formatISO as dateFnsFormatISO } from 'date-fns';
+import { es } from '@/lib/utils';
 import { useRouter } from 'next/navigation';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import { ContractEditFormSchema } from '@/lib/schemas';
+import { useForm } from 'react-hook-form';
+import { zodResolver } from '@hookform/resolvers/zod';
+import { useToast } from '@/hooks/use-toast';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { Calendar } from '@/components/ui/calendar';
+import { cn } from '@/lib/utils';
 
 const CONTRACTS_PER_PAGE = 10;
 
@@ -41,6 +48,7 @@ export default function ContractsPage() {
   const { user, isLoading: authIsLoading } = useAuth();
   const { selectedLocationId: adminSelectedLocation } = useAppState();
   const router = useRouter();
+  const { toast } = useToast();
 
   const [allProfessionalsWithContracts, setAllProfessionalsWithContracts] = useState<(Professional & { contractDisplayStatus: ContractDisplayStatus })[]>([]);
   const [displayedProfessionals, setDisplayedProfessionals] = useState<(Professional & { contractDisplayStatus: ContractDisplayStatus })[]>([]);
@@ -50,6 +58,18 @@ export default function ContractsPage() {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedProfessionalForHistory, setSelectedProfessionalForHistory] = useState<(Professional & { contractDisplayStatus: ContractDisplayStatus }) | null>(null);
   const [isHistoryModalOpen, setIsHistoryModalOpen] = useState(false);
+  
+  const [isContractEditModalOpen, setIsContractEditModalOpen] = useState(false);
+  const [editingContractProfessional, setEditingContractProfessional] = useState<(Professional & { contractDisplayStatus: ContractDisplayStatus }) | null>(null);
+
+  const contractEditForm = useForm<ContractEditFormData>({
+    resolver: zodResolver(ContractEditFormSchema),
+    defaultValues: {
+      startDate: null,
+      endDate: null,
+      empresa: '',
+    },
+  });
 
   const isAdminOrContador = user?.role === USER_ROLES.ADMIN || user?.role === USER_ROLES.CONTADOR;
   const effectiveLocationId = isAdminOrContador
@@ -73,7 +93,7 @@ export default function ContractsPage() {
       let profs: (Professional & { contractDisplayStatus: ContractDisplayStatus })[] = [];
       if (effectiveLocationId) {
         profs = await getProfessionals(effectiveLocationId);
-      } else { // Admin viewing 'all'
+      } else { 
         const allProfsPromises = LOCATIONS.map(loc => getProfessionals(loc.id));
         const results = await Promise.all(allProfsPromises);
         profs = results.flat();
@@ -97,7 +117,8 @@ export default function ContractsPage() {
     return allProfessionalsWithContracts
       .filter(p =>
         `${p.firstName} ${p.lastName}`.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        (p.currentContract?.notes && p.currentContract.notes.toLowerCase().includes(searchTerm.toLowerCase()))
+        (p.currentContract?.notes && p.currentContract.notes.toLowerCase().includes(searchTerm.toLowerCase())) ||
+        (p.currentContract?.empresa && p.currentContract.empresa.toLowerCase().includes(searchTerm.toLowerCase()))
       )
       .sort((a, b) => {
         const statusOrder: Record<ContractDisplayStatus, number> = {
@@ -122,6 +143,45 @@ export default function ContractsPage() {
   const handleViewHistory = (professional: Professional & { contractDisplayStatus: ContractDisplayStatus }) => {
     setSelectedProfessionalForHistory(professional);
     setIsHistoryModalOpen(true);
+  };
+
+  const handleEditContract = (professional: Professional & { contractDisplayStatus: ContractDisplayStatus }) => {
+    setEditingContractProfessional(professional);
+    contractEditForm.reset({
+      startDate: professional.currentContract?.startDate ? parseISO(professional.currentContract.startDate) : null,
+      endDate: professional.currentContract?.endDate ? parseISO(professional.currentContract.endDate) : null,
+      empresa: professional.currentContract?.empresa || '',
+    });
+    setIsContractEditModalOpen(true);
+  };
+
+  const onContractEditSubmit = async (data: ContractEditFormData) => {
+    if (!editingContractProfessional) return;
+
+    try {
+      const professionalId = editingContractProfessional.id;
+      // We send ProfessionalFormData structure even if only contract part is changed
+      const updatePayload: Partial<ProfessionalFormData> = {
+        currentContract_startDate: data.startDate,
+        currentContract_endDate: data.endDate,
+        currentContract_empresa: data.empresa,
+        // Pass existing notes to avoid clearing them if not edited here
+        currentContract_notes: editingContractProfessional.currentContract?.notes 
+      };
+
+      const updatedProf = await updateProfessional(professionalId, updatePayload);
+
+      if (updatedProf) {
+        toast({ title: "Contrato Actualizado", description: `El contrato de ${updatedProf.firstName} ${updatedProf.lastName} ha sido actualizado.` });
+        setIsContractEditModalOpen(false);
+        fetchContractData(); // Refetch to update the list
+      } else {
+        toast({ title: "Error", description: "No se pudo actualizar el contrato.", variant: "destructive" });
+      }
+    } catch (error) {
+      console.error("Error updating contract:", error);
+      toast({ title: "Error Inesperado", description: "Ocurrió un error al actualizar el contrato.", variant: "destructive" });
+    }
   };
 
   const handleLoadMore = () => {
@@ -160,7 +220,7 @@ export default function ContractsPage() {
       <Card className="shadow-md">
         <CardHeader>
           <CardTitle className="text-2xl flex items-center gap-2"><FileSpreadsheet className="text-primary"/> Gestión de Contratos</CardTitle>
-          <CardDescription>Visualizar el estado de los contratos de los profesionales y su historial.</CardDescription>
+          <CardDescription>Visualizar y editar el estado de los contratos de los profesionales y su historial.</CardDescription>
           {isAdminOrContador && (
             <div className="mt-1 text-sm text-muted-foreground">
               Viendo: {adminSelectedLocation === 'all' ? 'Todas las sedes' : LOCATIONS.find(l => l.id === adminSelectedLocation)?.name || ''}
@@ -171,7 +231,7 @@ export default function ContractsPage() {
           <div className="mb-4">
             <Input
               type="search"
-              placeholder="Buscar por nombre de profesional o notas del contrato..."
+              placeholder="Buscar por nombre, notas o empresa del contrato..."
               value={searchTerm}
               onChange={(e) => { setSearchTerm(e.target.value); setCurrentPage(1);}}
               className="w-full"
@@ -191,6 +251,7 @@ export default function ContractsPage() {
                       <TableHead>Profesional</TableHead>
                       <TableHead className="hidden md:table-cell">Sede</TableHead>
                       <TableHead>Estado Contrato</TableHead>
+                      <TableHead className="hidden sm:table-cell">Empresa</TableHead>
                       <TableHead className="hidden sm:table-cell">Inicio Contrato</TableHead>
                       <TableHead>Fin Contrato</TableHead>
                       <TableHead className="text-right">Acciones</TableHead>
@@ -213,15 +274,19 @@ export default function ContractsPage() {
                             {prof.contractDisplayStatus}
                           </span>
                         </TableCell>
+                        <TableCell className="hidden sm:table-cell text-xs">{prof.currentContract?.empresa || 'N/A'}</TableCell>
                         <TableCell className="hidden sm:table-cell text-xs">
                           {prof.currentContract?.startDate ? format(parseISO(prof.currentContract.startDate), 'dd/MM/yyyy') : 'N/A'}
                         </TableCell>
                         <TableCell className="text-xs">
                           {prof.currentContract?.endDate ? format(parseISO(prof.currentContract.endDate), 'dd/MM/yyyy') : 'N/A'}
                         </TableCell>
-                        <TableCell className="text-right">
-                          <Button variant="outline" size="sm" onClick={() => handleViewHistory(prof)} disabled={!prof.contractHistory || prof.contractHistory.length === 0}>
-                            <Eye className="mr-1 h-4 w-4" /> Historial
+                        <TableCell className="text-right space-x-1">
+                           <Button variant="outline" size="xs" onClick={() => handleEditContract(prof)} disabled={prof.contractDisplayStatus === 'Sin Contrato'}>
+                            <Edit3 className="mr-1 h-3 w-3" /> Editar
+                          </Button>
+                          <Button variant="outline" size="xs" onClick={() => handleViewHistory(prof)} disabled={!prof.contractHistory || prof.contractHistory.length === 0}>
+                            <Eye className="mr-1 h-3 w-3" /> Historial
                           </Button>
                         </TableCell>
                       </TableRow>
@@ -242,6 +307,95 @@ export default function ContractsPage() {
         </CardContent>
       </Card>
 
+      {/* Contract Edit Modal */}
+      {editingContractProfessional && (
+        <Dialog open={isContractEditModalOpen} onOpenChange={setIsContractEditModalOpen}>
+          <DialogContent className="sm:max-w-md">
+            <DialogHeader>
+              <DialogTitle>Editar Contrato de {editingContractProfessional.firstName} {editingContractProfessional.lastName}</DialogTitle>
+              <DialogDescription>Actualice los detalles del contrato actual.</DialogDescription>
+            </DialogHeader>
+            <Form {...contractEditForm}>
+              <form onSubmit={contractEditForm.handleSubmit(onContractEditSubmit)} className="space-y-4 py-2">
+                <FormField
+                  control={contractEditForm.control}
+                  name="startDate"
+                  render={({ field }) => (
+                    <FormItem className="flex flex-col">
+                      <FormLabel>Fecha Inicio Contrato</FormLabel>
+                      <Popover>
+                        <PopoverTrigger asChild>
+                          <FormControl>
+                            <Button variant="outline" className={cn("w-full pl-3 text-left font-normal", !field.value && "text-muted-foreground")}>
+                              {field.value ? format(field.value, "PPP", { locale: es }) : <span>Seleccionar fecha</span>}
+                              <CalendarIconLucide className="ml-auto h-4 w-4 opacity-50" />
+                            </Button>
+                          </FormControl>
+                        </PopoverTrigger>
+                        <PopoverContent className="w-auto p-0" align="start">
+                          <Calendar mode="single" selected={field.value} onSelect={field.onChange} initialFocus />
+                        </PopoverContent>
+                      </Popover>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={contractEditForm.control}
+                  name="endDate"
+                  render={({ field }) => (
+                    <FormItem className="flex flex-col">
+                      <FormLabel>Fecha Fin Contrato</FormLabel>
+                      <Popover>
+                        <PopoverTrigger asChild>
+                          <FormControl>
+                            <Button variant="outline" className={cn("w-full pl-3 text-left font-normal", !field.value && "text-muted-foreground")}>
+                              {field.value ? format(field.value, "PPP", { locale: es }) : <span>Seleccionar fecha</span>}
+                              <CalendarIconLucide className="ml-auto h-4 w-4 opacity-50" />
+                            </Button>
+                          </FormControl>
+                        </PopoverTrigger>
+                        <PopoverContent className="w-auto p-0" align="start">
+                          <Calendar
+                            mode="single"
+                            selected={field.value}
+                            onSelect={field.onChange}
+                            disabled={(date) => contractEditForm.getValues("startDate") ? date < contractEditForm.getValues("startDate")! : false}
+                            initialFocus
+                          />
+                        </PopoverContent>
+                      </Popover>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={contractEditForm.control}
+                  name="empresa"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel className="flex items-center gap-1"><Building size={16}/>Empresa</FormLabel>
+                      <FormControl>
+                        <Input placeholder="Nombre de la empresa" {...field} value={field.value || ''} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <DialogFooter className="pt-4">
+                  <DialogClose asChild><Button type="button" variant="outline">Cancelar</Button></DialogClose>
+                  <Button type="submit" disabled={contractEditForm.formState.isSubmitting}>
+                    {contractEditForm.formState.isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                    Guardar Cambios
+                  </Button>
+                </DialogFooter>
+              </form>
+            </Form>
+          </DialogContent>
+        </Dialog>
+      )}
+
+      {/* Contract History Modal */}
       {selectedProfessionalForHistory && (
         <Dialog open={isHistoryModalOpen} onOpenChange={setIsHistoryModalOpen}>
           <DialogContent className="sm:max-w-xl">
@@ -256,6 +410,7 @@ export default function ContractsPage() {
                     <TableRow>
                       <TableHead>Fecha Inicio</TableHead>
                       <TableHead>Fecha Fin</TableHead>
+                      <TableHead>Empresa</TableHead>
                       <TableHead>Notas</TableHead>
                     </TableRow>
                   </TableHeader>
@@ -264,6 +419,7 @@ export default function ContractsPage() {
                       <TableRow key={index}>
                         <TableCell className="text-xs">{format(parseISO(contract.startDate), 'dd/MM/yyyy')}</TableCell>
                         <TableCell className="text-xs">{format(parseISO(contract.endDate), 'dd/MM/yyyy')}</TableCell>
+                        <TableCell className="text-xs">{contract.empresa || '-'}</TableCell>
                         <TableCell className="text-xs">{contract.notes || '-'}</TableCell>
                       </TableRow>
                     ))}

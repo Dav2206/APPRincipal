@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import { LOCATIONS, TIME_SLOTS, PAYMENT_METHODS, APPOINTMENT_STATUS_DISPLAY, DAYS_OF_WEEK } from './constants';
 import type { DayOfWeekId } from './constants';
-import { getDay, differenceInCalendarDays } from 'date-fns';
+import { getDay, differenceInCalendarDays, parseISO } from 'date-fns';
 
 export const LoginSchema = z.object({
   username: z.string().min(1, { message: 'El nombre de usuario es requerido.' }),
@@ -96,6 +96,7 @@ export const ProfessionalFormSchema = z.object({
   currentContract_startDate: z.date().optional().nullable(),
   currentContract_endDate: z.date().optional().nullable(),
   currentContract_notes: z.string().max(100, "Notas del contrato no deben exceder 100 caracteres.").optional().nullable(),
+  currentContract_empresa: z.string().max(100, "Nombre de empresa no debe exceder 100 caracteres.").optional().nullable(),
 }).refine(data => {
   if (data.currentContract_startDate && data.currentContract_endDate) {
     return data.currentContract_endDate >= data.currentContract_startDate;
@@ -140,3 +141,18 @@ export const ServiceFormSchema = z.object({
   price: z.coerce.number().positive("El precio debe ser un número positivo.").optional().nullable(),
 });
 export type ServiceFormData = z.infer<typeof ServiceFormSchema>;
+
+export const ContractEditFormSchema = z.object({
+  startDate: z.date({ required_error: "La fecha de inicio del contrato es requerida."}).nullable(),
+  endDate: z.date({ required_error: "La fecha de fin del contrato es requerida."}).nullable(),
+  empresa: z.string().max(100, "Nombre de empresa no debe exceder 100 caracteres.").optional().nullable(),
+}).refine(data => {
+  if (data.startDate && data.endDate) {
+    return data.endDate >= data.startDate;
+  }
+  return true;
+}, {
+  message: "La fecha de fin del contrato debe ser igual o posterior a la fecha de inicio.",
+  path: ["endDate"],
+});
+export type ContractEditFormData = z.infer<typeof ContractEditFormSchema>;

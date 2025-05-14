@@ -60,7 +60,8 @@ const initialMockProfessionalsData: Professional[] = LOCATIONS.flatMap((location
         currentContract = {
             startDate: formatISO(contractStartDate, { representation: 'date' }),
             endDate: formatISO(contractEndDate, { representation: 'date' }),
-            notes: `Contrato estándar ${i + 1}`
+            notes: `Contrato estándar ${i + 1}`,
+            empresa: (i % 4 === 0) ? 'Empresa A' : 'Empresa B', // Assign a company
         };
     }
 
@@ -83,7 +84,8 @@ const initialMockProfessionalsData: Professional[] = LOCATIONS.flatMap((location
       contractHistory: currentContract && i % 4 === 0 ? [{ // Some professionals get a past contract
         startDate: formatISO(subDays(new Date(2025, 4, 13), 180), { representation: 'date' }),
         endDate: formatISO(subDays(new Date(2025, 4, 13), 91), { representation: 'date' }),
-        notes: 'Contrato anterior'
+        notes: 'Contrato anterior',
+        empresa: 'Empresa Antigua C',
       }] : [],
     };
   });
@@ -192,7 +194,7 @@ const getContractDisplayStatus = (contract: Contract | null | undefined): Contra
     if (!contract || !contract.endDate) {
         return 'Sin Contrato';
     }
-    const today = startOfDay(todayMock); // Use consistent mock date
+    const today = startOfDay(todayMock); 
     const endDate = parseISO(contract.endDate);
 
     if (isBefore(endDate, today)) {
@@ -267,7 +269,8 @@ export const addProfessional = async (data: ProfessionalFormData): Promise<Profe
         currentContract = {
             startDate: formatISO(data.currentContract_startDate, { representation: 'date' }),
             endDate: formatISO(data.currentContract_endDate, { representation: 'date' }),
-            notes: data.currentContract_notes || undefined
+            notes: data.currentContract_notes || undefined,
+            empresa: data.currentContract_empresa || undefined,
         };
     }
 
@@ -286,7 +289,7 @@ export const addProfessional = async (data: ProfessionalFormData): Promise<Profe
             notes: ov.notes,
         })) || [],
         currentContract: currentContract,
-        contractHistory: [], // New professionals start with an empty history
+        contractHistory: [], 
     };
 
     if (data.workSchedule) {
@@ -326,13 +329,11 @@ export const updateProfessional = async (id: string, data: Partial<ProfessionalF
         if (index !== -1) {
             const professionalToUpdate = { ...mockDB.professionals[index] };
             
-            // Update basic fields
             if(data.firstName) professionalToUpdate.firstName = data.firstName;
             if(data.lastName) professionalToUpdate.lastName = data.lastName;
             if(data.locationId) professionalToUpdate.locationId = data.locationId;
             professionalToUpdate.phone = data.phone || undefined;
 
-            // Update work schedule
             if (data.workSchedule) {
                 professionalToUpdate.workSchedule = { ...professionalToUpdate.workSchedule };
                  (Object.keys(data.workSchedule) as Array<DayOfWeekId>).forEach(dayId => {
@@ -349,7 +350,6 @@ export const updateProfessional = async (id: string, data: Partial<ProfessionalF
                 });
             }
 
-            // Update custom schedule overrides
             if (data.customScheduleOverrides) {
                 professionalToUpdate.customScheduleOverrides = data.customScheduleOverrides.map(ov => ({
                     id: ov.id || generateId(),
@@ -361,36 +361,61 @@ export const updateProfessional = async (id: string, data: Partial<ProfessionalF
                 }));
             }
 
-            // Handle contract update
             const oldContract = professionalToUpdate.currentContract;
-            let newCurrentContract: Contract | null = null;
+            let newProposedContractData: Partial<Contract> = {};
+            let contractFieldsTouched = false;
 
-            if (data.currentContract_startDate && data.currentContract_endDate) {
-                newCurrentContract = {
-                    startDate: formatISO(data.currentContract_startDate, { representation: 'date' }),
-                    endDate: formatISO(data.currentContract_endDate, { representation: 'date' }),
-                    notes: data.currentContract_notes || undefined
-                };
-            } else if (data.hasOwnProperty('currentContract_startDate') || data.hasOwnProperty('currentContract_endDate')) {
-                // If one is provided but not the other, or if they are cleared, set currentContract to null
-                newCurrentContract = null;
-            } else {
-                 newCurrentContract = professionalToUpdate.currentContract; // Keep existing if no form fields touched it
+            if (data.hasOwnProperty('currentContract_startDate')) {
+                newProposedContractData.startDate = data.currentContract_startDate ? formatISO(data.currentContract_startDate, { representation: 'date' }) : undefined;
+                contractFieldsTouched = true;
+            }
+            if (data.hasOwnProperty('currentContract_endDate')) {
+                newProposedContractData.endDate = data.currentContract_endDate ? formatISO(data.currentContract_endDate, { representation: 'date' }) : undefined;
+                contractFieldsTouched = true;
+            }
+             if (data.hasOwnProperty('currentContract_notes')) {
+                newProposedContractData.notes = data.currentContract_notes || undefined;
+                contractFieldsTouched = true;
+            }
+            if (data.hasOwnProperty('currentContract_empresa')) {
+                newProposedContractData.empresa = data.currentContract_empresa || undefined;
+                contractFieldsTouched = true;
             }
 
-
-            // If new contract is different from old one, and old one existed, move old to history
-            if (oldContract && (JSON.stringify(oldContract) !== JSON.stringify(newCurrentContract))) {
-                 if (!professionalToUpdate.contractHistory) {
-                    professionalToUpdate.contractHistory = [];
+            if (contractFieldsTouched) {
+                if (newProposedContractData.startDate && newProposedContractData.endDate) {
+                    const newContract: Contract = {
+                        startDate: newProposedContractData.startDate,
+                        endDate: newProposedContractData.endDate,
+                        notes: newProposedContractData.notes ?? oldContract?.notes,
+                        empresa: newProposedContractData.empresa ?? oldContract?.empresa,
+                    };
+                    if (oldContract && (oldContract.startDate !== newContract.startDate || oldContract.endDate !== newContract.endDate || oldContract.notes !== newContract.notes || oldContract.empresa !== newContract.empresa)) {
+                        professionalToUpdate.contractHistory = [...(professionalToUpdate.contractHistory || []), oldContract];
+                    }
+                    professionalToUpdate.currentContract = newContract;
+                } else if (!newProposedContractData.startDate && !newProposedContractData.endDate && !newProposedContractData.notes && !newProposedContractData.empresa) {
+                    // All contract fields are cleared
+                    if (oldContract) {
+                        professionalToUpdate.contractHistory = [...(professionalToUpdate.contractHistory || []), oldContract];
+                    }
+                    professionalToUpdate.currentContract = null;
+                } else {
+                     // Partial update to existing contract or invalid state, keep existing and apply partial if makes sense
+                    if(professionalToUpdate.currentContract){
+                        professionalToUpdate.currentContract = {
+                            ...professionalToUpdate.currentContract,
+                            ...newProposedContractData
+                        }
+                    } else if (newProposedContractData.startDate && newProposedContractData.endDate) {
+                        // If no current contract, but new one is valid
+                         professionalToUpdate.currentContract = newProposedContractData as Contract;
+                    }
                 }
-                professionalToUpdate.contractHistory.push(oldContract);
             }
-            professionalToUpdate.currentContract = newCurrentContract;
-
 
             mockDB.professionals[index] = professionalToUpdate;
-            return mockDB.professionals[index];
+            return professionalToUpdate;
         }
         return undefined;
     }
@@ -429,7 +454,7 @@ export const getPatients = async (options: { page?: number, limit?: number, sear
     filteredMockPatients.sort((a,b) => `${a.firstName} ${a.lastName}`.localeCompare(`${b.firstName} ${b.lastName}`));
     const totalCount = filteredMockPatients.length;
 
-    let paginatedPatients = [];
+    let paginatedPatients: Patient[] = [];
     let newLastVisibleId: string | null = null;
 
     if (startAfterId) {
@@ -437,14 +462,15 @@ export const getPatients = async (options: { page?: number, limit?: number, sear
         if (lastIndex !== -1) {
             paginatedPatients = filteredMockPatients.slice(lastIndex + 1, lastIndex + 1 + queryLimit);
         } else {
-            const startIndex = (page - 1) * queryLimit;
+            // Fallback if lastVisibleId is somehow invalid or not found, start from page 1
+            const startIndex = (page - 1) * queryLimit; // Recalculate startIndex for safety
             paginatedPatients = filteredMockPatients.slice(startIndex, startIndex + queryLimit);
         }
     } else {
          const startIndex = (page - 1) * queryLimit;
          paginatedPatients = filteredMockPatients.slice(startIndex, startIndex + queryLimit);
     }
-
+    
     newLastVisibleId = paginatedPatients.length > 0 ? paginatedPatients[paginatedPatients.length - 1].id : null;
 
     return { patients: paginatedPatients, totalCount, lastVisiblePatientId: newLastVisibleId };
@@ -598,11 +624,13 @@ export const getAppointments = async (filters: {
     let filteredMockAppointments = [...currentMockAppointments];
 
     if (restFilters.locationId) {
-      const targetLocation = restFilters.locationId as LocationId; 
-      filteredMockAppointments = filteredMockAppointments.filter(appt =>
-          appt.locationId === targetLocation ||
-          (appt.isExternalProfessional && appt.externalProfessionalOriginLocationId === targetLocation)
-      );
+      const targetLocationIds = Array.isArray(restFilters.locationId) ? restFilters.locationId : [restFilters.locationId];
+      if (targetLocationIds.length > 0) {
+          filteredMockAppointments = filteredMockAppointments.filter(appt =>
+              targetLocationIds.includes(appt.locationId) ||
+              (appt.isExternalProfessional && appt.externalProfessionalOriginLocationId && targetLocationIds.includes(appt.externalProfessionalOriginLocationId))
+          );
+      }
     }
 
     if (restFilters.patientId) {
@@ -648,16 +676,17 @@ export const getAppointments = async (filters: {
     });
 
     const populatedAppointmentsPromises = filteredMockAppointments.map(appt => populateAppointment(appt));
-    const populatedAppointmentsResult = await Promise.all(populatedAppointmentsPromises);
+    let populatedAppointmentsResult = await Promise.all(populatedAppointmentsPromises);
 
     const totalCount = populatedAppointmentsResult.length;
+    let paginatedResult: Appointment[] = [];
 
-    let paginatedResult = [];
     if (startAfterId) {
         const lastIdx = populatedAppointmentsResult.findIndex(a => a.id === startAfterId);
         if (lastIdx !== -1) {
             paginatedResult = populatedAppointmentsResult.slice(lastIdx + 1, lastIdx + 1 + queryLimit);
         } else {
+            // Fallback if lastVisibleId is somehow invalid or not found, start from page 1
             paginatedResult = populatedAppointmentsResult.slice(0, queryLimit);
         }
     } else {
@@ -665,8 +694,8 @@ export const getAppointments = async (filters: {
         paginatedResult = populatedAppointmentsResult.slice(startIndex, startIndex + queryLimit);
     }
 
-    const newLastVisibleId = paginatedResult.length > 0 ? populatedAppointmentsResult[populatedAppointmentsResult.length -1].id : null;
-    return { appointments: populatedAppointmentsResult, totalCount, lastVisibleAppointmentId: newLastVisibleId };
+    const newLastVisibleId = paginatedResult.length > 0 ? paginatedResult[paginatedResult.length -1].id : null;
+    return { appointments: paginatedResult, totalCount, lastVisibleAppointmentId: newLastVisibleId };
   }
   throw new Error("Appointment retrieval not implemented for non-mock database or mockDB not available.");
 };
@@ -898,23 +927,26 @@ export const getPatientAppointmentHistory = async (
   const pastStatuses: AppointmentStatus[] = [APPOINTMENT_STATUS.COMPLETED, APPOINTMENT_STATUS.NO_SHOW, APPOINTMENT_STATUS.CANCELLED_CLIENT, APPOINTMENT_STATUS.CANCELLED_STAFF];
 
   if (useMockDatabase) {
-    const historyAppointments = (mockDB.appointments || []).filter(appt =>
+    let historyAppointments = (mockDB.appointments || []).filter(appt =>
       appt.patientId === patientId &&
       appt.appointmentDateTime && parseISO(appt.appointmentDateTime) < todayDate &&
       pastStatuses.includes(appt.status)
-    ).sort((a, b) => parseISO(b.appointmentDateTime).getTime() - parseISO(a.appointmentDateTime).getTime());
-
+    );
+    
+    historyAppointments.sort((a, b) => parseISO(b.appointmentDateTime).getTime() - parseISO(a.appointmentDateTime).getTime());
+    
     const populatedHistoryPromises = historyAppointments.map(appt => populateAppointment(appt));
-    const populatedHistory = await Promise.all(populatedHistoryPromises);
+    let populatedHistory = await Promise.all(populatedHistoryPromises);
 
     const totalCount = populatedHistory.length;
-    let paginatedAppointments = [];
+    let paginatedAppointments: Appointment[] = [];
 
     if (startAfterId) {
         const lastIdx = populatedHistory.findIndex(a => a.id === startAfterId);
         if (lastIdx !== -1) {
             paginatedAppointments = populatedHistory.slice(lastIdx + 1, lastIdx + 1 + queryLimit);
         } else {
+            // Fallback if lastVisibleId is somehow invalid or not found, start from page 1
             paginatedAppointments = populatedHistory.slice(0, queryLimit);
         }
     } else {
@@ -922,8 +954,8 @@ export const getPatientAppointmentHistory = async (
         paginatedAppointments = populatedHistory.slice(startIndex, startIndex + queryLimit);
     }
 
-    const newLastVisibleId = paginatedAppointments.length > 0 ? populatedHistory[populatedHistory.length -1].id : null;
-    return { appointments: populatedHistory, totalCount, lastVisibleAppointmentId: newLastVisibleId };
+    const newLastVisibleId = paginatedAppointments.length > 0 ? paginatedAppointments[paginatedAppointments.length -1].id : null;
+    return { appointments: paginatedAppointments, totalCount, lastVisibleAppointmentId: newLastVisibleId };
   }
   throw new Error("Patient appointment history retrieval not implemented for non-mock database or mockDB not available.");
 };
@@ -971,8 +1003,9 @@ export function getProfessionalAvailabilityForDate(
 ): { startTime: string; endTime: string; notes?: string } | null {
   const dateToCheck = startOfDay(targetDate); 
   const targetDateString = format(dateToCheck, 'yyyy-MM-dd');
-  const targetDayOfWeekJs = getDay(dateToCheck); 
+  const targetDayOfWeekJs = getDay(dateToCheck); // 0 (Sunday) to 6 (Saturday)
 
+  // Check custom overrides first
   if (professional.customScheduleOverrides) {
     const override = professional.customScheduleOverrides.find(
       ov => ov.date === targetDateString
@@ -981,24 +1014,37 @@ export function getProfessionalAvailabilityForDate(
       if (override.isWorking && override.startTime && override.endTime) {
         return { startTime: override.startTime, endTime: override.endTime, notes: override.notes };
       }
-      return null; 
+      return null; // Explicitly not working due to override
     }
   }
   
+  // Fallback to base weekly schedule if no override for the specific date
   if (professional.workSchedule) {
-    const dayKey = DAYS_OF_WEEK[targetDayOfWeekJs].id as DayOfWeekId;
+    // Map JS day of week to our DayOfWeekId (monday, tuesday, etc.)
+    // JS: Sun=0, Mon=1, Tue=2, Wed=3, Thu=4, Fri=5, Sat=6
+    // Our DAYS_OF_WEEK: Mon=0, Tue=1, ..., Sun=6 (index based on array)
+    // Need to adjust: (targetDayOfWeekJs + 6) % 7 maps JS Sunday (0) to our Sunday (6) etc.
+    // Or simpler: use our DAYS_OF_WEEK array directly.
+    const dayKey = DAYS_OF_WEEK[targetDayOfWeekJs].id as DayOfWeekId; // This might need adjustment if your DAYS_OF_WEEK order is different
     
-    if (dayKey) {
+    if (dayKey) { // Ensure dayKey is valid
         const dailySchedule = professional.workSchedule[dayKey];
-        if (dailySchedule) {
+        if (dailySchedule) { // Check if schedule exists for this day
+        // If isWorking is explicitly false, they are not working.
+        // If isWorking is undefined or true, AND startTime/endTime exist, they are working.
         if (dailySchedule.isWorking === false) return null;
 
         if (dailySchedule.startTime && dailySchedule.endTime) {
             return { startTime: dailySchedule.startTime, endTime: dailySchedule.endTime };
         }
+        // If isWorking is true/undefined but no times, assume not working for safety, or handle as error
+        // For now, if isWorking is not explicitly false, but times are missing, we'll consider them not working.
+        // This could be stricter if needed.
+        return null; 
         }
     }
   }
 
+  // If no specific override and no base schedule for the day, assume not working
   return null; 
 }
