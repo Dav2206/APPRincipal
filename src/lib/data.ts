@@ -54,12 +54,12 @@ const initialMockProfessionalsData: Professional[] = LOCATIONS.flatMap((location
   const numProfessionals = professionalCounts[location.id] || 2;
   return Array.from({ length: numProfessionals }, (_, i) => {
     const baseSchedule: { [key in DayOfWeekId]?: { startTime: string; endTime: string; isWorking?: boolean } | null } = {
-      monday: { startTime: '10:00', endTime: '19:00', isWorking: true },
-      tuesday: { startTime: '10:00', endTime: '19:00', isWorking: true },
-      wednesday: { startTime: '10:00', endTime: '19:00', isWorking: true },
-      thursday: { startTime: '10:00', endTime: '19:00', isWorking: true },
-      friday: { startTime: '10:00', endTime: '19:00', isWorking: true },
-      saturday: { startTime: '09:00', endTime: '18:00', isWorking: true },
+      monday: { isWorking: true, startTime: '10:00', endTime: '19:00' },
+      tuesday: { isWorking: true, startTime: '10:00', endTime: '19:00' },
+      wednesday: { isWorking: true, startTime: '10:00', endTime: '19:00' },
+      thursday: { isWorking: true, startTime: '10:00', endTime: '19:00' },
+      friday: { isWorking: true, startTime: '10:00', endTime: '19:00' },
+      saturday: { isWorking: true, startTime: '09:00', endTime: '18:00' },
       sunday: { isWorking: true, startTime: '10:00', endTime: '18:00' },
     };
     
@@ -111,6 +111,8 @@ const initialMockProfessionalsData: Professional[] = LOCATIONS.flatMap((location
       lastName: location.name.split(' ')[0],
       locationId: location.id,
       phone: `9876543${locIndex}${i + 1}`,
+      birthDay: (i % 4 === 0) ? (i % 30) + 1 : null, // Some have birthdays
+      birthMonth: (i % 4 === 0) ? (i % 12) + 1 : null,
       biWeeklyEarnings: Math.random() * 1500 + 500,
       workSchedule: baseSchedule,
       customScheduleOverrides: isSecondProfHiguereta ? [
@@ -354,6 +356,8 @@ export const addProfessional = async (data: ProfessionalFormData): Promise<Profe
         lastName: data.lastName,
         locationId: data.locationId,
         phone: data.phone || undefined,
+        birthDay: data.birthDay ?? null,
+        birthMonth: data.birthMonth ?? null,
         workSchedule: {},
         customScheduleOverrides: data.customScheduleOverrides?.map(ov => ({
             id: ov.id || generateId(),
@@ -409,6 +413,8 @@ export const updateProfessional = async (id: string, data: Partial<ProfessionalF
             if(data.lastName) professionalToUpdate.lastName = data.lastName;
             if(data.locationId) professionalToUpdate.locationId = data.locationId;
             professionalToUpdate.phone = data.phone === null ? undefined : (data.phone ?? professionalToUpdate.phone);
+            professionalToUpdate.birthDay = data.birthDay === undefined ? professionalToUpdate.birthDay : (data.birthDay === 0 ? null : data.birthDay);
+            professionalToUpdate.birthMonth = data.birthMonth === undefined ? professionalToUpdate.birthMonth : (data.birthMonth === 0 ? null : data.birthMonth);
 
 
             if (data.workSchedule) {
@@ -891,10 +897,11 @@ export const addAppointment = async (data: AppointmentFormData & { isExternalPro
       const availability = getProfessionalAvailabilityForDate(prof, data.appointmentDate);
       if (!availability) continue;
 
+      // Check if professional's working hours contain the proposed appointment slot
       const profWorkStartTime = parse(`${format(data.appointmentDate, 'yyyy-MM-dd')} ${availability.startTime}`, 'yyyy-MM-dd HH:mm', new Date());
       const profWorkEndTime = parse(`${format(data.appointmentDate, 'yyyy-MM-dd')} ${availability.endTime}`, 'yyyy-MM-dd HH:mm', new Date());
 
-      if (!isWithinInterval(appointmentDateTimeObject, { start: profWorkStartTime, end: dateFnsAddMinutes(profWorkEndTime, -appointmentDuration +1) })) { 
+      if (!isWithinInterval(appointmentDateTimeObject, { start: profWorkStartTime, end: dateFnsAddMinutes(profWorkEndTime, -appointmentDuration +1) })) { // +1 to allow booking at exact end time if duration fits
           continue;
       }
 

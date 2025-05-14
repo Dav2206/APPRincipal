@@ -13,6 +13,7 @@ export interface User extends BaseEntity {
 }
 
 export interface Contract {
+  id: string; // Added ID to the contract itself for easier history management
   startDate: string; // ISO Date string
   endDate: string;   // ISO Date string
   notes?: string;
@@ -24,6 +25,8 @@ export interface Professional extends BaseEntity {
   lastName: string;
   locationId: LocationId;
   phone?: string;
+  birthDay?: number | null; // Optional day of birth (1-31)
+  birthMonth?: number | null; // Optional month of birth (1-12)
   biWeeklyEarnings?: number;
   
   workSchedule: {
@@ -109,6 +112,8 @@ export type ProfessionalFormData = {
   lastName: string;
   locationId: LocationId;
   phone?: string | null;
+  birthDay?: number | null;
+  birthMonth?: number | null;
   
   workSchedule: {
     [key in DayOfWeekId]?: { startTime?: string; endTime?: string; isWorking?: boolean };
@@ -125,7 +130,7 @@ export type ProfessionalFormData = {
   currentContract_startDate?: Date | null;
   currentContract_endDate?: Date | null;
   currentContract_notes?: string | null;
-  currentContract_empresa?: string | null; // Added empresa here
+  currentContract_empresa?: string | null; 
 };
 
 export type { AppointmentStatus }; 

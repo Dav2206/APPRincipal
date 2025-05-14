@@ -66,6 +66,8 @@ export const ProfessionalFormSchema = z.object({
   lastName: z.string().min(2, "Apellido es requerido."),
   locationId: z.string().refine(val => locationIds.includes(val as any), { message: "Sede inválida." }),
   phone: z.string().optional().nullable(),
+  birthDay: z.coerce.number().int().min(1, "Día inválido").max(31, "Día inválido").optional().nullable(),
+  birthMonth: z.coerce.number().int().min(1, "Mes inválido").max(12, "Mes inválido").optional().nullable(),
 
   workSchedule: z.object(
     DAYS_OF_WEEK.reduce((acc, day) => { 

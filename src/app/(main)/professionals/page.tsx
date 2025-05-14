@@ -33,7 +33,7 @@ import {
   DialogDescription,
 } from '@/components/ui/dialog';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
-import { PlusCircle, Edit2, Briefcase, Search, Loader2, CalendarDays, Clock, Trash2, Calendar as CalendarIconLucide, AlertTriangle, Users, Moon, ChevronsDown, FileText, Building } from 'lucide-react';
+import { PlusCircle, Edit2, Briefcase, Search, Loader2, CalendarDays, Clock, Trash2, Calendar as CalendarIconLucide, AlertTriangle, Users, Moon, ChevronsDown, FileText, Building, Gift } from 'lucide-react';
 import { useForm, useFieldArray, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { ProfessionalFormSchema } from '@/lib/schemas';
@@ -48,6 +48,8 @@ import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/
 
 
 const PROFESSIONALS_PER_PAGE = 5;
+const MONTH_NAMES = ["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"];
+
 
 export default function ProfessionalsPage() {
   const { user } = useAuth();
@@ -80,6 +82,8 @@ export default function ProfessionalsPage() {
       lastName: '',
       locationId: LOCATIONS[0].id,
       phone: '',
+      birthDay: null,
+      birthMonth: null,
       workSchedule: defaultBaseWorkSchedule,
       customScheduleOverrides: [],
       currentContract_startDate: null,
@@ -168,6 +172,8 @@ export default function ProfessionalsPage() {
       lastName: '',
       locationId: defaultLoc as LocationId,
       phone: '',
+      birthDay: null,
+      birthMonth: null,
       workSchedule: defaultBaseWorkSchedule,
       customScheduleOverrides: [],
       currentContract_startDate: null,
@@ -200,6 +206,8 @@ export default function ProfessionalsPage() {
         lastName: professional.lastName,
         locationId: professional.locationId as LocationId, 
         phone: professional.phone || '',
+        birthDay: professional.birthDay ?? null,
+        birthMonth: professional.birthMonth ?? null,
         workSchedule: formWorkSchedule,
         customScheduleOverrides: professional.customScheduleOverrides?.map(ov => ({
             id: ov.id || generateId(), 
@@ -252,6 +260,8 @@ export default function ProfessionalsPage() {
         lastName: data.lastName,
         locationId: data.locationId,
         phone: data.phone || undefined,
+        birthDay: data.birthDay === 0 ? null : data.birthDay,
+        birthMonth: data.birthMonth === 0 ? null : data.birthMonth,
         workSchedule: {},
         customScheduleOverrides: data.customScheduleOverrides?.map(ov => ({
             id: ov.id || generateId(),
@@ -527,6 +537,46 @@ export default function ProfessionalsPage() {
                     <FormField control={form.control} name="phone" render={({ field }) => (
                         <FormItem className="mt-4"><FormLabel>Teléfono (Opcional)</FormLabel><FormControl><Input type="tel" placeholder="Ej: 987654321" {...field} value={field.value || ''} /></FormControl><FormMessage /></FormItem>
                     )}/>
+                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <FormField
+                          control={form.control}
+                          name="birthDay"
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel className="flex items-center gap-1"><Gift size={16}/>Día de Cumpleaños (Opcional)</FormLabel>
+                              <Select onValueChange={(value) => field.onChange(value ? parseInt(value) : null)} value={field.value?.toString() || ""}>
+                                <FormControl><SelectTrigger><SelectValue placeholder="Día" /></SelectTrigger></FormControl>
+                                <SelectContent>
+                                  <SelectItem value=""><em>No especificar</em></SelectItem>
+                                  {Array.from({ length: 31 }, (_, i) => i + 1).map(day => (
+                                    <SelectItem key={`day-${day}`} value={day.toString()}>{day}</SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+                        <FormField
+                          control={form.control}
+                          name="birthMonth"
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel className="flex items-center gap-1"><Gift size={16}/>Mes de Cumpleaños (Opcional)</FormLabel>
+                              <Select onValueChange={(value) => field.onChange(value ? parseInt(value) : null)} value={field.value?.toString() || ""}>
+                                <FormControl><SelectTrigger><SelectValue placeholder="Mes" /></SelectTrigger></FormControl>
+                                <SelectContent>
+                                  <SelectItem value=""><em>No especificar</em></SelectItem>
+                                  {MONTH_NAMES.map((monthName, index) => (
+                                    <SelectItem key={`month-${index + 1}`} value={(index + 1).toString()}>{monthName}</SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+                      </div>
                   </AccordionContent>
                 </AccordionItem>
 
