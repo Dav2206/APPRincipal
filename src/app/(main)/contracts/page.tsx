@@ -46,6 +46,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 
 const CONTRACTS_PER_PAGE = 10;
 const ALL_EMPRESAS_VALUE = "all_empresas_placeholder";
+const NINGUNA_EMPRESA_FORM_VALUE = null; // Represents the actual value to store for "Ninguna"
+const NINGUNA_EMPRESA_SELECT_ITEM_VALUE = "_select_item_ninguna_empresa_"; // Unique value for the SelectItem
 
 export default function ContractsPage() {
   const { user, isLoading: authIsLoading } = useAuth();
@@ -79,7 +81,7 @@ export default function ContractsPage() {
     defaultValues: {
       startDate: null,
       endDate: null,
-      empresa: '',
+      empresa: '', // Default to empty string, which will show placeholder
     },
   });
 
@@ -137,7 +139,7 @@ export default function ContractsPage() {
         }
       });
     });
-    const combinedEmpresas = new Set([...Array.from(derivedEmpresas), ...manuallyAddedEmpresas]);
+    const combinedEmpresas = new Set([...Array.from(derivedEmpresas), ...manuallyAddedEmpresas].filter(e => e && e.trim() !== '')); // Filter out empty strings
     setUniqueEmpresas(Array.from(combinedEmpresas).sort((a,b) => a.toLowerCase().localeCompare(b.toLowerCase())));
   }, [allProfessionalsWithContracts, manuallyAddedEmpresas]);
 
@@ -188,7 +190,7 @@ export default function ContractsPage() {
     contractEditForm.reset({
       startDate: professional.currentContract?.startDate ? parseISO(professional.currentContract.startDate) : null,
       endDate: professional.currentContract?.endDate ? parseISO(professional.currentContract.endDate) : null,
-      empresa: professional.currentContract?.empresa || '',
+      empresa: professional.currentContract?.empresa || NINGUNA_EMPRESA_FORM_VALUE, // Use null for "Ninguna" in form state
     });
     setIsContractEditModalOpen(true);
   };
@@ -199,7 +201,7 @@ export default function ContractsPage() {
     contractEditForm.reset({
       startDate: null,
       endDate: null,
-      empresa: '',
+      empresa: NINGUNA_EMPRESA_FORM_VALUE, // Default to "Ninguna" for new contracts
     });
     setIsContractEditModalOpen(true);
   };
@@ -213,7 +215,8 @@ export default function ContractsPage() {
       const updatePayload: Partial<ProfessionalFormData> = {
         currentContract_startDate: data.startDate,
         currentContract_endDate: data.endDate,
-        currentContract_empresa: data.empresa,
+        // `data.empresa` will be `null` if "Ninguna" was selected, or the company string
+        currentContract_empresa: data.empresa, 
       };
 
       const updatedProf = await updateProfessional(professionalId, updatePayload);
@@ -448,20 +451,24 @@ export default function ContractsPage() {
                   render={({ field }) => (
                     <FormItem>
                       <FormLabel className="flex items-center gap-1"><Building size={16}/>Empresa</FormLabel>
-                      <Select onValueChange={field.onChange} value={field.value || ''}>
+                      <Select
+                        onValueChange={(value) => {
+                          field.onChange(value === NINGUNA_EMPRESA_SELECT_ITEM_VALUE ? NINGUNA_EMPRESA_FORM_VALUE : value);
+                        }}
+                        value={field.value === NINGUNA_EMPRESA_FORM_VALUE ? NINGUNA_EMPRESA_SELECT_ITEM_VALUE : (field.value || '')}
+                      >
                         <FormControl>
                           <SelectTrigger>
-                            <SelectValue placeholder="Seleccionar empresa existente o escribir nueva" />
+                            <SelectValue placeholder="Seleccionar empresa" />
                           </SelectTrigger>
                         </FormControl>
                         <SelectContent>
-                          <SelectItem value=""><em>Ninguna</em></SelectItem>
+                          <SelectItem value={NINGUNA_EMPRESA_SELECT_ITEM_VALUE}><em>Ninguna</em></SelectItem>
                           {uniqueEmpresas.map(empresa => (
                             <SelectItem key={empresa} value={empresa}>{empresa}</SelectItem>
                           ))}
                         </SelectContent>
                       </Select>
-                      {/* <FormControl><Input placeholder="Nombre de la empresa" {...field} value={field.value || ''} /></FormControl> */}
                       <FormMessage />
                     </FormItem>
                   )}
@@ -558,3 +565,4 @@ export default function ContractsPage() {
     </div>
   );
 }
+
