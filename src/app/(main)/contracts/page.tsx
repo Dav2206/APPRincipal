@@ -138,7 +138,7 @@ export default function ContractsPage() {
       });
     });
     const combinedEmpresas = new Set([...Array.from(derivedEmpresas), ...manuallyAddedEmpresas]);
-    setUniqueEmpresas(Array.from(combinedEmpresas).sort());
+    setUniqueEmpresas(Array.from(combinedEmpresas).sort((a,b) => a.toLowerCase().localeCompare(b.toLowerCase())));
   }, [allProfessionalsWithContracts, manuallyAddedEmpresas]);
 
   const handleAddEmpresaToManualList = () => {
@@ -448,9 +448,20 @@ export default function ContractsPage() {
                   render={({ field }) => (
                     <FormItem>
                       <FormLabel className="flex items-center gap-1"><Building size={16}/>Empresa</FormLabel>
-                      <FormControl>
-                        <Input placeholder="Nombre de la empresa" {...field} value={field.value || ''} />
-                      </FormControl>
+                      <Select onValueChange={field.onChange} value={field.value || ''}>
+                        <FormControl>
+                          <SelectTrigger>
+                            <SelectValue placeholder="Seleccionar empresa existente o escribir nueva" />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          <SelectItem value=""><em>Ninguna</em></SelectItem>
+                          {uniqueEmpresas.map(empresa => (
+                            <SelectItem key={empresa} value={empresa}>{empresa}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      {/* <FormControl><Input placeholder="Nombre de la empresa" {...field} value={field.value || ''} /></FormControl> */}
                       <FormMessage />
                     </FormItem>
                   )}
@@ -474,7 +485,7 @@ export default function ContractsPage() {
           <DialogHeader>
             <DialogTitle>Añadir Nueva Empresa al Filtro</DialogTitle>
             <DialogDescription>
-              Ingrese el nombre de la nueva empresa. Estará disponible en el filtro de empresas.
+              Ingrese el nombre de la nueva empresa. Estará disponible en el filtro de empresas y en el formulario de contratos.
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-2">
@@ -522,7 +533,7 @@ export default function ContractsPage() {
                       </TableRow>
                     )}
                     {selectedProfessionalForHistory.contractHistory && selectedProfessionalForHistory.contractHistory.sort((a,b) => parseISO(b.startDate).getTime() - parseISO(a.startDate).getTime()).map((contract, index) => (
-                      <TableRow key={index}>
+                      <TableRow key={contract.id || `history-${index}`}>
                         <TableCell><Badge variant="outline">Archivado</Badge></TableCell>
                         <TableCell className="text-xs">{format(parseISO(contract.startDate), 'dd/MM/yyyy')}</TableCell>
                         <TableCell className="text-xs">{format(parseISO(contract.endDate), 'dd/MM/yyyy')}</TableCell>
@@ -547,6 +558,3 @@ export default function ContractsPage() {
     </div>
   );
 }
-
-
-    
