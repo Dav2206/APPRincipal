@@ -49,6 +49,7 @@ import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/
 
 const PROFESSIONALS_PER_PAGE = 5;
 const MONTH_NAMES = ["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"];
+const NO_SPECIFY_BIRTHDAY_ITEM_VALUE = "_no_specify_birthday_";
 
 
 export default function ProfessionalsPage() {
@@ -544,10 +545,13 @@ export default function ProfessionalsPage() {
                           render={({ field }) => (
                             <FormItem>
                               <FormLabel className="flex items-center gap-1"><Gift size={16}/>Día de Cumpleaños (Opcional)</FormLabel>
-                              <Select onValueChange={(value) => field.onChange(value ? parseInt(value) : null)} value={field.value?.toString() || ""}>
+                               <Select
+                                onValueChange={(value) => field.onChange(value === NO_SPECIFY_BIRTHDAY_ITEM_VALUE ? null : parseInt(value))}
+                                value={field.value === null ? NO_SPECIFY_BIRTHDAY_ITEM_VALUE : (field.value?.toString() || NO_SPECIFY_BIRTHDAY_ITEM_VALUE)}
+                              >
                                 <FormControl><SelectTrigger><SelectValue placeholder="Día" /></SelectTrigger></FormControl>
                                 <SelectContent>
-                                  <SelectItem value=""><em>No especificar</em></SelectItem>
+                                  <SelectItem value={NO_SPECIFY_BIRTHDAY_ITEM_VALUE}><em>No especificar</em></SelectItem>
                                   {Array.from({ length: 31 }, (_, i) => i + 1).map(day => (
                                     <SelectItem key={`day-${day}`} value={day.toString()}>{day}</SelectItem>
                                   ))}
@@ -563,10 +567,13 @@ export default function ProfessionalsPage() {
                           render={({ field }) => (
                             <FormItem>
                               <FormLabel className="flex items-center gap-1"><Gift size={16}/>Mes de Cumpleaños (Opcional)</FormLabel>
-                              <Select onValueChange={(value) => field.onChange(value ? parseInt(value) : null)} value={field.value?.toString() || ""}>
+                              <Select
+                                onValueChange={(value) => field.onChange(value === NO_SPECIFY_BIRTHDAY_ITEM_VALUE ? null : parseInt(value))}
+                                value={field.value === null ? NO_SPECIFY_BIRTHDAY_ITEM_VALUE : (field.value?.toString() || NO_SPECIFY_BIRTHDAY_ITEM_VALUE)}
+                              >
                                 <FormControl><SelectTrigger><SelectValue placeholder="Mes" /></SelectTrigger></FormControl>
                                 <SelectContent>
-                                  <SelectItem value=""><em>No especificar</em></SelectItem>
+                                  <SelectItem value={NO_SPECIFY_BIRTHDAY_ITEM_VALUE}><em>No especificar</em></SelectItem>
                                   {MONTH_NAMES.map((monthName, index) => (
                                     <SelectItem key={`month-${index + 1}`} value={(index + 1).toString()}>{monthName}</SelectItem>
                                   ))}
