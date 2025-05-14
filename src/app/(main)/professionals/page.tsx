@@ -1,3 +1,4 @@
+
 "use client";
 
 import type { Professional, ProfessionalFormData, Contract } from '@/types';
@@ -326,7 +327,7 @@ export default function ProfessionalsPage() {
 
 
  const formatWorkScheduleDisplay = (prof: Professional) => {
-  const today = startOfDay(todayMock); 
+  const today = startOfDay(new Date()); // Use actual current date
   const availabilityToday = getProfessionalAvailabilityForDate(prof, today);
 
   let todayStr = "Hoy: ";
