@@ -232,8 +232,8 @@ export default function ProfessionalsPage() {
         const oldContractId = editingProfessional?.currentContract?.id;
         const newContractDataHasChanged = 
           !oldContractId ||
-          (data.currentContract_startDate && formatISO(data.currentContract_startDate, { representation: 'date' }) !== editingProfessional?.currentContract?.startDate) ||
-          (data.currentContract_endDate && formatISO(data.currentContract_endDate, { representation: 'date' }) !== editingProfessional?.currentContract?.endDate) ||
+          (data.currentContract_startDate && dateFnsFormatISO(data.currentContract_startDate, { representation: 'date' }) !== editingProfessional?.currentContract?.startDate) ||
+          (data.currentContract_endDate && dateFnsFormatISO(data.currentContract_endDate, { representation: 'date' }) !== editingProfessional?.currentContract?.endDate) ||
           (data.currentContract_notes !== (editingProfessional?.currentContract?.notes || '')) ||
           (data.currentContract_empresa !== (editingProfessional?.currentContract?.empresa || ''));
 
@@ -369,7 +369,7 @@ export default function ProfessionalsPage() {
     if (override) {
       reason = `Descansando (Anulación${override.notes ? `: ${override.notes}` : ''})`;
     } else if (prof.workSchedule && !prof.workSchedule[DAYS_OF_WEEK[getDay(today)].id as DayOfWeekId]?.isWorking && !override) {
-        reason = `Descansando (Horario base: ${DAYS_OF_WEEK[getDay(today)].id} libre)`;
+        reason = `Descansando (Horario base: ${DAYS_OF_WEEK[getDay(today)].name} libre)`;
     }
     todayStr += reason;
   }
@@ -708,4 +708,5 @@ export default function ProfessionalsPage() {
     </div>
   );
 }
+
 
