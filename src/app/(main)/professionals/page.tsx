@@ -96,9 +96,13 @@ export default function ProfessionalsPage() {
   
   const isAdminOrContador = user?.role === USER_ROLES.ADMIN || user?.role === USER_ROLES.CONTADOR;
   const isContadorOnly = user?.role === USER_ROLES.CONTADOR;
-  const effectiveLocationId = isAdminOrContador
-    ? (adminSelectedLocation && adminSelectedLocation !== 'all' ? adminSelectedLocation : LOCATIONS[0].id)
-    : user?.locationId;
+  
+  const effectiveLocationIdForFetch = useMemo(() => {
+    if (isAdminOrContador) {
+      return adminSelectedLocation === 'all' ? undefined : adminSelectedLocation as LocationId;
+    }
+    return user?.locationId;
+  }, [user, isAdminOrContador, adminSelectedLocation]);
 
 
   const fetchProfessionals = useCallback(async () => {
@@ -111,9 +115,9 @@ export default function ProfessionalsPage() {
     try {
       let profsToSet: (Professional & { contractDisplayStatus: ContractDisplayStatus })[] = [];
       if (isAdminOrContador) {
-        if (effectiveLocationId) {
-          profsToSet = await getProfessionals(effectiveLocationId);
-        } else { 
+        if (effectiveLocationIdForFetch) {
+          profsToSet = await getProfessionals(effectiveLocationIdForFetch);
+        } else { // 'all' selected
           const allProfsPromises = LOCATIONS.map(loc => getProfessionals(loc.id));
           const results = await Promise.all(allProfsPromises);
           profsToSet = results.flat();
@@ -126,7 +130,7 @@ export default function ProfessionalsPage() {
       toast({ title: "Error", description: "No se pudieron cargar los profesionales.", variant: "destructive" });
     }
     setIsLoading(false);
-  }, [effectiveLocationId, user, toast, isAdminOrContador]);
+  }, [effectiveLocationIdForFetch, user, toast, isAdminOrContador]);
 
   useEffect(() => {
     if (user?.role === USER_ROLES.ADMIN || user?.role === USER_ROLES.CONTADOR) {
@@ -226,6 +230,7 @@ export default function ProfessionalsPage() {
       let currentContract: Contract | null = null;
       if (data.currentContract_startDate && data.currentContract_endDate) {
         currentContract = {
+          id: editingProfessional?.currentContract?.id || generateId(),
           startDate: dateFnsFormatISO(data.currentContract_startDate, { representation: 'date' }),
           endDate: dateFnsFormatISO(data.currentContract_endDate, { representation: 'date' }),
           notes: data.currentContract_notes || undefined,
@@ -331,7 +336,7 @@ export default function ProfessionalsPage() {
 
 
  const formatWorkScheduleDisplay = (prof: Professional) => {
-  const today = startOfDay(todayMock); 
+  const today = startOfDay(new Date()); 
   const availabilityToday = getProfessionalAvailabilityForDate(prof, today);
 
   let todayStr = "Hoy: ";
@@ -684,3 +689,4 @@ export default function ProfessionalsPage() {
     </div>
   );
 }
+
