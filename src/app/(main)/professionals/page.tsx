@@ -106,7 +106,7 @@ export default function ProfessionalsPage() {
 
 
   const fetchProfessionals = useCallback(async () => {
-    if(!user || user.role === USER_ROLES.LOCATION_STAFF ) { 
+    if(!user || (user.role === USER_ROLES.LOCATION_STAFF && !isAdminOrContador) ) { 
       setIsLoading(false);
       setAllProfessionals([]);
       return;
@@ -229,8 +229,16 @@ export default function ProfessionalsPage() {
       
       let currentContract: Contract | null = null;
       if (data.currentContract_startDate && data.currentContract_endDate) {
+        const oldContractId = editingProfessional?.currentContract?.id;
+        const newContractDataHasChanged = 
+          !oldContractId ||
+          (data.currentContract_startDate && formatISO(data.currentContract_startDate, { representation: 'date' }) !== editingProfessional?.currentContract?.startDate) ||
+          (data.currentContract_endDate && formatISO(data.currentContract_endDate, { representation: 'date' }) !== editingProfessional?.currentContract?.endDate) ||
+          (data.currentContract_notes !== (editingProfessional?.currentContract?.notes || '')) ||
+          (data.currentContract_empresa !== (editingProfessional?.currentContract?.empresa || ''));
+
         currentContract = {
-          id: editingProfessional?.currentContract?.id || generateId(),
+          id: newContractDataHasChanged ? generateId() : oldContractId!,
           startDate: dateFnsFormatISO(data.currentContract_startDate, { representation: 'date' }),
           endDate: dateFnsFormatISO(data.currentContract_endDate, { representation: 'date' }),
           notes: data.currentContract_notes || undefined,
@@ -238,7 +246,7 @@ export default function ProfessionalsPage() {
         };
       }
 
-      const professionalToSave: Omit<Professional, 'id' | 'biWeeklyEarnings'> & {id?: string} = {
+      const professionalToSave: Omit<Professional, 'id' | 'biWeeklyEarnings'> & {id?: string; contractHistory: Contract[]} = {
         id: data.id,
         firstName: data.firstName,
         lastName: data.lastName,
@@ -256,6 +264,18 @@ export default function ProfessionalsPage() {
         currentContract: currentContract,
         contractHistory: editingProfessional?.contractHistory || [],
       };
+      
+      // Logic to move old currentContract to history if new contract is different
+      if (editingProfessional?.currentContract && currentContract && editingProfessional.currentContract.id !== currentContract.id) {
+         if (!professionalToSave.contractHistory.find(ch => ch.id === editingProfessional.currentContract!.id)) {
+            professionalToSave.contractHistory.push(editingProfessional.currentContract);
+         }
+      } else if (editingProfessional?.currentContract && !currentContract) { // Case where contract is removed
+          if (!professionalToSave.contractHistory.find(ch => ch.id === editingProfessional.currentContract!.id)) {
+            professionalToSave.contractHistory.push(editingProfessional.currentContract);
+         }
+      }
+
 
       if (data.workSchedule) {
         (Object.keys(data.workSchedule) as Array<DayOfWeekId>).forEach(dayId => { 
@@ -349,7 +369,7 @@ export default function ProfessionalsPage() {
     if (override) {
       reason = `Descansando (Anulación${override.notes ? `: ${override.notes}` : ''})`;
     } else if (prof.workSchedule && !prof.workSchedule[DAYS_OF_WEEK[getDay(today)].id as DayOfWeekId]?.isWorking && !override) {
-        reason = `Descansando (Horario base: ${DAYS_OF_WEEK[getDay(today)].name} libre)`;
+        reason = `Descansando (Horario base: ${DAYS_OF_WEEK[getDay(today)].id} libre)`;
     }
     todayStr += reason;
   }
@@ -415,7 +435,7 @@ export default function ProfessionalsPage() {
                       <TableHead className="hidden md:table-cell">Estado Contrato</TableHead>
                        <TableHead className="hidden md:table-cell">Empresa</TableHead>
                       <TableHead className="hidden md:table-cell">Fin Contrato</TableHead>
-                      {isAdminOrContador && <TableHead className="hidden xl:table-cell text-right">Ingresos Quincena (S/)</TableHead> }
+                      {isContadorOnly && <TableHead className="hidden xl:table-cell text-right">Ingresos Quincena (S/)</TableHead> }
                       <TableHead className="text-right">Acciones</TableHead>
                     </TableRow>
                   </TableHeader>
@@ -441,7 +461,6 @@ export default function ProfessionalsPage() {
                         <TableCell className="hidden md:table-cell text-xs">
                           {prof.currentContract?.endDate ? format(parseISO(prof.currentContract.endDate), 'dd/MM/yyyy') : 'N/A'}
                         </TableCell>
-                        {(isAdminOrContador && !isContadorOnly) && <TableCell className="hidden xl:table-cell text-right">{(prof.biWeeklyEarnings ?? 0).toFixed(2)}</TableCell> }
                         {isContadorOnly && <TableCell className="hidden xl:table-cell text-right">{(prof.biWeeklyEarnings ?? 0).toFixed(2)}</TableCell> }
                         <TableCell className="text-right">
                         {(isAdminOrContador) && ( 
@@ -453,7 +472,7 @@ export default function ProfessionalsPage() {
                       </TableRow>
                     )) : (
                       <TableRow>
-                        <TableCell colSpan={(isAdminOrContador && !isContadorOnly) ? 9 : (isContadorOnly ? 9 : 8)} className="h-24 text-center"> 
+                        <TableCell colSpan={isContadorOnly ? 9 : 8} className="h-24 text-center"> 
                           <AlertTriangle className="inline-block mr-2 h-5 w-5 text-muted-foreground" /> No se encontraron profesionales.
                         </TableCell>
                       </TableRow>
