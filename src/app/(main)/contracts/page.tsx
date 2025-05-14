@@ -2,7 +2,7 @@
 "use client";
 
 import type { Professional, Contract, ContractEditFormData, ProfessionalFormData } from '@/types';
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useAuth } from '@/contexts/auth-provider';
 import { useAppState } from '@/contexts/app-state-provider';
 import { getProfessionals, updateProfessional } from '@/lib/data';
@@ -29,7 +29,7 @@ import {
   DialogClose,
 } from '@/components/ui/dialog';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
-import { Loader2, AlertTriangle, FileSpreadsheet, Eye, ChevronsDown, Edit3, Calendar as CalendarIconLucide, Building, PlusCircle } from 'lucide-react';
+import { Loader2, AlertTriangle, FileSpreadsheet, Eye, ChevronsDown, Edit3, Calendar as CalendarIconLucide, Building, PlusCircle, Filter } from 'lucide-react';
 import { format, parseISO } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { useRouter } from 'next/navigation';
@@ -42,8 +42,10 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { Calendar } from '@/components/ui/calendar';
 import { cn } from '@/lib/utils';
 import { Badge } from '@/components/ui/badge';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 
 const CONTRACTS_PER_PAGE = 10;
+const ALL_EMPRESAS_VALUE = "all_empresas_placeholder";
 
 export default function ContractsPage() {
   const { user, isLoading: authIsLoading } = useAuth();
@@ -57,6 +59,9 @@ export default function ContractsPage() {
   
   const [isLoading, setIsLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
+  const [selectedEmpresa, setSelectedEmpresa] = useState<string>(ALL_EMPRESAS_VALUE);
+  const [uniqueEmpresas, setUniqueEmpresas] = useState<string[]>([]);
+
   const [selectedProfessionalForHistory, setSelectedProfessionalForHistory] = useState<(Professional & { contractDisplayStatus: ContractDisplayStatus }) | null>(null);
   const [isHistoryModalOpen, setIsHistoryModalOpen] = useState(false);
   
@@ -116,12 +121,28 @@ export default function ContractsPage() {
     }
   }, [fetchContractData, user, isAdminOrContador]);
 
+  useEffect(() => {
+    const empresas = new Set<string>();
+    allProfessionalsWithContracts.forEach(prof => {
+      if (prof.currentContract?.empresa) {
+        empresas.add(prof.currentContract.empresa);
+      }
+      prof.contractHistory?.forEach(ch => {
+        if (ch.empresa) {
+          empresas.add(ch.empresa);
+        }
+      });
+    });
+    setUniqueEmpresas(Array.from(empresas).sort());
+  }, [allProfessionalsWithContracts]);
+
   const filteredAndSortedProfessionals = React.useMemo(() => {
     return allProfessionalsWithContracts
       .filter(p =>
-        `${p.firstName} ${p.lastName}`.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        (`${p.firstName} ${p.lastName}`.toLowerCase().includes(searchTerm.toLowerCase()) ||
         (p.currentContract?.notes && p.currentContract.notes.toLowerCase().includes(searchTerm.toLowerCase())) ||
-        (p.currentContract?.empresa && p.currentContract.empresa.toLowerCase().includes(searchTerm.toLowerCase()))
+        (p.currentContract?.empresa && p.currentContract.empresa.toLowerCase().includes(searchTerm.toLowerCase()))) &&
+        (selectedEmpresa === ALL_EMPRESAS_VALUE || p.currentContract?.empresa === selectedEmpresa)
       )
       .sort((a, b) => {
         const statusOrder: Record<ContractDisplayStatus, number> = {
@@ -137,7 +158,7 @@ export default function ContractsPage() {
         }
         return `${a.firstName} ${a.lastName}`.localeCompare(`${b.firstName} ${b.lastName}`);
       });
-  }, [allProfessionalsWithContracts, searchTerm]);
+  }, [allProfessionalsWithContracts, searchTerm, selectedEmpresa]);
   
   useEffect(() => {
     setDisplayedProfessionals(filteredAndSortedProfessionals.slice(0, CONTRACTS_PER_PAGE * currentPage));
@@ -226,7 +247,7 @@ export default function ContractsPage() {
         <AlertTriangle className="mx-auto h-12 w-12 text-muted-foreground mb-4" />
         <h3 className="text-xl font-semibold mb-2">No se encontraron contratos</h3>
         <p className="text-muted-foreground">
-          {searchTerm ? "No hay profesionales que coincidan con la búsqueda." : "No hay información de contratos para mostrar."}
+          {searchTerm || selectedEmpresa !== ALL_EMPRESAS_VALUE ? "No hay profesionales que coincidan con los filtros." : "No hay información de contratos para mostrar."}
         </p>
       </CardContent>
     </Card>
@@ -245,14 +266,28 @@ export default function ContractsPage() {
           )}
         </CardHeader>
         <CardContent>
-          <div className="mb-4">
+          <div className="mb-4 flex flex-col sm:flex-row gap-4 items-center">
             <Input
               type="search"
               placeholder="Buscar por nombre, notas o empresa del contrato..."
               value={searchTerm}
               onChange={(e) => { setSearchTerm(e.target.value); setCurrentPage(1);}}
-              className="w-full"
+              className="flex-grow"
             />
+            <Select value={selectedEmpresa} onValueChange={(value) => { setSelectedEmpresa(value); setCurrentPage(1); }}>
+              <SelectTrigger className="w-full sm:w-[200px]">
+                <SelectValue placeholder="Filtrar por Empresa" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value={ALL_EMPRESAS_VALUE}>Todas las Empresas</SelectItem>
+                {uniqueEmpresas.map(empresa => (
+                  <SelectItem key={empresa} value={empresa}>{empresa}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Button variant="outline" className="w-full sm:w-auto"> {/* Placeholder for functionality */}
+              <Building className="mr-2 h-4 w-4"/> Añadir Nueva Empresa
+            </Button>
           </div>
 
           {isLoading ? <LoadingState /> : 
@@ -477,6 +512,3 @@ export default function ContractsPage() {
     </div>
   );
 }
-
-
-    
