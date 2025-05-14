@@ -29,7 +29,7 @@ import {
   DialogClose,
 } from '@/components/ui/dialog';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
-import { Loader2, AlertTriangle, FileSpreadsheet, Eye, ChevronsDown, Edit3, Calendar as CalendarIconLucide, Filter, PlusCircle } from 'lucide-react'; // Changed Building to Filter
+import { Loader2, AlertTriangle, FileSpreadsheet, Eye, ChevronsDown, Edit3, Calendar as CalendarIconLucide, Filter, PlusCircle, Pencil } from 'lucide-react';
 import { format, parseISO } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { useRouter } from 'next/navigation';
@@ -43,7 +43,7 @@ import { Calendar } from '@/components/ui/calendar';
 import { cn } from '@/lib/utils';
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Separator } from '@/components/ui/separator'; // Added Separator
+import { Separator } from '@/components/ui/separator';
 
 const CONTRACTS_PER_PAGE = 10;
 const ALL_EMPRESAS_VALUE = "all_empresas_placeholder";
@@ -66,8 +66,10 @@ export default function ContractsPage() {
   const [selectedEmpresa, setSelectedEmpresa] = useState<string>(ALL_EMPRESAS_VALUE);
   const [uniqueEmpresas, setUniqueEmpresas] = useState<string[]>([]);
   const [manuallyAddedEmpresas, setManuallyAddedEmpresas] = useState<string[]>([]);
-  const [isManageEmpresasModalOpen, setIsManageEmpresasModalOpen] = useState(false); // Renamed
+  const [isManageEmpresasModalOpen, setIsManageEmpresasModalOpen] = useState(false);
   const [newEmpresaNameInput, setNewEmpresaNameInput] = useState('');
+  const [editingEmpresaName, setEditingEmpresaName] = useState<string | null>(null);
+
 
   const [selectedProfessionalForHistory, setSelectedProfessionalForHistory] = useState<(Professional & { contractDisplayStatus: ContractDisplayStatus }) | null>(null);
   const [isHistoryModalOpen, setIsHistoryModalOpen] = useState(false);
@@ -144,31 +146,57 @@ export default function ContractsPage() {
     setUniqueEmpresas(Array.from(combinedEmpresas).sort((a,b) => a.toLowerCase().localeCompare(b.toLowerCase())));
   }, [allProfessionalsWithContracts, manuallyAddedEmpresas]);
 
-  const handleAddEmpresaToManualList = () => {
+  const isEmpresaInUse = useCallback((empresaName: string): boolean => {
+    return allProfessionalsWithContracts.some(prof =>
+      prof.currentContract?.empresa === empresaName ||
+      prof.contractHistory?.some(ch => ch.empresa === empresaName)
+    );
+  }, [allProfessionalsWithContracts]);
+
+  const handleSaveEmpresaName = () => {
     const trimmedNewEmpresaName = newEmpresaNameInput.trim();
-    if (trimmedNewEmpresaName !== '') {
-      if (!uniqueEmpresas.some(e => e.toLowerCase() === trimmedNewEmpresaName.toLowerCase()) && !manuallyAddedEmpresas.some(e => e.toLowerCase() === trimmedNewEmpresaName.toLowerCase())) {
-        setManuallyAddedEmpresas(prev => [...prev, trimmedNewEmpresaName]);
-        toast({ title: "Empresa Añadida", description: `"${trimmedNewEmpresaName}" se ha añadido a la lista de filtros.` });
-      } else {
-        toast({ title: "Empresa ya existe", description: `"${trimmedNewEmpresaName}" ya está en la lista.`, variant: "default" });
+    if (trimmedNewEmpresaName === '') {
+      toast({ title: "Nombre Vacío", description: "El nombre de la empresa no puede estar vacío.", variant: "destructive" });
+      return;
+    }
+
+    if (editingEmpresaName) { // Estamos actualizando un nombre
+      if (trimmedNewEmpresaName !== editingEmpresaName && uniqueEmpresas.some(e => e.toLowerCase() === trimmedNewEmpresaName.toLowerCase())) {
+        toast({ title: "Empresa Duplicada", description: `La empresa "${trimmedNewEmpresaName}" ya existe.`, variant: "destructive" });
+        return;
       }
+      setManuallyAddedEmpresas(prev =>
+        prev.map(e => (e === editingEmpresaName ? trimmedNewEmpresaName : e))
+      );
+      toast({ title: "Empresa Actualizada", description: `"${editingEmpresaName}" se actualizó a "${trimmedNewEmpresaName}".` });
+    } else { // Estamos añadiendo una nueva empresa
+      if (uniqueEmpresas.some(e => e.toLowerCase() === trimmedNewEmpresaName.toLowerCase())) {
+        toast({ title: "Empresa ya existe", description: `"${trimmedNewEmpresaName}" ya está en la lista.`, variant: "default" });
+        return;
+      }
+      setManuallyAddedEmpresas(prev => [...prev, trimmedNewEmpresaName]);
+      toast({ title: "Empresa Añadida", description: `"${trimmedNewEmpresaName}" se ha añadido a la lista de opciones.` });
     }
     setNewEmpresaNameInput('');
-    // No cerramos el modal para permitir añadir más o quitar.
+    setEditingEmpresaName(null);
+  };
+
+  const handleStartEditEmpresa = (empresa: string) => {
+    setEditingEmpresaName(empresa);
+    setNewEmpresaNameInput(empresa);
   };
 
   const handleRemoveManuallyAddedEmpresa = (empresaNameToRemove: string) => {
     const wasManuallyAdded = manuallyAddedEmpresas.includes(empresaNameToRemove);
     setManuallyAddedEmpresas(prev => prev.filter(e => e !== empresaNameToRemove));
   
-    const companyStillInUse = allProfessionalsWithContracts.some(prof =>
-      prof.currentContract?.empresa === empresaNameToRemove ||
-      prof.contractHistory?.some(ch => ch.empresa === empresaNameToRemove)
-    );
-  
+    if (editingEmpresaName === empresaNameToRemove) { // Si se está editando la empresa que se va a quitar
+      setNewEmpresaNameInput('');
+      setEditingEmpresaName(null);
+    }
+
     if (wasManuallyAdded) {
-      if (companyStillInUse) {
+      if (isEmpresaInUse(empresaNameToRemove)) {
         toast({
           title: "Empresa quitada de la lista manual",
           description: `"${empresaNameToRemove}" se quitó de las opciones añadidas manualmente, pero sigue apareciendo porque está en uso en contratos existentes.`,
@@ -183,11 +211,10 @@ export default function ContractsPage() {
         });
       }
     } else {
-      // This case happens if it was only derived from contracts and user tries to remove it from the "manage" list
       toast({
         title: "No se puede quitar completamente",
         description: `"${empresaNameToRemove}" no se puede eliminar de la lista de filtros porque está definida en contratos existentes. Edite los contratos directamente si desea cambiarla.`,
-        variant: "default", // Changed to default to be less alarming
+        variant: "default",
         duration: 6000,
       });
     }
@@ -283,6 +310,19 @@ export default function ContractsPage() {
     setCurrentPage(prev => prev + 1);
   };
 
+  const handleOpenManageEmpresasModal = () => {
+    setEditingEmpresaName(null); // Reset edit mode when opening modal
+    setNewEmpresaNameInput(''); // Clear input
+    setIsManageEmpresasModalOpen(true);
+  };
+
+  const handleCloseManageEmpresasModal = () => {
+    setIsManageEmpresasModalOpen(false);
+    setEditingEmpresaName(null); // Reset edit mode when closing modal
+    setNewEmpresaNameInput(''); // Clear input
+  };
+
+
   if (authIsLoading || !user || !isAdminOrContador) {
     return (
       <div className="flex h-screen items-center justify-center">
@@ -343,7 +383,7 @@ export default function ContractsPage() {
                 ))}
               </SelectContent>
             </Select>
-            <Button variant="outline" className="w-full sm:w-auto" onClick={() => setIsManageEmpresasModalOpen(true)}>
+            <Button variant="outline" className="w-full sm:w-auto" onClick={handleOpenManageEmpresasModal}>
               <Filter className="mr-2 h-4 w-4"/> Gestionar Empresas
             </Button>
           </div>
@@ -530,26 +570,33 @@ export default function ContractsPage() {
       )}
 
       {/* Manage Empresas Modal */}
-      <Dialog open={isManageEmpresasModalOpen} onOpenChange={setIsManageEmpresasModalOpen}>
+      <Dialog open={isManageEmpresasModalOpen} onOpenChange={handleCloseManageEmpresasModal}>
         <DialogContent className="sm:max-w-lg">
           <DialogHeader>
             <DialogTitle>Gestionar Nombres de Empresas</DialogTitle>
             <DialogDescription>
-              Añada nuevas empresas a la lista de filtros o elimine las que añadió manualmente.
-              Las empresas en uso en contratos no se pueden eliminar de esta lista.
+              Añada o actualice empresas en la lista de filtros, o elimine las que añadió manualmente.
+              Las empresas en uso no se pueden eliminar de esta lista, ni editar su nombre directamente aquí si están en uso.
             </DialogDescription>
           </DialogHeader>
           <div className="py-4 space-y-6">
             <div>
-              <h4 className="text-md font-semibold mb-2">Añadir Nueva Empresa</h4>
+              <h4 className="text-md font-semibold mb-2">{editingEmpresaName ? `Actualizar Nombre de "${editingEmpresaName}"` : "Añadir Nueva Empresa"}</h4>
               <div className="flex gap-2 items-center">
                 <Input
-                  placeholder="Nombre de la nueva empresa"
+                  placeholder="Nombre de la empresa"
                   value={newEmpresaNameInput}
                   onChange={(e) => setNewEmpresaNameInput(e.target.value)}
                   className="flex-grow"
                 />
-                <Button type="button" onClick={handleAddEmpresaToManualList}>Añadir</Button>
+                <Button type="button" onClick={handleSaveEmpresaName}>
+                  {editingEmpresaName ? "Actualizar Nombre" : "Añadir"}
+                </Button>
+                 {editingEmpresaName && (
+                  <Button type="button" variant="ghost" onClick={() => { setNewEmpresaNameInput(''); setEditingEmpresaName(null); }}>
+                    Cancelar Edición
+                  </Button>
+                )}
               </div>
             </div>
 
@@ -563,14 +610,30 @@ export default function ContractsPage() {
                     {uniqueEmpresas.map((empresa) => (
                       <li key={empresa} className="flex justify-between items-center p-1.5 hover:bg-muted/50 rounded">
                         <span className="text-sm">{empresa}</span>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="text-xs text-destructive hover:text-destructive/80 hover:bg-destructive/10 h-auto px-2 py-1"
-                          onClick={() => handleRemoveManuallyAddedEmpresa(empresa)}
-                        >
-                          Quitar
-                        </Button>
+                        <div className="flex items-center gap-1">
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="text-xs text-blue-600 hover:text-blue-500 hover:bg-blue-500/10 h-auto px-2 py-1"
+                            onClick={() => handleStartEditEmpresa(empresa)}
+                            disabled={!manuallyAddedEmpresas.includes(empresa) || isEmpresaInUse(empresa)}
+                            title={
+                              !manuallyAddedEmpresas.includes(empresa) ? "Solo se pueden editar empresas añadidas manualmente." :
+                              isEmpresaInUse(empresa) ? "No se puede editar una empresa en uso. Edite el contrato directamente." :
+                              "Editar nombre de empresa"
+                            }
+                          >
+                            <Pencil size={12} />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="text-xs text-destructive hover:text-destructive/80 hover:bg-destructive/10 h-auto px-2 py-1"
+                            onClick={() => handleRemoveManuallyAddedEmpresa(empresa)}
+                          >
+                            Quitar
+                          </Button>
+                        </div>
                       </li>
                     ))}
                   </ul>
@@ -581,9 +644,7 @@ export default function ContractsPage() {
             </div>
           </div>
           <DialogFooter className="pt-4">
-            <DialogClose asChild>
-              <Button type="button" variant="outline">Cerrar</Button>
-            </DialogClose>
+            <Button type="button" variant="outline" onClick={handleCloseManageEmpresasModal}>Cerrar</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -644,3 +705,6 @@ export default function ContractsPage() {
     </div>
   );
 }
+
+
+      
