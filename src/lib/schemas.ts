@@ -158,3 +158,19 @@ export const ContractEditFormSchema = z.object({
   path: ["endDate"],
 });
 export type ContractEditFormData = z.infer<typeof ContractEditFormSchema>;
+
+export const PeriodicReminderFormSchema = z.object({
+  title: z.string().min(1, "El título es requerido."),
+  description: z.string().optional().nullable(),
+  dueDate: z.date({ required_error: "La fecha de vencimiento es requerida." }),
+  recurrence: z.enum(['once', 'monthly', 'quarterly', 'annually'], { 
+    required_error: "La recurrencia es requerida.",
+    invalid_type_error: "Seleccione una recurrencia válida."
+  }),
+  amount: z.coerce.number().positive("El monto debe ser un número positivo.").optional().nullable(),
+  status: z.enum(['pending', 'paid'], { 
+    required_error: "El estado es requerido.",
+    invalid_type_error: "Seleccione un estado válido."
+  }),
+});
+export type PeriodicReminderFormData = z.infer<typeof PeriodicReminderFormSchema>;

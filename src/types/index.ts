@@ -151,3 +151,23 @@ export type ContractEditFormData = {
   endDate: Date | null;
   empresa?: string | null;
 };
+
+export interface PeriodicReminder extends BaseEntity {
+  title: string;
+  description?: string;
+  dueDate: string; // ISO Date string 'YYYY-MM-DD'
+  recurrence: 'once' | 'monthly' | 'quarterly' | 'annually';
+  amount?: number;
+  status: 'pending' | 'paid';
+  createdAt?: string; // ISO Date string
+  updatedAt?: string; // ISO Date string
+}
+
+export interface PeriodicReminderFormData {
+  title: string;
+  description?: string | null;
+  dueDate: Date; // In the form, it's a Date object from react-day-picker
+  recurrence: 'once' | 'monthly' | 'quarterly' | 'annually';
+  amount?: number | null; // Form might deal with undefined or null for optional numbers
+  status: 'pending' | 'paid';
+}
