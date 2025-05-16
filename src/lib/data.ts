@@ -51,7 +51,7 @@ const professionalCounts: Record<LocationId, number> = {
 };
 
 const initialMockProfessionalsData: Professional[] = LOCATIONS.flatMap((location, locIndex) => {
-  const numProfessionals = professionalCounts[location.id] || 2;
+  const numProfessionals = professionalCounts[location.id] || 2; // Use the counts
   return Array.from({ length: numProfessionals }, (_, i) => {
     const baseSchedule: { [key in DayOfWeekId]?: { startTime: string; endTime: string; isWorking?: boolean } | null } = {
       monday: { isWorking: true, startTime: '10:00', endTime: '19:00' },
@@ -67,6 +67,7 @@ const initialMockProfessionalsData: Professional[] = LOCATIONS.flatMap((location
     const isThirdProfHiguereta = location.id === 'higuereta' && i === 2;
 
     let currentContract: Contract | null = null;
+    // Ensure first two professionals per location have active contracts
     if (i < 2) {
         const contractStartDate = subDays(todayMock, 60); 
         const contractEndDate = addDays(todayMock, 90);   
@@ -77,7 +78,7 @@ const initialMockProfessionalsData: Professional[] = LOCATIONS.flatMap((location
             notes: `Contrato activo para ${location.name} prof ${i + 1}`,
             empresa: `Empresa Principal ${location.name}`,
         };
-    } else {
+    } else { // For subsequent professionals, vary contract status
         if (i % 3 === 0) { 
             const contractStartDate = subDays(todayMock, 30);
             const contractEndDate = addDays(todayMock, 60);
@@ -99,19 +100,20 @@ const initialMockProfessionalsData: Professional[] = LOCATIONS.flatMap((location
                  empresa: 'Empresa Expirada',
              };
         }
+        // The third case (i % 3 === 2) will have no currentContract (null)
     }
 
     let birthDay: number | null = null;
     let birthMonth: number | null = null;
     if (i === 0 && location.id === 'higuereta') { 
-        const upcomingBday = addDays(todayMock, 5);
+        const upcomingBday = addDays(todayMock, 5); // Upcoming in 5 days
         birthDay = getDate(upcomingBday);
         birthMonth = getMonth(upcomingBday) + 1;
     } else if (i === 1 && location.id === 'san_antonio') { 
-        const upcomingBday = addDays(todayMock, 10);
+        const upcomingBday = addDays(todayMock, 10); // Upcoming in 10 days
         birthDay = getDate(upcomingBday);
         birthMonth = getMonth(upcomingBday) + 1;
-    } else if (i % 4 === 0) { 
+    } else if (i % 4 === 0) { // Some other professionals with birthdays
         birthDay = (i % 28) + 1; 
         birthMonth = (i % 12) + 1;
     }
@@ -226,9 +228,11 @@ const initialMockAppointmentsData: Appointment[] = [
 
 const initialMockPeriodicRemindersData: PeriodicReminder[] = [
   { id: 'rem001', title: 'Pago IGV Mensual', dueDate: formatISO(setMonth(setYear(new Date(), 2025), 4), { representation: 'date'}), recurrence: 'monthly', amount: 350.00, status: 'pending', createdAt: formatISO(new Date()), updatedAt: formatISO(new Date()) },
-  { id: 'rem002', title: 'Servicio de Luz Oficina', dueDate: formatISO(addDays(todayMock, 5), { representation: 'date'}), recurrence: 'monthly', amount: 120.50, status: 'pending', createdAt: formatISO(new Date()), updatedAt: formatISO(new Date()) },
+  { id: 'rem002', title: 'Servicio de Luz Oficina', dueDate: formatISO(addDays(todayMock, 2), { representation: 'date'}), recurrence: 'monthly', amount: 120.50, status: 'pending', createdAt: formatISO(new Date()), updatedAt: formatISO(new Date()) }, // Due in 2 days
   { id: 'rem003', title: 'Cuota Préstamo Banco X', dueDate: formatISO(subDays(todayMock, 10), { representation: 'date'}), recurrence: 'monthly', amount: 1200.00, status: 'paid', createdAt: formatISO(new Date()), updatedAt: formatISO(new Date()) },
   { id: 'rem004', title: 'Renovación SOAT Camioneta', dueDate: formatISO(addDays(todayMock, 40), { representation: 'date'}), recurrence: 'annually', amount: 450.00, status: 'pending', createdAt: formatISO(new Date()), updatedAt: formatISO(new Date()) },
+  { id: 'rem005', title: 'Alquiler Local Principal', dueDate: formatISO(subDays(todayMock, 3), { representation: 'date'}), recurrence: 'monthly', amount: 2500.00, status: 'pending', createdAt: formatISO(new Date()), updatedAt: formatISO(new Date()) }, // Overdue by 3 days
+  { id: 'rem006', title: 'Declaración Anual Impuestos', dueDate: formatISO(addDays(todayMock, 1), { representation: 'date'}), recurrence: 'annually', amount: 150.00, status: 'pending', createdAt: formatISO(new Date()), updatedAt: formatISO(new Date()) }, // Due tomorrow
 ];
 
 
@@ -487,8 +491,8 @@ export const updateProfessional = async (id: string, data: Partial<ProfessionalF
                     (!oldContract || 
                      oldContract.startDate !== newProposedContractData.startDate || 
                      oldContract.endDate !== newProposedContractData.endDate ||
-                     (oldContract.notes || undefined) !== (newProposedContractData.notes || undefined) ||
-                     (oldContract.empresa || undefined) !== (newProposedContractData.empresa || undefined)
+                     (oldContract.notes || '') !== (newProposedContractData.notes || '') || // Corrected logic for notes
+                     (oldContract.empresa || '') !== (newProposedContractData.empresa || '')   // Corrected logic for empresa
                     );
 
                 if (isCreatingNewContractInstance) {
@@ -503,6 +507,9 @@ export const updateProfessional = async (id: string, data: Partial<ProfessionalF
                         empresa: newProposedContractData.empresa,
                     };
                 } else if (oldContract && (newProposedContractData.notes !== undefined || newProposedContractData.empresa !== undefined || newProposedContractData.startDate !== undefined || newProposedContractData.endDate !== undefined)) {
+                    // This block ensures that even if only notes or empresa changes, the existing contract is updated.
+                    // If start/end dates change, a new contract instance might be created above if they are both present.
+                    // If only one of start/end changes, or only metadata, update the current one.
                     professionalToUpdate.currentContract = {
                         ...oldContract,
                         startDate: newProposedContractData.startDate !== undefined ? newProposedContractData.startDate : oldContract.startDate,
@@ -511,8 +518,10 @@ export const updateProfessional = async (id: string, data: Partial<ProfessionalF
                         empresa: newProposedContractData.empresa !== undefined ? newProposedContractData.empresa : oldContract.empresa,
                     };
                  } else if (!newProposedContractData.startDate && !newProposedContractData.endDate && !contractFieldsTouchedInPayload && oldContract) {
+                     // If no contract fields were touched but there's an old contract, keep it.
                      professionalToUpdate.currentContract = oldContract;
                 } else if ((!newProposedContractData.startDate || !newProposedContractData.endDate) && contractFieldsTouchedInPayload) {
+                    // If contract is being removed (e.g., start/end dates are cleared)
                     if (oldContract && oldContract.id && !professionalToUpdate.contractHistory?.find(h => h.id === oldContract!.id)) {
                         professionalToUpdate.contractHistory = [...(professionalToUpdate.contractHistory || []), oldContract];
                     }
@@ -569,6 +578,7 @@ export const getPatients = async (options: { page?: number, limit?: number, sear
         if (lastIndex !== -1) {
             paginatedPatients = filteredMockPatients.slice(lastIndex + 1, lastIndex + 1 + queryLimit);
         } else {
+            // Fallback if startAfterId is not found (e.g., data changed) - start from beginning of the current page
             const startIndex = (page - 1) * queryLimit; 
             paginatedPatients = filteredMockPatients.slice(startIndex, startIndex + queryLimit);
         }
@@ -1194,3 +1204,4 @@ export const deletePeriodicReminder = async (id: string): Promise<boolean> => {
   }
   throw new Error("Periodic reminder deletion not implemented for non-mock database or mockDB not available.");
 };
+

@@ -1,22 +1,22 @@
 
 "use client";
 
+import type { PeriodicReminder } from '@/types';
 import { useAuth } from '@/contexts/auth-provider';
 import { USER_ROLES, LOCATIONS, LocationId, APPOINTMENT_STATUS, DAYS_OF_WEEK } from '@/lib/constants';
 import type { Professional } from '@/types';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
 import Link from 'next/link';
-import Image from 'next/image';
-import { CalendarPlus, Users, History, Briefcase, Loader2, Bed, CalendarCheck2, Gift } from 'lucide-react';
+import { CalendarPlus, Users, History, Briefcase, Loader2, Bed, CalendarCheck2, Gift, Bell } from 'lucide-react';
 import { useAppState } from '@/contexts/app-state-provider';
 import { useState, useEffect, useMemo } from 'react';
-import { getAppointments, getProfessionals, getProfessionalAvailabilityForDate } from '@/lib/data';
-import { startOfDay, endOfDay, startOfMonth, endOfMonth, nextSunday, isToday, addDays, differenceInDays, getYear, getMonth, getDate } from 'date-fns';
+import { getAppointments, getProfessionals, getProfessionalAvailabilityForDate, getPeriodicReminders } from '@/lib/data';
+import { startOfDay, endOfDay, startOfMonth, endOfMonth, nextSunday, isToday, addDays, differenceInDays, getYear, getMonth, getDate, parseISO, isBefore } from 'date-fns';
 import { StatCard } from '@/components/dashboard/stat-card';
 import { ActionCard } from '@/components/dashboard/action-card';
 import { ProfessionalStatusTodayCard } from '@/components/dashboard/professional-status-today-card';
 import { UpcomingBirthdaysCard } from '@/components/dashboard/upcoming-birthdays-card';
+import { UpcomingRemindersCard } from '@/components/dashboard/upcoming-reminders-card';
 
 
 interface DashboardStats {
@@ -39,8 +39,11 @@ export default function DashboardPage() {
   const [professionalsOnRestToday, setProfessionalsOnRestToday] = useState<Professional[]>([]);
   const [professionalsWorkingNextSunday, setProfessionalsWorkingNextSunday] = useState<Professional[]>([]);
   const [professionalsWithUpcomingBirthdays, setProfessionalsWithUpcomingBirthdays] = useState<Professional[]>([]);
+  const [overdueReminders, setOverdueReminders] = useState<PeriodicReminder[]>([]);
+  const [upcomingRemindersNext4Days, setUpcomingRemindersNext4Days] = useState<PeriodicReminder[]>([]);
   const [isLoadingProfessionalStatus, setIsLoadingProfessionalStatus] = useState(true);
   const [isLoadingUpcomingBirthdays, setIsLoadingUpcomingBirthdays] = useState(true);
+  const [isLoadingReminders, setIsLoadingReminders] = useState(true);
 
 
   const isAdminOrContador = user?.role === USER_ROLES.ADMIN || user?.role === USER_ROLES.CONTADOR;
@@ -58,6 +61,7 @@ export default function DashboardPage() {
       setIsLoadingStats(true);
       setIsLoadingProfessionalStatus(true);
       setIsLoadingUpcomingBirthdays(true);
+      if (isAdminOrContador) setIsLoadingReminders(true);
 
       let todayAppointmentsCount = 0;
       let pendingConfirmationsCount = 0;
@@ -124,9 +128,9 @@ export default function DashboardPage() {
         // Fetch All Professionals for status checks and birthdays
         let allFetchedProfessionals: Professional[] = [];
         if (isAdminOrContador) {
-            if (effectiveLocationId) { // Specific location or first location if 'all' was technically selected but page uses single view
+            if (effectiveLocationId) { 
                 allFetchedProfessionals = await getProfessionals(effectiveLocationId);
-            } else { // 'all' locations selected by admin/contador for overview
+            } else { 
                 const allProfsPromises = LOCATIONS.map(loc => getProfessionals(loc.id));
                 const results = await Promise.all(allProfsPromises);
                 allFetchedProfessionals = results.flat();
@@ -153,9 +157,7 @@ export default function DashboardPage() {
         const workingNextSundayDate = nextSunday(today);
         const workingNextSunday: Professional[] = [];
         const upcomingBirthdaysList: Professional[] = [];
-        const todayDate = getDate(today);
-        const todayMonth = getMonth(today) + 1; // 1-indexed for comparison
-
+        
         for (const prof of allFetchedProfessionals) {
           const availabilityToday = getProfessionalAvailabilityForDate(prof, today);
           if (!availabilityToday) {
@@ -167,11 +169,10 @@ export default function DashboardPage() {
             workingNextSunday.push(prof);
           }
 
-          // Upcoming Birthdays Logic
           if (prof.birthDay && prof.birthMonth) {
             const currentYear = getYear(today);
             let nextBirthdayThisYear = new Date(currentYear, prof.birthMonth - 1, prof.birthDay);
-            if (nextBirthdayThisYear < today) { // Birthday already passed this year
+            if (nextBirthdayThisYear < today) { 
               nextBirthdayThisYear = new Date(currentYear + 1, prof.birthMonth - 1, prof.birthDay);
             }
             const daysToBirthday = differenceInDays(nextBirthdayThisYear, today);
@@ -183,13 +184,31 @@ export default function DashboardPage() {
         setProfessionalsOnRestToday(restingToday.sort((a,b) => `${a.firstName} ${a.lastName}`.localeCompare(`${b.firstName} ${b.lastName}`)));
         setProfessionalsWorkingNextSunday(workingNextSunday.sort((a,b) => `${a.firstName} ${a.lastName}`.localeCompare(`${b.firstName} ${b.lastName}`)));
         setProfessionalsWithUpcomingBirthdays(upcomingBirthdaysList.sort((a,b) => {
-          // Sort by how soon the birthday is
           const dateA = new Date(getYear(today), (a.birthMonth || 1) -1, a.birthDay || 1);
           const dateB = new Date(getYear(today), (b.birthMonth || 1) -1, b.birthDay || 1);
           if (dateA < today) dateA.setFullYear(getYear(today) + 1);
           if (dateB < today) dateB.setFullYear(getYear(today) + 1);
           return dateA.getTime() - dateB.getTime();
         }));
+        setIsLoadingProfessionalStatus(false);
+        setIsLoadingUpcomingBirthdays(false);
+
+        // Fetch Reminders for Admin/Contador
+        if (isAdminOrContador) {
+            const allReminders = await getPeriodicReminders();
+            const fourDaysFromToday = addDays(today, 4);
+            const overdue = allReminders.filter(r => r.status === 'pending' && isBefore(parseISO(r.dueDate), today))
+                                      .sort((a,b) => parseISO(a.dueDate).getTime() - parseISO(b.dueDate).getTime());
+            const upcoming = allReminders.filter(r => {
+                const dueDate = parseISO(r.dueDate);
+                return r.status === 'pending' && !isBefore(dueDate, today) && dueDate <= fourDaysFromToday;
+            }).sort((a,b) => parseISO(a.dueDate).getTime() - parseISO(b.dueDate).getTime());
+            
+            setOverdueReminders(overdue);
+            setUpcomingRemindersNext4Days(upcoming);
+            setIsLoadingReminders(false);
+        }
+
 
       } catch (error) {
         console.error("Failed to fetch dashboard data:", error);
@@ -202,10 +221,13 @@ export default function DashboardPage() {
         setProfessionalsOnRestToday([]);
         setProfessionalsWorkingNextSunday([]);
         setProfessionalsWithUpcomingBirthdays([]);
+        setOverdueReminders([]);
+        setUpcomingRemindersNext4Days([]);
       } finally {
         setIsLoadingStats(false);
         setIsLoadingProfessionalStatus(false);
         setIsLoadingUpcomingBirthdays(false);
+        if (isAdminOrContador) setIsLoadingReminders(false);
       }
     };
 
@@ -266,9 +288,19 @@ export default function DashboardPage() {
             icon={<History className="h-6 w-6 text-primary" />} 
           />
         )}
+        {isAdminOrContador && (
+          <UpcomingRemindersCard
+            title="Alertas de Pagos"
+            overdueReminders={overdueReminders}
+            upcomingReminders={upcomingRemindersNext4Days}
+            isLoading={isLoadingReminders}
+            icon={<Bell className="h-6 w-6 text-primary" />}
+            emptyMessage="No hay alertas de pagos pendientes."
+          />
+        )}
       </div>
 
-      <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 mb-8"> {/* Adjusted grid for new card */}
+      <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 mb-8">
         <ProfessionalStatusTodayCard
             title="Profesionales Descansando Hoy"
             professionals={professionalsOnRestToday}
@@ -318,4 +350,3 @@ export default function DashboardPage() {
     </div>
   );
 }
-
