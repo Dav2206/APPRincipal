@@ -7,7 +7,7 @@ import { useAuth } from '@/contexts/auth-provider';
 import { USER_ROLES } from '@/lib/constants';
 import { getPeriodicReminders, addPeriodicReminder, updatePeriodicReminder, deletePeriodicReminder as deletePeriodicReminderData } from '@/lib/data';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
+import { Button, buttonVariants } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import {
@@ -43,7 +43,8 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { Calendar } from '@/components/ui/calendar';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Checkbox } from '@/components/ui/checkbox';
-import { Bell, CalendarClock, StickyNote, ShieldAlert, PlusCircle, Edit2, Trash2, AlertTriangle, Loader2, CheckCircle, XCircle } from 'lucide-react';
+import { Badge } from '@/components/ui/badge'; // Importación añadida
+import { Bell, CalendarClock, StickyNote, ShieldAlert, PlusCircle, Edit2, Trash2, AlertTriangle, Loader2, CheckCircle, XCircle, Clock } from 'lucide-react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { PeriodicReminderFormSchema } from '@/lib/schemas';
@@ -251,7 +252,7 @@ export default function RemindersPage() {
                       {reminders.map((reminder) => {
                         const displayStatus = getReminderDisplayStatus(reminder);
                         return (
-                          <TableRow key={reminder.id} className={cn(displayStatus.variant === 'destructive' && 'bg-destructive/10')}>
+                          <TableRow key={reminder.id} className={cn(displayStatus.variant === 'destructive' && reminder.status === 'pending' && 'bg-destructive/10')}>
                             <TableCell className="font-medium">
                               {reminder.title}
                               {reminder.description && <p className="text-xs text-muted-foreground truncate max-w-xs">{reminder.description}</p>}
@@ -352,7 +353,7 @@ export default function RemindersPage() {
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel>Descripción (Opcional)</FormLabel>
-                    <FormControl><Textarea placeholder="Ej: Declaración mensual, periodo 05-2025" {...field} /></FormControl>
+                    <FormControl><Textarea placeholder="Ej: Declaración mensual, periodo 05-2025" {...field} value={field.value || ''}/></FormControl>
                     <FormMessage />
                   </FormItem>
                 )}
@@ -450,3 +451,4 @@ export default function RemindersPage() {
     </div>
   );
 }
+
