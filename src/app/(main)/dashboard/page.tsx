@@ -1,22 +1,23 @@
 
 "use client";
 
-import type { PeriodicReminder } from '@/types';
+import type { PeriodicReminder, ImportantNote } from '@/types';
 import { useAuth } from '@/contexts/auth-provider';
 import { USER_ROLES, LOCATIONS, LocationId, APPOINTMENT_STATUS, DAYS_OF_WEEK } from '@/lib/constants';
 import type { Professional } from '@/types';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import Link from 'next/link';
-import { CalendarPlus, Users, History, Briefcase, Loader2, Bed, CalendarCheck2, Gift, Bell } from 'lucide-react';
+import { CalendarPlus, Users, History, Briefcase, Loader2, Bed, CalendarCheck2, Gift, Bell, StickyNote } from 'lucide-react';
 import { useAppState } from '@/contexts/app-state-provider';
 import { useState, useEffect, useMemo } from 'react';
-import { getAppointments, getProfessionals, getProfessionalAvailabilityForDate, getPeriodicReminders } from '@/lib/data';
+import { getAppointments, getProfessionals, getProfessionalAvailabilityForDate, getPeriodicReminders, getImportantNotes } from '@/lib/data';
 import { startOfDay, endOfDay, startOfMonth, endOfMonth, nextSunday, isToday, addDays, differenceInDays, getYear, getMonth, getDate, parseISO, isBefore } from 'date-fns';
 import { StatCard } from '@/components/dashboard/stat-card';
 import { ActionCard } from '@/components/dashboard/action-card';
 import { ProfessionalStatusTodayCard } from '@/components/dashboard/professional-status-today-card';
 import { UpcomingBirthdaysCard } from '@/components/dashboard/upcoming-birthdays-card';
 import { UpcomingRemindersCard } from '@/components/dashboard/upcoming-reminders-card';
+import { ImportantNotesCard } from '@/components/dashboard/important-notes-card';
 
 
 interface DashboardStats {
@@ -41,9 +42,11 @@ export default function DashboardPage() {
   const [professionalsWithUpcomingBirthdays, setProfessionalsWithUpcomingBirthdays] = useState<Professional[]>([]);
   const [overdueReminders, setOverdueReminders] = useState<PeriodicReminder[]>([]);
   const [upcomingRemindersNext4Days, setUpcomingRemindersNext4Days] = useState<PeriodicReminder[]>([]);
+  const [recentImportantNotes, setRecentImportantNotes] = useState<ImportantNote[]>([]);
   const [isLoadingProfessionalStatus, setIsLoadingProfessionalStatus] = useState(true);
   const [isLoadingUpcomingBirthdays, setIsLoadingUpcomingBirthdays] = useState(true);
   const [isLoadingReminders, setIsLoadingReminders] = useState(true);
+  const [isLoadingImportantNotes, setIsLoadingImportantNotes] = useState(true);
 
 
   const isAdminOrContador = user?.role === USER_ROLES.ADMIN || user?.role === USER_ROLES.CONTADOR;
@@ -61,7 +64,10 @@ export default function DashboardPage() {
       setIsLoadingStats(true);
       setIsLoadingProfessionalStatus(true);
       setIsLoadingUpcomingBirthdays(true);
-      if (isAdminOrContador) setIsLoadingReminders(true);
+      if (isAdminOrContador) {
+        setIsLoadingReminders(true);
+        setIsLoadingImportantNotes(true);
+      }
 
       let todayAppointmentsCount = 0;
       let pendingConfirmationsCount = 0;
@@ -80,11 +86,11 @@ export default function DashboardPage() {
             const allLocationsAppointmentsResults = await Promise.all(allLocationsAppointmentsPromises);
             todayAppointmentsCount = allLocationsAppointmentsResults.reduce((sum, result) => sum + (result.appointments ? result.appointments.length : 0), 0);
           } else if (selectedLocationId && selectedLocationId !== 'all' && (isAdminOrContador || user.locationId === selectedLocationId)) {
-            const locationAppointments = await getAppointments({ date: today, locationId: selectedLocationId as LocationId, statuses: [APPOINTMENT_STATUS.BOOKED, APPOINTMENT_STATUS.CONFIRMED] });
-            todayAppointmentsCount = locationAppointments.appointments ? locationAppointments.appointments.length : 0;
+            const { appointments } = await getAppointments({ date: today, locationId: selectedLocationId as LocationId, statuses: [APPOINTMENT_STATUS.BOOKED, APPOINTMENT_STATUS.CONFIRMED] });
+            todayAppointmentsCount = appointments ? appointments.length : 0;
           } else if (user.role === USER_ROLES.LOCATION_STAFF && user.locationId) {
-            const locationAppointments = await getAppointments({ date: today, locationId: user.locationId, statuses: [APPOINTMENT_STATUS.BOOKED, APPOINTMENT_STATUS.CONFIRMED] });
-            todayAppointmentsCount = locationAppointments.appointments ? locationAppointments.appointments.length : 0;
+            const { appointments } = await getAppointments({ date: today, locationId: user.locationId, statuses: [APPOINTMENT_STATUS.BOOKED, APPOINTMENT_STATUS.CONFIRMED] });
+            todayAppointmentsCount = appointments ? appointments.length : 0;
           }
         }
 
@@ -95,11 +101,11 @@ export default function DashboardPage() {
              const allLocationsPendingResults = await Promise.all(allLocationsPendingPromises);
              pendingConfirmationsCount = allLocationsPendingResults.reduce((sum, result) => sum + (result.appointments ? result.appointments.length : 0), 0);
           } else if (selectedLocationId && selectedLocationId !== 'all' && (isAdminOrContador || user.locationId === selectedLocationId)) {
-            const bookedAppointments = await getAppointments({ statuses: [APPOINTMENT_STATUS.BOOKED], locationId: selectedLocationId as LocationId });
-            pendingConfirmationsCount = bookedAppointments.appointments ? bookedAppointments.appointments.length : 0;
+            const { appointments } = await getAppointments({ statuses: [APPOINTMENT_STATUS.BOOKED], locationId: selectedLocationId as LocationId });
+            pendingConfirmationsCount = appointments ? appointments.length : 0;
           } else if (user.role === USER_ROLES.LOCATION_STAFF && user.locationId) {
-            const bookedAppointments = await getAppointments({ statuses: [APPOINTMENT_STATUS.BOOKED], locationId: user.locationId });
-            pendingConfirmationsCount = bookedAppointments.appointments ? bookedAppointments.appointments.length : 0;
+            const { appointments } = await getAppointments({ statuses: [APPOINTMENT_STATUS.BOOKED], locationId: user.locationId });
+            pendingConfirmationsCount = appointments ? appointments.length : 0;
           }
         }
         
@@ -116,12 +122,12 @@ export default function DashboardPage() {
               totalSum + (locationResults.appointments ? locationResults.appointments.reduce((locationSum, appt) => locationSum + (appt.amountPaid || 0), 0) : 0), 
             0);
           } else if (selectedLocationId && selectedLocationId !== 'all') {
-            const completedAppointmentsMonth = await getAppointments({
+            const { appointments } = await getAppointments({
               statuses: [APPOINTMENT_STATUS.COMPLETED],
               locationId: selectedLocationId as LocationId,
               dateRange: { start: currentMonthStart, end: currentMonthEnd },
             });
-            totalRevenueMonthValue = completedAppointmentsMonth.appointments ? completedAppointmentsMonth.appointments.reduce((sum, appt) => sum + (appt.amountPaid || 0), 0) : 0;
+            totalRevenueMonthValue = appointments ? appointments.reduce((sum, appt) => sum + (appt.amountPaid || 0), 0) : 0;
           }
         }
 
@@ -193,9 +199,13 @@ export default function DashboardPage() {
         setIsLoadingProfessionalStatus(false);
         setIsLoadingUpcomingBirthdays(false);
 
-        // Fetch Reminders for Admin/Contador
+        // Fetch Reminders and Notes for Admin/Contador
         if (isAdminOrContador) {
-            const allReminders = await getPeriodicReminders();
+            const [allReminders, allImpNotes] = await Promise.all([
+              getPeriodicReminders(),
+              getImportantNotes()
+            ]);
+
             const fourDaysFromToday = addDays(today, 4);
             const overdue = allReminders.filter(r => r.status === 'pending' && isBefore(parseISO(r.dueDate), today))
                                       .sort((a,b) => parseISO(a.dueDate).getTime() - parseISO(b.dueDate).getTime());
@@ -207,6 +217,9 @@ export default function DashboardPage() {
             setOverdueReminders(overdue);
             setUpcomingRemindersNext4Days(upcoming);
             setIsLoadingReminders(false);
+
+            setRecentImportantNotes(allImpNotes.sort((a, b) => parseISO(b.createdAt || '1970-01-01').getTime() - parseISO(a.createdAt || '1970-01-01').getTime()).slice(0, 3));
+            setIsLoadingImportantNotes(false);
         }
 
 
@@ -223,11 +236,15 @@ export default function DashboardPage() {
         setProfessionalsWithUpcomingBirthdays([]);
         setOverdueReminders([]);
         setUpcomingRemindersNext4Days([]);
+        setRecentImportantNotes([]);
       } finally {
         setIsLoadingStats(false);
         setIsLoadingProfessionalStatus(false);
         setIsLoadingUpcomingBirthdays(false);
-        if (isAdminOrContador) setIsLoadingReminders(false);
+        if (isAdminOrContador) {
+          setIsLoadingReminders(false);
+          setIsLoadingImportantNotes(false);
+        }
       }
     };
 
@@ -288,19 +305,9 @@ export default function DashboardPage() {
             icon={<History className="h-6 w-6 text-primary" />} 
           />
         )}
-        {isAdminOrContador && (
-          <UpcomingRemindersCard
-            title="Alertas de Pagos"
-            overdueReminders={overdueReminders}
-            upcomingReminders={upcomingRemindersNext4Days}
-            isLoading={isLoadingReminders}
-            icon={<Bell className="h-6 w-6 text-primary" />}
-            emptyMessage="No hay alertas de pagos pendientes."
-          />
-        )}
       </div>
 
-      <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 mb-8">
+      <div className="grid gap-6 md:grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 mb-8">
         <ProfessionalStatusTodayCard
             title="Profesionales Descansando Hoy"
             professionals={professionalsOnRestToday}
@@ -322,6 +329,25 @@ export default function DashboardPage() {
             icon={<Gift className="h-6 w-6 text-primary" />}
             emptyMessage="No hay cumpleaños en los próximos 15 días."
         />
+         {isAdminOrContador && (
+          <UpcomingRemindersCard
+            title="Alertas de Pagos"
+            overdueReminders={overdueReminders}
+            upcomingReminders={upcomingRemindersNext4Days}
+            isLoading={isLoadingReminders}
+            icon={<Bell className="h-6 w-6 text-primary" />}
+            emptyMessage="No hay alertas de pagos pendientes."
+          />
+        )}
+        {isAdminOrContador && (
+          <ImportantNotesCard
+            title="Notas Importantes Recientes"
+            notes={recentImportantNotes}
+            isLoading={isLoadingImportantNotes}
+            icon={<StickyNote className="h-6 w-6 text-primary" />}
+            emptyMessage="No hay notas importantes recientes."
+          />
+        )}
       </div>
       
       <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
@@ -350,3 +376,4 @@ export default function DashboardPage() {
     </div>
   );
 }
+
