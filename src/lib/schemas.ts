@@ -174,3 +174,10 @@ export const PeriodicReminderFormSchema = z.object({
   }),
 });
 export type PeriodicReminderFormData = z.infer<typeof PeriodicReminderFormSchema>;
+
+export const ImportantNoteFormSchema = z.object({
+  id: z.string().optional(),
+  title: z.string().min(1, "El título es requerido."),
+  content: z.string().min(1, "El contenido es requerido."),
+});
+export type ImportantNoteFormData = z.infer<typeof ImportantNoteFormSchema>;

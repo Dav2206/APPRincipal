@@ -1,6 +1,5 @@
-
 // src/lib/data.ts
-import type { User, Professional, Patient, Service, Appointment, AppointmentFormData, ProfessionalFormData, AppointmentStatus, ServiceFormData, Contract, PeriodicReminder } from '@/types';
+import type { User, Professional, Patient, Service, Appointment, AppointmentFormData, ProfessionalFormData, AppointmentStatus, ServiceFormData, Contract, PeriodicReminder, ImportantNote, ImportantNoteFormData } from '@/types';
 import { LOCATIONS, USER_ROLES, SERVICES as SERVICES_CONSTANTS, APPOINTMENT_STATUS, LocationId, ServiceId as ConstantServiceId, APPOINTMENT_STATUS_DISPLAY, PAYMENT_METHODS, TIME_SLOTS, DAYS_OF_WEEK } from './constants';
 import type { DayOfWeekId } from './constants';
 import { formatISO, parseISO, addDays, setHours, setMinutes, startOfDay, endOfDay, isSameDay as dateFnsIsSameDay, startOfMonth, endOfMonth, differenceInYears, subDays, isEqual, isBefore, isAfter, getDate, getYear, getMonth, setMonth, setYear, getHours, addMinutes as dateFnsAddMinutes, isWithinInterval, getDay, format, differenceInCalendarDays, areIntervalsOverlapping, parse } from 'date-fns';
@@ -235,6 +234,12 @@ const initialMockPeriodicRemindersData: PeriodicReminder[] = [
   { id: 'rem006', title: 'Declaración Anual Impuestos', dueDate: formatISO(addDays(todayMock, 1), { representation: 'date'}), recurrence: 'annually', amount: 150.00, status: 'pending', createdAt: formatISO(new Date()), updatedAt: formatISO(new Date()) }, // Due tomorrow
 ];
 
+const initialMockImportantNotesData: ImportantNote[] = [
+    { id: 'note001', title: 'Procedimiento Nuevo Quiropodia', content: 'Revisar el nuevo protocolo para quiropodia avanzada que se implementará desde el 01/06/2025. Capacitación pendiente para todo el personal.', createdAt: formatISO(subDays(todayMock, 5)), updatedAt: formatISO(subDays(todayMock, 5))},
+    { id: 'note002', title: 'Contacto Proveedor Insumos', content: 'Sr. Pérez - 999888777. Llamar la primera semana de cada mes para pedidos.', createdAt: formatISO(subDays(todayMock, 15)), updatedAt: formatISO(subDays(todayMock, 10))},
+    { id: 'note003', title: 'Ideas Campaña Día de la Madre', content: 'Ofrecer 2x1 en reflexología. Crear paquetes especiales con descuento.', createdAt: formatISO(subDays(todayMock, 30)), updatedAt: formatISO(subDays(todayMock, 30))},
+];
+
 
 interface MockDB {
   users: User[];
@@ -243,6 +248,7 @@ interface MockDB {
   services: Service[];
   appointments: Appointment[];
   periodicReminders: PeriodicReminder[];
+  importantNotes: ImportantNote[];
 }
 
 let globalMockDB: MockDB | null = null;
@@ -257,6 +263,7 @@ function initializeGlobalMockStore(): MockDB {
         services: [...initialMockServicesData],
         appointments: [...initialMockAppointmentsData],
         periodicReminders: [...initialMockPeriodicRemindersData],
+        importantNotes: [...initialMockImportantNotesData],
       };
     }
     return (window as any).__globalMockDB;
@@ -269,6 +276,7 @@ function initializeGlobalMockStore(): MockDB {
         services: [...initialMockServicesData],
         appointments: [...initialMockAppointmentsData],
         periodicReminders: [...initialMockPeriodicRemindersData],
+        importantNotes: [...initialMockImportantNotesData],
       };
     }
     return globalMockDB;
@@ -491,8 +499,8 @@ export const updateProfessional = async (id: string, data: Partial<ProfessionalF
                     (!oldContract || 
                      oldContract.startDate !== newProposedContractData.startDate || 
                      oldContract.endDate !== newProposedContractData.endDate ||
-                     (oldContract.notes || '') !== (newProposedContractData.notes || '') || // Corrected logic for notes
-                     (oldContract.empresa || '') !== (newProposedContractData.empresa || '')   // Corrected logic for empresa
+                     (oldContract.notes || '') !== (newProposedContractData.notes || '') || 
+                     (oldContract.empresa || '') !== (newProposedContractData.empresa || '')   
                     );
 
                 if (isCreatingNewContractInstance) {
@@ -507,9 +515,6 @@ export const updateProfessional = async (id: string, data: Partial<ProfessionalF
                         empresa: newProposedContractData.empresa,
                     };
                 } else if (oldContract && (newProposedContractData.notes !== undefined || newProposedContractData.empresa !== undefined || newProposedContractData.startDate !== undefined || newProposedContractData.endDate !== undefined)) {
-                    // This block ensures that even if only notes or empresa changes, the existing contract is updated.
-                    // If start/end dates change, a new contract instance might be created above if they are both present.
-                    // If only one of start/end changes, or only metadata, update the current one.
                     professionalToUpdate.currentContract = {
                         ...oldContract,
                         startDate: newProposedContractData.startDate !== undefined ? newProposedContractData.startDate : oldContract.startDate,
@@ -518,10 +523,8 @@ export const updateProfessional = async (id: string, data: Partial<ProfessionalF
                         empresa: newProposedContractData.empresa !== undefined ? newProposedContractData.empresa : oldContract.empresa,
                     };
                  } else if (!newProposedContractData.startDate && !newProposedContractData.endDate && !contractFieldsTouchedInPayload && oldContract) {
-                     // If no contract fields were touched but there's an old contract, keep it.
                      professionalToUpdate.currentContract = oldContract;
                 } else if ((!newProposedContractData.startDate || !newProposedContractData.endDate) && contractFieldsTouchedInPayload) {
-                    // If contract is being removed (e.g., start/end dates are cleared)
                     if (oldContract && oldContract.id && !professionalToUpdate.contractHistory?.find(h => h.id === oldContract!.id)) {
                         professionalToUpdate.contractHistory = [...(professionalToUpdate.contractHistory || []), oldContract];
                     }
@@ -813,7 +816,7 @@ export const getAppointments = async (filters: {
     }
 
     const newLastVisibleId = paginatedResult.length > 0 ? paginatedResult[paginatedResult.length -1].id : null;
-    return { appointments: paginatedResult, totalCount, lastVisibleAppointmentId: newLastVisibleId };
+    return { appointments: populatedAppointmentsResult, totalCount, lastVisibleAppointmentId: newLastVisibleId };
   }
   throw new Error("Appointment retrieval not implemented for non-mock database or mockDB not available.");
 };
@@ -1072,7 +1075,7 @@ export const getPatientAppointmentHistory = async (
     }
 
     const newLastVisibleId = paginatedAppointments.length > 0 ? paginatedAppointments[paginatedAppointments.length -1].id : null;
-    return { appointments: paginatedAppointments, totalCount, lastVisibleAppointmentId: newLastVisibleId };
+    return { appointments: populatedHistory, totalCount, lastVisibleAppointmentId: newLastVisibleId };
   }
   throw new Error("Patient appointment history retrieval not implemented for non-mock database or mockDB not available.");
 };
@@ -1205,3 +1208,49 @@ export const deletePeriodicReminder = async (id: string): Promise<boolean> => {
   throw new Error("Periodic reminder deletion not implemented for non-mock database or mockDB not available.");
 };
 
+// --- Important Notes CRUD ---
+export const getImportantNotes = async (): Promise<ImportantNote[]> => {
+    if (useMockDatabase) {
+        return [...mockDB.importantNotes].sort((a,b) => parseISO(b.createdAt || new Date(0).toISOString()).getTime() - parseISO(a.createdAt || new Date(0).toISOString()).getTime());
+    }
+    throw new Error("Important note retrieval not implemented for non-mock database.");
+};
+
+export const addImportantNote = async (data: Omit<ImportantNote, 'id' | 'createdAt' | 'updatedAt'>): Promise<ImportantNote> => {
+    if (useMockDatabase) {
+        const newNote: ImportantNote = {
+            id: generateId(),
+            ...data,
+            createdAt: formatISO(new Date()),
+            updatedAt: formatISO(new Date()),
+        };
+        mockDB.importantNotes.push(newNote);
+        return newNote;
+    }
+    throw new Error("Important note creation not implemented for non-mock database.");
+};
+
+export const updateImportantNote = async (id: string, data: Partial<Omit<ImportantNote, 'id' | 'createdAt' | 'updatedAt'>>): Promise<ImportantNote | undefined> => {
+    if (useMockDatabase) {
+        const index = mockDB.importantNotes.findIndex(n => n.id === id);
+        if (index !== -1) {
+            mockDB.importantNotes[index] = {
+                ...mockDB.importantNotes[index],
+                ...data,
+                updatedAt: formatISO(new Date()),
+            };
+            return mockDB.importantNotes[index];
+        }
+        return undefined;
+    }
+    throw new Error("Important note update not implemented for non-mock database.");
+};
+
+export const deleteImportantNote = async (id: string): Promise<boolean> => {
+    if (useMockDatabase) {
+        const initialLength = mockDB.importantNotes.length;
+        mockDB.importantNotes = mockDB.importantNotes.filter(n => n.id !== id);
+        return mockDB.importantNotes.length < initialLength;
+    }
+    throw new Error("Important note deletion not implemented for non-mock database.");
+};

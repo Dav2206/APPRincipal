@@ -2,10 +2,13 @@
 "use client";
 
 import React, { useState, useEffect, useCallback } from 'react';
-import type { PeriodicReminder, PeriodicReminderFormData } from '@/types';
+import type { PeriodicReminder, PeriodicReminderFormData, ImportantNote, ImportantNoteFormData } from '@/types';
 import { useAuth } from '@/contexts/auth-provider';
 import { USER_ROLES } from '@/lib/constants';
-import { getPeriodicReminders, addPeriodicReminder, updatePeriodicReminder, deletePeriodicReminder as deletePeriodicReminderData } from '@/lib/data';
+import { 
+  getPeriodicReminders, addPeriodicReminder, updatePeriodicReminder, deletePeriodicReminder as deletePeriodicReminderData,
+  getImportantNotes, addImportantNote, updateImportantNote, deleteImportantNote as deleteImportantNoteData
+} from '@/lib/data';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button, buttonVariants } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -43,11 +46,11 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { Calendar } from '@/components/ui/calendar';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Checkbox } from '@/components/ui/checkbox';
-import { Badge } from '@/components/ui/badge'; // Importación añadida
-import { Bell, CalendarClock, StickyNote, ShieldAlert, PlusCircle, Edit2, Trash2, AlertTriangle, Loader2, CheckCircle, XCircle, Clock } from 'lucide-react';
+import { Badge } from '@/components/ui/badge';
+import { Bell, CalendarClock, StickyNote, ShieldAlert, PlusCircle, Edit2, Trash2, AlertTriangle, Loader2, CheckCircle, XCircle, Clock, FileText } from 'lucide-react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { PeriodicReminderFormSchema } from '@/lib/schemas';
+import { PeriodicReminderFormSchema, ImportantNoteFormSchema } from '@/lib/schemas';
 import { useToast } from '@/hooks/use-toast';
 import { useRouter } from 'next/navigation';
 import { format, parseISO, startOfDay, isBefore } from 'date-fns';
@@ -72,6 +75,13 @@ export default function RemindersPage() {
   const [editingReminder, setEditingReminder] = useState<PeriodicReminder | null>(null);
   const [reminderToDelete, setReminderToDelete] = useState<PeriodicReminder | null>(null);
 
+  const [notes, setNotes] = useState<ImportantNote[]>([]);
+  const [isLoadingNotes, setIsLoadingNotes] = useState(true);
+  const [isNoteFormOpen, setIsNoteFormOpen] = useState(false);
+  const [editingNote, setEditingNote] = useState<ImportantNote | null>(null);
+  const [noteToDelete, setNoteToDelete] = useState<ImportantNote | null>(null);
+
+
   const reminderForm = useForm<PeriodicReminderFormData>({
     resolver: zodResolver(PeriodicReminderFormSchema),
     defaultValues: {
@@ -81,6 +91,14 @@ export default function RemindersPage() {
       recurrence: 'once',
       amount: undefined,
       status: 'pending',
+    },
+  });
+
+  const noteForm = useForm<ImportantNoteFormData>({
+    resolver: zodResolver(ImportantNoteFormSchema),
+    defaultValues: {
+      title: '',
+      content: '',
     },
   });
 
@@ -103,10 +121,26 @@ export default function RemindersPage() {
     }
   }, [user, toast]);
 
+  const fetchNotes = useCallback(async () => {
+    if (!user || (user.role !== USER_ROLES.ADMIN && user.role !== USER_ROLES.CONTADOR)) return;
+    setIsLoadingNotes(true);
+    try {
+      const data = await getImportantNotes();
+      setNotes(data.sort((a,b) => parseISO(b.createdAt || new Date(0).toISOString()).getTime() - parseISO(a.createdAt || new Date(0).toISOString()).getTime()));
+    } catch (error) {
+      toast({ title: "Error", description: "No se pudieron cargar las notas.", variant: "destructive" });
+    } finally {
+      setIsLoadingNotes(false);
+    }
+  }, [user, toast]);
+
+
   useEffect(() => {
     fetchReminders();
-  }, [fetchReminders]);
+    fetchNotes();
+  }, [fetchReminders, fetchNotes]);
 
+  // Reminder Handlers
   const handleAddReminder = () => {
     setEditingReminder(null);
     reminderForm.reset({
@@ -183,6 +217,47 @@ export default function RemindersPage() {
       return { text: 'Vencido', variant: 'destructive', icon: <AlertTriangle className="h-4 w-4" /> };
     }
     return { text: 'Pendiente', variant: 'secondary', icon: <Clock className="h-4 w-4 text-orange-500" /> };
+  };
+
+  // Note Handlers
+  const handleAddNote = () => {
+    setEditingNote(null);
+    noteForm.reset({ title: '', content: '' });
+    setIsNoteFormOpen(true);
+  };
+
+  const handleEditNote = (note: ImportantNote) => {
+    setEditingNote(note);
+    noteForm.reset({ title: note.title, content: note.content, id: note.id });
+    setIsNoteFormOpen(true);
+  };
+
+  const handleDeleteNote = async () => {
+    if (!noteToDelete) return;
+    try {
+      await deleteImportantNoteData(noteToDelete.id);
+      toast({ title: "Nota Eliminada", description: `"${noteToDelete.title}" ha sido eliminada.` });
+      setNoteToDelete(null);
+      fetchNotes();
+    } catch (error) {
+      toast({ title: "Error", description: "No se pudo eliminar la nota.", variant: "destructive" });
+    }
+  };
+
+  const onSubmitNoteForm = async (data: ImportantNoteFormData) => {
+    try {
+      if (editingNote) {
+        await updateImportantNote(editingNote.id, data);
+        toast({ title: "Nota Actualizada", description: `"${data.title}" ha sido actualizada.` });
+      } else {
+        await addImportantNote(data);
+        toast({ title: "Nota Añadida", description: `"${data.title}" ha sido añadida.` });
+      }
+      setIsNoteFormOpen(false);
+      fetchNotes();
+    } catch (error) {
+      toast({ title: "Error", description: "No se pudo guardar la nota.", variant: "destructive" });
+    }
   };
 
 
@@ -307,22 +382,82 @@ export default function RemindersPage() {
           </Card>
 
           <Card>
-            <CardHeader>
-              <CardTitle className="text-xl flex items-center gap-2">
-                <StickyNote className="text-accent" />
-                Notas Importantes
-              </CardTitle>
-              <CardDescription>
-                Guarde y organice información crucial y datos relevantes para su empresa.
-              </CardDescription>
+            <CardHeader className="flex flex-row justify-between items-center">
+              <div>
+                <CardTitle className="text-xl flex items-center gap-2">
+                  <StickyNote className="text-accent" />
+                  Notas Importantes
+                </CardTitle>
+                <CardDescription>
+                  Guarde y organice información crucial y datos relevantes para su empresa.
+                </CardDescription>
+              </div>
+              <Button onClick={handleAddNote}>
+                <PlusCircle className="mr-2 h-4 w-4" /> Añadir Nota
+              </Button>
             </CardHeader>
             <CardContent>
-              <div className="p-6 border rounded-lg bg-secondary/30 text-center">
-                <ShieldAlert className="h-10 w-10 text-muted-foreground mx-auto mb-2" />
-                <p className="text-muted-foreground">
-                  Próximamente: Un espacio dedicado para registrar notas, ideas y datos importantes, con funcionalidades de búsqueda para un acceso rápido.
-                </p>
-              </div>
+              {isLoadingNotes ? (
+                <div className="flex justify-center items-center h-40">
+                  <Loader2 className="h-8 w-8 animate-spin text-primary" />
+                   <p className="ml-2 text-muted-foreground">Cargando notas...</p>
+                </div>
+              ) : notes.length === 0 ? (
+                <div className="p-6 border rounded-lg bg-secondary/30 text-center">
+                  <FileText className="h-10 w-10 text-muted-foreground mx-auto mb-2" />
+                  <p className="text-muted-foreground">
+                    No hay notas importantes guardadas. ¡Añade la primera!
+                  </p>
+                </div>
+              ) : (
+                <div className="rounded-md border">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Título</TableHead>
+                        <TableHead>Contenido (Vista Previa)</TableHead>
+                        <TableHead className="hidden md:table-cell">Fecha Creación</TableHead>
+                        <TableHead className="text-right">Acciones</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {notes.map((note) => (
+                        <TableRow key={note.id}>
+                          <TableCell className="font-medium">{note.title}</TableCell>
+                          <TableCell className="text-sm text-muted-foreground max-w-xs truncate">{note.content}</TableCell>
+                          <TableCell className="hidden md:table-cell">{note.createdAt ? format(parseISO(note.createdAt), "PPP", { locale: es }) : '-'}</TableCell>
+                          <TableCell className="text-right space-x-1">
+                            <Button variant="ghost" size="icon-xs" onClick={() => handleEditNote(note)} title="Editar Nota">
+                              <Edit2 className="h-4 w-4" />
+                            </Button>
+                            <AlertDialog>
+                              <AlertDialogTrigger asChild>
+                                <Button variant="ghost" size="icon-xs" onClick={() => setNoteToDelete(note)} title="Eliminar Nota">
+                                  <Trash2 className="h-4 w-4 text-destructive" />
+                                </Button>
+                              </AlertDialogTrigger>
+                              <AlertDialogContent>
+                                <AlertDialogHeader>
+                                  <AlertDialogTitle>¿Confirmar Eliminación?</AlertDialogTitle>
+                                  <AlertDialogDescription>
+                                    Esta acción no se puede deshacer. ¿Estás seguro de que quieres eliminar la nota "{noteToDelete?.title}"?
+                                  </AlertDialogDescription>
+                                </AlertDialogHeader>
+                                <AlertDialogFooter>
+                                  <AlertDialogCancel onClick={() => setNoteToDelete(null)}>Cancelar</AlertDialogCancel>
+                                  <AlertDialogAction onClick={handleDeleteNote} className={buttonVariants({ variant: "destructive" })}>
+                                    Eliminar
+                                  </AlertDialogAction>
+                                </AlertDialogFooter>
+                              </AlertDialogContent>
+                            </AlertDialog>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              )}
             </CardContent>
           </Card>
         </CardContent>
@@ -448,7 +583,48 @@ export default function RemindersPage() {
           </Form>
         </DialogContent>
       </Dialog>
+
+      {/* Note Form Dialog */}
+      <Dialog open={isNoteFormOpen} onOpenChange={setIsNoteFormOpen}>
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>{editingNote ? 'Editar' : 'Añadir'} Nota Importante</DialogTitle>
+          </DialogHeader>
+          <Form {...noteForm}>
+            <form onSubmit={noteForm.handleSubmit(onSubmitNoteForm)} className="space-y-4 py-2 max-h-[70vh] overflow-y-auto pr-2">
+              <FormField
+                control={noteForm.control}
+                name="title"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Título</FormLabel>
+                    <FormControl><Input placeholder="Ej: Contacto Proveedor X" {...field} /></FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={noteForm.control}
+                name="content"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Contenido</FormLabel>
+                    <FormControl><Textarea placeholder="Detalles de la nota..." {...field} rows={5} /></FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <DialogFooter className="pt-4">
+                <DialogClose asChild><Button type="button" variant="outline">Cancelar</Button></DialogClose>
+                <Button type="submit" disabled={noteForm.formState.isSubmitting}>
+                  {noteForm.formState.isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                  {editingNote ? 'Guardar Cambios' : 'Añadir Nota'}
+                </Button>
+              </DialogFooter>
+            </form>
+          </Form>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
-

@@ -25,8 +25,8 @@ export interface Professional extends BaseEntity {
   lastName: string;
   locationId: LocationId;
   phone?: string;
-  birthDay?: number | null; // Optional day of birth (1-31)
-  birthMonth?: number | null; // Optional month of birth (1-12)
+  birthDay?: number | null;
+  birthMonth?: number | null;
   biWeeklyEarnings?: number;
   
   workSchedule: {
@@ -170,4 +170,17 @@ export interface PeriodicReminderFormData {
   recurrence: 'once' | 'monthly' | 'quarterly' | 'annually';
   amount?: number | null; // Form might deal with undefined or null for optional numbers
   status: 'pending' | 'paid';
+}
+
+export interface ImportantNote extends BaseEntity {
+  title: string;
+  content: string;
+  createdAt?: string; // ISO Date string
+  updatedAt?: string; // ISO Date string
+}
+
+export interface ImportantNoteFormData {
+  id?: string; // for editing
+  title: string;
+  content: string;
 }
