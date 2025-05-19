@@ -18,6 +18,7 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: 'Footprints Scheduler',
   description: 'Appointment scheduling for podology centers',
+  // Añadir robots meta tag aquí también es una opción, pero en el head del HTML es más directo.
 };
 
 export default function RootLayout({
@@ -27,6 +28,9 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
+      <head>
+        <meta name="robots" content="noindex, nofollow" />
+      </head>
       <body className={`${geistSans.variable} ${geistMono.variable} antialiased`}>
         <AuthProvider>
           <AppStateProvider>
