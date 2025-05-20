@@ -68,10 +68,10 @@ if (useMockDatabase) {
         if (process.env.NODE_ENV === 'development') {
           console.log("[FirebaseConfig] Modo DESARROLLO detectado.");
           if (firestoreInstance) {
+            // Verifica si ya está conectado al emulador para no intentar conectar múltiples veces si la config se recarga
             const settings = (firestoreInstance as any)._settings || (firestoreInstance as any).settings;
-             // Verifica si ya está conectado al emulador para no intentar conectar múltiples veces si la config se recarga
-            if (settings && settings.host && settings.host.includes('localhost')) {
-                 console.log("[FirebaseConfig] Emulador de Firestore YA PARECE ESTAR conectado en localhost:8080.");
+            if (settings && settings.host && (settings.host.includes('localhost') || settings.host.includes('127.0.0.1'))) {
+                 console.log(`[FirebaseConfig] Emulador de Firestore YA PARECE ESTAR conectado en ${settings.host}:${settings.port}.`);
             } else {
                 console.log("[FirebaseConfig] Intentando conectar Firestore al emulador en localhost:8080.");
                 try {
@@ -79,9 +79,8 @@ if (useMockDatabase) {
                     console.log("[FirebaseConfig] ÉXITO - Conexión al emulador de Firestore CONFIGURADA para localhost:8080.");
                     console.log("[FirebaseConfig]   Asegúrate de que el emulador de Firestore esté ejecutándose (ej: 'firebase emulators:start').");
                 } catch (emulatorError: any) {
-                    // Comprobar si el error es porque ya está conectado (FirebaseError: FIRESTORE (10.14.1) FirebaseError: Firestore has already been started and its settings can no longer be changed. You have to call settings() before calling any other methods.)
                     if (emulatorError.code === 'failed-precondition' && emulatorError.message.includes('settings can no longer be changed')) {
-                        console.warn("[FirebaseConfig] Advertencia: El emulador de Firestore ya estaba configurado. Esto es normal si el código se recarga (hot-reload).");
+                        console.warn("[FirebaseConfig] Advertencia: El emulador de Firestore ya estaba configurado o las configuraciones no se pueden cambiar después de que Firestore ha comenzado. Esto es normal si el código se recarga (hot-reload) o si ya se ha realizado una operación de Firestore.");
                     } else {
                         console.error("[FirebaseConfig] ERROR conectando al emulador de Firestore en localhost:8080:", emulatorError);
                         console.warn("[FirebaseConfig] Firestore intentará conectarse a la base de datos de PRODUCCIÓN porque la conexión al emulador falló.");
