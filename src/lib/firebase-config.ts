@@ -20,89 +20,92 @@ const firebaseConfig = {
 let app: FirebaseApp | undefined;
 let firestoreInstance: Firestore | undefined;
 
-console.log("Firebase Config Module: Starting initialization...");
-console.log("Firebase Config Module: NEXT_PUBLIC_USE_MOCK_DATABASE from env:", process.env.NEXT_PUBLIC_USE_MOCK_DATABASE);
-console.log("Firebase Config Module: Effective useMockDatabase flag:", useMockDatabase);
-console.log("Firebase Config Module: Firebase Project ID from env:", process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID);
-console.log("Firebase Config Module: Resolved firebaseConfig.projectId for initialization:", firebaseConfig.projectId);
-
+console.log("Firebase Config Module: Iniciando configuración...");
+console.log(`Firebase Config Module: NEXT_PUBLIC_USE_MOCK_DATABASE (desde env) = ${process.env.NEXT_PUBLIC_USE_MOCK_DATABASE}`);
+console.log(`Firebase Config Module: useMockDatabase (interpretado) = ${useMockDatabase}`);
+console.log(`Firebase Config Module: Project ID para inicialización = ${firebaseConfig.projectId}`);
 
 if (useMockDatabase) {
-  console.warn("Firebase Config Module: USING MOCK DATABASE. Firestore connection will NOT be attempted by this module.");
+  console.warn("Firebase Config Module: USANDO BASE DE DATOS MOCK (EN MEMORIA). No se intentará conexión a Firebase/Firestore real.");
   app = undefined;
   firestoreInstance = undefined;
 } else {
-  console.log("Firebase Config Module: Attempting to connect to REAL Firebase services (NOT using mock database).");
+  console.log("Firebase Config Module: Intentando conectar a servicios REALES de Firebase (Firestore).");
   const essentialConfigsMissing = !firebaseConfig.apiKey || !firebaseConfig.authDomain || !firebaseConfig.projectId;
 
   if (essentialConfigsMissing) {
     console.error(
-      'CRITICAL Firebase Config: Essential Firebase config (apiKey, authDomain, projectId) is missing for REAL database connection. Please ensure all NEXT_PUBLIC_FIREBASE_ environment variables are set. Firestore will NOT be initialized.'
+      'CRÍTICO - Configuración Firebase: Faltan configuraciones esenciales (apiKey, authDomain, projectId). Asegúrate de que todas las variables NEXT_PUBLIC_FIREBASE_ estén en tu .env.local. Firestore NO se inicializará.'
     );
-    if (!firebaseConfig.apiKey) console.error("Firebase Config Error: Missing NEXT_PUBLIC_FIREBASE_API_KEY");
-    if (!firebaseConfig.authDomain) console.error("Firebase Config Error: Missing NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN");
-    if (!firebaseConfig.projectId) console.error("Firebase Config Error: Missing NEXT_PUBLIC_FIREBASE_PROJECT_ID.");
+    if (!firebaseConfig.apiKey) console.error("Error Config Firebase: Falta NEXT_PUBLIC_FIREBASE_API_KEY");
+    if (!firebaseConfig.authDomain) console.error("Error Config Firebase: Falta NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN");
+    if (!firebaseConfig.projectId) console.error("Error Config Firebase: Falta NEXT_PUBLIC_FIREBASE_PROJECT_ID (esencial para Firestore).");
     app = undefined;
     firestoreInstance = undefined;
   } else {
-    console.log("Firebase Config Module: Essential Firebase environment variables appear to be present.");
+    console.log("Firebase Config Module: Variables esenciales de Firebase (apiKey, authDomain, projectId) parecen estar presentes.");
     try {
       if (!getApps().length) {
         app = initializeApp(firebaseConfig);
-        console.log("Firebase Config Module: Firebase app newly initialized.");
+        console.log("Firebase Config Module: App de Firebase inicializada (nueva instancia).");
       } else {
         app = getApp();
-        console.log("Firebase Config Module: Firebase app already exists, using existing instance.");
+        console.log("Firebase Config Module: App de Firebase ya existía (usando instancia existente).");
       }
     } catch (e) {
-      console.error("Firebase Config Module: Error initializing Firebase app:", e);
+      console.error("Firebase Config Module: Error inicializando la app de Firebase:", e);
       app = undefined;
     }
 
     if (app) {
-      console.log(`Firebase Config Module: Firebase app initialized successfully for project ID: '${app.options.projectId}'.`);
+      console.log(`Firebase Config Module: App de Firebase inicializada correctamente para el proyecto ID: '${app.options.projectId}'.`);
       try {
         firestoreInstance = getFirestore(app);
-        console.log("Firebase Config Module: Firestore instance obtained.");
+        console.log("Firebase Config Module: Instancia de Firestore obtenida.");
 
-        if (process.env.NODE_ENV === 'development' && !useMockDatabase) { // Connect to emulator only in dev AND if not explicitly using mock
-          console.log("Firebase Config Module: DEVELOPMENT mode & NOT useMockDatabase. Attempting to connect Firestore to emulator.");
+        if (process.env.NODE_ENV === 'development') {
+          console.log("Firebase Config Module: Entorno de DESARROLLO detectado.");
           if (firestoreInstance) {
-            // Basic check to prevent multiple connections if already connected
-            if (!(firestoreInstance as any)._settings?.host?.includes('localhost')) {
-               try {
-                connectFirestoreEmulator(firestoreInstance, 'localhost', 8080);
-                console.log("Firebase Config Module: SUCCESS - Firestore emulator connection CONFIGURED for localhost:8080.");
-               } catch (emulatorError) {
-                 console.error("Firebase Config Module: ERROR during connectFirestoreEmulator:", emulatorError);
-                 console.warn("Firebase Config Module: Firestore will attempt to connect to PRODUCTION. Check emulator status.");
-               }
+            // Comprobación para evitar múltiples conexiones al emulador si ya está conectado
+            // Esta comprobación puede variar un poco dependiendo de la versión exacta del SDK, 
+            // pero la idea es ver si ya tiene un host configurado que sea localhost.
+            const firestoreSettings = (firestoreInstance as any)._settings || (firestoreInstance as any).settings;
+            if (firestoreSettings && firestoreSettings.host && firestoreSettings.host.includes('localhost')) {
+               console.log("Firebase Config Module: Emulador de Firestore YA PARECE ESTAR configurado en localhost:8080.");
             } else {
-               console.log("Firebase Config Module: Firestore emulator SEEMS ALREADY configured.");
+              console.log("Firebase Config Module: Intentando conectar Firestore al emulador en localhost:8080.");
+              try {
+                connectFirestoreEmulator(firestoreInstance, 'localhost', 8080);
+                console.log("Firebase Config Module: ÉXITO - Conexión al emulador de Firestore CONFIGURADA para localhost:8080.");
+                console.log("Firebase Config Module: Asegúrate de que el emulador de Firestore esté corriendo (ej: 'firebase emulators:start').");
+              } catch (emulatorError) {
+                console.error("Firebase Config Module: ERROR durante connectFirestoreEmulator(firestoreInstance, 'localhost', 8080):", emulatorError);
+                console.warn("Firebase Config Module: Firestore intentará conectarse a la base de datos de PRODUCCIÓN porque la conexión al emulador falló. Verifica el estado del emulador y posibles conflictos de puerto.");
+              }
             }
           } else {
-            console.error("Firebase Config Module: Firestore instance is undefined in DEVELOPMENT. Cannot connect to emulator.");
+            console.error("Firebase Config Module: Instancia de Firestore es undefined en DESARROLLO. No se puede conectar al emulador.");
           }
-        } else if (process.env.NODE_ENV !== 'development' && !useMockDatabase) {
-          console.log(`Firebase Config Module: PRODUCTION mode (or not dev) & NOT useMockDatabase. Connecting to Cloud Firestore project ID: '${firebaseConfig.projectId}'.`);
+        } else {
+          console.log(`Firebase Config Module: Entorno de PRODUCCIÓN detectado. Conectando a Cloud Firestore, proyecto ID: '${firebaseConfig.projectId}'.`);
+          console.log("Firebase Config Module: Si la conexión falla, revisa tus variables .env, la configuración de tu proyecto Firebase (Firestore habilitado, estado de facturación), y tu conectividad de red.");
         }
       } catch (e) {
-        console.error("Firebase Config Module: Error getting Firestore instance or during emulator/production setup logic:", e);
-        firestoreInstance = undefined;
+        console.error("Firebase Config Module: Error obteniendo instancia de Firestore o durante la lógica de emulador/producción:", e);
+        firestoreInstance = undefined; 
       }
     } else {
-      console.error("Firebase Config Module: Firebase app is NOT initialized (due to config issues or initialization error). Firestore cannot be configured.");
-      firestoreInstance = undefined;
+      console.error("Firebase Config Module: App de Firebase NO inicializada. Firestore no puede ser configurado o usado.");
     }
   }
 }
 
 if (!firestoreInstance && !useMockDatabase) {
-    console.warn("Firebase Config Module: Firestore instance is NOT available at the end of configuration (and not using mock). Data operations might fail if REAL database was intended.");
+    console.warn("Firebase Config Module: La instancia de Firestore NO está disponible al final de la configuración (y no se está usando mock). Las operaciones de datos probablemente fallarán si se esperaba una base de datos REAL.");
 } else if (firestoreInstance && !useMockDatabase) {
-    console.log("Firebase Config Module: Firestore instance IS available for export (using REAL database).");
+    console.log("Firebase Config Module: La instancia de Firestore ESTÁ disponible para exportar (usando base de datos REAL).");
 } else if (useMockDatabase) {
-    console.log("Firebase Config Module: Firestore instance is UNDEFINED because useMockDatabase is true.");
+    console.log("Firebase Config Module: La instancia de Firestore está INDEFINIDA porque useMockDatabase es true.");
 }
 
 export { firestoreInstance as firestore, app };
