@@ -3,27 +3,31 @@
 import { initializeApp, getApps, getApp, type FirebaseApp } from 'firebase/app';
 import { getFirestore, connectFirestoreEmulator, type Firestore } from 'firebase/firestore';
 
-// Esta variable determina si se usa la base de datos mock en memoria o se intenta conectar a Firebase/Firestore real.
-// Para conectar a Firestore real, NEXT_PUBLIC_USE_MOCK_DATABASE debe ser 'false' o no estar definida en .env.local.
-// Si NEXT_PUBLIC_USE_MOCK_DATABASE es 'true', se usará la base de datos mock.
-export const useMockDatabase = process.env.NEXT_PUBLIC_USE_MOCK_DATABASE === 'true';
-
+// --- Configuración de Firebase ---
+// Estos son los valores que proporcionaste.
 const firebaseConfig = {
-  apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
-  authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN,
-  projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID || "footprints-scheduler-ywrwg", // Asegura un fallback si no está en env
-  storageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET,
-  messagingSenderId: process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID,
-  appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID,
-  measurementId: process.env.NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID, // Opcional
+  apiKey: "AIzaSyC5Or6YruEptKq5A0qHNQVXDIcqQHlh9Bs",
+  authDomain: "footprints-scheduler-ywrwg.firebaseapp.com",
+  databaseURL: "https://footprints-scheduler-ywrwg-default-rtdb.firebaseio.com",
+  projectId: "footprints-scheduler-ywrwg",
+  storageBucket: "footprints-scheduler-ywrwg.appspot.com", // Corregido: típicamente es .appspot.com, no .firebasestorage.app
+  messagingSenderId: "282404257095",
+  appId: "1:282404257095:web:9379050c19e48caa396062",
+  measurementId: "G-5TV8S318N7" // Opcional, se mantiene por si se usa en el futuro
 };
+
+// --- Control para usar Mock Database vs Firestore Real ---
+// Para usar Firestore REAL, esta variable debe ser false.
+// Puedes controlarla con NEXT_PUBLIC_USE_MOCK_DATABASE en tu .env.local
+// Si NEXT_PUBLIC_USE_MOCK_DATABASE es 'true', se usará la base de datos mock.
+// Si es 'false' o no está definida, se intentará conectar a Firestore real.
+export const useMockDatabase = process.env.NEXT_PUBLIC_USE_MOCK_DATABASE === 'true';
 
 let app: FirebaseApp | undefined;
 let firestoreInstance: Firestore | undefined;
 
 console.log("--- INICIO CONFIGURACIÓN FIREBASE/FIRESTORE ---");
 console.log(`[FirebaseConfig] ¿Usar Base de Datos Mock (en memoria)? ${useMockDatabase} (basado en NEXT_PUBLIC_USE_MOCK_DATABASE='${process.env.NEXT_PUBLIC_USE_MOCK_DATABASE}')`);
-console.log(`[FirebaseConfig] VALOR DE process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID: '${process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID}'`);
 console.log(`[FirebaseConfig] Project ID que se usará para la inicialización de Firebase: '${firebaseConfig.projectId}'`);
 
 if (useMockDatabase) {
@@ -31,21 +35,15 @@ if (useMockDatabase) {
   app = undefined;
   firestoreInstance = undefined;
 } else {
-  console.log("[FirebaseConfig] Intentando conectar a servicios REALES de Firebase/Firestore.");
+  console.log("[FirebaseConfig] Intentando conectar a servicios REALES de Firebase/Firestore con la configuración proporcionada.");
 
-  const essentialConfigsMissing = !firebaseConfig.apiKey || !firebaseConfig.authDomain || !firebaseConfig.projectId;
-
-  if (essentialConfigsMissing) {
+  // Verificación simple de que el projectId está presente (ya que ahora está hardcodeado)
+  if (!firebaseConfig.projectId) {
     console.error(
-      '[FirebaseConfig] CRÍTICO: Faltan configuraciones esenciales de Firebase (apiKey, authDomain, projectId). Revisa tus variables de entorno en .env.local. Firebase NO se inicializará correctamente.'
+      '[FirebaseConfig] CRÍTICO: El projectId en la configuración hardcodeada está vacío. Firebase NO se inicializará correctamente.'
     );
-    if (!firebaseConfig.apiKey) console.error("[FirebaseConfig] Error: Falta NEXT_PUBLIC_FIREBASE_API_KEY");
-    if (!firebaseConfig.authDomain) console.error("[FirebaseConfig] Error: Falta NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN");
-    if (!firebaseConfig.projectId) console.error("[FirebaseConfig] Error: Falta NEXT_PUBLIC_FIREBASE_PROJECT_ID o está vacío. Este es crucial.");
-    app = undefined;
-    firestoreInstance = undefined;
   } else {
-    console.log("[FirebaseConfig] Variables de entorno esenciales para Firebase (apiKey, authDomain, projectId) parecen estar presentes.");
+    console.log("[FirebaseConfig] El projectId en la configuración hardcodeada está presente.");
     try {
       if (!getApps().length) {
         app = initializeApp(firebaseConfig);
@@ -56,7 +54,7 @@ if (useMockDatabase) {
       }
     } catch (e) {
       console.error("[FirebaseConfig] Error inicializando la app de Firebase:", e);
-      app = undefined;
+      app = undefined; // Asegura que app sea undefined en caso de fallo
     }
 
     if (app) {
@@ -68,7 +66,7 @@ if (useMockDatabase) {
         if (process.env.NODE_ENV === 'development') {
           console.log("[FirebaseConfig] Modo DESARROLLO detectado.");
           if (firestoreInstance) {
-            // Verifica si ya está conectado al emulador para no intentar conectar múltiples veces si la config se recarga
+            // Comprobar si el emulador ya está conectado para evitar múltiples llamadas
             const settings = (firestoreInstance as any)._settings || (firestoreInstance as any).settings;
             if (settings && settings.host && (settings.host.includes('localhost') || settings.host.includes('127.0.0.1'))) {
                  console.log(`[FirebaseConfig] Emulador de Firestore YA PARECE ESTAR conectado en ${settings.host}:${settings.port}.`);
@@ -92,7 +90,7 @@ if (useMockDatabase) {
           }
         } else {
           console.log(`[FirebaseConfig] Modo PRODUCCIÓN detectado. Conectando a Cloud Firestore, proyecto ID: '${firebaseConfig.projectId}'.`);
-          console.log("[FirebaseConfig] Si la conexión falla, verifica tus variables de entorno, la configuración de tu proyecto Firebase (Firestore habilitado, estado de facturación) y tu conectividad de red.");
+          console.log("[FirebaseConfig] Si la conexión falla, verifica la configuración de tu proyecto Firebase (Firestore habilitado, estado de facturación) y tu conectividad de red.");
         }
       } catch (e) {
         console.error("[FirebaseConfig] Error obteniendo instancia de Firestore o durante la lógica de configuración del emulador/producción:", e);
@@ -105,14 +103,13 @@ if (useMockDatabase) {
 }
 
 if (!firestoreInstance && !useMockDatabase) {
-    console.error("[FirebaseConfig] ALERTA FINAL: La instancia de Firestore NO está disponible y NO se está usando la base de datos mock. Las operaciones de datos con Firestore fallarán. VERIFICA TUS VARIABLES DE ENTORNO Y LA CONFIGURACIÓN DE TU PROYECTO EN LA CONSOLA DE FIREBASE.");
+    console.error("[FirebaseConfig] ALERTA FINAL: La instancia de Firestore NO está disponible y NO se está usando la base de datos mock. Las operaciones de datos con Firestore fallarán. Verifica la configuración de tu proyecto Firebase y tu conexión a internet.");
 } else if (firestoreInstance && !useMockDatabase) {
     console.log("[FirebaseConfig] ESTADO FINAL: La instancia de Firestore ESTÁ disponible para la aplicación (usando base de datos REAL o EMULADA).");
 } else if (useMockDatabase) {
-    console.warn("[FirebaseConfig] ESTADO FINAL: La aplicación está usando la BASE DE DATOS MOCK (en memoria).");
+    // Este caso es si useMockDatabase es true, lo cual ya se maneja arriba.
+    // console.warn("[FirebaseConfig] ESTADO FINAL: La aplicación está usando la BASE DE DATOS MOCK (en memoria).");
 }
 console.log("--- FIN CONFIGURACIÓN FIREBASE/FIRESTORE ---");
 
 export { firestoreInstance as firestore, app };
-    
-    
