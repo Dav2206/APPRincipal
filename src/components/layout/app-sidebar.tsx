@@ -22,7 +22,8 @@ import {
   ClipboardList, 
   FileText,
   FileSpreadsheet,
-  Bell, // Icono para Recordatorios
+  Bell,
+  Terminal, // Icono para Test Function
 } from 'lucide-react';
 import { USER_ROLES } from '@/lib/constants';
 
@@ -38,6 +39,7 @@ const navItems = [
   { href: '/services', label: 'Servicios', icon: ClipboardList, roles: [USER_ROLES.ADMIN] }, 
   { href: '/reminders', label: 'Recordatorios', icon: Bell, roles: [USER_ROLES.ADMIN, USER_ROLES.CONTADOR] },
   { href: '/finances', label: 'Finanzas', icon: Landmark, roles: [USER_ROLES.CONTADOR] },
+  { href: '/test-function', label: 'Test Function', icon: Terminal, roles: [USER_ROLES.ADMIN] }, // <-- AÑADIDO
 ];
 
 export function AppSidebar() {
@@ -86,7 +88,7 @@ export function AppSidebar() {
                 finalIsActive = false;
               }
               
-              const specificExactMatchRoutes = ['/appointments', '/schedule', '/finances', '/services', '/registry', '/contracts', '/reminders'];
+              const specificExactMatchRoutes = ['/appointments', '/schedule', '/finanzas', '/services', '/registry', '/contracts', '/reminders', '/test-function']; // <-- AÑADIDO /test-function
               if (specificExactMatchRoutes.includes(href)) {
                 finalIsActive = pathname === href || pathname.startsWith(`${href}/`);
               }
@@ -116,3 +118,5 @@ export function AppSidebar() {
     </>
   );
 }
+
+    
