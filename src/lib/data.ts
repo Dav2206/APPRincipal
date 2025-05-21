@@ -3,14 +3,11 @@
 import type { User, Professional, Patient, Service, Appointment, AppointmentFormData, ProfessionalFormData, AppointmentStatus, ServiceFormData, Contract, PeriodicReminder, ImportantNote, PeriodicReminderFormData, ImportantNoteFormData } from '@/types';
 import { LOCATIONS, USER_ROLES, SERVICES as SERVICES_CONSTANTS, APPOINTMENT_STATUS, LocationId, ServiceId as ConstantServiceId, APPOINTMENT_STATUS_DISPLAY, PAYMENT_METHODS, TIME_SLOTS, DAYS_OF_WEEK } from './constants';
 import type { DayOfWeekId } from './constants';
-import { formatISO, parseISO, addDays, setHours, setMinutes, startOfDay, endOfDay, isSameDay as dateFnsIsSameDay, startOfMonth, endOfMonth, subDays, isEqual, isBefore, isAfter, getDate, getYear, getMonth, setMonth, setYear, getHours, addMinutes as dateFnsAddMinutes, isWithinInterval, getDay, format, differenceInCalendarDays, areIntervalsOverlapping, parse } from 'date-fns';
+import { formatISO, parseISO, addDays, setHours, setMinutes, startOfDay, endOfDay, isSameDay as dateFnsIsSameDay, startOfMonth, endOfMonth, subDays, isEqual, isBefore, isAfter, getDate, getYear, getMonth, setMonth, setYear, getHours, addMinutes as dateFnsAddMinutes, isWithinInterval, getDay, format, differenceInCalendarDays, areIntervalsOverlapping } from 'date-fns';
 import { es } from 'date-fns/locale';
-import { firestore, useMockDatabase as globalUseMockDatabase, app as firebaseApp } from './firebase-config'; // Centralized mock flag
+import { firestore, useMockDatabase } from './firebase-config'; // Import useMockDatabase
 import { collection, addDoc, getDocs, doc, getDoc, updateDoc, query, where, deleteDoc, writeBatch, serverTimestamp, Timestamp, runTransaction, setDoc, QueryConstraint, orderBy, limit, startAfter,getCountFromServer, CollectionReference, DocumentData, documentId } from 'firebase/firestore';
 
-
-// Determine if using mock database based on environment variable
-const useMockDatabase = globalUseMockDatabase;
 
 // --- Helper to convert Firestore Timestamps to ISO strings and vice-versa ---
 const toFirestoreTimestamp = (date: Date | string | undefined | null): Timestamp | null => {
@@ -77,13 +74,19 @@ const convertDocumentData = (docData: DocumentData): any => {
 // --- Contract Status Helper ---
 export type ContractDisplayStatus = 'Activo' | 'Próximo a Vencer' | 'Vencido' | 'Sin Contrato';
 
+// Moved getContractDisplayStatus to be defined before its potential use in initialMockProfessionalsData or other initializations
 export function getContractDisplayStatus(contract: Contract | null | undefined, referenceDateParam?: Date): ContractDisplayStatus {
   try {
     const referenceDate = startOfDay(referenceDateParam || new Date());
     if (!contract || !contract.endDate) {
         return 'Sin Contrato';
     }
-    const endDate = parseISO(contract.endDate);
+    // Ensure endDate is a valid date string before parsing
+    const endDate = typeof contract.endDate === 'string' ? parseISO(contract.endDate) : contract.endDate;
+    if (isNaN(endDate.getTime())) { // Check if endDate is a valid Date object
+        console.warn("Invalid endDate provided to getContractDisplayStatus:", contract.endDate);
+        return 'Sin Contrato';
+    }
 
     if (isBefore(endDate, referenceDate)) {
         return 'Vencido';
@@ -94,7 +97,7 @@ export function getContractDisplayStatus(contract: Contract | null | undefined, 
     }
     return 'Activo';
   } catch (error) {
-    console.error("Error in getContractDisplayStatus:", error);
+    console.error("Error in getContractDisplayStatus:", error, "Contract:", contract, "Reference Date:", referenceDateParam);
     return 'Sin Contrato';
   }
 };
@@ -111,7 +114,8 @@ const generateId = (): string => {
   }
 };
 
-const todayMock = new Date(2025, 4, 13); // Tuesday, May 13, 2025 (month is 0-indexed for Date constructor)
+// Use a fixed date for mock data generation to ensure consistency across reloads/tests
+const todayMock = new Date(2025, 4, 20); // Tuesday, May 20, 2025 (month is 0-indexed)
 const yesterdayMock = subDays(todayMock, 1);
 const twoDaysAgoMock = subDays(todayMock, 2);
 const tomorrowMock = addDays(todayMock,1);
@@ -163,7 +167,7 @@ const initialMockProfessionalsData: Professional[] = LOCATIONS.flatMap((location
     // Ensure first two professionals per location have active contracts based on todayMock
     if (i < 2) {
         const contractStartDate = subDays(todayMock, 60);
-        const contractEndDate = addDays(todayMock, 90);
+        const contractEndDate = addDays(todayMock, 90); // Active for 3 months from 60 days ago
         currentContract = {
             id: generateId(),
             startDate: formatISO(contractStartDate, { representation: 'date' }),
@@ -173,9 +177,9 @@ const initialMockProfessionalsData: Professional[] = LOCATIONS.flatMap((location
         };
     } else { // For subsequent professionals, vary contract status
         const contractType = i % 4;
-        if (contractType === 0) { // Active contract
-            const contractStartDate = subDays(todayMock, Math.floor(Math.random() * 30) + 15);
-            const contractEndDate = addDays(todayMock, Math.floor(Math.random() * 75) + 15);
+        if (contractType === 0) { // Active contract, different duration
+            const contractStartDate = subDays(todayMock, Math.floor(Math.random() * 30) + 15); // Started 15-45 days ago
+            const contractEndDate = addDays(todayMock, Math.floor(Math.random() * 75) + 45); // Ends in 45-120 days
             currentContract = {
                 id: generateId(),
                 startDate: formatISO(contractStartDate, { representation: 'date' }),
@@ -184,8 +188,8 @@ const initialMockProfessionalsData: Professional[] = LOCATIONS.flatMap((location
                 empresa: (i % 2 === 0) ? 'Empresa A' : 'Empresa B',
             };
         } else if (contractType === 1) { // Expired contract
-             const expiredContractStartDate = subDays(todayMock, 120);
-             const expiredContractEndDate = subDays(todayMock, 30);
+             const expiredContractStartDate = subDays(todayMock, 120); // Started 4 months ago
+             const expiredContractEndDate = subDays(todayMock, 30);   // Ended 1 month ago
              const expiredContract = {
                  id: generateId(),
                  startDate: formatISO(expiredContractStartDate, { representation: 'date' }),
@@ -194,9 +198,9 @@ const initialMockProfessionalsData: Professional[] = LOCATIONS.flatMap((location
                  empresa: 'Empresa Expirada C',
              };
              contractHistory.push(expiredContract);
-             currentContract = null; // No current contract if last one is expired
+             currentContract = null;
         } else if (contractType === 2) { // Contract about to expire
-            const contractStartDate = subDays(todayMock, 75);
+            const contractStartDate = subDays(todayMock, 75); // Started 2.5 months ago
             const contractEndDate = addDays(todayMock, 10); // Expires in 10 days
              currentContract = {
                  id: generateId(),
@@ -215,16 +219,16 @@ const initialMockProfessionalsData: Professional[] = LOCATIONS.flatMap((location
       lastName: location.name.split(' ')[0],
       locationId: location.id,
       phone: `9876543${locIndex}${i + 1}`,
-      biWeeklyEarnings: 0, // Will be calculated if needed
+      biWeeklyEarnings: 0,
       workSchedule: baseSchedule,
-      customScheduleOverrides: (i === 0 && locIndex === 0) ? [ // Example for first professional of first location
+      customScheduleOverrides: (i === 0 && locIndex === 0) ? [
         { id: generateId(), date: formatISO(addDays(todayMock, 3), {representation: 'date'}), isWorking: false, notes: "Descanso programado"},
         { id: generateId(), date: formatISO(addDays(todayMock, 7), {representation: 'date'}), isWorking: true, startTime: "14:00", endTime: "20:00", notes: "Turno especial tarde"}
       ] : [],
       currentContract: currentContract,
       contractHistory: contractHistory,
-      birthDay: (i % 5 === 0) ? (Math.floor(Math.random() * 28) + 1) : null, // Example birthdays
-      birthMonth: (i % 5 === 0) ? (getMonth(todayMock) + 1) : null, // Birthdays in current mock month
+      birthDay: (i % 5 === 0 && (i+1) % 2 === 0) ? (getDate(todayMock) + i % 10 ) % 28 + 1 : undefined,
+      birthMonth: (i % 5 === 0 && (i+1) % 2 === 0) ? (getMonth(todayMock) + 1) : undefined,
     };
   });
 });
@@ -465,26 +469,35 @@ const docsToData = <T extends BaseEntity>(querySnapshot: any): T[] => {
 export const getUserByUsername = async (username: string): Promise<User | undefined> => {
   try {
     if (useMockDatabase) {
-        return mockDB.users.find(u => u.username === username);
+      console.log("[data.ts] getUserByUsername (mock) for:", username);
+      const user = mockDB.users.find(u => u.username === username);
+      console.log("[data.ts] getUserByUsername (mock) result:", user);
+      return user;
     }
     if (!firestore) {
-      console.warn("Firestore not initialized in getUserByUsername. Using mock as fallback.");
+      console.warn("[data.ts] Firestore not initialized in getUserByUsername. Using mock as fallback.");
       return mockDB.users.find(u => u.username === username);
     }
+    console.log("[data.ts] getUserByUsername (Firestore) for:", username);
     const usersCol = collection(firestore, 'usuarios');
     const q = query(usersCol, where('username', '==', username));
     const snapshot = await getDocs(q);
-    if (snapshot.empty) return undefined;
-    return { id: snapshot.docs[0].id, ...convertDocumentData(snapshot.docs[0].data()) } as User;
+    if (snapshot.empty) {
+      console.log("[data.ts] getUserByUsername (Firestore) no user found for:", username);
+      return undefined;
+    }
+    const userData = { id: snapshot.docs[0].id, ...convertDocumentData(snapshot.docs[0].data()) } as User;
+    console.log("[data.ts] getUserByUsername (Firestore) result:", userData);
+    return userData;
   } catch (error) {
-    console.error("Error in getUserByUsername:", error);
-    return undefined;
+    console.error("[data.ts] Error in getUserByUsername:", error);
+    return undefined; // Devuelve undefined en caso de error para un manejo más limpio
   }
 };
 
 // --- Professionals ---
 export const getProfessionals = async (locationId?: LocationId): Promise<(Professional & { contractDisplayStatus: ContractDisplayStatus })[]> => {
-  const currentReferenceDate = new Date();
+  const currentReferenceDate = new Date(); // Use actual current date for status calculation
   try {
     if (useMockDatabase) {
         let professionalsResult = locationId
@@ -511,7 +524,7 @@ export const getProfessionals = async (locationId?: LocationId): Promise<(Profes
     }
 
     if (!firestore) {
-      console.warn("Firestore not initialized in getProfessionals. Falling back to mock data.");
+      console.warn("[data.ts] Firestore not initialized in getProfessionals. Falling back to mock data.");
       return mockDB.professionals.map(p => ({ ...p, contractDisplayStatus: getContractDisplayStatus(p.currentContract, currentReferenceDate) })).sort((a,b) => `${a.firstName} ${a.lastName}`.localeCompare(`${b.firstName} ${b.lastName}`));
     }
 
@@ -523,6 +536,10 @@ export const getProfessionals = async (locationId?: LocationId): Promise<(Profes
     qConstraints.push(orderBy('firstName'), orderBy('lastName'));
     const q = query(professionalsCol, ...qConstraints);
     const snapshot = await getDocs(q);
+    if (snapshot.empty && !locationId) {
+      console.warn("[data.ts] Firestore 'profesionales' collection is empty or query returned no results. Falling back to mock for getProfessionals.");
+      return mockDB.professionals.map(p => ({ ...p, contractDisplayStatus: getContractDisplayStatus(p.currentContract, currentReferenceDate) })).sort((a,b) => `${a.firstName} ${a.lastName}`.localeCompare(`${b.firstName} ${b.lastName}`));
+    }
     let professionalsList = snapshot.docs.map(d => ({ id: d.id, ...convertDocumentData(d.data()) }) as Professional);
 
     const { start: quincenaStart, end: quincenaEnd } = getCurrentQuincenaDateRange();
@@ -548,20 +565,20 @@ export const getProfessionals = async (locationId?: LocationId): Promise<(Profes
         })
     });
   } catch (error) {
-    console.error("Error in getProfessionals:", error);
+    console.error("[data.ts] Error in getProfessionals:", error);
     return [];
   }
 };
 
 export const getProfessionalById = async (id: string): Promise<Professional | undefined> => {
-  const currentReferenceDate = new Date();
+  const currentReferenceDate = new Date(); // Use actual current date
   try {
     if (useMockDatabase) {
         const prof = mockDB.professionals.find(p => p.id === id);
         return prof ? { ...prof, contractDisplayStatus: getContractDisplayStatus(prof.currentContract, currentReferenceDate) } : undefined;
     }
     if (!firestore) {
-      console.warn("Firestore not initialized in getProfessionalById. Falling back to mock data for ID:", id);
+      console.warn("[data.ts] Firestore not initialized in getProfessionalById. Falling back to mock data for ID:", id);
       const prof = mockDB.professionals.find(p => p.id === id);
       return prof ? { ...prof, contractDisplayStatus: getContractDisplayStatus(prof.currentContract, currentReferenceDate) } : undefined;
     }
@@ -571,32 +588,32 @@ export const getProfessionalById = async (id: string): Promise<Professional | un
     const profData = { id: docSnap.id, ...convertDocumentData(docSnap.data()) } as Professional;
     return { ...profData, contractDisplayStatus: getContractDisplayStatus(profData.currentContract, currentReferenceDate) };
   } catch (error) {
-    console.error(`Error in getProfessionalById for ID ${id}:`, error);
+    console.error(`[data.ts] Error in getProfessionalById for ID ${id}:`, error);
     return undefined;
   }
 };
 
-export const addProfessional = async (data: ProfessionalFormData): Promise<Professional> => {
-  const newId = data.id || generateId();
+export const addProfessional = async (data: Omit<ProfessionalFormData, 'id'>): Promise<Professional> => {
+  const newId = generateId();
   try {
     const professionalToSave: Omit<Professional, 'id' | 'biWeeklyEarnings'> = {
         firstName: data.firstName,
         lastName: data.lastName,
         locationId: data.locationId,
-        phone: data.phone === null ? undefined : (data.phone || undefined),
-        birthDay: data.birthDay === null ? null : data.birthDay,
-        birthMonth: data.birthMonth === null ? null : data.birthMonth,
-        workSchedule: {}, // Initialize, will be populated below
+        phone: data.phone === null || data.phone === '' ? undefined : data.phone,
+        birthDay: data.birthDay === null ? undefined : data.birthDay,
+        birthMonth: data.birthMonth === null ? undefined : data.birthMonth,
+        workSchedule: {},
         customScheduleOverrides: data.customScheduleOverrides?.map(ov => ({
             id: ov.id || generateId(),
             date: formatISO(ov.date, { representation: 'date' }),
             isWorking: ov.isWorking,
             startTime: ov.isWorking ? ov.startTime : undefined,
             endTime: ov.isWorking ? ov.endTime : undefined,
-            notes: ov.notes,
+            notes: ov.notes || undefined,
         })) || [],
-        currentContract: null, // Initialize, will be populated below
-        contractHistory: [], // Initialize
+        currentContract: null,
+        contractHistory: [],
     };
 
     if (data.workSchedule) {
@@ -623,8 +640,8 @@ export const addProfessional = async (data: ProfessionalFormData): Promise<Profe
             id: generateId(),
             startDate: formatISO(data.currentContract_startDate, { representation: 'date' }),
             endDate: formatISO(data.currentContract_endDate, { representation: 'date' }),
-            notes: data.currentContract_notes === null ? undefined : (data.currentContract_notes || undefined),
-            empresa: data.currentContract_empresa === null ? undefined : (data.currentContract_empresa || undefined),
+            notes: data.currentContract_notes === null || data.currentContract_notes === '' ? undefined : data.currentContract_notes,
+            empresa: data.currentContract_empresa === null || data.currentContract_empresa === '' ? undefined : data.currentContract_empresa,
         };
     }
 
@@ -639,19 +656,33 @@ export const addProfessional = async (data: ProfessionalFormData): Promise<Profe
       return newProfessional;
     }
 
-    if (!firestore) throw new Error("Firestore not initialized in addProfessional");
+    if (!firestore) throw new Error("[data.ts] Firestore not initialized in addProfessional");
 
     const firestoreData: any = { ...professionalToSave };
+    firestoreData.phone = firestoreData.phone || null;
+    firestoreData.birthDay = firestoreData.birthDay ?? null;
+    firestoreData.birthMonth = firestoreData.birthMonth ?? null;
+
     if (firestoreData.currentContract) {
         firestoreData.currentContract.startDate = toFirestoreTimestamp(firestoreData.currentContract.startDate);
         firestoreData.currentContract.endDate = toFirestoreTimestamp(firestoreData.currentContract.endDate);
+        firestoreData.currentContract.notes = firestoreData.currentContract.notes || null;
+        firestoreData.currentContract.empresa = firestoreData.currentContract.empresa || null;
+    } else {
+      firestoreData.currentContract = null;
     }
-    if (firestoreData.customScheduleOverrides) {
-        firestoreData.customScheduleOverrides = firestoreData.customScheduleOverrides.map((ov: any) => ({
-            ...ov,
-            date: toFirestoreTimestamp(ov.date)
-        }));
-    }
+    firestoreData.contractHistory = firestoreData.contractHistory?.map((ch: any) => ({
+      ...ch,
+      startDate: toFirestoreTimestamp(ch.startDate),
+      endDate: toFirestoreTimestamp(ch.endDate),
+      notes: ch.notes || null,
+      empresa: ch.empresa || null,
+    })) || [];
+    firestoreData.customScheduleOverrides = firestoreData.customScheduleOverrides?.map((ov: any) => ({
+        ...ov,
+        date: toFirestoreTimestamp(ov.date),
+        notes: ov.notes || null,
+    })) || [];
     firestoreData.biWeeklyEarnings = 0;
 
 
@@ -660,7 +691,7 @@ export const addProfessional = async (data: ProfessionalFormData): Promise<Profe
     const savedDoc = await getDoc(docRef);
     return { id: newId, ...convertDocumentData(savedDoc.data()!) } as Professional;
   } catch (error) {
-    console.error("Error in addProfessional:", error);
+    console.error("[data.ts] Error in addProfessional:", error);
     throw error;
   }
 };
@@ -677,9 +708,9 @@ export const updateProfessional = async (id: string, data: Partial<ProfessionalF
         if(data.firstName !== undefined) professionalToUpdate.firstName = data.firstName;
         if(data.lastName !== undefined) professionalToUpdate.lastName = data.lastName;
         if(data.locationId !== undefined) professionalToUpdate.locationId = data.locationId;
-        professionalToUpdate.phone = data.phone === null ? undefined : (data.phone ?? professionalToUpdate.phone);
-        professionalToUpdate.birthDay = data.birthDay === null ? null : (data.birthDay ?? professionalToUpdate.birthDay);
-        professionalToUpdate.birthMonth = data.birthMonth === null ? null : (data.birthMonth ?? professionalToUpdate.birthMonth);
+        professionalToUpdate.phone = data.phone === null || data.phone === '' ? undefined : (data.phone ?? professionalToUpdate.phone);
+        professionalToUpdate.birthDay = data.birthDay === null ? undefined : (data.birthDay ?? professionalToUpdate.birthDay);
+        professionalToUpdate.birthMonth = data.birthMonth === null ? undefined : (data.birthMonth ?? professionalToUpdate.birthMonth);
 
 
         if (data.workSchedule) {
@@ -705,7 +736,7 @@ export const updateProfessional = async (id: string, data: Partial<ProfessionalF
                 isWorking: ov.isWorking,
                 startTime: ov.isWorking ? ov.startTime : undefined,
                 endTime: ov.isWorking ? ov.endTime : undefined,
-                notes: ov.notes,
+                notes: ov.notes || undefined,
             }));
         }
 
@@ -721,11 +752,11 @@ export const updateProfessional = async (id: string, data: Partial<ProfessionalF
             contractFieldsTouchedInPayload = true;
         }
          if (data.hasOwnProperty('currentContract_notes')) {
-            newProposedContractData.notes = data.currentContract_notes === null ? undefined : (data.currentContract_notes || undefined);
+            newProposedContractData.notes = data.currentContract_notes === null || data.currentContract_notes === '' ? undefined : data.currentContract_notes;
             contractFieldsTouchedInPayload = true;
         }
         if (data.hasOwnProperty('currentContract_empresa')) {
-            newProposedContractData.empresa = data.currentContract_empresa === null ? undefined : (data.currentContract_empresa || undefined);
+            newProposedContractData.empresa = data.currentContract_empresa === null || data.currentContract_empresa === '' ? undefined : data.currentContract_empresa;
             contractFieldsTouchedInPayload = true;
         }
 
@@ -759,7 +790,7 @@ export const updateProfessional = async (id: string, data: Partial<ProfessionalF
                     notes: newProposedContractData.notes !== undefined ? newProposedContractData.notes : oldContract.notes,
                     empresa: newProposedContractData.empresa !== undefined ? newProposedContractData.empresa : oldContract.empresa,
                 };
-             } else if ((!newProposedContractData.startDate || !newProposedContractData.endDate) && contractFieldsTouchedInPayload) { // Case where contract is being removed
+             } else if ((!newProposedContractData.startDate || !newProposedContractData.endDate) && contractFieldsTouchedInPayload) {
                 if (oldContract && oldContract.id && !professionalToUpdate.contractHistory?.find(h => h.id === oldContract!.id)) {
                     professionalToUpdate.contractHistory = [...(professionalToUpdate.contractHistory || []), oldContract];
                  }
@@ -769,21 +800,23 @@ export const updateProfessional = async (id: string, data: Partial<ProfessionalF
         mockDB.professionals[index] = professionalToUpdate;
         return professionalToUpdate;
     }
-    if (!firestore) throw new Error("Firestore not initialized in updateProfessional");
+    if (!firestore) throw new Error("[data.ts] Firestore not initialized in updateProfessional");
     const docRef = doc(firestore, 'profesionales', id);
 
     const dataToUpdateFirestore: any = { ...data };
     delete dataToUpdateFirestore.id;
 
-    if (dataToUpdateFirestore.hasOwnProperty('phone')) dataToUpdateFirestore.phone = dataToUpdateFirestore.phone || null;
-    if (dataToUpdateFirestore.hasOwnProperty('birthDay')) dataToUpdateFirestore.birthDay = dataToUpdateFirestore.birthDay ?? null;
-    if (dataToUpdateFirestore.hasOwnProperty('birthMonth')) dataToUpdateFirestore.birthMonth = dataToUpdateFirestore.birthMonth ?? null;
+    // Ensure optional fields are set to null if empty or explicitly null
+    dataToUpdateFirestore.phone = data.phone === '' || data.phone === null ? null : (data.phone ?? undefined);
+    dataToUpdateFirestore.birthDay = data.birthDay === null ? null : (data.birthDay ?? undefined);
+    dataToUpdateFirestore.birthMonth = data.birthMonth === null ? null : (data.birthMonth ?? undefined);
 
 
     if (dataToUpdateFirestore.customScheduleOverrides) {
         dataToUpdateFirestore.customScheduleOverrides = dataToUpdateFirestore.customScheduleOverrides.map((ov: any) => ({
             ...ov,
-            date: toFirestoreTimestamp(ov.date)
+            date: toFirestoreTimestamp(ov.date),
+            notes: ov.notes || null,
         }));
     }
 
@@ -814,11 +847,11 @@ export const updateProfessional = async (id: string, data: Partial<ProfessionalF
             contractFieldsTouchedInPayload = true;
         }
         if (data.hasOwnProperty('currentContract_notes')) {
-            newProposedContractData.notes = data.currentContract_notes === null ? undefined : (data.currentContract_notes ?? undefined);
+            newProposedContractData.notes = data.currentContract_notes === '' || data.currentContract_notes === null ? null : data.currentContract_notes;
             contractFieldsTouchedInPayload = true;
         }
         if (data.hasOwnProperty('currentContract_empresa')) {
-            newProposedContractData.empresa = data.currentContract_empresa === null ? undefined : (data.currentContract_empresa ?? undefined);
+            newProposedContractData.empresa = data.currentContract_empresa === '' || data.currentContract_empresa === null ? null : data.currentContract_empresa;
             contractFieldsTouchedInPayload = true;
         }
 
@@ -830,8 +863,8 @@ export const updateProfessional = async (id: string, data: Partial<ProfessionalF
                 (!oldContract ||
                  oldContract.startDate !== newProposedContractData.startDate ||
                  oldContract.endDate !== newProposedContractData.endDate ||
-                 (oldContract.notes || '') !== (newProposedContractData.notes || '') ||
-                 (oldContract.empresa || '') !== (newProposedContractData.empresa || '')
+                 (oldContract.notes || null) !== (newProposedContractData.notes || null) || // Compare with null
+                 (oldContract.empresa || null) !== (newProposedContractData.empresa || null)  // Compare with null
                 );
 
             if (isCreatingNewContractInstance) {
@@ -842,8 +875,8 @@ export const updateProfessional = async (id: string, data: Partial<ProfessionalF
                     id: generateId(),
                     startDate: newProposedContractData.startDate!,
                     endDate: newProposedContractData.endDate!,
-                    notes: newProposedContractData.notes,
-                    empresa: newProposedContractData.empresa,
+                    notes: newProposedContractData.notes, // Already handles null/undefined
+                    empresa: newProposedContractData.empresa, // Already handles null/undefined
                 };
             } else if (oldContract && (newProposedContractData.startDate !== undefined || newProposedContractData.endDate !== undefined || newProposedContractData.notes !== undefined || newProposedContractData.empresa !== undefined )) {
                  currentContractForFirestore = {
@@ -853,7 +886,7 @@ export const updateProfessional = async (id: string, data: Partial<ProfessionalF
                     notes: newProposedContractData.notes !== undefined ? newProposedContractData.notes : oldContract.notes,
                     empresa: newProposedContractData.empresa !== undefined ? newProposedContractData.empresa : oldContract.empresa,
                 };
-            } else if ((!newProposedContractData.startDate || !newProposedContractData.endDate) && contractFieldsTouchedInPayload) {
+             } else if ((!newProposedContractData.startDate || !newProposedContractData.endDate) && contractFieldsTouchedInPayload) {
                  if (oldContract && oldContract.id && !contractHistory.find(h => h.id === oldContract.id)) {
                     contractHistory.push(oldContract);
                  }
@@ -864,13 +897,15 @@ export const updateProfessional = async (id: string, data: Partial<ProfessionalF
             ...currentContractForFirestore,
             startDate: toFirestoreTimestamp(currentContractForFirestore.startDate),
             endDate: toFirestoreTimestamp(currentContractForFirestore.endDate),
+            notes: currentContractForFirestore.notes || null,
+            empresa: currentContractForFirestore.empresa || null,
         } : null;
         dataToUpdateFirestore.contractHistory = contractHistory.map(ch => ({
             ...ch,
             startDate: toFirestoreTimestamp(ch.startDate),
             endDate: toFirestoreTimestamp(ch.endDate),
-            notes: ch.notes ?? null, // ensure null instead of undefined
-            empresa: ch.empresa ?? null, // ensure null instead of undefined
+            notes: ch.notes || null,
+            empresa: ch.empresa || null,
         }));
     }
 
@@ -879,12 +914,18 @@ export const updateProfessional = async (id: string, data: Partial<ProfessionalF
     delete dataToUpdateFirestore.currentContract_notes;
     delete dataToUpdateFirestore.currentContract_empresa;
 
+    // Remove fields that are explicitly undefined before sending to Firestore
+    for (const key in dataToUpdateFirestore) {
+        if (dataToUpdateFirestore[key] === undefined) {
+            delete dataToUpdateFirestore[key];
+        }
+    }
 
     await updateDoc(docRef, dataToUpdateFirestore);
     const updatedDocSnap = await getDoc(docRef);
     return updatedDocSnap.exists() ? { id: updatedDocSnap.id, ...convertDocumentData(updatedDocSnap.data()) } as Professional : undefined;
   } catch (error) {
-    console.error(`Error in updateProfessional for ID ${id}:`, error);
+    console.error(`[data.ts] Error in updateProfessional for ID ${id}:`, error);
     throw error;
   }
 };
@@ -904,6 +945,7 @@ export const getPatients = async (options: { page?: number, limit?: number, sear
           (p.phone && p.phone.includes(searchTerm))
           );
       }
+      let patientIdsWithAppointmentsToday: Set<string> | null = null;
       if (filterToday && user) {
           const todayForFilter = startOfDay(new Date());
           const isAdminOrContador = user.role === USER_ROLES.ADMIN || user.role === USER_ROLES.CONTADOR;
@@ -916,8 +958,8 @@ export const getPatients = async (options: { page?: number, limit?: number, sear
             (effectiveLocationId ? appt.locationId === effectiveLocationId : true) &&
             (appt.status === APPOINTMENT_STATUS.BOOKED || appt.status === APPOINTMENT_STATUS.CONFIRMED)
           );
-          const patientIdsWithAppointmentsToday = new Set(dailyAppointments.map(app => app.patientId));
-          filteredMockPatients = filteredMockPatients.filter(p => patientIdsWithAppointmentsToday.has(p.id));
+          patientIdsWithAppointmentsToday = new Set(dailyAppointments.map(app => app.patientId));
+          filteredMockPatients = filteredMockPatients.filter(p => patientIdsWithAppointmentsToday!.has(p.id));
       }
       filteredMockPatients.sort((a,b) => `${a.firstName} ${a.lastName}`.localeCompare(`${b.firstName} ${b.lastName}`));
       const totalCount = filteredMockPatients.length;
@@ -928,13 +970,14 @@ export const getPatients = async (options: { page?: number, limit?: number, sear
     }
 
     if (!firestore) {
-        console.warn("Firestore not initialized in getPatients. Falling back to mock data.");
+        console.warn("[data.ts] Firestore not initialized in getPatients. Falling back to mock data.");
         const mockResult = mockDB.patients.sort((a,b) => `${a.firstName} ${a.lastName}`.localeCompare(`${b.firstName} ${b.lastName}`));
         return { patients: mockResult.slice(0, queryLimit), totalCount: mockResult.length, lastVisiblePatientId: mockResult[queryLimit-1]?.id || null };
     }
 
     const patientsCol = collection(firestore, 'pacientes') as CollectionReference<Omit<Patient, 'id'>>;
     let qConstraints: QueryConstraint[] = [];
+    let patientIdsWithAppointmentsToday: Set<string> | null = null;
 
 
     if (filterToday && user) {
@@ -952,20 +995,23 @@ export const getPatients = async (options: { page?: number, limit?: number, sear
             apptQueryConstraints.push(where('locationId', '==', effectiveLocationId));
         }
         const dailyAppointmentsSnap = await getDocs(query(appointmentsTodayCol, ...apptQueryConstraints));
-        const patientIdsWithAppointmentsToday = new Set(dailyAppointmentsSnap.docs.map(d => d.data().patientId as string));
+        patientIdsWithAppointmentsToday = new Set(dailyAppointmentsSnap.docs.map(d => d.data().patientId as string));
 
         if (patientIdsWithAppointmentsToday.size === 0) return { patients: [], totalCount: 0, lastVisiblePatientId: null };
 
         const patientIdsArray = Array.from(patientIdsWithAppointmentsToday);
+        // Firestore 'in' query supports up to 30 elements. If more, we fetch all and filter client-side.
         if (patientIdsArray.length > 0 && patientIdsArray.length <= 30) {
             qConstraints.push(where(documentId(), 'in', patientIdsArray));
         } else if (patientIdsArray.length > 30) {
-            console.warn("More than 30 patients with appointments today. Patient list may be incomplete due to Firestore 'in' query limits.");
-        } else {
+             console.warn("[data.ts] More than 30 patients with appointments today. Filtering patients client-side after fetching all. This might be slow.");
+        } else { // No patients with appointments today
            return { patients: [], totalCount: 0, lastVisiblePatientId: null };
         }
     }
 
+    // Get total count based on current filters (excluding pagination and ordering for count)
+    // If patientIdsWithAppointmentsToday is set and > 30, count will be of all patients, then client-filtered
     const baseQueryForCount = query(patientsCol, ...qConstraints.filter(c => !(c.type === 'orderBy' || c.type === 'limit' || c.type === 'startAfter')));
     const totalSnapshot = await getCountFromServer(baseQueryForCount);
     let totalCount = totalSnapshot.data().count;
@@ -983,26 +1029,29 @@ export const getPatients = async (options: { page?: number, limit?: number, sear
     const snapshot = await getDocs(q);
     let patientsData = snapshot.docs.map(d => ({ id: d.id, ...convertDocumentData(d.data()) }) as Patient);
 
+    // Client-side filtering if searchTerm is present OR if filterToday resulted in > 30 patient IDs
     if (searchTerm) {
         const lowerSearchTerm = searchTerm.toLowerCase();
         patientsData = patientsData.filter(p =>
           `${p.firstName} ${p.lastName}`.toLowerCase().includes(lowerSearchTerm) ||
           (p.phone && p.phone.includes(searchTerm))
         );
-        if(!filterToday || (filterToday && Array.from(patientIdsWithAppointmentsToday || []).length > 30)) {
-             totalCount = patientsData.length;
-        }
-    }
-     if (filterToday && Array.from(patientIdsWithAppointmentsToday || []).length > 30 && !searchTerm) {
-        patientsData = patientsData.filter(p => (patientIdsWithAppointmentsToday || new Set()).has(p.id));
+        // If search term is applied, the totalCount should reflect the searched result count
+        // This is tricky if combined with filterToday > 30 items, as the initial count was for ALL patients.
+        // For simplicity here, if searchTerm exists, we update totalCount to the length of client-side filtered data.
         totalCount = patientsData.length;
+    }
+     if (filterToday && patientIdsWithAppointmentsToday && patientIdsWithAppointmentsToday.size > 30 && !searchTerm) {
+        // If we had to fetch all patients because of the 'in' limit, filter them now.
+        patientsData = patientsData.filter(p => patientIdsWithAppointmentsToday!.has(p.id));
+        totalCount = patientsData.length; // Update total count after client-side filter
     }
 
 
     const newLastVisibleId = patientsData.length > 0 ? patientsData[patientsData.length - 1].id : null;
     return { patients: patientsData, totalCount, lastVisiblePatientId: newLastVisibleId };
   } catch (error) {
-    console.error("Error in getPatients:", error);
+    console.error("[data.ts] Error in getPatients:", error);
     return { patients: [], totalCount: 0, lastVisiblePatientId: null };
   }
 };
@@ -1013,14 +1062,14 @@ export const getPatientById = async (id: string): Promise<Patient | undefined> =
         return mockDB.patients.find(p => p.id === id);
     }
     if (!firestore) {
-      console.warn("Firestore not initialized in getPatientById. Falling back to mock data for ID:", id);
+      console.warn("[data.ts] Firestore not initialized in getPatientById. Falling back to mock data for ID:", id);
       return mockDB.patients.find(p => p.id === id);
     }
     const docRef = doc(firestore, 'pacientes', id);
     const docSnap = await getDoc(docRef);
     return docSnap.exists() ? { id: docSnap.id, ...convertDocumentData(docSnap.data()) } as Patient : undefined;
   } catch (error) {
-    console.error(`Error in getPatientById for ID ${id}:`, error);
+    console.error(`[data.ts] Error in getPatientById for ID ${id}:`, error);
     return undefined;
   }
 };
@@ -1031,7 +1080,7 @@ export const findPatient = async (firstName: string, lastName: string): Promise<
         return mockDB.patients.find(p => p.firstName.toLowerCase() === firstName.toLowerCase() && p.lastName.toLowerCase() === lastName.toLowerCase());
     }
      if (!firestore) {
-      console.warn("Firestore not initialized in findPatient. Falling back to mock data.");
+      console.warn("[data.ts] Firestore not initialized in findPatient. Falling back to mock data.");
       return mockDB.patients.find(p => p.firstName.toLowerCase() === firstName.toLowerCase() && p.lastName.toLowerCase() === lastName.toLowerCase());
     }
     const patientsCol = collection(firestore, 'pacientes');
@@ -1040,7 +1089,7 @@ export const findPatient = async (firstName: string, lastName: string): Promise<
     if (snapshot.empty) return undefined;
     return { id: snapshot.docs[0].id, ...convertDocumentData(snapshot.docs[0].data()) } as Patient;
   } catch (error) {
-    console.error("Error in findPatient:", error);
+    console.error("[data.ts] Error in findPatient:", error);
     return undefined;
   }
 };
@@ -1052,27 +1101,27 @@ export const addPatient = async (data: Omit<Patient, 'id'>): Promise<Patient> =>
         id: generateId(),
         ...data,
         age: data.age ?? null,
-        phone: data.phone || undefined,
+        phone: data.phone === '' ? undefined : data.phone,
         isDiabetic: data.isDiabetic || false,
-        notes: data.notes || undefined,
-        preferredProfessionalId: data.preferredProfessionalId || undefined,
+        notes: data.notes === '' ? undefined : data.notes,
+        preferredProfessionalId: data.preferredProfessionalId === '' ? undefined : data.preferredProfessionalId,
       };
       mockDB.patients.push(newPatient);
       return newPatient;
     }
-    if (!firestore) throw new Error("Firestore not initialized in addPatient");
+    if (!firestore) throw new Error("[data.ts] Firestore not initialized in addPatient");
     const patientData = {
         ...data,
-        phone: data.phone || null,
+        phone: data.phone === '' ? null : (data.phone || null),
         age: data.age ?? null,
         isDiabetic: data.isDiabetic || false,
-        notes: data.notes || null,
-        preferredProfessionalId: data.preferredProfessionalId || null,
+        notes: data.notes === '' ? null : (data.notes || null),
+        preferredProfessionalId: data.preferredProfessionalId === '' ? null : (data.preferredProfessionalId || null),
     };
     const docRef = await addDoc(collection(firestore, 'pacientes'), patientData);
     return { id: docRef.id, ...patientData } as Patient;
   } catch (error) {
-    console.error("Error in addPatient:", error);
+    console.error("[data.ts] Error in addPatient:", error);
     throw error;
   }
 };
@@ -1083,7 +1132,7 @@ export const updatePatient = async (id: string, data: Partial<Patient>): Promise
         const index = mockDB.patients.findIndex(p => p.id === id);
         if (index !== -1) {
             const patientToUpdate = { ...mockDB.patients[index], ...data };
-             if (data.hasOwnProperty('age') && data.age === null) {
+             if (data.hasOwnProperty('age') && (data.age === null || data.age === 0)) { // Treat 0 as null too
                 patientToUpdate.age = null;
             }
             if (data.hasOwnProperty('phone') && (data.phone === '' || data.phone === null)) {
@@ -1092,28 +1141,38 @@ export const updatePatient = async (id: string, data: Partial<Patient>): Promise
             if (data.hasOwnProperty('notes') && (data.notes === '' || data.notes === null)) {
                 patientToUpdate.notes = undefined;
             }
+             if (data.hasOwnProperty('preferredProfessionalId') && (data.preferredProfessionalId === '' || data.preferredProfessionalId === null)) {
+                patientToUpdate.preferredProfessionalId = undefined;
+            }
             mockDB.patients[index] = patientToUpdate;
             return mockDB.patients[index];
         }
         return undefined;
     }
-    if (!firestore) throw new Error("Firestore not initialized in updatePatient");
+    if (!firestore) throw new Error("[data.ts] Firestore not initialized in updatePatient");
     const docRef = doc(firestore, 'pacientes', id);
     const updateData: any = { ...data };
     delete updateData.id;
 
-    if (updateData.hasOwnProperty('phone')) updateData.phone = updateData.phone || null;
-    if (updateData.hasOwnProperty('age')) updateData.age = updateData.age ?? null;
-    if (updateData.hasOwnProperty('notes')) updateData.notes = updateData.notes || null;
-    if (updateData.hasOwnProperty('preferredProfessionalId')) updateData.preferredProfessionalId = updateData.preferredProfessionalId || null;
-    if (updateData.hasOwnProperty('isDiabetic')) updateData.isDiabetic = updateData.isDiabetic || false;
+    // Ensure optional fields are set to null if empty or explicitly null for Firestore
+    updateData.phone = data.phone === '' || data.phone === null ? null : (data.phone ?? undefined);
+    updateData.age = data.age === 0 || data.age === null ? null : (data.age ?? undefined); // Treat 0 as null
+    updateData.notes = data.notes === '' || data.notes === null ? null : (data.notes ?? undefined);
+    updateData.preferredProfessionalId = data.preferredProfessionalId === '' || data.preferredProfessionalId === null ? null : (data.preferredProfessionalId ?? undefined);
+    updateData.isDiabetic = data.isDiabetic ?? false; // Default to false if undefined
 
+    // Remove fields that are explicitly undefined before sending to Firestore
+    for (const key in updateData) {
+        if (updateData[key] === undefined) {
+            delete updateData[key];
+        }
+    }
 
     await updateDoc(docRef, updateData);
     const updatedDocSnap = await getDoc(docRef);
     return updatedDocSnap.exists() ? { id: updatedDocSnap.id, ...convertDocumentData(updatedDocSnap.data()) } as Patient : undefined;
   } catch (error) {
-    console.error(`Error in updatePatient for ID ${id}:`, error);
+    console.error(`[data.ts] Error in updatePatient for ID ${id}:`, error);
     throw error;
   }
 };
@@ -1125,15 +1184,19 @@ export const getServices = async (): Promise<Service[]> => {
         return [...mockDB.services].sort((a, b) => a.name.localeCompare(b.name));
     }
     if (!firestore) {
-      console.warn("Firestore not initialized in getServices. Falling back to mock data.");
+      console.warn("[data.ts] Firestore not initialized in getServices. Falling back to mock data.");
       return [...mockDB.services].sort((a, b) => a.name.localeCompare(b.name));
     }
     const servicesCol = collection(firestore, 'servicios');
     const q = query(servicesCol, orderBy('name'));
     const snapshot = await getDocs(q);
+     if (snapshot.empty) {
+        console.warn("[data.ts] Firestore 'servicios' collection is empty. Falling back to mock data for getServices.");
+        return [...mockDB.services].sort((a, b) => a.name.localeCompare(b.name));
+    }
     return snapshot.docs.map(d => ({ id: d.id, ...convertDocumentData(d.data()) }) as Service);
   } catch (error) {
-    console.error("Error in getServices:", error);
+    console.error("[data.ts] Error in getServices:", error);
     return [];
   }
 };
@@ -1144,14 +1207,14 @@ export const getServiceById = async (id: string): Promise<Service | undefined> =
         return mockDB.services.find(s => s.id === id);
     }
     if (!firestore) {
-      console.warn("Firestore not initialized in getServiceById. Falling back to mock data for ID:", id);
+      console.warn("[data.ts] Firestore not initialized in getServiceById. Falling back to mock data for ID:", id);
       return mockDB.services.find(s => s.id === id);
     }
     const docRef = doc(firestore, 'servicios', id);
     const docSnap = await getDoc(docRef);
     return docSnap.exists() ? { id: docSnap.id, ...convertDocumentData(docSnap.data()) } as Service : undefined;
   } catch (error) {
-    console.error(`Error in getServiceById for ID ${id}:`, error);
+    console.error(`[data.ts] Error in getServiceById for ID ${id}:`, error);
     return undefined;
   }
 };
@@ -1162,7 +1225,7 @@ export const addService = async (data: ServiceFormData): Promise<Service> => {
     const newServiceData: Omit<Service, 'id'> = {
       name: data.name,
       defaultDuration: totalDurationMinutes,
-      price: data.price ?? undefined,
+      price: data.price === null ? undefined : (data.price ?? undefined),
     };
     if (useMockDatabase) {
       const newService: Service = {
@@ -1172,7 +1235,7 @@ export const addService = async (data: ServiceFormData): Promise<Service> => {
       mockDB.services.push(newService);
       return newService;
     }
-    if (!firestore) throw new Error("Firestore not initialized in addService");
+    if (!firestore) throw new Error("[data.ts] Firestore not initialized in addService");
     const dataToSave = {
       ...newServiceData,
       price: newServiceData.price === undefined ? null : newServiceData.price,
@@ -1181,7 +1244,7 @@ export const addService = async (data: ServiceFormData): Promise<Service> => {
     await setDoc(docRef, dataToSave);
     return { id: docRef.id, ...newServiceData };
   } catch (error) {
-    console.error("Error in addService:", error);
+    console.error("[data.ts] Error in addService:", error);
     throw error;
   }
 };
@@ -1204,7 +1267,7 @@ export const updateService = async (id: string, data: Partial<ServiceFormData>):
         }
         return undefined;
     }
-    if (!firestore) throw new Error("Firestore not initialized in updateService");
+    if (!firestore) throw new Error("[data.ts] Firestore not initialized in updateService");
     const docRef = doc(firestore, 'servicios', id);
     const updateData: any = {};
     if (data.name) updateData.name = data.name;
@@ -1215,12 +1278,18 @@ export const updateService = async (id: string, data: Partial<ServiceFormData>):
       updateData.price = data.price === undefined || data.price === null ? null : data.price;
     }
 
+    // Remove fields that are explicitly undefined before sending to Firestore
+    for (const key in updateData) {
+        if (updateData[key] === undefined) {
+            delete updateData[key];
+        }
+    }
 
     await updateDoc(docRef, updateData);
     const updatedDocSnap = await getDoc(docRef);
     return updatedDocSnap.exists() ? { id: updatedDocSnap.id, ...convertDocumentData(updatedDocSnap.data()) } as Service : undefined;
   } catch (error) {
-    console.error(`Error in updateService for ID ${id}:`, error);
+    console.error(`[data.ts] Error in updateService for ID ${id}:`, error);
     throw error;
   }
 };
@@ -1260,8 +1329,8 @@ const populateAppointmentFull = async (apptData: any): Promise<Appointment> => {
     }
     return { ...apptData, patient, professional, service, addedServices: addedServicesPopulated } as Appointment;
   } catch (error) {
-    console.error("Error in populateAppointmentFull:", error);
-    return { ...apptData } as Appointment;
+    console.error("[data.ts] Error in populateAppointmentFull:", error);
+    return { ...apptData } as Appointment; // Return partially populated data on error
   }
 };
 
@@ -1344,7 +1413,7 @@ export const getAppointments = async (filters: {
     }
 
     if (!firestore) {
-        console.warn("Firestore not initialized in getAppointments. Falling back to mock data.");
+        console.warn("[data.ts] Firestore not initialized in getAppointments. Falling back to mock data.");
         const mockResults = mockDB.appointments.slice(0, queryLimit);
         const populatedMockResults = await Promise.all(mockResults.map(populateAppointmentFull));
         return { appointments: populatedMockResults, totalCount: mockDB.appointments.length, lastVisibleAppointmentId: mockResults[queryLimit-1]?.id || null };
@@ -1358,7 +1427,7 @@ export const getAppointments = async (filters: {
       if (targetLocationIds.length > 0 && targetLocationIds.length <= 30) {
           qConstraints.push(where('locationId', 'in', targetLocationIds));
       } else if (targetLocationIds.length > 30) {
-          console.warn("More than 30 locationIds for appointment filter. Querying for all locations and filtering client-side.");
+           console.warn("[data.ts] More than 30 locationIds for appointment filter. Querying for all locations and filtering client-side.");
       }
     }
     if (restFilters.patientId) qConstraints.push(where('patientId', '==', restFilters.patientId));
@@ -1385,7 +1454,7 @@ export const getAppointments = async (filters: {
       if (statusesToFilter.length > 0 && statusesToFilter.length <= 30) {
           qConstraints.push(where('status', 'in', statusesToFilter));
       } else if (statusesToFilter.length > 30) {
-           console.warn("More than 30 statuses for appointment filter. Querying without status filter and filtering client-side.");
+           console.warn("[data.ts] More than 30 statuses for appointment filter. Querying without status filter and filtering client-side.");
       }
     }
 
@@ -1409,8 +1478,14 @@ export const getAppointments = async (filters: {
 
     const q = query(appointmentsCol, ...qConstraints);
     const snapshot = await getDocs(q);
+    if (snapshot.empty && qConstraints.length > 1) { // More than just orderBy, implies filters were applied
+        console.warn("[data.ts] Firestore 'citas' query returned no results with current filters. Falling back to mock if applicable, or empty array.");
+        if (useMockDatabase) return { appointments: mockDB.appointments.slice(0,queryLimit), totalCount: mockDB.appointments.length, lastVisibleAppointmentId: mockDB.appointments[queryLimit-1]?.id || null};
+        return { appointments: [], totalCount: 0, lastVisibleAppointmentId: null };
+    }
     let appointmentsData = snapshot.docs.map(d => ({ id: d.id, ...convertDocumentData(d.data()) }) as Appointment);
 
+    // Client-side filtering if initial query was too broad due to 'in' or 'array-contains-any' limits
     if (restFilters.locationId && Array.isArray(restFilters.locationId) && restFilters.locationId.length > 30) {
         appointmentsData = appointmentsData.filter(appt => (restFilters.locationId as LocationId[]).includes(appt.locationId));
         totalCount = appointmentsData.length;
@@ -1425,7 +1500,7 @@ export const getAppointments = async (filters: {
     const newLastVisibleId = populatedAppointments.length > 0 ? populatedAppointments[populatedAppointments.length - 1].id : null;
     return { appointments: populatedAppointments, totalCount, lastVisibleAppointmentId: newLastVisibleId };
   } catch (error) {
-    console.error("Error in getAppointments:", error);
+    console.error("[data.ts] Error in getAppointments:", error);
     return { appointments: [], totalCount: 0, lastVisibleAppointmentId: null };
   }
 };
@@ -1438,7 +1513,7 @@ export const getAppointmentById = async (id: string): Promise<Appointment | unde
         return appt ? populateAppointmentFull(appt) : undefined;
     }
     if (!firestore) {
-      console.warn("Firestore not initialized in getAppointmentById. Falling back to mock data for ID:", id);
+      console.warn("[data.ts] Firestore not initialized in getAppointmentById. Falling back to mock data for ID:", id);
       const appt = mockDB.appointments.find(a => a.id === id);
       return appt ? populateAppointmentFull(appt) : undefined;
     }
@@ -1448,7 +1523,7 @@ export const getAppointmentById = async (id: string): Promise<Appointment | unde
     const apptData = { id: docSnap.id, ...convertDocumentData(docSnap.data()) } as Appointment;
     return populateAppointmentFull(apptData);
   } catch (error) {
-    console.error(`Error in getAppointmentById for ID ${id}:`, error);
+    console.error(`[data.ts] Error in getAppointmentById for ID ${id}:`, error);
     return undefined;
   }
 };
@@ -1461,7 +1536,7 @@ export const addAppointment = async (data: AppointmentFormData & { isExternalPro
       ? mockDB.services.find(s => s.id === data.serviceId)
       : await getServiceById(data.serviceId as string);
 
-    if (!service) throw new Error(`Service with ID ${data.serviceId} not found.`);
+    if (!service) throw new Error(`[data.ts] Service with ID ${data.serviceId} not found.`);
 
     const appointmentDateHours = parseInt(data.appointmentTime.split(':')[0]);
     const appointmentDateMinutes = parseInt(data.appointmentTime.split(':')[1]);
@@ -1483,28 +1558,26 @@ export const addAppointment = async (data: AppointmentFormData & { isExternalPro
           firstName: data.patientFirstName,
           lastName: data.patientLastName,
           phone: data.patientPhone || undefined,
-          age: data.age,
+          age: data.patientAge ?? null,
           isDiabetic: data.isDiabetic || false,
         });
         patientId = newPatient.id;
       }
     }
 
-    let actualProfessionalId: string | undefined | null = data.preferredProfessionalId;
+    let actualProfessionalId: string | undefined | null = data.preferredProfessionalId === ANY_PROFESSIONAL_VALUE ? null : data.preferredProfessionalId;
     let isExternalProfAssignment = data.isExternalProfessional || false;
     let externalProfOriginLocId: LocationId | null = data.externalProfessionalOriginLocationId || null;
     let finalBookingObservations = data.bookingObservations || '';
 
 
-    if (!actualProfessionalId || actualProfessionalId === ANY_PROFESSIONAL_VALUE) {
-      console.log("Attempting to auto-assign professional...");
-      const allProfsResponse = useMockDatabase ? mockDB.professionals : await getProfessionals(); // Fetch all if not mock
-      const allProfs = Array.isArray(allProfsResponse) ? allProfsResponse : (allProfsResponse || []);
-
-
+    if (!actualProfessionalId) {
+      console.log("[data.ts] Attempting to auto-assign professional...");
+      const allProfsSystem = useMockDatabase ? mockDB.professionals : await getProfessionals(); // Fetch all professionals if not using mock
+      
       const professionalsToConsider = data.searchExternal
-        ? allProfs
-        : allProfs.filter(p => p.locationId === data.locationId);
+        ? allProfsSystem
+        : allProfsSystem.filter(p => p.locationId === data.locationId);
 
       let appointmentsOnDateForConsideredProfs: Appointment[];
        const appointmentsResult = useMockDatabase
@@ -1517,9 +1590,9 @@ export const addAppointment = async (data: AppointmentFormData & { isExternalPro
       for (const prof of professionalsToConsider) {
         const availability = getProfessionalAvailabilityForDate(prof, appointmentDateTimeObject);
         if (availability) {
-          const profWorkStartTime = parse(`${format(data.appointmentDate, 'yyyy-MM-dd')} ${availability.startTime}`, 'yyyy-MM-dd HH:mm', new Date());
-          const profWorkEndTime = parse(`${format(data.appointmentDate, 'yyyy-MM-dd')} ${availability.endTime}`, 'yyyy-MM-dd HH:mm', new Date());
-
+          const profWorkStartTime = parseISO(`${format(data.appointmentDate, 'yyyy-MM-dd')}T${availability.startTime}:00`);
+          const profWorkEndTime = parseISO(`${format(data.appointmentDate, 'yyyy-MM-dd')}T${availability.endTime}:00`);
+          
           if (!isWithinInterval(appointmentDateTimeObject, { start: profWorkStartTime, end: dateFnsAddMinutes(profWorkEndTime, -appointmentDuration +1) })) {
             continue;
           }
@@ -1547,14 +1620,13 @@ export const addAppointment = async (data: AppointmentFormData & { isExternalPro
               isExternalProfAssignment = false;
               externalProfOriginLocId = null;
             }
-            console.log(`Auto-assigned professional ${actualProfessionalId}`);
+            console.log(`[data.ts] Auto-assigned professional ${actualProfessionalId}`);
             break;
           }
         }
       }
-      if (!actualProfessionalId || actualProfessionalId === ANY_PROFESSIONAL_VALUE) {
-        console.log("No professional could be auto-assigned.");
-         actualProfessionalId = null;
+      if (!actualProfessionalId) {
+        console.log("[data.ts] No professional could be auto-assigned.");
       }
     }
 
@@ -1586,7 +1658,7 @@ export const addAppointment = async (data: AppointmentFormData & { isExternalPro
       return populatedAppt;
     }
 
-    if (!firestore) throw new Error("Firestore not initialized in addAppointment");
+    if (!firestore) throw new Error("[data.ts] Firestore not initialized in addAppointment");
 
     const firestoreReadyData: any = {
         ...newAppointmentRaw,
@@ -1595,6 +1667,9 @@ export const addAppointment = async (data: AppointmentFormData & { isExternalPro
         updatedAt: serverTimestamp(),
         addedServices: [],
         attachedPhotos: [],
+        professionalId: newAppointmentRaw.professionalId || null,
+        bookingObservations: newAppointmentRaw.bookingObservations || null,
+        externalProfessionalOriginLocationId: newAppointmentRaw.externalProfessionalOriginLocationId || null,
     };
 
     const docRef = await addDoc(collection(firestore, 'citas'), firestoreReadyData);
@@ -1602,7 +1677,7 @@ export const addAppointment = async (data: AppointmentFormData & { isExternalPro
     const newAppointmentData = {id: newAppointmentSnapshot.id, ...convertDocumentData(newAppointmentSnapshot.data()!) } as Appointment;
     return populateAppointmentFull(newAppointmentData);
   } catch (error) {
-    console.error("Error in addAppointment:", error);
+    console.error("[data.ts] Error in addAppointment:", error);
     throw error;
   }
 };
@@ -1619,6 +1694,15 @@ export const updateAppointment = async (id: string, data: Partial<Appointment>):
           ...data,
           updatedAt: formatISO(new Date()),
         };
+        // Ensure optional fields are handled correctly for mockDB
+        if (data.hasOwnProperty('professionalId') && data.professionalId === null) updatedAppointmentRaw.professionalId = null;
+        if (data.hasOwnProperty('bookingObservations') && data.bookingObservations === null) updatedAppointmentRaw.bookingObservations = undefined;
+        if (data.hasOwnProperty('actualArrivalTime') && data.actualArrivalTime === null) updatedAppointmentRaw.actualArrivalTime = undefined;
+        if (data.hasOwnProperty('paymentMethod') && data.paymentMethod === null) updatedAppointmentRaw.paymentMethod = undefined;
+        if (data.hasOwnProperty('amountPaid') && data.amountPaid === null) updatedAppointmentRaw.amountPaid = undefined;
+        if (data.hasOwnProperty('staffNotes') && data.staffNotes === null) updatedAppointmentRaw.staffNotes = undefined;
+
+
         const populatedAppointment = await populateAppointmentFull(updatedAppointmentRaw);
         mockDB.appointments[index] = populatedAppointment;
         return populatedAppointment;
@@ -1626,18 +1710,16 @@ export const updateAppointment = async (id: string, data: Partial<Appointment>):
       return undefined;
     }
 
-    if (!firestore) throw new Error("Firestore not initialized in updateAppointment");
+    if (!firestore) throw new Error("[data.ts] Firestore not initialized in updateAppointment");
     const docRef = doc(firestore, 'citas', id);
 
-    const dataToUpdate: any = { ...data };
+    const dataToUpdate: any = { ...data }; // Create a mutable copy
     delete dataToUpdate.id;
     delete dataToUpdate.patient;
     delete dataToUpdate.professional;
     delete dataToUpdate.service;
 
-    if (dataToUpdate.appointmentDateTime && typeof dataToUpdate.appointmentDateTime === 'string') {
-      dataToUpdate.appointmentDateTime = toFirestoreTimestamp(dataToUpdate.appointmentDateTime);
-    } else if (dataToUpdate.appointmentDateTime && dataToUpdate.appointmentDateTime instanceof Date) {
+    if (dataToUpdate.appointmentDateTime && (typeof dataToUpdate.appointmentDateTime === 'string' || dataToUpdate.appointmentDateTime instanceof Date)) {
       dataToUpdate.appointmentDateTime = toFirestoreTimestamp(dataToUpdate.appointmentDateTime);
     }
 
@@ -1650,13 +1732,25 @@ export const updateAppointment = async (id: string, data: Partial<Appointment>):
     }
     dataToUpdate.updatedAt = serverTimestamp();
 
+    // Ensure fields that can be null are explicitly set to null for Firestore if needed
+    const optionalFieldsToNullify: (keyof Appointment)[] = ['professionalId', 'bookingObservations', 'actualArrivalTime', 'paymentMethod', 'amountPaid', 'staffNotes', 'externalProfessionalOriginLocationId'];
+    optionalFieldsToNullify.forEach(field => {
+        if (dataToUpdate.hasOwnProperty(field) && (dataToUpdate[field] === undefined || dataToUpdate[field] === '')) {
+            dataToUpdate[field] = null;
+        }
+    });
+    if (dataToUpdate.hasOwnProperty('isExternalProfessional') && dataToUpdate.isExternalProfessional === undefined) {
+        dataToUpdate.isExternalProfessional = false;
+    }
+
+
     await updateDoc(docRef, dataToUpdate);
     const updatedDocSnap = await getDoc(docRef);
     if (!updatedDocSnap.exists()) return undefined;
     const updatedAppointmentData = { id: updatedDocSnap.id, ...convertDocumentData(updatedDocSnap.data()) } as Appointment;
     return populateAppointmentFull(updatedAppointmentData);
   } catch (error) {
-    console.error(`Error in updateAppointment for ID ${id}:`, error);
+    console.error(`[data.ts] Error in updateAppointment for ID ${id}:`, error);
     throw error;
   }
 };
@@ -1687,7 +1781,7 @@ export const getPatientAppointmentHistory = async (
     }
 
     if (!firestore) {
-      console.warn("Firestore not initialized in getPatientAppointmentHistory. Falling back to mock data for patient:", patientId);
+      console.warn("[data.ts] Firestore not initialized in getPatientAppointmentHistory. Falling back to mock data for patient:", patientId);
       let mockHistory = (mockDB.appointments || []).filter(appt =>
         appt.patientId === patientId &&
         appt.appointmentDateTime && parseISO(appt.appointmentDateTime) < todayForFilter &&
@@ -1724,7 +1818,7 @@ export const getPatientAppointmentHistory = async (
     const newLastVisibleId = populatedAppointments.length > 0 ? populatedAppointments[populatedAppointments.length - 1].id : null;
     return { appointments: populatedAppointments, totalCount, lastVisibleAppointmentId: newLastVisibleId };
   } catch (error) {
-    console.error(`Error in getPatientAppointmentHistory for patient ID ${patientId}:`, error);
+    console.error(`[data.ts] Error in getPatientAppointmentHistory for patient ID ${patientId}:`, error);
     return { appointments: [], totalCount: 0, lastVisibleAppointmentId: null };
   }
 };
@@ -1732,7 +1826,7 @@ export const getPatientAppointmentHistory = async (
 // --- Utils ---
 export const getCurrentQuincenaDateRange = (): { start: Date; end: Date } => {
   try {
-    const todayForQuincena = new Date();
+    const todayForQuincena = new Date(); // Use real current date
     const currentYear = getYear(todayForQuincena);
     const currentMonth = getMonth(todayForQuincena);
     const currentDay = getDate(todayForQuincena);
@@ -1743,11 +1837,11 @@ export const getCurrentQuincenaDateRange = (): { start: Date; end: Date } => {
       endDate = dateFnsAddMinutes(startOfDay(addDays(startDate, 14)), (24*60)-1);
     } else {
       startDate = addDays(startOfMonth(setMonth(setYear(new Date(), currentYear), currentMonth)), 15);
-      endDate = endOfMonth(setMonth(setYear(new Date(), currentYear), currentMonth));
+      endDate = endOfDay(endOfMonth(setMonth(setYear(new Date(), currentYear), currentMonth)));
     }
     return { start: startOfDay(startDate), end: endOfDay(endDate) };
   } catch (error) {
-    console.error("Error in getCurrentQuincenaDateRange:", error);
+    console.error("[data.ts] Error in getCurrentQuincenaDateRange:", error);
     const todayFallback = new Date();
     return { start: startOfDay(todayFallback), end: endOfDay(todayFallback) };
   }
@@ -1755,26 +1849,27 @@ export const getCurrentQuincenaDateRange = (): { start: Date; end: Date } => {
 
 export const getProfessionalAppointmentsForDate = async (professionalId: string, date: Date): Promise<Appointment[]> => {
   try {
+    const targetDate = startOfDay(date);
+    const statusesToFetch: AppointmentStatus[] = [APPOINTMENT_STATUS.BOOKED, APPOINTMENT_STATUS.CONFIRMED];
+
     if (useMockDatabase) {
-      const targetDate = startOfDay(date);
       const professionalAppointments = (mockDB.appointments || [])
         .filter(appt =>
           appt.professionalId === professionalId &&
           appt.appointmentDateTime && dateFnsIsSameDay(parseISO(appt.appointmentDateTime), targetDate) &&
-          (appt.status === APPOINTMENT_STATUS.BOOKED || appt.status === APPOINTMENT_STATUS.CONFIRMED)
+          statusesToFetch.includes(appt.status)
         )
         .sort((a, b) => parseISO(a.appointmentDateTime).getTime() - parseISO(b.appointmentDateTime).getTime());
       return Promise.all(professionalAppointments.map(populateAppointmentFull));
     }
 
     if (!firestore) {
-      console.warn("Firestore not initialized in getProfessionalAppointmentsForDate. Falling back to mock for prof ID:", professionalId);
-      const targetDate = startOfDay(date);
+      console.warn("[data.ts] Firestore not initialized in getProfessionalAppointmentsForDate. Falling back to mock for prof ID:", professionalId);
       const mockAppointments = (mockDB.appointments || [])
         .filter(appt =>
           appt.professionalId === professionalId &&
           appt.appointmentDateTime && dateFnsIsSameDay(parseISO(appt.appointmentDateTime), targetDate) &&
-          (appt.status === APPOINTMENT_STATUS.BOOKED || appt.status === APPOINTMENT_STATUS.CONFIRMED)
+          statusesToFetch.includes(appt.status)
         )
         .sort((a, b) => parseISO(a.appointmentDateTime).getTime() - parseISO(b.appointmentDateTime).getTime());
       return Promise.all(mockAppointments.map(populateAppointmentFull));
@@ -1785,14 +1880,14 @@ export const getProfessionalAppointmentsForDate = async (professionalId: string,
       where('professionalId', '==', professionalId),
       where('appointmentDateTime', '>=', toFirestoreTimestamp(startOfDay(date))!),
       where('appointmentDateTime', '<=', toFirestoreTimestamp(endOfDay(date))!),
-      where('status', 'in', [APPOINTMENT_STATUS.BOOKED, APPOINTMENT_STATUS.CONFIRMED]),
+      where('status', 'in', statusesToFetch),
       orderBy('appointmentDateTime', 'asc')
     );
     const snapshot = await getDocs(q);
     const appointmentsData = snapshot.docs.map(d => ({ id: d.id, ...convertDocumentData(d.data()) }) as Appointment);
     return Promise.all(appointmentsData.map(populateAppointmentFull));
   } catch (error) {
-    console.error(`Error in getProfessionalAppointmentsForDate for prof ID ${professionalId} and date ${date}:`, error);
+    console.error(`[data.ts] Error in getProfessionalAppointmentsForDate for prof ID ${professionalId} and date ${date}:`, error);
     return [];
   }
 };
@@ -1805,6 +1900,7 @@ export function getProfessionalAvailabilityForDate(
   try {
     const contractStatus = getContractDisplayStatus(professional.currentContract, targetDate);
     if (contractStatus !== 'Activo') {
+      // console.log(`[Availability] Prof ${professional.firstName} no activo por contrato el ${formatISO(targetDate, {representation: 'date'})}`);
       return null;
     }
     const dateToCheck = startOfDay(targetDate);
@@ -1816,33 +1912,37 @@ export function getProfessionalAvailabilityForDate(
       );
       if (override) {
         if (override.isWorking && override.startTime && override.endTime) {
+          // console.log(`[Availability] Prof ${professional.firstName} disponible por override el ${targetDateString}: ${override.startTime}-${override.endTime}`);
           return { startTime: override.startTime, endTime: override.endTime, notes: override.notes };
         }
+        // console.log(`[Availability] Prof ${professional.firstName} NO disponible por override el ${targetDateString}`);
         return null; // Override explicitly says not working or lacks times
       }
     }
-    // If no override, check base work schedule
     if (professional.workSchedule) {
-      const dayOfWeekIndex = getDay(dateToCheck); // Sunday is 0, Monday is 1, etc.
+      const dayOfWeekIndex = getDay(dateToCheck);
       const dayKey = DAYS_OF_WEEK.find((_, index) => index === dayOfWeekIndex)?.id as DayOfWeekId | undefined;
 
       if (dayKey) {
           const dailySchedule = professional.workSchedule[dayKey];
           if (dailySchedule) {
-          if (dailySchedule.isWorking === false) return null;
-          // If isWorking is true or undefined (assume true if times are present), and times are valid
+          if (dailySchedule.isWorking === false) {
+            // console.log(`[Availability] Prof ${professional.firstName} NO disponible por horario base (isWorking: false) el ${dayKey}`);
+            return null;
+          }
           if ((dailySchedule.isWorking === true || dailySchedule.isWorking === undefined) && dailySchedule.startTime && dailySchedule.endTime) {
+              // console.log(`[Availability] Prof ${professional.firstName} disponible por horario base el ${dayKey}: ${dailySchedule.startTime}-${dailySchedule.endTime}`);
               return { startTime: dailySchedule.startTime, endTime: dailySchedule.endTime };
           }
-          // If isWorking is not explicitly false but times are missing, treat as not working
+          // console.log(`[Availability] Prof ${professional.firstName} NO disponible por horario base (faltan tiempos o isWorking no es true) el ${dayKey}`);
           return null;
           }
       }
     }
-    // Default to not working if no schedule found for the day
+    // console.log(`[Availability] Prof ${professional.firstName} NO disponible (sin horario base ni override) el ${targetDateString}`);
     return null;
   } catch (error) {
-    console.error("Error in getProfessionalAvailabilityForDate:", error);
+    console.error("[data.ts] Error in getProfessionalAvailabilityForDate:", error);
     return null;
   }
 }
@@ -1854,83 +1954,113 @@ export const getPeriodicReminders = async (): Promise<PeriodicReminder[]> => {
       return [...mockDB.periodicReminders].sort((a, b) => parseISO(a.dueDate).getTime() - parseISO(b.dueDate).getTime());
     }
      if (!firestore) {
-      console.warn("Firestore not initialized in getPeriodicReminders. Falling back to mock data.");
+      console.warn("[data.ts] Firestore not initialized in getPeriodicReminders. Falling back to mock data.");
       return [...mockDB.periodicReminders].sort((a, b) => parseISO(a.dueDate).getTime() - parseISO(b.dueDate).getTime());
     }
     const remindersCol = collection(firestore, 'recordatorios');
     const q = query(remindersCol, orderBy('dueDate', 'asc'));
     const snapshot = await getDocs(q);
+    if (snapshot.empty) {
+        console.warn("[data.ts] Firestore 'recordatorios' collection is empty. Falling back to mock data for getPeriodicReminders.");
+        return [...mockDB.periodicReminders].sort((a, b) => parseISO(a.dueDate).getTime() - parseISO(b.dueDate).getTime());
+    }
     return snapshot.docs.map(d => ({ id: d.id, ...convertDocumentData(d.data()) }) as PeriodicReminder);
   } catch (error) {
-    console.error("Error in getPeriodicReminders:", error);
+    console.error("[data.ts] Error in getPeriodicReminders:", error);
     return [];
   }
 };
 
 export const addPeriodicReminder = async (data: Omit<PeriodicReminder, 'id' | 'createdAt' | 'updatedAt'>): Promise<PeriodicReminder> => {
   try {
+    const reminderToSave: Omit<PeriodicReminder, 'id' | 'createdAt' | 'updatedAt'> = {
+      ...data,
+      dueDate: formatISO(parseISO(data.dueDate), { representation: 'date' }),
+      description: data.description || undefined,
+      amount: data.amount ?? undefined,
+    };
+
     if (useMockDatabase) {
       const newReminder: PeriodicReminder = {
         id: generateId(),
-        ...data,
-        dueDate: formatISO(parseISO(data.dueDate), { representation: 'date' }),
+        ...reminderToSave,
         createdAt: formatISO(new Date()),
         updatedAt: formatISO(new Date()),
       };
       mockDB.periodicReminders.push(newReminder);
       return newReminder;
     }
-    if (!firestore) throw new Error("Firestore not initialized in addPeriodicReminder");
-    const reminderData = {
-      ...data,
-      dueDate: toFirestoreTimestamp(formatISO(parseISO(data.dueDate), { representation: 'date' })),
+    if (!firestore) throw new Error("[data.ts] Firestore not initialized in addPeriodicReminder");
+    
+    const firestoreData = {
+      ...reminderToSave,
+      dueDate: toFirestoreTimestamp(reminderToSave.dueDate),
       createdAt: serverTimestamp(),
       updatedAt: serverTimestamp(),
-      description: data.description || null,
-      amount: data.amount ?? null,
+      description: reminderToSave.description || null,
+      amount: reminderToSave.amount ?? null,
     };
-    const docRef = await addDoc(collection(firestore, 'recordatorios'), reminderData);
-    const savedData = (await getDoc(docRef)).data();
+    const docRef = await addDoc(collection(firestore, 'recordatorios'), firestoreData);
+    const savedSnap = await getDoc(docRef); // Re-fetch to get server timestamps
+    const savedData = convertDocumentData(savedSnap.data()!);
+
     return {
       id: docRef.id,
-      ...data,
+      ...reminderToSave, // Use the JS version of data for immediate return
       dueDate: formatISO(parseISO(data.dueDate), {representation: 'date'}),
-      createdAt: savedData?.createdAt ? fromFirestoreTimestamp(savedData.createdAt as Timestamp) : new Date().toISOString(),
-      updatedAt: savedData?.updatedAt ? fromFirestoreTimestamp(savedData.updatedAt as Timestamp) : new Date().toISOString(),
-     } as PeriodicReminder;
+      createdAt: savedData?.createdAt ? (savedData.createdAt as string) : new Date().toISOString(),
+      updatedAt: savedData?.updatedAt ? (savedData.updatedAt as string) : new Date().toISOString(),
+     };
   } catch (error) {
-    console.error("Error in addPeriodicReminder:", error);
+    console.error("[data.ts] Error in addPeriodicReminder:", error);
     throw error;
   }
 };
 
 export const updatePeriodicReminder = async (id: string, data: Partial<Omit<PeriodicReminder, 'id' | 'createdAt' | 'updatedAt'>> & {dueDate: string}): Promise<PeriodicReminder | undefined> => {
   try {
+    const updatePayload: Partial<PeriodicReminder> = {
+      ...data,
+      dueDate: formatISO(parseISO(data.dueDate), { representation: 'date' }),
+      description: data.description || undefined,
+      amount: data.amount ?? undefined,
+    };
+
+
     if (useMockDatabase) {
       const index = mockDB.periodicReminders.findIndex(r => r.id === id);
       if (index !== -1) {
         mockDB.periodicReminders[index] = {
           ...mockDB.periodicReminders[index],
-          ...data,
-          dueDate: formatISO(parseISO(data.dueDate), { representation: 'date' }),
+          ...updatePayload,
           updatedAt: formatISO(new Date()),
         };
         return mockDB.periodicReminders[index];
       }
       return undefined;
     }
-    if (!firestore) throw new Error("Firestore not initialized in updatePeriodicReminder");
+    if (!firestore) throw new Error("[data.ts] Firestore not initialized in updatePeriodicReminder");
     const docRef = doc(firestore, 'recordatorios', id);
-    const updateData: any = { ...data };
-    if (updateData.dueDate && typeof updateData.dueDate === 'string') {
-      updateData.dueDate = toFirestoreTimestamp(formatISO(parseISO(updateData.dueDate), {representation: 'date'}));
+    const firestoreUpdateData: any = { ...updatePayload };
+    if (firestoreUpdateData.dueDate && typeof firestoreUpdateData.dueDate === 'string') {
+      firestoreUpdateData.dueDate = toFirestoreTimestamp(formatISO(parseISO(firestoreUpdateData.dueDate), {representation: 'date'}));
     }
-    updateData.updatedAt = serverTimestamp();
-    await updateDoc(docRef, updateData);
+    firestoreUpdateData.updatedAt = serverTimestamp();
+    firestoreUpdateData.description = firestoreUpdateData.description || null;
+    firestoreUpdateData.amount = firestoreUpdateData.amount ?? null;
+
+    // Remove fields that are explicitly undefined before sending to Firestore
+    for (const key in firestoreUpdateData) {
+        if (firestoreUpdateData[key] === undefined) {
+            delete firestoreUpdateData[key];
+        }
+    }
+
+    await updateDoc(docRef, firestoreUpdateData);
     const updatedDocSnap = await getDoc(docRef);
     return updatedDocSnap.exists() ? { id: updatedDocSnap.id, ...convertDocumentData(updatedDocSnap.data()) } as PeriodicReminder : undefined;
   } catch (error) {
-    console.error(`Error in updatePeriodicReminder for ID ${id}:`, error);
+    console.error(`[data.ts] Error in updatePeriodicReminder for ID ${id}:`, error);
     throw error;
   }
 };
@@ -1942,11 +2072,11 @@ export const deletePeriodicReminder = async (id: string): Promise<boolean> => {
       mockDB.periodicReminders = mockDB.periodicReminders.filter(r => r.id !== id);
       return mockDB.periodicReminders.length < initialLength;
     }
-    if (!firestore) throw new Error("Firestore not initialized in deletePeriodicReminder");
+    if (!firestore) throw new Error("[data.ts] Firestore not initialized in deletePeriodicReminder");
     await deleteDoc(doc(firestore, 'recordatorios', id));
     return true;
   } catch (error) {
-    console.error(`Error in deletePeriodicReminder for ID ${id}:`, error);
+    console.error(`[data.ts] Error in deletePeriodicReminder for ID ${id}:`, error);
     return false;
   }
 };
@@ -1958,15 +2088,19 @@ export const getImportantNotes = async (): Promise<ImportantNote[]> => {
         return [...mockDB.importantNotes].sort((a,b) => parseISO(b.createdAt || new Date(0).toISOString()).getTime() - parseISO(a.createdAt || new Date(0).toISOString()).getTime());
     }
      if (!firestore) {
-      console.warn("Firestore not initialized in getImportantNotes. Falling back to mock data.");
+      console.warn("[data.ts] Firestore not initialized in getImportantNotes. Falling back to mock data.");
       return [...mockDB.importantNotes].sort((a,b) => parseISO(b.createdAt || new Date(0).toISOString()).getTime() - parseISO(a.createdAt || new Date(0).toISOString()).getTime());
     }
     const notesCol = collection(firestore, 'notasImportantes');
     const q = query(notesCol, orderBy('createdAt', 'desc'));
     const snapshot = await getDocs(q);
+     if (snapshot.empty) {
+        console.warn("[data.ts] Firestore 'notasImportantes' collection is empty. Falling back to mock data for getImportantNotes.");
+        return [...mockDB.importantNotes].sort((a,b) => parseISO(b.createdAt || new Date(0).toISOString()).getTime() - parseISO(a.createdAt || new Date(0).toISOString()).getTime());
+    }
     return snapshot.docs.map(d => ({ id: d.id, ...convertDocumentData(d.data()) }) as ImportantNote);
   } catch (error) {
-    console.error("Error in getImportantNotes:", error);
+    console.error("[data.ts] Error in getImportantNotes:", error);
     return [];
   }
 };
@@ -1983,22 +2117,23 @@ export const addImportantNote = async (data: Omit<ImportantNote, 'id' | 'created
         mockDB.importantNotes.push(newNote);
         return newNote;
     }
-    if (!firestore) throw new Error("Firestore not initialized in addImportantNote");
+    if (!firestore) throw new Error("[data.ts] Firestore not initialized in addImportantNote");
     const noteData = {
       ...data,
       createdAt: serverTimestamp(),
       updatedAt: serverTimestamp(),
     };
     const docRef = await addDoc(collection(firestore, 'notasImportantes'), noteData);
-    const savedData = (await getDoc(docRef)).data();
+    const savedSnap = await getDoc(docRef);
+    const savedData = convertDocumentData(savedSnap.data()!);
     return {
       id: docRef.id,
       ...data,
-      createdAt: savedData?.createdAt ? fromFirestoreTimestamp(savedData.createdAt as Timestamp) : new Date().toISOString(),
-      updatedAt: savedData?.updatedAt ? fromFirestoreTimestamp(savedData.updatedAt as Timestamp) : new Date().toISOString(),
-    } as ImportantNote;
+      createdAt: savedData?.createdAt ? (savedData.createdAt as string) : new Date().toISOString(),
+      updatedAt: savedData?.updatedAt ? (savedData.updatedAt as string) : new Date().toISOString(),
+    };
   } catch (error) {
-    console.error("Error in addImportantNote:", error);
+    console.error("[data.ts] Error in addImportantNote:", error);
     throw error;
   }
 };
@@ -2017,14 +2152,22 @@ export const updateImportantNote = async (id: string, data: Partial<Omit<Importa
         }
         return undefined;
     }
-    if (!firestore) throw new Error("Firestore not initialized in updateImportantNote");
+    if (!firestore) throw new Error("[data.ts] Firestore not initialized in updateImportantNote");
     const docRef = doc(firestore, 'notasImportantes', id);
     const updateData = { ...data, updatedAt: serverTimestamp() };
+    
+    // Remove fields that are explicitly undefined before sending to Firestore
+    for (const key in updateData) {
+        if ((updateData as any)[key] === undefined) {
+            delete (updateData as any)[key];
+        }
+    }
+
     await updateDoc(docRef, updateData);
     const updatedDocSnap = await getDoc(docRef);
     return updatedDocSnap.exists() ? { id: updatedDocSnap.id, ...convertDocumentData(updatedDocSnap.data()) } as ImportantNote : undefined;
   } catch (error) {
-    console.error(`Error in updateImportantNote for ID ${id}:`, error);
+    console.error(`[data.ts] Error in updateImportantNote for ID ${id}:`, error);
     throw error;
   }
 };
@@ -2036,11 +2179,11 @@ export const deleteImportantNote = async (id: string): Promise<boolean> => {
         mockDB.importantNotes = mockDB.importantNotes.filter(n => n.id !== id);
         return mockDB.importantNotes.length < initialLength;
     }
-    if (!firestore) throw new Error("Firestore not initialized in deleteImportantNote");
+    if (!firestore) throw new Error("[data.ts] Firestore not initialized in deleteImportantNote");
     await deleteDoc(doc(firestore, 'notasImportantes', id));
     return true;
   } catch (error) {
-    console.error(`Error in deleteImportantNote for ID ${id}:`, error);
+    console.error(`[data.ts] Error in deleteImportantNote for ID ${id}:`, error);
     return false;
   }
 };
@@ -2049,28 +2192,28 @@ export const deleteImportantNote = async (id: string): Promise<boolean> => {
 // --- Seed Firestore with Mock Data ---
 export const seedFirestoreWithMockData = async (): Promise<void> => {
   if (useMockDatabase) {
-    console.warn("Seed function called, but useMockDatabase is true. No data will be written to Firestore.");
+    console.warn("[data.ts] Seed function called, but useMockDatabase is true. No data will be written to Firestore.");
     return;
   }
   if (!firestore) {
-    throw new Error("Firestore not initialized. Cannot seed data.");
+    throw new Error("[data.ts] Firestore not initialized. Cannot seed data.");
   }
 
-  console.log("Starting to seed Firestore with mock data...");
+  console.log("[data.ts] Starting to seed Firestore with mock data...");
   const batch = writeBatch(firestore);
 
   try {
-    console.log(`Seeding ${initialMockUsersData.length} users...`);
+    console.log(`[data.ts] Seeding ${initialMockUsersData.length} users...`);
     initialMockUsersData.forEach(user => {
       const { id, ...userData } = user;
       const userRef = doc(firestore, "usuarios", id);
       const dataToSave: any = {...userData};
-      dataToSave.password = "admin";
+      dataToSave.password = "admin"; // Store "admin" for seeded users for simplicity with current login
       dataToSave.locationId = userData.locationId || null;
       batch.set(userRef, dataToSave);
     });
 
-    console.log(`Seeding ${initialMockServicesData.length} services...`);
+    console.log(`[data.ts] Seeding ${initialMockServicesData.length} services...`);
     initialMockServicesData.forEach(service => {
       const { id, ...serviceData } = service;
       const serviceRef = doc(firestore, "servicios", id);
@@ -2080,9 +2223,9 @@ export const seedFirestoreWithMockData = async (): Promise<void> => {
       });
     });
 
-    console.log(`Seeding ${initialMockProfessionalsData.length} professionals...`);
+    console.log(`[data.ts] Seeding ${initialMockProfessionalsData.length} professionals...`);
     initialMockProfessionalsData.forEach(prof => {
-      const { id, biWeeklyEarnings, ...profData } = prof; // Exclude biWeeklyEarnings
+      const { id, biWeeklyEarnings, contractDisplayStatus, ...profData } = prof; // Exclude calculated/client-side fields
       const professionalRef = doc(firestore, "profesionales", id);
       const dataToSave: any = { ...profData };
       dataToSave.phone = profData.phone || null;
@@ -2112,16 +2255,17 @@ export const seedFirestoreWithMockData = async (): Promise<void> => {
       if (dataToSave.customScheduleOverrides && Array.isArray(dataToSave.customScheduleOverrides)) {
           dataToSave.customScheduleOverrides = dataToSave.customScheduleOverrides.map((ov: any) => ({
               ...ov,
-              date: toFirestoreTimestamp(ov.date)
+              date: toFirestoreTimestamp(ov.date),
+              notes: ov.notes || null,
           }));
       } else {
         dataToSave.customScheduleOverrides = [];
       }
-      dataToSave.biWeeklyEarnings = 0;
+      dataToSave.biWeeklyEarnings = 0; // Initialize in Firestore, can be calculated later
       batch.set(professionalRef, dataToSave);
     });
 
-    console.log(`Seeding ${initialMockPatientsData.length} patients...`);
+    console.log(`[data.ts] Seeding ${initialMockPatientsData.length} patients...`);
     initialMockPatientsData.forEach(patient => {
       const { id, ...patientData } = patient;
       const patientRef = doc(firestore, "pacientes", id);
@@ -2135,9 +2279,9 @@ export const seedFirestoreWithMockData = async (): Promise<void> => {
       });
     });
 
-    console.log(`Seeding ${initialMockAppointmentsData.length} appointments...`);
+    console.log(`[data.ts] Seeding ${initialMockAppointmentsData.length} appointments...`);
     initialMockAppointmentsData.forEach(appt => {
-      const { id, patient, professional, service, addedServices, ...apptData } = appt;
+      const { id, patient, professional, service, ...apptData } = appt; // Exclude populated fields
       const appointmentRef = doc(firestore, "citas", id);
       const dataToSave: any = { ...apptData };
       dataToSave.appointmentDateTime = toFirestoreTimestamp(dataToSave.appointmentDateTime);
@@ -2153,8 +2297,8 @@ export const seedFirestoreWithMockData = async (): Promise<void> => {
       dataToSave.isExternalProfessional = dataToSave.isExternalProfessional || false;
       dataToSave.externalProfessionalOriginLocationId = dataToSave.externalProfessionalOriginLocationId || null;
 
-      if (addedServices && Array.isArray(addedServices)) {
-        dataToSave.addedServices = addedServices.map((as: any) => ({
+      if (dataToSave.addedServices && Array.isArray(dataToSave.addedServices)) {
+        dataToSave.addedServices = dataToSave.addedServices.map((as: any) => ({ // Ensure addedServices are plain objects
             serviceId: as.serviceId,
             professionalId: as.professionalId || null,
             price: as.price ?? null,
@@ -2165,7 +2309,7 @@ export const seedFirestoreWithMockData = async (): Promise<void> => {
       batch.set(appointmentRef, dataToSave);
     });
 
-    console.log(`Seeding ${initialMockPeriodicRemindersData.length} reminders...`);
+    console.log(`[data.ts] Seeding ${initialMockPeriodicRemindersData.length} reminders...`);
     initialMockPeriodicRemindersData.forEach(reminder => {
         const { id, ...reminderData } = reminder;
         const reminderRef = doc(firestore, "recordatorios", id);
@@ -2178,7 +2322,7 @@ export const seedFirestoreWithMockData = async (): Promise<void> => {
         batch.set(reminderRef, dataToSave);
     });
 
-    console.log(`Seeding ${initialMockImportantNotesData.length} notes...`);
+    console.log(`[data.ts] Seeding ${initialMockImportantNotesData.length} notes...`);
     initialMockImportantNotesData.forEach(note => {
         const { id, ...noteData } = note;
         const noteRef = doc(firestore, "notasImportantes", id);
@@ -2190,32 +2334,32 @@ export const seedFirestoreWithMockData = async (): Promise<void> => {
 
 
     await batch.commit();
-    console.log("Firestore seeded successfully with mock data!");
+    console.log("[data.ts] Firestore seeded successfully with mock data!");
   } catch (error) {
-    console.error("Error seeding Firestore:", error);
-    throw error;
+    console.error("[data.ts] Error seeding Firestore:", error);
+    throw error; // Re-throw to allow UI to catch and display
   }
 };
 
 export const clearFirestoreData = async (): Promise<void> => {
   if (useMockDatabase) {
-    console.warn("Clear function called, but useMockDatabase is true. No data will be cleared from Firestore.");
+    console.warn("[data.ts] Clear function called, but useMockDatabase is true. No data will be cleared from Firestore.");
     return;
   }
   if (!firestore) {
-    throw new Error("Firestore not initialized. Cannot clear data.");
+    throw new Error("[data.ts] Firestore not initialized. Cannot clear data.");
   }
 
   const collectionsToClear = ['usuarios', 'servicios', 'profesionales', 'pacientes', 'citas', 'recordatorios', 'notasImportantes', 'sedes'];
-  console.log("Starting to clear Firestore data from collections:", collectionsToClear.join(', '));
+  console.log("[data.ts] Starting to clear Firestore data from collections:", collectionsToClear.join(', '));
 
   try {
     for (const collectionName of collectionsToClear) {
-      console.log(`Clearing collection: ${collectionName}...`);
+      console.log(`[data.ts] Clearing collection: ${collectionName}...`);
       const collectionRef = collection(firestore, collectionName);
       const snapshot = await getDocs(collectionRef);
       if (snapshot.empty) {
-        console.log(`Collection ${collectionName} is already empty.`);
+        console.log(`[data.ts] Collection ${collectionName} is already empty.`);
         continue;
       }
       const subBatch = writeBatch(firestore);
@@ -2223,11 +2367,11 @@ export const clearFirestoreData = async (): Promise<void> => {
         subBatch.delete(docPayload.ref);
       });
       await subBatch.commit();
-      console.log(`Collection ${collectionName} cleared successfully.`);
+      console.log(`[data.ts] Collection ${collectionName} cleared successfully.`);
     }
-    console.log("All specified Firestore collections cleared successfully!");
+    console.log("[data.ts] All specified Firestore collections cleared successfully!");
   } catch (error) {
-    console.error("Error clearing Firestore data:", error);
-    throw error;
+    console.error("[data.ts] Error clearing Firestore data:", error);
+    throw error; // Re-throw to allow UI to catch and display
   }
 };

@@ -3,10 +3,10 @@
 
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
-import { auth as firebaseAuth, useMockDatabase, firestore } from '../lib/firebase-config';
-import { signInWithEmailAndPassword, signOut, onAuthStateChanged, User as FirebaseUser } from 'firebase/auth';
+import { useMockDatabase, firestore, auth } from '../lib/firebase-config'; // Import auth
+import { signInWithEmailAndPassword, signOut, onAuthStateChanged, User as FirebaseUser } from 'firebase/auth'; // Firebase Auth functions
 import type { User as AppUser } from '@/types';
-import { getUserByUsername } from '@/lib/data'; // Using this for mock or Firestore based on useMockDatabase
+import { getUserByUsername } from '@/lib/data';
 
 interface AuthContextType {
   user: AppUser | null;
@@ -23,131 +23,147 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const router = useRouter();
   const pathname = usePathname();
 
-  const loadUserFromStorage = useCallback(async () => {
-    setIsLoading(true);
-    let foundUser: AppUser | null = null;
+  const fetchAppUserProfile = useCallback(async (identity: string, isUid: boolean = false): Promise<AppUser | null> => {
     try {
-      if (typeof window !== 'undefined') {
-        const storedUserString = localStorage.getItem('currentUser');
-        if (storedUserString) {
-          const storedUser: AppUser = JSON.parse(storedUserString);
-          // Basic validation: ensure it has an ID and username
-          if (storedUser && storedUser.id && storedUser.username) {
-            // If not using mockDB, re-verify against actual DB for security (optional here for simplicity)
-            if (!useMockDatabase && firestore) {
-                const dbUser = await getUserByUsername(storedUser.username);
-                if (dbUser && dbUser.id === storedUser.id) {
-                    foundUser = dbUser;
-                } else {
-                     console.warn("Stored user not found or mismatched in Firestore during session load.");
-                     localStorage.removeItem('currentUser');
-                }
-            } else if (useMockDatabase) {
-                 const mockUser = await getUserByUsername(storedUser.username);
-                 if (mockUser && mockUser.id === storedUser.id) {
-                    foundUser = mockUser;
-                 } else {
-                    localStorage.removeItem('currentUser');
-                 }
-            }
-          } else {
-            localStorage.removeItem('currentUser');
-          }
-        }
+      // En un sistema real con Firebase Auth, 'identity' sería firebaseUser.email o firebaseUser.uid
+      // getUserByUsername actualmente espera el campo 'username' de tu colección 'usuarios'.
+      // Si 'username' en Firestore ES el email que usas para Auth, esto funciona.
+      // Si quisieras usar UID, getUserByUsername necesitaría ser adaptada o crear una nueva función getUserByUid.
+      const appUserProfile = await getUserByUsername(identity);
+      if (appUserProfile) {
+        return appUserProfile;
+      } else {
+        console.warn(`Perfil de aplicación no encontrado en Firestore para la identidad: ${identity}`);
+        return null;
       }
     } catch (error) {
-      console.error("Failed to load user from storage:", error);
-      if (typeof window !== 'undefined') {
-        localStorage.removeItem('currentUser');
-      }
-    } finally {
-        setUser(foundUser);
-        setIsLoading(false);
+      console.error("Error buscando perfil de aplicación en Firestore:", error);
+      return null;
     }
   }, []);
 
-
-  useEffect(() => {
-    // If using Firebase Auth for real, this would be the primary mechanism
-    if (!useMockDatabase && firebaseAuth) {
-      const unsubscribe = onAuthStateChanged(firebaseAuth, async (firebaseUser: FirebaseUser | null) => {
-        setIsLoading(true);
-        if (firebaseUser && firebaseUser.email) {
-          // Firebase Auth uses email as username by default.
-          // We need to fetch our custom AppUser profile from Firestore using this email/username.
-          // Assuming 'username' in your AppUser maps to 'email' in Firebase Auth.
-          // Or, if you store a unique 'authUid' field in your AppUser documents, you could use firebaseUser.uid.
-          // For this example, let's assume you have a way to map firebaseUser.email to your AppUser's username.
-          // This part might need adjustment based on your exact user data structure in Firestore.
-          try {
-            // This is a placeholder. You'd typically have a more robust way to link
-            // Firebase Auth users (firebaseUser.uid or firebaseUser.email) to your user profiles in Firestore.
-            // For example, if you store the Firebase Auth UID in your 'usuarios' collection.
-            // Or if the 'username' in your 'usuarios' collection IS the email used for Firebase Auth.
-            const appUserProfile = await getUserByUsername(firebaseUser.email); // Adjust if username is not email
-            if (appUserProfile) {
-              setUser(appUserProfile);
-              if (typeof window !== 'undefined') {
-                localStorage.setItem('currentUser', JSON.stringify(appUserProfile));
-              }
+  const loadUserFromStorageOrFirebaseAuth = useCallback(async () => {
+    setIsLoading(true);
+    if (useMockDatabase) {
+      console.log("[AuthProvider] Usando mockDB: Cargando usuario desde localStorage (si existe).");
+      try {
+        const storedUserString = localStorage.getItem('currentUser');
+        if (storedUserString) {
+          const storedUser: AppUser = JSON.parse(storedUserString);
+          if (storedUser && storedUser.id && storedUser.username) {
+            const mockUser = await getUserByUsername(storedUser.username); // Verifica contra el mock actual
+            if (mockUser && mockUser.id === storedUser.id) {
+              setUser(mockUser);
             } else {
-              console.warn("Firebase Auth user logged in, but no corresponding AppUser profile found.");
+              localStorage.removeItem('currentUser');
               setUser(null);
-              if (typeof window !== 'undefined') {
-                localStorage.removeItem('currentUser');
-              }
-              await signOut(firebaseAuth); // Sign out if no app profile
             }
-          } catch (error) {
-             console.error("Error fetching AppUser profile after Firebase Auth state change:", error);
-             setUser(null);
-             if (typeof window !== 'undefined') {
-                localStorage.removeItem('currentUser');
-             }
+          } else {
+            localStorage.removeItem('currentUser');
+            setUser(null);
           }
         } else {
           setUser(null);
-           if (typeof window !== 'undefined') {
+        }
+      } catch (error) {
+        console.error("Error cargando usuario desde localStorage (mockDB):", error);
+        localStorage.removeItem('currentUser');
+        setUser(null);
+      } finally {
+        setIsLoading(false);
+      }
+    } else if (auth) {
+      console.log("[AuthProvider] Usando Firebase Auth real: Suscribiéndose a onAuthStateChanged.");
+      const unsubscribe = onAuthStateChanged(auth, async (firebaseUser: FirebaseUser | null) => {
+        if (firebaseUser) {
+          console.log("[AuthProvider] Usuario de Firebase Auth detectado:", firebaseUser.email);
+          if (firebaseUser.email) {
+            const appUserProfile = await fetchAppUserProfile(firebaseUser.email);
+            if (appUserProfile) {
+              setUser(appUserProfile);
+              localStorage.setItem('currentUser', JSON.stringify(appUserProfile));
+              console.log("[AuthProvider] Perfil de aplicación cargado desde Firestore:", appUserProfile);
+            } else {
+              setUser(null);
+              localStorage.removeItem('currentUser');
+              // Opcional: desloguear de Firebase Auth si no hay perfil de app, o manejarlo de otra forma.
+              // await signOut(auth); 
+              console.warn("[AuthProvider] Usuario autenticado con Firebase Auth, pero no se encontró perfil en Firestore.");
+            }
+          } else {
+            console.warn("[AuthProvider] Usuario de Firebase Auth no tiene email. No se puede buscar perfil.");
+            setUser(null);
             localStorage.removeItem('currentUser');
           }
+        } else {
+          console.log("[AuthProvider] No hay usuario de Firebase Auth (logout).");
+          setUser(null);
+          localStorage.removeItem('currentUser');
         }
         setIsLoading(false);
       });
-      return () => unsubscribe();
+      return () => {
+        console.log("[AuthProvider] Desuscribiéndose de onAuthStateChanged.");
+        unsubscribe();
+      };
     } else {
-      // Fallback to localStorage if not using Firebase Auth or if firebaseAuth is undefined
-      loadUserFromStorage();
+      console.warn("[AuthProvider] Ni mockDB ni Firebase Auth están disponibles. Estado de carga finalizado sin usuario.");
+      setIsLoading(false);
+      setUser(null);
     }
-  }, [loadUserFromStorage]);
+  }, [fetchAppUserProfile]); // fetchAppUserProfile es una dependencia
+
+  useEffect(() => {
+    loadUserFromStorageOrFirebaseAuth();
+  }, [loadUserFromStorageOrFirebaseAuth]);
 
 
   const login = async (usernameAttempt: string, passwordAttempt: string): Promise<boolean> => {
     setIsLoading(true);
     try {
-      const fetchedUser = await getUserByUsername(usernameAttempt);
-
-      if (fetchedUser && fetchedUser.password === passwordAttempt) { // Password check (INSECURE for production)
-        setUser(fetchedUser);
-        if (typeof window !== 'undefined') {
+      if (useMockDatabase) {
+        console.log("[AuthProvider] Login (mockDB) para:", usernameAttempt);
+        const fetchedUser = await getUserByUsername(usernameAttempt);
+        if (fetchedUser && fetchedUser.password === passwordAttempt) {
+          setUser(fetchedUser);
           localStorage.setItem('currentUser', JSON.stringify(fetchedUser));
+          if (pathname === '/') router.replace('/dashboard');
+          return true;
         }
-        if (pathname === '/') {
-            router.replace('/dashboard');
-        }
-        return true;
-      } else {
         setUser(null);
-        if (typeof window !== 'undefined') {
-          localStorage.removeItem('currentUser');
+        localStorage.removeItem('currentUser');
+        return false;
+      } else if (auth) {
+        console.log("[AuthProvider] Login (Firebase Auth) para:", usernameAttempt);
+        // Asumimos que usernameAttempt es el email para Firebase Auth
+        const userCredential = await signInWithEmailAndPassword(auth, usernameAttempt, passwordAttempt);
+        const firebaseUser = userCredential.user;
+        if (firebaseUser && firebaseUser.email) {
+          const appUserProfile = await fetchAppUserProfile(firebaseUser.email);
+          if (appUserProfile) {
+            setUser(appUserProfile);
+            localStorage.setItem('currentUser', JSON.stringify(appUserProfile));
+            if (pathname === '/') router.replace('/dashboard');
+            return true;
+          } else {
+            // Usuario autenticado con Firebase Auth pero sin perfil en Firestore
+            await signOut(auth); // Desloguear para evitar estado inconsistente
+            setUser(null);
+            localStorage.removeItem('currentUser');
+            return false;
+          }
         }
+        setUser(null);
+        localStorage.removeItem('currentUser');
+        return false;
+      } else {
+        console.error("[AuthProvider] Error de login: Ni mockDB ni Firebase Auth disponibles.");
         return false;
       }
     } catch (error) {
-      console.error("Login error:", error);
+      console.error("[AuthProvider] Error en login:", error);
       setUser(null);
-      if (typeof window !== 'undefined') {
-        localStorage.removeItem('currentUser');
-      }
+      localStorage.removeItem('currentUser');
       return false;
     } finally {
       setIsLoading(false);
@@ -157,24 +173,19 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const logout = async (): Promise<void> => {
     setIsLoading(true);
     try {
-      if (!useMockDatabase && firebaseAuth) {
-        await signOut(firebaseAuth); // Sign out from Firebase Auth if used
+      if (!useMockDatabase && auth) {
+        console.log("[AuthProvider] Logout (Firebase Auth).");
+        await signOut(auth);
+      } else {
+        console.log("[AuthProvider] Logout (mockDB).");
       }
-      setUser(null);
-      if (typeof window !== 'undefined') {
-        localStorage.removeItem('currentUser');
-      }
-      router.replace('/');
     } catch (error) {
-      console.error("Logout error:", error);
-      // Still clear local state even if Firebase signout fails
-      setUser(null);
-      if (typeof window !== 'undefined') {
-        localStorage.removeItem('currentUser');
-      }
-      router.replace('/'); // Ensure redirect even on error
+      console.error("[AuthProvider] Error en logout:", error);
     } finally {
-        setIsLoading(false);
+      setUser(null);
+      localStorage.removeItem('currentUser');
+      router.replace('/');
+      setIsLoading(false);
     }
   };
 
