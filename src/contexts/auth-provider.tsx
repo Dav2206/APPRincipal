@@ -1,24 +1,16 @@
 "use client";
 
-import type { User } from '@/types';
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
-import { getUserByUsername } from '@/lib/data'; // Mock data access
 import { useRouter, usePathname } from 'next/navigation';
+import { auth } from '../lib/firebase-config'; // Import the auth instance
+import { signInWithEmailAndPassword, signOut, onAuthStateChanged, User } from 'firebase/auth'; // Import Firebase Auth functions and User type
 
 interface AuthContextType {
   user: User | null;
   isLoading: boolean;
-  login: (username: string, password_unused: string) => Promise<boolean>;
-  logout: () => void;
+  login: (email: string, password: string) => Promise<boolean>;
+  logout: () => Promise<void>;
 }
-
-const AuthContext = createContext<AuthContextType | undefined>(undefined);
-
-export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [user, setUser] = useState<User | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
-  const router = useRouter();
-  const pathname = usePathname();
 
   const loadUserFromStorage = useCallback(() => {
     setIsLoading(true);
@@ -38,35 +30,35 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       localStorage.removeItem('currentUser');
     }
     setIsLoading(false);
-  }, []);
+  }, []); // Dependencies adjusted to remove router and pathname
 
   useEffect(() => {
-    loadUserFromStorage();
-  }, [loadUserFromStorage]);
-
-  useEffect(() => {
-    if (!isLoading && !user && pathname !== '/') {
-      router.push('/');
-    }
-    if (!isLoading && user && pathname === '/') {
-      router.push('/dashboard');
-    }
-  }, [user, isLoading, pathname, router]);
-
-  const login = async (username: string, password_unused: string): Promise<boolean> => {
-    setIsLoading(true);
-    // In a real app, password would be sent to a backend for verification.
-    // Here, we're just checking if the user exists by username as per mock data.
-    const foundUser = await getUserByUsername(username);
-    if (foundUser && foundUser.password === password_unused) { // Password check for mock
-      setUser(foundUser);
-      localStorage.setItem('currentUser', JSON.stringify(foundUser));
+    const unsubscribe = onAuthStateChanged(auth, (firebaseUser) => {
+      setUser(firebaseUser);
       setIsLoading(false);
-      router.push('/dashboard');
+    });
+
+    return () => unsubscribe();
+  }, []); // Dependency array is empty to run only on mount and unmount
+
+
+const AuthContext = createContext<AuthContextType | undefined>(undefined);
+
+export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const [user, setUser] = useState<User | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const router = useRouter();
+  const pathname = usePathname();
+
+  // Implement the login function using Firebase Authentication
+  const login = async (email: string, password: string): Promise<boolean> => {
+    setIsLoading(true); // Optional: Indicate loading state
+    try {
+      await signInWithEmailAndPassword(auth, email, password);
+      console.log("Login successful!");
       return true;
     }
     setUser(null);
-    localStorage.removeItem('currentUser');
     setIsLoading(false);
     return false;
   };

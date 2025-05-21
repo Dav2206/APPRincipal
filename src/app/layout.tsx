@@ -32,12 +32,10 @@ export default function RootLayout({
         <meta name="robots" content="noindex, nofollow" />
       </head>
       <body className={`${geistSans.variable} ${geistMono.variable} antialiased`}>
-        <AuthProvider>
-          <AppStateProvider>
-            {children}
-            <Toaster />
-          </AppStateProvider>
-        </AuthProvider>
+        <AppStateProvider>
+          {children}
+          <Toaster />
+        </AppStateProvider>
       </body>
     </html>
   );
