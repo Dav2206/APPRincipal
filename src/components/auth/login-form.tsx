@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useForm } from 'react-hook-form';
@@ -6,11 +7,10 @@ import { LoginSchema, type LoginFormData } from '@/lib/schemas';
 import { useAuth } from '@/contexts/auth-provider';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
+import { Label } from '@/components/ui/label'; // No se usa directamente pero puede ser útil
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
-import { useState }
- from 'react';
+import { useState } from 'react';
 import { AlertCircle, Footprints } from 'lucide-react';
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 
@@ -22,7 +22,7 @@ export function LoginForm() {
   const form = useForm<LoginFormData>({
     resolver: zodResolver(LoginSchema),
     defaultValues: {
-      username: '',
+      username: '', // Este campo se tratará como email para Firebase Auth
       password: '',
     },
   });
@@ -30,11 +30,14 @@ export function LoginForm() {
   async function onSubmit(data: LoginFormData) {
     setIsLoading(true);
     setError(null);
-    const success = await login(data.username, data.password);
-    if (!success) {
-      setError('Nombre de usuario o contraseña incorrectos.');
+    const loginResult = await login(data.username, data.password);
+    if (!loginResult.success) {
+      setError(loginResult.message || 'Nombre de usuario o contraseña incorrectos.');
+      if (loginResult.errorCode) {
+        console.error("Auth Error Code:", loginResult.errorCode);
+      }
     }
-    // Navigation is handled by AuthProvider
+    // La navegación en caso de éxito es manejada por el AuthProvider a través de onAuthStateChanged
     setIsLoading(false);
   }
 
@@ -55,9 +58,9 @@ export function LoginForm() {
               name="username"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Nombre de Usuario</FormLabel>
+                  <FormLabel>Correo Electrónico (Usuario)</FormLabel>
                   <FormControl>
-                    <Input placeholder="Ej: Admin o Higuereta" {...field} />
+                    <Input placeholder="Ej: admin@footprints.com o HigueretaStaff" {...field} />
                   </FormControl>
                   <FormMessage />
                 </FormItem>
