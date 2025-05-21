@@ -45,7 +45,7 @@ export function UpcomingBirthdaysCard({ title, professionals, isLoading, icon, e
                 <li key={prof.id} className="flex items-center justify-between gap-3 p-2 rounded-md hover:bg-muted/50 transition-colors">
                   <div className="flex items-center gap-3">
                     <Avatar className="h-8 w-8">
-                      <AvatarImage src={`https://picsum.photos/seed/${prof.id}/40/40`} data-ai-hint="professional avatar" />
+                      <AvatarImage src={`https://picsum.photos/seed/${prof.id}/40/40`} alt={`${prof.firstName} ${prof.lastName} avatar`} />
                       <AvatarFallback>{getInitials(`${prof.firstName} ${prof.lastName}`)}</AvatarFallback>
                     </Avatar>
                     <div>
