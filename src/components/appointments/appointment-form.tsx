@@ -10,11 +10,10 @@ import type { Professional, Patient, Service, Appointment } from '@/types';
 import { useAuth } from '@/contexts/auth-provider';
 import { useAppState } from '@/contexts/app-state-provider';
 import { USER_ROLES, LOCATIONS, TIME_SLOTS, APPOINTMENT_STATUS } from '@/lib/constants';
-import { getProfessionals, getServices, addAppointment, getPatientById, getProfessionalAvailabilityForDate, getAppointments, getContractDisplayStatus } from '@/lib/data';
+import { getServices, addAppointment, getPatientById, getProfessionalAvailabilityForDate, getAppointments } from '@/lib/data';
 
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Textarea } from '@/components/ui/textarea';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
@@ -23,7 +22,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter, DialogClose } from '@/components/ui/dialog';
 import { CalendarIcon, ClockIcon, UserPlus, Building, Briefcase, ConciergeBell, Edit3, Loader2, UserRound, AlertCircle, Shuffle, ShoppingBag, PlusCircle, Trash2 } from 'lucide-react';
-import { format, parse, differenceInYears, parseISO, addMinutes, areIntervalsOverlapping, startOfDay } from 'date-fns';
+import { format, parse, parseISO, addMinutes, areIntervalsOverlapping, startOfDay } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { cn } from '@/lib/utils';
 import { PatientSearchField } from './patient-search-field';
@@ -54,8 +53,8 @@ export function AppointmentForm({
   onAppointmentCreated,
   initialData,
   defaultDate,
-  allProfessionals: allSystemProfessionals,
-  currentLocationProfessionals: professionalsForCurrentLocation
+  allProfessionals: allSystemProfessionals, // Renamed for clarity inside component
+  currentLocationProfessionals: professionalsForCurrentLocationProp // Renamed for clarity
 }: AppointmentFormProps) {
   const { user } = useAuth();
   const { selectedLocationId: adminSelectedLocation } = useAppState();
@@ -138,11 +137,11 @@ export function AppointmentForm({
   }, [isOpen, form, toast]);
 
   useEffect(() => {
-    if (isOpen) {
+    if (isOpen && initialData?.locationId !== watchLocationId) { // Reset if location changes from initial or form open
         form.setValue('searchExternal', false);
         form.setValue('preferredProfessionalId', ANY_PROFESSIONAL_VALUE);
     }
-  }, [watchLocationId, isOpen, form]);
+  }, [watchLocationId, isOpen, form, initialData?.locationId]);
 
 
   useEffect(() => {
@@ -156,7 +155,7 @@ export function AppointmentForm({
         const result = await getAppointments({
           locationId: watchLocationId as LocationId,
           date: watchAppointmentDate,
-          statuses: [APPOINTMENT_STATUS.BOOKED, APPOINTMENT_STATUS.CONFIRMED]
+          statuses: [APPOINTMENT_STATUS.BOOKED, APPOINTMENT_STATUS.CONFIRMED, APPOINTMENT_STATUS.COMPLETED] // Include completed to check for overlaps
         });
         setAppointmentsForSelectedDate(result.appointments || []);
       } catch (error) {
@@ -173,48 +172,63 @@ export function AppointmentForm({
 
 
   useEffect(() => {
+    console.log("[AppointmentForm] Recalculating available professionals. Watched values:", {
+      isOpen,
+      date: watchAppointmentDate ? format(watchAppointmentDate, 'yyyy-MM-dd') : 'N/A',
+      time: watchAppointmentTime,
+      serviceId: watchServiceId,
+      servicesListLength: servicesList.length,
+      isLoadingAppointments,
+      searchExternal: watchSearchExternal,
+      formLocationId: watchLocationId,
+      prop_professionalsForCurrentLocationLength: professionalsForCurrentLocationProp.length,
+      prop_allSystemProfessionalsLength: allSystemProfessionals.length,
+    });
+
     if (!isOpen || !watchAppointmentDate || !watchAppointmentTime || !watchServiceId || servicesList.length === 0 || isLoadingAppointments ) {
-      // console.log("[AppointmentForm] Skipping available professionals calculation due to missing data or loading state.");
-      setAvailableProfessionalsForTimeSlot(professionalsForCurrentLocation.filter(prof => {
+      console.log("[AppointmentForm] Skipping available professionals calculation due to missing data or loading state.");
+      const defaultProfsToShow = watchSearchExternal ? allSystemProfessionals : professionalsForCurrentLocationProp.filter(prof => prof.locationId === watchLocationId);
+      setAvailableProfessionalsForTimeSlot(defaultProfsToShow.filter(prof => {
         const availability = getProfessionalAvailabilityForDate(prof, watchAppointmentDate);
+        // Basic check: is working and has defined hours?
         return availability !== null && availability.startTime !== '' && availability.endTime !== '';
       }));
       setSlotAvailabilityMessage('');
       return;
     }
-    // console.log("[AppointmentForm] Recalculating available professionals...");
 
     const selectedService = servicesList.find(s => s.id === watchServiceId);
     if (!selectedService) {
       setAvailableProfessionalsForTimeSlot([]);
       setSlotAvailabilityMessage('Por favor, seleccione un servicio principal válido.');
-      // console.log("[AppointmentForm] No valid main service selected.");
+      console.log("[AppointmentForm] No valid main service selected.");
       return;
     }
 
     const appointmentDuration = selectedService.defaultDuration;
     const proposedStartTime = parse(`${format(watchAppointmentDate, 'yyyy-MM-dd')} ${watchAppointmentTime}`, 'yyyy-MM-dd HH:mm', new Date());
     const proposedEndTime = addMinutes(proposedStartTime, appointmentDuration);
+    console.log(`[AppointmentForm] Proposed appointment slot: ${format(proposedStartTime, 'HH:mm')} - ${format(proposedEndTime, 'HH:mm')} (Duration: ${appointmentDuration}m)`);
 
-    const professionalsToConsider = watchSearchExternal ? allSystemProfessionals : professionalsForCurrentLocation;
+    const professionalsToConsider = watchSearchExternal ? allSystemProfessionals : professionalsForCurrentLocationProp;
     const availableProfs: Professional[] = [];
-    // console.log(`[AppointmentForm] Professionals to consider (searchExternal: ${watchSearchExternal}): ${professionalsToConsider.length}`);
+    console.log(`[AppointmentForm] Professionals to consider (searchExternal: ${watchSearchExternal}, formLocationId: ${watchLocationId}): ${professionalsToConsider.length} professionals.`);
 
     for (const prof of professionalsToConsider) {
-      if (watchSearchExternal && prof.locationId === watchLocationId) {
-        // console.log(`[AppointmentForm] Skipping local professional ${prof.firstName} during external search.`);
-        continue;
-      }
+      // If not searching externally, only consider professionals from the form's selected location.
       if (!watchSearchExternal && prof.locationId !== watchLocationId) {
-        // console.log(`[AppointmentForm] Skipping external professional ${prof.firstName} during local search.`);
+        // This log is mostly for debugging if professionalsForCurrentLocationProp was not pre-filtered correctly.
+        // console.log(`[AppointmentForm] INTERNAL SKIP ${prof.firstName} ${prof.lastName} (ID: ${prof.id}): Not in selected form location '${watchLocationId}'. Professional's location: '${prof.locationId}'. This should ideally not happen if professionalsForCurrentLocationProp is correctly filtered.`);
         continue;
       }
 
       const dailyAvailability = getProfessionalAvailabilityForDate(prof, watchAppointmentDate);
-      // console.log(`[AppointmentForm] Availability for ${prof.firstName} ${prof.lastName} on ${format(watchAppointmentDate, 'yyyy-MM-dd')}:`, dailyAvailability);
+      // Use JSON.stringify then parse to get a clean loggable object, avoiding potential circular references or complex Proxy objects.
+      console.log(`[AppointmentForm] Checking Prof: ${prof.firstName} ${prof.lastName} (ID: ${prof.id}, Loc: ${prof.locationId}). Daily Availability for ${format(watchAppointmentDate, 'yyyy-MM-dd')}:`, dailyAvailability ? JSON.parse(JSON.stringify(dailyAvailability)) : null);
+
 
       if (!dailyAvailability || !dailyAvailability.startTime || !dailyAvailability.endTime) {
-        // console.log(`[AppointmentForm] ${prof.firstName} is not working or has no defined hours.`);
+        console.log(`[AppointmentForm] SKIPPED ${prof.firstName} ${prof.lastName}: No daily availability or missing start/end times. Reason from availability: ${dailyAvailability?.reason || 'No specific reason provided by getProfessionalAvailabilityForDate'}`);
         continue;
       }
 
@@ -222,12 +236,14 @@ export function AppointmentForm({
       const profWorkEndTime = parse(`${format(watchAppointmentDate, 'yyyy-MM-dd')} ${dailyAvailability.endTime}`, 'yyyy-MM-dd HH:mm', new Date());
 
       if (proposedStartTime < profWorkStartTime || proposedEndTime > profWorkEndTime) {
-        // console.log(`[AppointmentForm] ${prof.firstName} not available: Appointment time (${watchAppointmentTime}-${format(proposedEndTime, 'HH:mm')}) outside work hours (${dailyAvailability.startTime}-${dailyAvailability.endTime}).`);
+        console.log(`[AppointmentForm] SKIPPED ${prof.firstName} ${prof.lastName}: Appointment time (${format(proposedStartTime, 'HH:mm')}-${format(proposedEndTime, 'HH:mm')}) is outside of their work hours (${dailyAvailability.startTime}-${dailyAvailability.endTime}).`);
         continue;
       }
 
       let isBusy = false;
-      const appointmentsForThisProfAndDay = appointmentsForSelectedDate.filter(appt => appt.professionalId === prof.id);
+      const appointmentsForThisProfAndDay = appointmentsForSelectedDate.filter(
+        (appt) => appt.professionalId === prof.id && !appt.isTravelBlock
+      );
 
       for (const existingAppt of appointmentsForThisProfAndDay) {
         const existingApptStartTime = parseISO(existingAppt.appointmentDateTime);
@@ -237,26 +253,27 @@ export function AppointmentForm({
           { start: existingApptStartTime, end: existingApptEndTime }
         )) {
           isBusy = true;
-          // console.log(`[AppointmentForm] ${prof.firstName} is busy due to overlap with existing appointment ${existingAppt.id}.`);
+          console.log(`[AppointmentForm] SKIPPED ${prof.firstName} ${prof.lastName}: Busy due to overlap with existing appointment ${existingAppt.id} (${format(existingApptStartTime, 'HH:mm')}-${format(existingApptEndTime, 'HH:mm')}).`);
           break;
         }
       }
       if (!isBusy) {
         availableProfs.push(prof);
-        // console.log(`[AppointmentForm] ${prof.firstName} ADDED to available list.`);
+        console.log(`[AppointmentForm] ADDED ${prof.firstName} ${prof.lastName} (ID: ${prof.id}, Loc: ${prof.locationId}) to available list for this slot.`);
       }
     }
 
-    setAvailableProfessionalsForTimeSlot(availableProfs);
+    setAvailableProfessionalsForTimeSlot(availableProfs.sort((a,b) => `${a.firstName} ${a.lastName}`.localeCompare(`${b.firstName} ${b.lastName}`)));
     if (availableProfs.length === 0) {
-      setSlotAvailabilityMessage(watchSearchExternal ? 'No hay profesionales disponibles en otras sedes para este horario.' : 'No hay profesionales locales disponibles en este horario. Todas las citas pueden estar tomadas o no hay personal.');
-      // console.log("[AppointmentForm] No professionals available for the selected slot.");
+        const baseMessage = 'No hay profesionales disponibles para este horario y servicio.';
+        setSlotAvailabilityMessage(watchSearchExternal ? `${baseMessage} (incluyendo otras sedes).` : `${baseMessage} Pruebe buscando en otras sedes si la opción está disponible.`);
+        console.log("[AppointmentForm] No professionals available for the selected slot after all checks.");
     } else {
       setSlotAvailabilityMessage('');
-      // console.log(`[AppointmentForm] ${availableProfs.length} professionals available.`);
+      console.log(`[AppointmentForm] Calculation complete. ${availableProfs.length} professionals available for this slot.`);
     }
 
-  }, [isOpen, watchAppointmentDate, watchAppointmentTime, watchServiceId, servicesList, professionalsForCurrentLocation, allSystemProfessionals, appointmentsForSelectedDate, isLoadingAppointments, watchSearchExternal, watchLocationId]);
+  }, [isOpen, watchAppointmentDate, watchAppointmentTime, watchServiceId, servicesList, professionalsForCurrentLocationProp, allSystemProfessionals, appointmentsForSelectedDate, isLoadingAppointments, watchSearchExternal, watchLocationId]);
 
 
   useEffect(() => {
@@ -274,8 +291,7 @@ export function AppointmentForm({
     } else {
       setCurrentPatientForHistory(null);
       setShowPatientHistory(false);
-      form.setValue('isDiabetic', false); // Reset if no existing patient
-      form.setValue('patientAge', null); // Reset if no existing patient
+      // Don't reset isDiabetic and patientAge here if they were part of initialData or manual input for a new patient
     }
   }, [watchExistingPatientId, form]);
 
@@ -290,7 +306,7 @@ export function AppointmentForm({
       form.setValue('isDiabetic', patient.isDiabetic || false);
       setCurrentPatientForHistory(patient);
       setShowPatientHistory(true);
-    } else { // New patient or cleared selection
+    } else { 
       form.setValue('existingPatientId', null);
       form.setValue('patientFirstName', '');
       form.setValue('patientLastName', '');
@@ -307,11 +323,10 @@ export function AppointmentForm({
     setIsLoading(true);
     console.log("[AppointmentForm] onSubmit: Datos crudos del formulario:", JSON.stringify(data, null, 2));
 
-
     if (data.serviceId === DEFAULT_SERVICE_ID_PLACEHOLDER && servicesList.length > 0) {
-      data.serviceId = servicesList[0].id;
-    } else if (data.serviceId === DEFAULT_SERVICE_ID_PLACEHOLDER) {
-        toast({ title: "Error", description: "Servicio principal es requerido.", variant: "destructive" });
+      data.serviceId = servicesList[0].id; // Fallback if somehow placeholder is still selected
+    } else if (data.serviceId === DEFAULT_SERVICE_ID_PLACEHOLDER || !servicesList.find(s => s.id === data.serviceId)) {
+        toast({ title: "Error de Validación", description: "Servicio principal es requerido o inválido.", variant: "destructive" });
         setIsLoading(false);
         return;
     }
@@ -322,30 +337,15 @@ export function AppointmentForm({
       professionalId: as.professionalId === NO_SELECTION_PLACEHOLDER ? null : as.professionalId,
     })).filter(as => as.serviceId && as.serviceId !== DEFAULT_SERVICE_ID_PLACEHOLDER);
 
-
-    let finalBookingObservations = data.bookingObservations || '';
-    let isExternalProfAssignment = false;
-    let externalProfOriginLocId: LocationId | null = null;
-
-    if (data.preferredProfessionalId && data.preferredProfessionalId !== ANY_PROFESSIONAL_VALUE) {
-        const selectedProf = allSystemProfessionals.find(p => p.id === data.preferredProfessionalId);
-        if (selectedProf && selectedProf.locationId !== data.locationId) {
-            isExternalProfAssignment = true;
-            externalProfOriginLocId = selectedProf.locationId;
-            finalBookingObservations += `${finalBookingObservations ? '; ' : ''}Profesional ${selectedProf.firstName} ${selectedProf.lastName} de sede ${LOCATIONS.find(l=>l.id === selectedProf.locationId)?.name} se movilizará.`;
-        }
-    }
-
     try {
-      const submitData: AppointmentFormData & { isExternalProfessional?: boolean; externalProfessionalOriginLocationId?: LocationId | null; addedServices?: FormSchemaType['addedServices'] } = {
+      const submitData: FormSchemaType & { isExternalProfessional?: boolean; externalProfessionalOriginLocationId?: LocationId | null; addedServices?: FormSchemaType['addedServices'] } = {
         ...data,
         preferredProfessionalId: data.preferredProfessionalId === ANY_PROFESSIONAL_VALUE ? null : data.preferredProfessionalId,
-        patientPhone: (data.existingPatientId && user?.role !== USER_ROLES.ADMIN) ? undefined : data.patientPhone,
+        patientPhone: (data.existingPatientId && user?.role !== USER_ROLES.ADMIN) ? undefined : data.patientPhone, // Send undefined to not update if restricted
         isDiabetic: data.isDiabetic || false,
         patientAge: data.patientAge === 0 ? null : data.patientAge, 
-        bookingObservations: finalBookingObservations.trim() || undefined,
-        isExternalProfessional: isExternalProfAssignment,
-        externalProfessionalOriginLocationId: externalProfOriginLocId,
+        bookingObservations: data.bookingObservations?.trim() || undefined,
+        // isExternalProfessional and externalProfessionalOriginLocationId will be set by addAppointment
         addedServices: validAddedServices,
       };
       console.log("[AppointmentForm] onSubmit: Datos procesados para enviar a addAppointment:", JSON.stringify(submitData, null, 2));
@@ -381,8 +381,9 @@ export function AppointmentForm({
       console.error("Error creating appointment:", error);
       toast({
         title: "Error al Agendar",
-        description: (error instanceof Error && error.message) ? error.message : "No se pudo crear la cita. Intente nuevamente.",
+        description: (error instanceof Error && error.message) ? error.message : "No se pudo crear la cita. Verifique la disponibilidad o contacte soporte.",
         variant: "destructive",
+        duration: 7000,
       });
     } finally {
       setIsLoading(false);
@@ -392,19 +393,29 @@ export function AppointmentForm({
   const isSubmitDisabled = useMemo(() => {
     if (isLoading || isLoadingServices || isLoadingAppointments ) return true;
     if (servicesList.length === 0 && form.getValues('serviceId') === DEFAULT_SERVICE_ID_PLACEHOLDER) return true;
+    if (form.getValues('serviceId') === DEFAULT_SERVICE_ID_PLACEHOLDER) return true; // Must select a main service
 
-    if (watchPreferredProfessionalId && watchPreferredProfessionalId !== ANY_PROFESSIONAL_VALUE) {
-      return !availableProfessionalsForTimeSlot.find(p => p.id === watchPreferredProfessionalId);
+    const preferredProfId = watchPreferredProfessionalId;
+    
+    if (preferredProfId && preferredProfId !== ANY_PROFESSIONAL_VALUE) {
+      // If a specific professional is chosen, they MUST be in the available list for that slot.
+      const isChosenProfAvailable = availableProfessionalsForTimeSlot.find(p => p.id === preferredProfId);
+      if (!isChosenProfAvailable) {
+          console.log(`[AppointmentForm] Submit DISABLED: Preferred professional ${preferredProfId} is not in the available list for the slot.`);
+          return true;
+      }
+    } else if (preferredProfId === ANY_PROFESSIONAL_VALUE && availableProfessionalsForTimeSlot.length === 0) {
+        // If "any professional" is chosen, but the list of available professionals for that slot is empty.
+        console.log(`[AppointmentForm] Submit DISABLED: "Any professional" selected, but no professionals are available for this slot.`);
+        return true;
     }
-    if (watchPreferredProfessionalId === ANY_PROFESSIONAL_VALUE && !watchSearchExternal && availableProfessionalsForTimeSlot.length === 0) return true;
-    if (watchPreferredProfessionalId === ANY_PROFESSIONAL_VALUE && watchSearchExternal && availableProfessionalsForTimeSlot.length === 0) return true;
-
-
     return false;
-  }, [isLoading, isLoadingServices, isLoadingAppointments, servicesList, availableProfessionalsForTimeSlot, watchPreferredProfessionalId, watchSearchExternal, form]);
+  }, [isLoading, isLoadingServices, isLoadingAppointments, servicesList, availableProfessionalsForTimeSlot, watchPreferredProfessionalId, form]);
 
 
   if (!isOpen) return null;
+
+  const checkboxDisabledReason = (availableProfessionalsForTimeSlot.length > 0 && !watchSearchExternal) || isLoadingServices || servicesList.length === 0 || isLoadingAppointments;
 
   return (
     <Dialog open={isOpen} onOpenChange={(open) => {
@@ -414,7 +425,7 @@ export function AppointmentForm({
           appointmentDate: defaultDate || new Date(),
           locationId: initialData?.locationId || defaultLocation || LOCATIONS[0].id,
           serviceId: servicesList.length > 0 ? servicesList[0].id : DEFAULT_SERVICE_ID_PLACEHOLDER,
-          appointmentTime: TIME_SLOTS[4],
+          appointmentTime: TIME_SLOTS[4], 
           preferredProfessionalId: ANY_PROFESSIONAL_VALUE,
           patientFirstName: '',
           patientLastName: '',
@@ -436,7 +447,7 @@ export function AppointmentForm({
         <DialogHeader>
           <DialogTitle className="text-2xl flex items-center gap-2">
             <CalendarIcon className="text-primary"/>
-            {initialData?.patientFirstName ? 'Editar Cita' : 'Agendar Nueva Cita'}
+            Agendar Nueva Cita
           </DialogTitle>
           <DialogDescription>
             Complete los detalles para la nueva cita.
@@ -447,7 +458,7 @@ export function AppointmentForm({
           <Form {...form}>
             <form onSubmit={form.handleSubmit(onSubmit)} className="grid grid-cols-1 md:grid-cols-2 gap-6 py-4">
               
-              <div className="md:col-span-2 space-y-4 p-4 border rounded-lg shadow-sm bg-card">
+              <div className="md:col-span-1 space-y-4 p-4 border rounded-lg shadow-sm bg-card">
                 <h3 className="text-lg font-semibold flex items-center gap-2"><UserPlus /> Información del Paciente</h3>
                 <FormField
                   control={form.control}
@@ -560,7 +571,7 @@ export function AppointmentForm({
               </div>
 
               
-              <div className="space-y-4 p-4 border rounded-lg shadow-sm bg-card">
+              <div className="md:col-span-1 space-y-4 p-4 border rounded-lg shadow-sm bg-card">
                  <h3 className="text-lg font-semibold flex items-center gap-2"><ConciergeBell /> Detalles de la Cita</h3>
                 <FormField
                   control={form.control}
@@ -668,175 +679,170 @@ export function AppointmentForm({
                     )}
                   />
                 </div>
-                 {slotAvailabilityMessage && availableProfessionalsForTimeSlot.length === 0 && !watchSearchExternal && (
-                  <Alert variant={"destructive"} className="mt-2">
-                    <AlertCircle className="h-4 w-4" />
-                    <AlertDescription>{slotAvailabilityMessage}</AlertDescription>
-                    <Button type="button" variant="link" size="sm" className="p-0 h-auto mt-1 text-destructive hover:text-destructive/80" onClick={() => { form.setValue('searchExternal', true);}}>
-                      <Shuffle className="mr-1 h-3 w-3"/> Intentar buscar en otras sedes
-                    </Button>
-                  </Alert>
-                )}
-                 {slotAvailabilityMessage && availableProfessionalsForTimeSlot.length === 0 && watchSearchExternal && (
-                    <Alert variant={"destructive"} className="mt-2">
-                        <AlertCircle className="h-4 w-4" />
-                        <AlertDescription>{slotAvailabilityMessage}</AlertDescription>
-                         <Button type="button" variant="link" size="sm" className="p-0 h-auto mt-1 text-destructive hover:text-destructive/80" onClick={() => {form.setValue('searchExternal', false);}}>
-                           Volver a buscar en sede actual
-                        </Button>
-                    </Alert>
-                 )}
-              </div>
-
-              
-              <div className="space-y-4 p-4 border rounded-lg shadow-sm bg-card">
-                <h3 className="text-lg font-semibold flex items-center gap-2"><Briefcase /> Profesional y Observaciones</h3>
-                 <FormField
+                
+                <div className="space-y-2">
+                  <h4 className="text-md font-semibold flex items-center gap-2"><Briefcase /> Profesional y Observaciones</h4>
+                   <FormField
+                      control={form.control}
+                      name="searchExternal"
+                      render={({ field }) => (
+                          <FormItem className="flex flex-row items-center space-x-3 space-y-0 rounded-md border p-3 shadow-sm">
+                              <FormControl>
+                                  <Checkbox
+                                      checked={field.value}
+                                      onCheckedChange={(checked) => {
+                                          const isChecked = Boolean(checked);
+                                          field.onChange(isChecked);
+                                          form.setValue('preferredProfessionalId', ANY_PROFESSIONAL_VALUE);
+                                      }}
+                                      disabled={checkboxDisabledReason}
+                                      id="searchExternalCheckbox"
+                                  />
+                              </FormControl>
+                              <div className="space-y-1 leading-none">
+                                  <Label htmlFor="searchExternalCheckbox" className={cn("cursor-pointer", checkboxDisabledReason && "text-muted-foreground")}>
+                                      Buscar profesional en otras sedes
+                                  </Label>
+                                  {checkboxDisabledReason && !isLoadingAppointments && !isLoadingServices && (
+                                      <FormDescription className="text-xs">
+                                          {availableProfessionalsForTimeSlot.length > 0 ? "Deshabilitado porque hay profesionales locales disponibles." : (servicesList.length === 0 ? "Seleccione un servicio primero." : "No hay profesionales disponibles.")}
+                                      </FormDescription>
+                                  )}
+                              </div>
+                          </FormItem>
+                      )}
+                  />
+                  <FormField
                     control={form.control}
-                    name="searchExternal"
+                    name="preferredProfessionalId"
                     render={({ field }) => (
-                        <FormItem className="flex flex-row items-center space-x-3 space-y-0 rounded-md border p-3 shadow-sm">
-                            <FormControl>
-                                <Checkbox
-                                    checked={field.value}
-                                    onCheckedChange={(checked) => {
-                                        const isChecked = Boolean(checked);
-                                        field.onChange(isChecked);
-                                        form.setValue('preferredProfessionalId', ANY_PROFESSIONAL_VALUE);
-                                    }}
-                                    disabled={(availableProfessionalsForTimeSlot.length > 0 && !field.value) || isLoadingServices || servicesList.length === 0 || isLoadingAppointments}
-                                />
-                            </FormControl>
-                            <div className="space-y-1 leading-none">
-                                <FormLabel className={((availableProfessionalsForTimeSlot.length > 0 && !field.value) || isLoadingServices || servicesList.length === 0) ? "text-muted-foreground" : ""}>
-                                    Buscar profesional en otras sedes
-                                </FormLabel>
-                                {availableProfessionalsForTimeSlot.length > 0 && !field.value && <FormDescription className="text-xs">Deshabilitado porque hay profesionales locales disponibles.</FormDescription>}
-                            </div>
-                        </FormItem>
+                      <FormItem>
+                        <FormLabel>Profesional Preferido (Opcional)</FormLabel>
+                        <Select
+                          onValueChange={(value) => field.onChange(value === ANY_PROFESSIONAL_VALUE ? null : value)}
+                          value={field.value || ANY_PROFESSIONAL_VALUE}
+                          disabled={isLoadingServices || servicesList.length === 0 || isLoadingAppointments }
+                        >
+                          <FormControl>
+                            <SelectTrigger>
+                                <SelectValue placeholder={
+                                    (isLoadingAppointments || isLoadingServices) ? "Cargando..." :
+                                    (availableProfessionalsForTimeSlot.length > 0 || watchSearchExternal) ? "Cualquier profesional disponible" :
+                                    "No hay profesionales disponibles"
+                                } />
+                            </SelectTrigger>
+                          </FormControl>
+                          <SelectContent>
+                            <SelectItem value={ANY_PROFESSIONAL_VALUE}>Cualquier profesional disponible</SelectItem>
+                            {availableProfessionalsForTimeSlot.map(prof => (
+                              <SelectItem key={prof.id} value={prof.id}>
+                                  {prof.firstName} {prof.lastName} {watchSearchExternal && prof.locationId !== watchLocationId ? `(Sede: ${LOCATIONS.find(l=>l.id === prof.locationId)?.name || 'Externa'})` : ''}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                         {slotAvailabilityMessage && (
+                            <Alert variant={availableProfessionalsForTimeSlot.length > 0 ? "default" : "destructive"} className="mt-2 text-xs p-2">
+                              <AlertCircle className="h-4 w-4" />
+                              <AlertDescription>{slotAvailabilityMessage}</AlertDescription>
+                            </Alert>
+                          )}
+                        <FormMessage />
+                      </FormItem>
                     )}
-                />
-                <FormField
-                  control={form.control}
-                  name="preferredProfessionalId"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Profesional Preferido (Opcional)</FormLabel>
-                      <Select
-                        onValueChange={(value) => field.onChange(value === ANY_PROFESSIONAL_VALUE ? null : value)}
-                        value={field.value || ANY_PROFESSIONAL_VALUE}
-                        disabled={isLoadingServices || servicesList.length === 0 || isLoadingAppointments }
-                      >
+                  />
+                  <FormField
+                    control={form.control}
+                    name="bookingObservations"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel className="flex items-center gap-1"><Edit3 size={16}/>Observaciones Adicionales (Opcional)</FormLabel>
                         <FormControl>
-                          <SelectTrigger><SelectValue placeholder={availableProfessionalsForTimeSlot.length > 0 || watchSearchExternal ? "Cualquier profesional disponible" : "No hay profesionales"} /></SelectTrigger>
+                          <Textarea
+                            placeholder="Ej: El paciente tiene movilidad reducida, etc."
+                            className="resize-none"
+                            {...field}
+                            value={field.value || ''}
+                            disabled={isLoadingServices || servicesList.length === 0}
+                          />
                         </FormControl>
-                        <SelectContent>
-                          <SelectItem value={ANY_PROFESSIONAL_VALUE}>Cualquier profesional disponible</SelectItem>
-                          {(watchSearchExternal ? allSystemProfessionals.filter(p => {
-                             const availability = getProfessionalAvailabilityForDate(p, watchAppointmentDate);
-                             return availability !== null && availability.startTime !== '' && availability.endTime !== '';
-                          }) : availableProfessionalsForTimeSlot).map(prof => (
-                            <SelectItem key={prof.id} value={prof.id}>
-                                {prof.firstName} {prof.lastName} {watchSearchExternal && prof.locationId !== watchLocationId ? `(Sede: ${LOCATIONS.find(l=>l.id === prof.locationId)?.name})` : ''}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                <FormField
-                  control={form.control}
-                  name="bookingObservations"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel className="flex items-center gap-1"><Edit3 size={16}/>Observaciones Adicionales (Opcional)</FormLabel>
-                      <FormControl>
-                        <Textarea
-                          placeholder="Ej: El paciente tiene movilidad reducida, requiere un podólogo con experiencia en pie diabético, etc."
-                          className="resize-none"
-                          {...field}
-                          value={field.value || ''}
-                          disabled={isLoadingServices || servicesList.length === 0}
-                        />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-              </div>
-
-              
-              {!isLoadingServices && servicesList && servicesList.length > 0 && (
-                <div className="md:col-span-2 space-y-4 p-4 border rounded-lg shadow-sm bg-card">
-                  <div className="flex justify-between items-center">
-                    <h3 className="text-lg font-semibold flex items-center gap-2"><ShoppingBag/> Servicios Adicionales</h3>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      onClick={() => appendAddedService({ serviceId: servicesList[0].id, professionalId: NO_SELECTION_PLACEHOLDER, price: undefined })}
-                    >
-                      <PlusCircle className="mr-2 h-4 w-4" /> Agregar Servicio
-                    </Button>
-                  </div>
-                  {addedServiceFields.map((item, index) => (
-                    <div key={item.id} className="p-3 border rounded-md space-y-3 bg-muted/50 relative">
-                       <Button type="button" variant="ghost" size="icon" className="absolute top-1 right-1 h-6 w-6" onClick={() => removeAddedService(index)}>
-                          <Trash2 className="h-4 w-4 text-destructive" />
-                        </Button>
-                      <FormField
-                        control={form.control}
-                        name={`addedServices.${index}.serviceId`}
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel>Servicio Adicional {index + 1}</FormLabel>
-                            <Select onValueChange={field.onChange} value={field.value} disabled={!servicesList?.length}>
-                              <FormControl><SelectTrigger><SelectValue placeholder={servicesList?.length ? "Seleccionar servicio" : "No hay servicios"} /></SelectTrigger></FormControl>
-                              <SelectContent>
-                                 {!servicesList?.length && <SelectItem value={DEFAULT_SERVICE_ID_PLACEHOLDER} disabled>No hay servicios</SelectItem>}
-                                 {servicesList?.map(s => <SelectItem key={`added-${s.id}-${index}`} value={s.id}>{s.name}</SelectItem>)}
-                              </SelectContent>
-                            </Select>
-                            <FormMessage />
-                          </FormItem>
-                        )}
-                      />
-                      <FormField
-                        control={form.control}
-                        name={`addedServices.${index}.professionalId`}
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel>Profesional (Opcional)</FormLabel>
-                            <Select onValueChange={(value) => field.onChange(value === NO_SELECTION_PLACEHOLDER ? null : value)} value={field.value || NO_SELECTION_PLACEHOLDER}>
-                             <FormControl><SelectTrigger><SelectValue placeholder="Mismo prof. / Cualquiera" /></SelectTrigger></FormControl>
-                              <SelectContent>
-                                <SelectItem value={NO_SELECTION_PLACEHOLDER}>Mismo prof. / Cualquiera</SelectItem>
-                                {professionalsForCurrentLocation.map(p => <SelectItem key={`added-prof-${p.id}-${index}`} value={p.id}>{p.firstName} {p.lastName}</SelectItem>)}
-                              </SelectContent>
-                            </Select>
-                            <FormMessage />
-                          </FormItem>
-                        )}
-                      />
-                      <FormField
-                        control={form.control}
-                        name={`addedServices.${index}.price`}
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel>Precio (S/) (Opcional)</FormLabel>
-                            <FormControl><Input type="number" step="0.01" placeholder="Ej: 50.00" {...field} value={field.value ?? ""} onChange={e => field.onChange(e.target.value ? parseFloat(e.target.value) : undefined)} /></FormControl>
-                            <FormMessage />
-                          </FormItem>
-                        )}
-                      />
-                    </div>
-                  ))}
-                  <FormField control={form.control} name="addedServices" render={() => <FormMessage />} />
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
                 </div>
-              )}
 
+                {!isLoadingServices && servicesList && servicesList.length > 0 && (
+                  <div className="space-y-3 pt-3 mt-3 border-t">
+                    <div className="flex justify-between items-center">
+                      <h4 className="text-md font-semibold flex items-center gap-2"><ShoppingBag/> Servicios Adicionales</h4>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() => appendAddedService({ serviceId: servicesList?.length ? servicesList[0].id : DEFAULT_SERVICE_ID_PLACEHOLDER, professionalId: NO_SELECTION_PLACEHOLDER, price: undefined })}
+                      >
+                        <PlusCircle className="mr-2 h-4 w-4" /> Agregar
+                      </Button>
+                    </div>
+                    {addedServiceFields.map((item, index) => (
+                      <div key={item.id} className="p-3 border rounded-md space-y-3 bg-muted/50 relative">
+                         <Button type="button" variant="ghost" size="icon" className="absolute top-1 right-1 h-6 w-6" onClick={() => removeAddedService(index)}>
+                            <Trash2 className="h-4 w-4 text-destructive" />
+                          </Button>
+                        <FormField
+                          control={form.control}
+                          name={`addedServices.${index}.serviceId`}
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel className="text-xs">Servicio Adicional {index + 1}</FormLabel>
+                              <Select onValueChange={field.onChange} value={field.value} disabled={!servicesList?.length}>
+                                <FormControl><SelectTrigger><SelectValue placeholder={servicesList?.length ? "Seleccionar servicio" : "No hay servicios"} /></SelectTrigger></FormControl>
+                                <SelectContent>
+                                   {!servicesList?.length && <SelectItem value={DEFAULT_SERVICE_ID_PLACEHOLDER} disabled>No hay servicios</SelectItem>}
+                                   {servicesList?.map(s => <SelectItem key={`added-${s.id}-${index}`} value={s.id}>{s.name}</SelectItem>)}
+                                </SelectContent>
+                              </Select>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+                        <FormField
+                          control={form.control}
+                          name={`addedServices.${index}.professionalId`}
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel className="text-xs">Profesional (Opcional)</FormLabel>
+                              <Select onValueChange={(value) => field.onChange(value === NO_SELECTION_PLACEHOLDER ? null : value)} value={field.value || NO_SELECTION_PLACEHOLDER}>
+                               <FormControl><SelectTrigger><SelectValue placeholder="Mismo prof. / Cualquiera" /></SelectTrigger></FormControl>
+                                <SelectContent>
+                                  <SelectItem value={NO_SELECTION_PLACEHOLDER}>Mismo prof. / Cualquiera</SelectItem>
+                                  {availableProfessionalsForTimeSlot.map(p => <SelectItem key={`added-prof-${p.id}-${index}`} value={p.id}>{p.firstName} {p.lastName}</SelectItem>)}
+                                </SelectContent>
+                              </Select>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+                        <FormField
+                          control={form.control}
+                          name={`addedServices.${index}.price`}
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel className="text-xs">Precio (S/) (Opcional)</FormLabel>
+                              <FormControl><Input type="number" step="0.01" placeholder="Ej: 50.00" {...field} value={field.value ?? ""} onChange={e => field.onChange(e.target.value ? parseFloat(e.target.value) : undefined)} /></FormControl>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+                      </div>
+                    ))}
+                    <FormField control={form.control} name="addedServices" render={() => <FormMessage />} />
+                  </div>
+                )}
+
+
+              </div>
             </form>
           </Form>
         </div>
@@ -869,7 +875,7 @@ export function AppointmentForm({
           </DialogClose>
           <Button type="submit" onClick={form.handleSubmit(onSubmit)} disabled={isSubmitDisabled}>
             {(isLoading || isLoadingServices || isLoadingAppointments ) && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-            {initialData?.patientFirstName ? 'Actualizar Cita' : 'Agendar Cita'}
+            Agendar Cita
           </Button>
         </DialogFooter>
       </DialogContent>
