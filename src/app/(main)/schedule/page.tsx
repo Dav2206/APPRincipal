@@ -55,7 +55,7 @@ export default function SchedulePage() {
         getProfessionals(), 
         getAppointments({ 
           date: currentDate,
-          statuses: [APPOINTMENT_STATUS.BOOKED, APPOINTMENT_STATUS.CONFIRMED],
+          statuses: [APPOINTMENT_STATUS.BOOKED, APPOINTMENT_STATUS.CONFIRMED, APPOINTMENT_STATUS.COMPLETED], // <-- MODIFICADO AQUÍ
         }),
       ]);
 
@@ -68,12 +68,12 @@ export default function SchedulePage() {
 
       
       allRelevantAppointmentsToday
-        .filter(appt => appt.locationId === actualEffectiveLocationId)
+        .filter(appt => appt.locationId === actualEffectiveLocationId && appt.status !== APPOINTMENT_STATUS.CANCELLED_CLIENT && appt.status !== APPOINTMENT_STATUS.CANCELLED_STAFF && appt.status !== APPOINTMENT_STATUS.NO_SHOW)
         .forEach(appt => {
           displayableAppointments.push(appt);
           if (appt.professionalId && !processedProfIdsForColumns.has(appt.professionalId)) {
             const prof = allSystemProfs.find(p => p.id === appt.professionalId);
-            if (prof && getProfessionalAvailabilityForDate(prof, currentDate)) { // This now checks contract
+            if (prof && getProfessionalAvailabilityForDate(prof, currentDate)) { 
               professionalsForColumns.push(prof);
               processedProfIdsForColumns.add(prof.id);
             }
@@ -83,7 +83,7 @@ export default function SchedulePage() {
       
       allSystemProfs
         .filter(prof => {
-            const availability = getProfessionalAvailabilityForDate(prof, currentDate); // This now checks contract
+            const availability = getProfessionalAvailabilityForDate(prof, currentDate); 
             return prof.locationId === actualEffectiveLocationId && availability;
         })
         .forEach(localProf => {
@@ -93,13 +93,15 @@ export default function SchedulePage() {
           }
           
           allRelevantAppointmentsToday
-            .filter(appt => appt.professionalId === localProf.id && appt.isExternalProfessional && appt.locationId !== actualEffectiveLocationId)
+            .filter(appt => appt.professionalId === localProf.id && appt.isExternalProfessional && appt.locationId !== actualEffectiveLocationId && appt.status !== APPOINTMENT_STATUS.CANCELLED_CLIENT && appt.status !== APPOINTMENT_STATUS.CANCELLED_STAFF && appt.status !== APPOINTMENT_STATUS.NO_SHOW)
             .forEach(travelAppt => {
-              displayableAppointments.push({
-                ...travelAppt,
-                id: `travel-${travelAppt.id}-${localProf.id}`, 
-                isTravelBlock: true,
-              });
+              if (!displayableAppointments.find(da => da.id === `travel-${travelAppt.id}-${localProf.id}`)) {
+                displayableAppointments.push({
+                  ...travelAppt,
+                  id: `travel-${travelAppt.id}-${localProf.id}`, 
+                  isTravelBlock: true,
+                });
+              }
             });
         });
       
@@ -108,7 +110,7 @@ export default function SchedulePage() {
       );
       
       setWorkingProfessionals(professionalsForColumns);
-      setAppointments(displayableAppointments);
+      setAppointments(displayableAppointments.sort((a,b) => parseISO(a.appointmentDateTime).getTime() - parseISO(b.appointmentDateTime).getTime()));
 
     } catch (error) {
       console.error("Error fetching schedule data:", error);
@@ -243,10 +245,10 @@ export default function SchedulePage() {
               message="Por favor, seleccione una sede para ver la agenda horaria."
             />
           )
-          : workingProfessionals.length === 0 ? (
+          : workingProfessionals.length === 0 && appointments.filter(a => a.locationId === actualEffectiveLocationId && !a.isTravelBlock && (a.status === APPOINTMENT_STATUS.BOOKED || a.status === APPOINTMENT_STATUS.CONFIRMED || a.status === APPOINTMENT_STATUS.COMPLETED)).length === 0 ? (
             <NoDataCard
-              title="No hay profesionales trabajando hoy"
-              message={`No se encontraron profesionales activos para ${LOCATIONS.find(l => l.id === actualEffectiveLocationId)?.name || 'la selección actual'} en esta fecha.`}
+              title="No hay profesionales ni citas"
+              message={`No se encontraron profesionales activos ni citas para ${LOCATIONS.find(l => l.id === actualEffectiveLocationId)?.name || 'la selección actual'} en esta fecha.`}
             />
           ) : (
             <DailyTimeline
