@@ -2,7 +2,7 @@
 "use client";
 
 import type { Appointment, Professional } from '@/types';
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useAuth } from '@/contexts/auth-provider';
 import { useAppState } from '@/contexts/app-state-provider';
 import { getAppointments, getProfessionals, getAppointmentById, getProfessionalAvailabilityForDate } from '@/lib/data';
@@ -19,15 +19,15 @@ import { cn } from '@/lib/utils';
 import { AppointmentEditDialog } from '@/components/appointments/appointment-edit-dialog';
 import { AppointmentForm } from '@/components/appointments/appointment-form';
 
-const timeSlotsForView = TIME_SLOTS.filter(slot => slot >= "09:00");
+const timeSlotsForView = TIME_SLOTS.filter(slot => parseInt(slot.split(':')[0]) >= 9);
 
 export default function SchedulePage() {
   const { user } = useAuth();
   const { selectedLocationId: adminSelectedLocation } = useAppState();
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [allSystemProfessionals, setAllSystemProfessionals] = useState<Professional[]>([]);
-  const [workingProfessionals, setWorkingProfessionals] = useState<Professional[]>([]);
-  const [currentDate, setCurrentDate] = useState<Date>(startOfDay(new Date())); 
+  const [workingProfessionalsForTimeline, setWorkingProfessionalsForTimeline] = useState<Professional[]>([]);
+  const [currentDate, setCurrentDate] = useState<Date>(startOfDay(new Date()));
   const [isLoading, setIsLoading] = useState(true);
   const [selectedAppointmentForEdit, setSelectedAppointmentForEdit] = useState<Appointment | null>(null);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
@@ -35,9 +35,9 @@ export default function SchedulePage() {
 
   const isAdminOrContador = user?.role === USER_ROLES.ADMIN || user?.role === USER_ROLES.CONTADOR;
 
-  const actualEffectiveLocationId = isAdminOrContador
+  const actualEffectiveLocationId = useMemo(() => isAdminOrContador
     ? (adminSelectedLocation === 'all' || !adminSelectedLocation ? LOCATIONS[0].id : adminSelectedLocation as LocationId)
-    : user?.locationId;
+    : user?.locationId, [isAdminOrContador, adminSelectedLocation, user?.locationId]);
 
 
   const fetchData = useCallback(async () => {
@@ -45,77 +45,81 @@ export default function SchedulePage() {
       setIsLoading(false);
       setAppointments([]);
       setAllSystemProfessionals([]);
-      setWorkingProfessionals([]);
+      setWorkingProfessionalsForTimeline([]);
       return;
     }
     setIsLoading(true);
+    console.log(`[SchedulePage] fetchData for date: ${formatISO(currentDate)}, location: ${actualEffectiveLocationId}`);
 
     try {
-      const [allSystemProfs, allRelevantAppointmentsTodayResponse] = await Promise.all([
-        getProfessionals(), 
-        getAppointments({ 
+      const [allSystemProfsResponse, allRelevantAppointmentsTodayResponse] = await Promise.all([
+        getProfessionals(),
+        getAppointments({
           date: currentDate,
-          statuses: [APPOINTMENT_STATUS.BOOKED, APPOINTMENT_STATUS.CONFIRMED, APPOINTMENT_STATUS.COMPLETED], // <-- MODIFICADO AQUÍ
+          statuses: [APPOINTMENT_STATUS.BOOKED, APPOINTMENT_STATUS.CONFIRMED, APPOINTMENT_STATUS.COMPLETED],
         }),
       ]);
 
-      setAllSystemProfessionals(allSystemProfs || []);
+      const allSystemProfs = allSystemProfsResponse || [];
+      setAllSystemProfessionals(allSystemProfs);
       const allRelevantAppointmentsToday = allRelevantAppointmentsTodayResponse.appointments || [];
+      console.log(`[SchedulePage] Fetched ${allSystemProfs.length} total professionals and ${allRelevantAppointmentsToday.length} relevant appointments for the day.`);
 
       const displayableAppointments: Appointment[] = [];
-      const professionalsForColumns: Professional[] = [];
+      const professionalsForColumnsSet = new Set<Professional>();
       const processedProfIdsForColumns = new Set<string>();
 
-      
+
       allRelevantAppointmentsToday
-        .filter(appt => appt.locationId === actualEffectiveLocationId && appt.status !== APPOINTMENT_STATUS.CANCELLED_CLIENT && appt.status !== APPOINTMENT_STATUS.CANCELLED_STAFF && appt.status !== APPOINTMENT_STATUS.NO_SHOW)
+        .filter(appt => appt.locationId === actualEffectiveLocationId && !appt.isTravelBlock)
         .forEach(appt => {
           displayableAppointments.push(appt);
           if (appt.professionalId && !processedProfIdsForColumns.has(appt.professionalId)) {
             const prof = allSystemProfs.find(p => p.id === appt.professionalId);
-            if (prof && getProfessionalAvailabilityForDate(prof, currentDate)) { 
-              professionalsForColumns.push(prof);
+            if (prof && !prof.isManager && getProfessionalAvailabilityForDate(prof, currentDate)) {
+              professionalsForColumnsSet.add(prof);
               processedProfIdsForColumns.add(prof.id);
             }
           }
         });
 
-      
+
       allSystemProfs
         .filter(prof => {
-            const availability = getProfessionalAvailabilityForDate(prof, currentDate); 
-            return prof.locationId === actualEffectiveLocationId && availability;
+            const availability = getProfessionalAvailabilityForDate(prof, currentDate);
+            return prof.locationId === actualEffectiveLocationId && !prof.isManager && availability;
         })
         .forEach(localProf => {
           if (!processedProfIdsForColumns.has(localProf.id)) {
-            professionalsForColumns.push(localProf);
+            professionalsForColumnsSet.add(localProf);
             processedProfIdsForColumns.add(localProf.id);
           }
-          
+
           allRelevantAppointmentsToday
-            .filter(appt => appt.professionalId === localProf.id && appt.isExternalProfessional && appt.locationId !== actualEffectiveLocationId && appt.status !== APPOINTMENT_STATUS.CANCELLED_CLIENT && appt.status !== APPOINTMENT_STATUS.CANCELLED_STAFF && appt.status !== APPOINTMENT_STATUS.NO_SHOW)
+            .filter(appt => appt.professionalId === localProf.id && appt.isExternalProfessional && appt.locationId !== actualEffectiveLocationId)
             .forEach(travelAppt => {
               if (!displayableAppointments.find(da => da.id === `travel-${travelAppt.id}-${localProf.id}`)) {
                 displayableAppointments.push({
                   ...travelAppt,
-                  id: `travel-${travelAppt.id}-${localProf.id}`, 
+                  id: `travel-${travelAppt.id}-${localProf.id}`,
                   isTravelBlock: true,
                 });
               }
             });
         });
-      
-      professionalsForColumns.sort((a, b) =>
+
+      const professionalsForColumnsArray = Array.from(professionalsForColumnsSet).sort((a, b) =>
         `${a.firstName} ${a.lastName}`.localeCompare(`${b.firstName} ${b.lastName}`)
       );
-      
-      setWorkingProfessionals(professionalsForColumns);
+
+      setWorkingProfessionalsForTimeline(professionalsForColumnsArray);
       setAppointments(displayableAppointments.sort((a,b) => parseISO(a.appointmentDateTime).getTime() - parseISO(b.appointmentDateTime).getTime()));
+      console.log(`[SchedulePage] Displaying ${professionalsForColumnsArray.length} professionals in timeline and ${displayableAppointments.length} appointment items.`);
 
     } catch (error) {
-      console.error("Error fetching schedule data:", error);
+      console.error("[SchedulePage] Error fetching schedule data:", error);
       setAppointments([]);
-      setWorkingProfessionals([]);
+      setWorkingProfessionalsForTimeline([]);
     } finally {
       setIsLoading(false);
     }
@@ -134,37 +138,41 @@ export default function SchedulePage() {
   };
 
   const handleTimelineAppointmentClick = useCallback(async (appointment: Appointment) => {
-    if (appointment.isTravelBlock) return; 
+    if (appointment.isTravelBlock) return;
 
     try {
       if (!appointment || !appointment.id || appointment.id.startsWith('travel-')) {
         console.error("Invalid appointment object or travel block passed to handleTimelineAppointmentClick");
         return;
       }
-      const fullAppointmentDetails = await getAppointmentById(appointment.id);
+      // Attempt to fetch the most up-to-date details, especially if it's an external professional's appointment
+      // where some details might not be fully populated initially.
+      const fullAppointmentDetails = await getAppointmentById(appointment.id.replace(/^travel-/, '').split('-')[0]); // Get original ID if it was a travel block ID
       if (fullAppointmentDetails) {
         setSelectedAppointmentForEdit(fullAppointmentDetails);
       } else {
+        // Fallback to the appointment data from the timeline if full details can't be fetched
+        // This might happen if it's a newly created appointment not yet fully retrievable by ID in some mock scenarios
         setSelectedAppointmentForEdit(appointment);
-        console.warn("Could not fetch full appointment details for editing, using timeline data for edit modal.");
+        console.warn("[SchedulePage] Could not fetch full appointment details for edit, using timeline data for edit modal. Original ID:", appointment.id.replace(/^travel-/, '').split('-')[0]);
       }
       setIsEditModalOpen(true);
     } catch (error) {
-      console.error("Error fetching appointment details for edit:", error);
-      setSelectedAppointmentForEdit(appointment);
+      console.error("[SchedulePage] Error fetching appointment details for edit:", error);
+      setSelectedAppointmentForEdit(appointment); // Fallback to timeline data on error
       setIsEditModalOpen(true);
     }
   }, []);
 
 
   const handleAppointmentUpdated = useCallback(() => {
-    fetchData(); 
+    fetchData();
     setIsEditModalOpen(false);
   }, [fetchData]);
 
   const handleNewAppointmentCreated = useCallback(async () => {
     setIsNewAppointmentFormOpen(false);
-    await fetchData(); 
+    await fetchData();
   }, [fetchData]);
 
   const NoDataCard = ({ title, message }: { title: string; message: string }) => (
@@ -195,7 +203,7 @@ export default function SchedulePage() {
                 Agenda Horaria - {format(currentDate, "PPP", { locale: es })}
               </CardTitle>
               <CardDescription>
-                Vista de la agenda en formato de línea de tiempo por profesional.
+                Vista de la agenda en formato de línea de tiempo por profesional (excluye Gerentes de Sede).
               </CardDescription>
             </div>
             <div className="flex items-center gap-2 w-full md:w-auto flex-wrap">
@@ -245,15 +253,15 @@ export default function SchedulePage() {
               message="Por favor, seleccione una sede para ver la agenda horaria."
             />
           )
-          : workingProfessionals.length === 0 && appointments.filter(a => a.locationId === actualEffectiveLocationId && !a.isTravelBlock && (a.status === APPOINTMENT_STATUS.BOOKED || a.status === APPOINTMENT_STATUS.CONFIRMED || a.status === APPOINTMENT_STATUS.COMPLETED)).length === 0 ? (
+          : workingProfessionalsForTimeline.length === 0 && appointments.filter(a => a.locationId === actualEffectiveLocationId && !a.isTravelBlock && (a.status === APPOINTMENT_STATUS.BOOKED || a.status === APPOINTMENT_STATUS.CONFIRMED || a.status === APPOINTMENT_STATUS.COMPLETED)).length === 0 ? (
             <NoDataCard
               title="No hay profesionales ni citas"
-              message={`No se encontraron profesionales activos ni citas para ${LOCATIONS.find(l => l.id === actualEffectiveLocationId)?.name || 'la selección actual'} en esta fecha.`}
+              message={`No se encontraron profesionales activos (no gerentes) ni citas para ${LOCATIONS.find(l => l.id === actualEffectiveLocationId)?.name || 'la selección actual'} en esta fecha.`}
             />
           ) : (
             <DailyTimeline
-              professionals={workingProfessionals}
-              appointments={appointments} 
+              professionals={workingProfessionalsForTimeline}
+              appointments={appointments}
               timeSlots={timeSlotsForView}
               currentDate={currentDate}
               onAppointmentClick={handleTimelineAppointmentClick}

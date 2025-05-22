@@ -1,3 +1,4 @@
+
 import type { LocationId, UserRole, PaymentMethod, AppointmentStatus, DayOfWeekId } from '@/lib/constants';
 
 export interface BaseEntity {
@@ -8,38 +9,41 @@ export interface User extends BaseEntity {
   username: string;
   password?: string; // Password should ideally be handled securely and not stored plaintext
   role: UserRole;
-  locationId?: LocationId;
+  locationId?: LocationId | null; // Allow null for admin/contador
   name: string;
+  useruid?: string; // Firebase Auth UID
 }
 
 export interface Contract {
-  id: string; // Added ID to the contract itself for easier history management
+  id: string;
   startDate: string; // ISO Date string
   endDate: string;   // ISO Date string
-  notes?: string;
-  empresa?: string; // Company associated with the contract
+  notes?: string | null;
+  empresa?: string | null;
 }
 
 export interface Professional extends BaseEntity {
   firstName: string;
   lastName: string;
   locationId: LocationId;
-  phone?: string;
+  phone?: string | null;
   birthDay?: number | null;
   birthMonth?: number | null;
+  isManager?: boolean; // Nuevo campo para gerente
+
   biWeeklyEarnings?: number;
-  
+
   workSchedule: {
     [key in DayOfWeekId]?: { startTime: string; endTime: string; isWorking?: boolean; } | null;
   };
 
   customScheduleOverrides?: Array<{
-    id: string; // Unique ID for the override itself
+    id: string;
     date: string; // ISO Date string 'YYYY-MM-DD'
     isWorking: boolean;
-    startTime?: string; // e.g., "09:00"
-    endTime?: string;   // e.g., "17:00"
-    notes?: string;
+    startTime?: string;
+    endTime?: string;
+    notes?: string | null;
   }>;
 
   currentContract?: Contract | null;
@@ -49,61 +53,71 @@ export interface Professional extends BaseEntity {
 export interface Patient extends BaseEntity {
   firstName: string;
   lastName: string;
-  phone?: string;
-  age?: number | null; 
+  phone?: string | null;
+  age?: number | null;
   isDiabetic?: boolean;
-  preferredProfessionalId?: string; // ID of a Professional
-  notes?: string;
+  preferredProfessionalId?: string | null;
+  notes?: string | null;
 }
 
 export interface Service {
-  id: string; 
+  id: string;
   name: string;
   defaultDuration: number; // in minutes
-  price?: number;
+  price?: number | null;
+}
+
+export interface AddedServiceItem {
+  serviceId: string;
+  professionalId?: string | null;
+  price?: number | null;
+  service?: Service; // Populated for display
+  professional?: Professional; // Populated for display
 }
 
 export interface Appointment extends BaseEntity {
   patientId: string;
-  patient?: Patient; 
+  patient?: Patient;
   locationId: LocationId;
-  professionalId?: string | null; 
-  professional?: Professional; 
-  serviceId: string; 
-  service?: Service; 
-  appointmentDateTime: string; 
+  professionalId?: string | null;
+  professional?: Professional;
+  serviceId: string;
+  service?: Service;
+  appointmentDateTime: string;
   durationMinutes: number;
   preferredProfessionalId?: string | null;
-  bookingObservations?: string;
+  bookingObservations?: string | null;
   status: AppointmentStatus;
-  actualArrivalTime?: string; 
-  addedServices?: { serviceId: string; professionalId?: string | null; price?: number | null; service?: Service, professional?: Professional }[];
-  paymentMethod?: PaymentMethod;
-  amountPaid?: number;
-  staffNotes?: string;
-  attachedPhotos?: string[]; 
-  createdAt?: string; 
-  updatedAt?: string; 
-  isExternalProfessional?: boolean; 
-  externalProfessionalOriginLocationId?: LocationId | null; 
-  isTravelBlock?: boolean; 
+  actualArrivalTime?: string | null;
+  addedServices?: AddedServiceItem[];
+  paymentMethod?: PaymentMethod | null;
+  amountPaid?: number | null;
+  staffNotes?: string | null;
+  attachedPhotos?: string[];
+  createdAt?: string;
+  updatedAt?: string;
+  isExternalProfessional?: boolean;
+  externalProfessionalOriginLocationId?: LocationId | null;
+  isTravelBlock?: boolean;
+  _deleted?: boolean; // Flag for UI handling of deleted items
 }
 
 export type AppointmentFormData = {
   patientFirstName: string;
   patientLastName: string;
   patientPhone?: string | null;
-  patientAge?: number | null; 
+  patientAge?: number | null;
   existingPatientId?: string | null;
   isDiabetic?: boolean;
 
   locationId: LocationId;
-  serviceId: string; 
-  appointmentDate: Date; 
-  appointmentTime: string; 
-  preferredProfessionalId?: string | null; 
+  serviceId: string;
+  appointmentDate: Date;
+  appointmentTime: string;
+  preferredProfessionalId?: string | null;
   bookingObservations?: string | null;
-  searchExternal?: boolean; 
+  searchExternal?: boolean;
+  addedServices?: Partial<AddedServiceItem>[];
 };
 
 export type ProfessionalFormData = {
@@ -114,38 +128,38 @@ export type ProfessionalFormData = {
   phone?: string | null;
   birthDay?: number | null;
   birthMonth?: number | null;
-  
+  isManager?: boolean; // Nuevo campo para gerente
+
   workSchedule: {
     [key in DayOfWeekId]?: { startTime?: string; endTime?: string; isWorking?: boolean };
   };
-  
+
   customScheduleOverrides?: Array<{
-    id: string; 
-    date: Date; 
+    id: string;
+    date: Date;
     isWorking: boolean;
     startTime?: string;
     endTime?: string;
-    notes?: string;
+    notes?: string | null;
   }>;
   currentContract_startDate?: Date | null;
   currentContract_endDate?: Date | null;
   currentContract_notes?: string | null;
-  currentContract_empresa?: string | null; 
+  currentContract_empresa?: string | null;
 };
 
-export type { AppointmentStatus }; 
+export type { AppointmentStatus };
 
 export type ServiceFormData = {
   id?: string;
   name: string;
-  defaultDuration: { 
+  defaultDuration: {
     hours: number;
     minutes: number;
   };
-  price?: number;
+  price?: number | null;
 };
 
-// Schema for editing contract on ContractsPage
 export type ContractEditFormData = {
   startDate: Date | null;
   endDate: Date | null;
@@ -154,10 +168,10 @@ export type ContractEditFormData = {
 
 export interface PeriodicReminder extends BaseEntity {
   title: string;
-  description?: string;
+  description?: string | null;
   dueDate: string; // ISO Date string 'YYYY-MM-DD'
   recurrence: 'once' | 'monthly' | 'quarterly' | 'annually';
-  amount?: number;
+  amount?: number | null;
   status: 'pending' | 'paid';
   createdAt?: string; // ISO Date string
   updatedAt?: string; // ISO Date string
@@ -166,9 +180,9 @@ export interface PeriodicReminder extends BaseEntity {
 export interface PeriodicReminderFormData {
   title: string;
   description?: string | null;
-  dueDate: Date; // In the form, it's a Date object from react-day-picker
+  dueDate: Date;
   recurrence: 'once' | 'monthly' | 'quarterly' | 'annually';
-  amount?: number | null; // Form might deal with undefined or null for optional numbers
+  amount?: number | null;
   status: 'pending' | 'paid';
 }
 
@@ -180,7 +194,7 @@ export interface ImportantNote extends BaseEntity {
 }
 
 export interface ImportantNoteFormData {
-  id?: string; // for editing
+  id?: string;
   title: string;
   content: string;
 }

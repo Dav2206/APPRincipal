@@ -5,9 +5,9 @@ import type { Professional, ProfessionalFormData, Contract } from '@/types';
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useAuth } from '@/contexts/auth-provider';
 import { useAppState } from '@/contexts/app-state-provider';
-import { getProfessionals, addProfessional, updateProfessional, getProfessionalAvailabilityForDate } from '@/lib/data';
+import { getProfessionals, addProfessional, updateProfessional, getProfessionalAvailabilityForDate, getContractDisplayStatus } from '@/lib/data';
 import type { ContractDisplayStatus } from '@/lib/data';
-import { LOCATIONS, USER_ROLES, LocationId, TIME_SLOTS, DAYS_OF_WEEK } from '@/lib/constants';
+import { LOCATIONS, USER_ROLES, LocationId, TIME_SLOTS, DAYS_OF_WEEK, DayOfWeekId as DayOfWeekIdConst } from '@/lib/constants';
 import type { DayOfWeekId } from '@/lib/constants';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -33,7 +33,7 @@ import {
   DialogDescription,
 } from '@/components/ui/dialog';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
-import { PlusCircle, Edit2, Users, Search, Loader2, CalendarDays, Clock, Trash2, Calendar as CalendarIconLucide, AlertTriangle, Moon, ChevronsDown, FileText, Building, Gift } from 'lucide-react';
+import { PlusCircle, Edit2, Users, Search, Loader2, CalendarDays, Clock, Trash2, Calendar as CalendarIconLucide, AlertTriangle, Moon, ChevronsDown, FileText, Building, Gift, Briefcase as BriefcaseIcon } from 'lucide-react';
 import { useForm, useFieldArray, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { ProfessionalFormSchema } from '@/lib/schemas';
@@ -48,8 +48,6 @@ import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/
 
 
 const PROFESSIONALS_PER_PAGE = 5;
-const MONTH_NAMES = ["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"];
-const NO_SPECIFY_BIRTHDAY_ITEM_VALUE = "_no_specify_birthday_";
 
 
 export default function ProfessionalsPage() {
@@ -72,7 +70,7 @@ export default function ProfessionalsPage() {
     thursday: { isWorking: true, startTime: '10:00', endTime: '19:00' },
     friday: { isWorking: true, startTime: '10:00', endTime: '19:00' },
     saturday: { isWorking: true, startTime: '09:00', endTime: '18:00' },
-    sunday: { isWorking: true, startTime: '10:00', endTime: '18:00' }, 
+    sunday: { isWorking: true, startTime: '10:00', endTime: '18:00' },
   };
 
 
@@ -83,6 +81,7 @@ export default function ProfessionalsPage() {
       lastName: '',
       locationId: LOCATIONS[0].id,
       phone: '',
+      isManager: false,
       workSchedule: defaultBaseWorkSchedule,
       customScheduleOverrides: [],
       currentContract_startDate: null,
@@ -91,15 +90,15 @@ export default function ProfessionalsPage() {
       currentContract_empresa: '',
     }
   });
-  
+
   const { fields: customScheduleFields, append: appendCustomSchedule, remove: removeCustomSchedule } = useFieldArray({
     control: form.control,
     name: "customScheduleOverrides"
   });
-  
+
   const isAdminOrContador = user?.role === USER_ROLES.ADMIN || user?.role === USER_ROLES.CONTADOR;
   const isContadorOnly = user?.role === USER_ROLES.CONTADOR;
-  
+
   const effectiveLocationIdForFetch = useMemo(() => {
     if (isAdminOrContador) {
       return adminSelectedLocation === 'all' ? undefined : adminSelectedLocation as LocationId;
@@ -109,7 +108,7 @@ export default function ProfessionalsPage() {
 
 
   const fetchProfessionals = useCallback(async () => {
-    if(!user || (user.role === USER_ROLES.LOCATION_STAFF && !isAdminOrContador) ) { 
+    if(!user || (user.role === USER_ROLES.LOCATION_STAFF && !isAdminOrContador) ) {
       setIsLoading(false);
       setAllProfessionals([]);
       return;
@@ -164,13 +163,14 @@ export default function ProfessionalsPage() {
     setEditingProfessional(null);
     const defaultLoc = isAdminOrContador
       ? (adminSelectedLocation && adminSelectedLocation !== 'all' ? adminSelectedLocation : LOCATIONS[0].id)
-      : user?.locationId; 
-    
+      : user?.locationId;
+
     form.reset({
       firstName: '',
       lastName: '',
       locationId: defaultLoc as LocationId,
       phone: '',
+      isManager: false,
       workSchedule: defaultBaseWorkSchedule,
       customScheduleOverrides: [],
       currentContract_startDate: null,
@@ -187,12 +187,12 @@ export default function ProfessionalsPage() {
         return;
     }
     setEditingProfessional(professional);
-    
+
     const formWorkSchedule: ProfessionalFormData['workSchedule'] = {};
-    DAYS_OF_WEEK.forEach(day => { 
-      const dayId = day.id as DayOfWeekId;
+    DAYS_OF_WEEK.forEach(day => {
+      const dayId = day.id as DayOfWeekIdConst;
       const schedule = professional.workSchedule?.[dayId];
-      formWorkSchedule[dayId] = schedule 
+      formWorkSchedule[dayId] = schedule
         ? { isWorking: schedule.isWorking, startTime: schedule.startTime, endTime: schedule.endTime }
         : { isWorking: false, startTime: defaultBaseWorkSchedule[dayId]?.startTime, endTime: defaultBaseWorkSchedule[dayId]?.endTime };
     });
@@ -201,11 +201,12 @@ export default function ProfessionalsPage() {
         id: professional.id,
         firstName: professional.firstName,
         lastName: professional.lastName,
-        locationId: professional.locationId as LocationId, 
+        locationId: professional.locationId as LocationId,
         phone: professional.phone || '',
+        isManager: professional.isManager || false,
         workSchedule: formWorkSchedule,
         customScheduleOverrides: professional.customScheduleOverrides?.map(ov => ({
-            id: ov.id || generateId(), 
+            id: ov.id || generateId(),
             date: parseISO(ov.date),
             isWorking: ov.isWorking,
             startTime: ov.startTime || undefined,
@@ -219,7 +220,7 @@ export default function ProfessionalsPage() {
     });
     setIsFormOpen(true);
   };
-  
+
   const generateId = () => Math.random().toString(36).substr(2, 9);
 
 
@@ -229,23 +230,24 @@ export default function ProfessionalsPage() {
         return;
     }
     try {
-      
+
       let currentContract: Contract | null = null;
       if (data.currentContract_startDate && data.currentContract_endDate) {
         const oldContractId = editingProfessional?.currentContract?.id;
-        const newContractDataHasChanged = 
+        const newContractDataHasChanged =
           !oldContractId ||
           (data.currentContract_startDate && dateFnsFormatISO(data.currentContract_startDate, { representation: 'date' }) !== editingProfessional?.currentContract?.startDate) ||
           (data.currentContract_endDate && dateFnsFormatISO(data.currentContract_endDate, { representation: 'date' }) !== editingProfessional?.currentContract?.endDate) ||
-          (data.currentContract_notes !== (editingProfessional?.currentContract?.notes || '')) ||
-          (data.currentContract_empresa !== (editingProfessional?.currentContract?.empresa || ''));
+          ((data.currentContract_notes ?? null) !== (editingProfessional?.currentContract?.notes ?? null)) ||
+          ((data.currentContract_empresa ?? null) !== (editingProfessional?.currentContract?.empresa ?? null));
+
 
         currentContract = {
           id: newContractDataHasChanged ? generateId() : oldContractId!,
           startDate: dateFnsFormatISO(data.currentContract_startDate, { representation: 'date' }),
           endDate: dateFnsFormatISO(data.currentContract_endDate, { representation: 'date' }),
-          notes: data.currentContract_notes || undefined,
-          empresa: data.currentContract_empresa || undefined,
+          notes: data.currentContract_notes || null,
+          empresa: data.currentContract_empresa || null,
         };
       }
 
@@ -254,7 +256,8 @@ export default function ProfessionalsPage() {
         firstName: data.firstName,
         lastName: data.lastName,
         locationId: data.locationId,
-        phone: data.phone || undefined,
+        phone: data.phone || null,
+        isManager: data.isManager || false,
         workSchedule: {},
         customScheduleOverrides: data.customScheduleOverrides?.map(ov => ({
             id: ov.id || generateId(),
@@ -262,17 +265,17 @@ export default function ProfessionalsPage() {
             isWorking: ov.isWorking,
             startTime: ov.isWorking ? ov.startTime : undefined,
             endTime: ov.isWorking ? ov.endTime : undefined,
-            notes: ov.notes,
+            notes: ov.notes || null,
         })) || [],
         currentContract: currentContract,
         contractHistory: editingProfessional?.contractHistory || [],
       };
-      
+
       if (editingProfessional?.currentContract && currentContract && editingProfessional.currentContract.id !== currentContract.id) {
          if (!professionalToSave.contractHistory.find(ch => ch.id === editingProfessional.currentContract!.id)) {
             professionalToSave.contractHistory.push(editingProfessional.currentContract);
          }
-      } else if (editingProfessional?.currentContract && !currentContract) { 
+      } else if (editingProfessional?.currentContract && !currentContract) {
           if (!professionalToSave.contractHistory.find(ch => ch.id === editingProfessional.currentContract!.id)) {
             professionalToSave.contractHistory.push(editingProfessional.currentContract);
          }
@@ -280,7 +283,7 @@ export default function ProfessionalsPage() {
 
 
       if (data.workSchedule) {
-        (Object.keys(data.workSchedule) as Array<DayOfWeekId>).forEach(dayId => { 
+        (Object.keys(data.workSchedule) as Array<DayOfWeekIdConst>).forEach(dayId => {
           const dayData = data.workSchedule![dayId];
           if (dayData) {
             professionalToSave.workSchedule[dayId] = {
@@ -294,7 +297,7 @@ export default function ProfessionalsPage() {
         });
       }
 
-      const result = editingProfessional && editingProfessional.id 
+      const result = editingProfessional && editingProfessional.id
         ? await updateProfessional(editingProfessional.id, professionalToSave as Partial<ProfessionalFormData>)
         : await addProfessional(professionalToSave as Omit<ProfessionalFormData, 'id'>);
 
@@ -304,14 +307,14 @@ export default function ProfessionalsPage() {
           toast({ title: "Error", description: `No se pudo ${editingProfessional ? 'actualizar' : 'agregar'} a ${data.firstName}.`, variant: "destructive" });
       }
       setIsFormOpen(false);
-      setCurrentPage(1); 
+      setCurrentPage(1);
       fetchProfessionals();
     } catch (error) {
       toast({ title: "Error", description: "No se pudo guardar el profesional.", variant: "destructive" });
       console.error(error);
     }
   };
-  
+
   const LoadingState = () => (
      <div className="flex flex-col items-center justify-center h-64 col-span-full">
         <Loader2 className="h-12 w-12 animate-spin text-primary" />
@@ -322,8 +325,8 @@ export default function ProfessionalsPage() {
   const handleLoadMore = () => {
     setCurrentPage(prev => prev + 1);
   };
-  
-  if (!user) { 
+
+  if (!user) {
     return (
       <div className="flex h-screen items-center justify-center">
         <p>Cargando...</p>
@@ -331,7 +334,7 @@ export default function ProfessionalsPage() {
     );
   }
 
-  if (user.role === USER_ROLES.LOCATION_STAFF) {
+  if (user.role === USER_ROLES.LOCATION_STAFF && !isAdminOrContador) {
     return (
         <Card className="shadow-md">
             <CardHeader>
@@ -346,44 +349,41 @@ export default function ProfessionalsPage() {
   }
 
  const calculateNextGeneralDayOff = (prof: Professional, referenceDate: Date): Date | null => {
-  for (let i = 0; i <= 30; i++) { 
-    const checkDate = dateFnsAddDays(referenceDate, i);
-    const availability = getProfessionalAvailabilityForDate(prof, checkDate);
-    if (!availability || (availability && !availability.startTime && !availability.endTime)) { 
-      return checkDate;
+    for (let i = 0; i <= 30; i++) {
+      const checkDate = dateFnsAddDays(referenceDate, i);
+      const availability = getProfessionalAvailabilityForDate(prof, checkDate);
+      if (!availability || (availability && !availability.startTime && !availability.endTime)) {
+        return checkDate;
+      }
     }
-  }
-  return null;
-};
+    return null;
+  };
 
 
  const formatWorkScheduleDisplay = (prof: Professional) => {
-  const today = startOfDay(new Date()); 
-  const availabilityToday = getProfessionalAvailabilityForDate(prof, today);
+    const today = startOfDay(new Date());
+    const availabilityToday = getProfessionalAvailabilityForDate(prof, today);
 
-  let todayStr = "Hoy: ";
-  if (availabilityToday && availabilityToday.startTime && availabilityToday.endTime) {
-    todayStr += `${availabilityToday.startTime}-${availabilityToday.endTime}`;
-    if (availabilityToday.notes) todayStr += ` (${availabilityToday.notes})`;
-  } else {
-    if (availabilityToday && availabilityToday.reason && availabilityToday.reason.trim() !== "") {
-      todayStr += availabilityToday.reason; 
+    let todayStr = "Hoy: ";
+    if (availabilityToday && availabilityToday.startTime && availabilityToday.endTime) {
+      todayStr += `${availabilityToday.startTime}-${availabilityToday.endTime}`;
+      if (availabilityToday.notes && availabilityToday.notes.trim() !== "") todayStr += ` (${availabilityToday.notes})`;
+      else if (availabilityToday.reason && availabilityToday.reason.trim() !== "" && availabilityToday.reason !== "Horario base") todayStr += ` (${availabilityToday.reason})`;
     } else {
-      todayStr += "Descansando"; 
+      todayStr += availabilityToday?.reason || "Descansando";
     }
-  }
-  
-  const nextDayOffDate = calculateNextGeneralDayOff(prof, today);
-  let nextDayOffDisplayStr = "";
-  if (nextDayOffDate) {
-    const formattedDate = format(nextDayOffDate, "EEEE, d 'de' MMMM", { locale: es });
-    nextDayOffDisplayStr = ` | Próx. Desc.: ${formattedDate.charAt(0).toUpperCase() + formattedDate.slice(1)}`;
-  } else {
-    nextDayOffDisplayStr = " | Próx. Desc.: No definido próximamente";
-  }
-  
-  return `${todayStr}${nextDayOffDisplayStr}`;
-};
+
+    const nextDayOffDate = calculateNextGeneralDayOff(prof, today);
+    let nextDayOffDisplayStr = "";
+    if (nextDayOffDate) {
+      const formattedDate = format(nextDayOffDate, "EEEE, d 'de' MMMM", { locale: es });
+      nextDayOffDisplayStr = ` | Próx. Desc.: ${formattedDate.charAt(0).toUpperCase() + formattedDate.slice(1)}`;
+    } else {
+      nextDayOffDisplayStr = " | Próx. Desc.: No definido próximamente";
+    }
+
+    return `${todayStr}${nextDayOffDisplayStr}`;
+  };
 
 
   return (
@@ -391,7 +391,7 @@ export default function ProfessionalsPage() {
       <Card className="shadow-md">
         <CardHeader className="flex flex-col md:flex-row justify-between items-center">
           <div>
-            <CardTitle className="text-2xl flex items-center gap-2"><Users className="text-primary"/> Gestión de Profesionales</CardTitle>
+            <CardTitle className="text-2xl flex items-center gap-2"><BriefcaseIcon className="text-primary"/> Gestión de Profesionales</CardTitle>
             <CardDescription>Ver, agregar o editar información, horarios y contratos de los profesionales.</CardDescription>
             {isAdminOrContador && (
               <div className="mt-1 text-sm text-muted-foreground">
@@ -399,7 +399,7 @@ export default function ProfessionalsPage() {
               </div>
             )}
           </div>
-          {(isAdminOrContador) && ( 
+          {(isAdminOrContador) && (
           <Button onClick={handleAddProfessional} className="w-full mt-4 md:mt-0 md:w-auto">
             <PlusCircle className="mr-2 h-4 w-4" /> Agregar Profesional
           </Button>
@@ -441,7 +441,10 @@ export default function ProfessionalsPage() {
                   <TableBody>
                     {displayedProfessionals.length > 0 ? displayedProfessionals.map(prof => (
                       <TableRow key={prof.id}>
-                        <TableCell className="font-medium">{prof.firstName} {prof.lastName}</TableCell>
+                        <TableCell className="font-medium">
+                          {prof.firstName} {prof.lastName}
+                          {prof.isManager && <Badge variant="secondary" className="ml-2 text-xs">Gerente</Badge>}
+                        </TableCell>
                         <TableCell className="hidden md:table-cell">{LOCATIONS.find(l => l.id === prof.locationId)?.name}</TableCell>
                         <TableCell className="hidden lg:table-cell text-xs">{formatWorkScheduleDisplay(prof)}</TableCell>
                         <TableCell className="hidden xl:table-cell">{prof.phone || 'N/A'}</TableCell>
@@ -453,7 +456,7 @@ export default function ProfessionalsPage() {
                             prof.contractDisplayStatus === 'Sin Contrato' && 'text-muted-foreground',
                           )}>
                             {(prof.contractDisplayStatus === 'Próximo a Vencer' || prof.contractDisplayStatus === 'Vencido' || prof.contractDisplayStatus === 'No Vigente Aún') && <AlertTriangle className="inline-block mr-1 h-3 w-3" />}
-                            {prof.contractDisplayStatus}
+                            {getContractDisplayStatus(prof.currentContract)}
                           </span>
                         </TableCell>
                         <TableCell className="hidden md:table-cell text-xs">{prof.currentContract?.empresa || 'N/A'}</TableCell>
@@ -462,7 +465,7 @@ export default function ProfessionalsPage() {
                         </TableCell>
                         {isContadorOnly && <TableCell className="hidden xl:table-cell text-right">{(prof.biWeeklyEarnings ?? 0).toFixed(2)}</TableCell> }
                         <TableCell className="text-right">
-                        {(isAdminOrContador) && ( 
+                        {(isAdminOrContador) && (
                           <Button variant="ghost" size="sm" onClick={() => handleEditProfessional(prof)}>
                             <Edit2 className="h-4 w-4" /> <span className="sr-only">Editar</span>
                           </Button>
@@ -471,7 +474,7 @@ export default function ProfessionalsPage() {
                       </TableRow>
                     )) : (
                       <TableRow>
-                        <TableCell colSpan={isContadorOnly ? 9 : 8} className="h-24 text-center"> 
+                        <TableCell colSpan={isContadorOnly ? 9 : 8} className="h-24 text-center">
                           <AlertTriangle className="inline-block mr-2 h-5 w-5 text-muted-foreground" /> No se encontraron profesionales.
                         </TableCell>
                       </TableRow>
@@ -502,7 +505,7 @@ export default function ProfessionalsPage() {
           <Form {...form}>
             <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-1 py-4 max-h-[80vh] overflow-y-auto pr-2">
               {editingProfessional && <input type="hidden" {...form.register("id")} />}
-              
+
               <Accordion type="multiple" defaultValue={['personal-info', 'base-schedule', 'contract-info']} className="w-full">
                 <AccordionItem value="personal-info">
                   <AccordionTrigger className="text-lg font-semibold">Información Personal</AccordionTrigger>
@@ -526,14 +529,35 @@ export default function ProfessionalsPage() {
                     <FormField control={form.control} name="phone" render={({ field }) => (
                         <FormItem className="mt-4"><FormLabel>Teléfono (Opcional)</FormLabel><FormControl><Input type="tel" placeholder="Ej: 987654321" {...field} value={field.value || ''} /></FormControl><FormMessage /></FormItem>
                     )}/>
+                    <FormField
+                      control={form.control}
+                      name="isManager"
+                      render={({ field }) => (
+                        <FormItem className="flex flex-row items-center space-x-3 space-y-0 rounded-md border p-3 shadow-sm">
+                          <FormControl>
+                            <Checkbox
+                              checked={field.value}
+                              onCheckedChange={field.onChange}
+                            />
+                          </FormControl>
+                          <div className="space-y-1 leading-none">
+                            <FormLabel>¿Es Gerente de Sede?</FormLabel>
+                            <FormDescription className="text-xs">
+                              Los gerentes pueden atender citas pero no aparecerán como una columna en la Agenda Horaria.
+                            </FormDescription>
+                          </div>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
                   </AccordionContent>
                 </AccordionItem>
 
                 <AccordionItem value="base-schedule">
                   <AccordionTrigger className="text-lg font-semibold">Horario Semanal Base (Lunes a Domingo)</AccordionTrigger>
                   <AccordionContent className="space-y-4 pt-2">
-                      {DAYS_OF_WEEK.map((day) => { 
-                          const dayId = day.id as DayOfWeekId;
+                      {DAYS_OF_WEEK.map((day) => {
+                          const dayId = day.id as DayOfWeekIdConst;
                           return (
                               <div key={dayId} className="p-3 border rounded-md bg-muted/30">
                                   <FormField
@@ -584,7 +608,7 @@ export default function ProfessionalsPage() {
                       })}
                   </AccordionContent>
                 </AccordionItem>
-                
+
                 <AccordionItem value="custom-overrides">
                   <AccordionTrigger className="text-lg font-semibold">Registrar Días de Descanso / Horarios Especiales</AccordionTrigger>
                   <AccordionContent className="space-y-4 pt-2">
@@ -707,6 +731,3 @@ export default function ProfessionalsPage() {
     </div>
   );
 }
-
-
-

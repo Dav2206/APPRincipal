@@ -1,3 +1,4 @@
+
 import { z } from 'zod';
 import { LOCATIONS, TIME_SLOTS, PAYMENT_METHODS, APPOINTMENT_STATUS_DISPLAY, DAYS_OF_WEEK } from './constants';
 import type { DayOfWeekId } from './constants';
@@ -42,6 +43,11 @@ export const AppointmentFormSchema = z.object({
   preferredProfessionalId: z.string().optional().nullable(),
   bookingObservations: z.string().optional().nullable(),
   searchExternal: z.boolean().optional(),
+  addedServices: z.array(z.object({
+    serviceId: z.string().min(1, "Servicio adicional inválido."),
+    professionalId: z.string().optional().nullable(),
+    price: z.coerce.number().positive("El precio debe ser positivo.").optional().nullable(),
+  })).optional().nullable(),
 });
 
 export type AppointmentFormData = z.infer<typeof AppointmentFormSchema>;
@@ -66,16 +72,15 @@ export const ProfessionalFormSchema = z.object({
   lastName: z.string().min(2, "Apellido es requerido."),
   locationId: z.string().refine(val => locationIds.includes(val as any), { message: "Sede inválida." }),
   phone: z.string().optional().nullable(),
-  birthDay: z.coerce.number().int().min(1, "Día inválido").max(31, "Día inválido").optional().nullable(),
-  birthMonth: z.coerce.number().int().min(1, "Mes inválido").max(12, "Mes inválido").optional().nullable(),
+  isManager: z.boolean().optional(), // Nuevo campo para gerente
 
   workSchedule: z.object(
-    DAYS_OF_WEEK.reduce((acc, day) => { 
+    DAYS_OF_WEEK.reduce((acc, day) => {
         acc[day.id as DayOfWeekId] = DayScheduleSchema.optional();
         return acc;
       }, {} as Record<DayOfWeekId, z.ZodOptional<typeof DayScheduleSchema>>)
   ).optional(),
-  
+
   customScheduleOverrides: z.array(
     z.object({
       id: z.string(),
@@ -91,7 +96,7 @@ export const ProfessionalFormSchema = z.object({
       return true;
     }, {
       message: "Si trabaja, inicio y fin son requeridos, y inicio debe ser antes que fin.",
-      path: ["startTime"], 
+      path: ["startTime"],
     })
   ).optional().nullable(),
 
@@ -116,17 +121,17 @@ export const AppointmentUpdateSchema = z.object({
   serviceId: z.string().min(1, "Servicio es requerido.").optional(),
   appointmentDate: z.date({ required_error: "Fecha de la cita es requerida."}).optional(),
   appointmentTime: z.string().refine(val => TIME_SLOTS.includes(val), { message: "Hora inválida."}).optional(),
-  actualArrivalTime: z.string().optional().nullable(), 
-  professionalId: z.string().optional().nullable(), 
-  durationMinutes: z.coerce.number().int().positive("La duración debe ser un número positivo.").optional().nullable(),
+  actualArrivalTime: z.string().optional().nullable(),
+  professionalId: z.string().optional().nullable(),
+  durationMinutes: z.coerce.number().int().min(0, "La duración debe ser un número positivo o cero.").optional().nullable(), // Permitir cero
   paymentMethod: z.string().refine(val => paymentMethodValues.includes(val as any), {message: "Método de pago inválido"}).optional().nullable(),
-  amountPaid: z.coerce.number().positive("El monto pagado debe ser un número positivo.").optional().nullable(),
+  amountPaid: z.coerce.number().min(0, "El monto pagado no puede ser negativo.").optional().nullable(), // Permitir cero
   staffNotes: z.string().optional().nullable(),
   attachedPhotos: z.array(z.string().startsWith("data:image/", { message: "Debe ser un data URI de imagen válido." })).optional().nullable(),
   addedServices: z.array(z.object({
     serviceId: z.string().min(1, "Servicio adicional inválido."),
     professionalId: z.string().optional().nullable(),
-    price: z.coerce.number().positive().optional().nullable(),
+    price: z.coerce.number().positive("El precio debe ser positivo.").optional().nullable(),
   })).optional().nullable(),
 });
 
@@ -138,9 +143,9 @@ export const ServiceFormSchema = z.object({
     minutes: z.coerce.number().int().min(0, "Minutos no pueden ser negativos.").max(59, "Minutos no pueden ser más de 59.").default(30),
   }).refine(data => (data.hours * 60 + data.minutes) > 0, {
     message: "La duración total debe ser mayor a 0 minutos.",
-    path: ["root"], 
+    path: ["root"],
   }),
-  price: z.coerce.number().positive("El precio debe ser un número positivo.").optional().nullable(),
+  price: z.coerce.number().min(0, "El precio no puede ser negativo.").optional().nullable(),
 });
 export type ServiceFormData = z.infer<typeof ServiceFormSchema>;
 
@@ -163,12 +168,12 @@ export const PeriodicReminderFormSchema = z.object({
   title: z.string().min(1, "El título es requerido."),
   description: z.string().optional().nullable(),
   dueDate: z.date({ required_error: "La fecha de vencimiento es requerida." }),
-  recurrence: z.enum(['once', 'monthly', 'quarterly', 'annually'], { 
+  recurrence: z.enum(['once', 'monthly', 'quarterly', 'annually'], {
     required_error: "La recurrencia es requerida.",
     invalid_type_error: "Seleccione una recurrencia válida."
   }),
   amount: z.coerce.number().positive("El monto debe ser un número positivo.").optional().nullable(),
-  status: z.enum(['pending', 'paid'], { 
+  status: z.enum(['pending', 'paid'], {
     required_error: "El estado es requerido.",
     invalid_type_error: "Seleccione un estado válido."
   }),
