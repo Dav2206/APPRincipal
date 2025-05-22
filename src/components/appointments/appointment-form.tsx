@@ -2,7 +2,7 @@
 "use client";
 
 import React, { useState, useEffect, useMemo } from 'react';
-import { useForm, Controller } from 'react-hook-form';
+import { useForm, Controller, useFieldArray } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { AppointmentFormSchema, type AppointmentFormData as FormSchemaType } from '@/lib/schemas';
 import type { LocationId } from '@/lib/constants';
@@ -101,7 +101,7 @@ export function AppointmentForm({
     },
   });
 
-  const { fields: addedServiceFields, append: appendAddedService, remove: removeAddedService } = useForm({
+  const { fields: addedServiceFields, append: appendAddedService, remove: removeAddedService } = useFieldArray({
     control: form.control,
     name: "addedServices",
   });
@@ -174,18 +174,21 @@ export function AppointmentForm({
 
   useEffect(() => {
     if (!isOpen || !watchAppointmentDate || !watchAppointmentTime || !watchServiceId || servicesList.length === 0 || isLoadingAppointments ) {
-      console.log("[AppointmentForm] Skipping available professionals calculation due to missing data or loading state.");
-      setAvailableProfessionalsForTimeSlot(professionalsForCurrentLocation.filter(prof => getProfessionalAvailabilityForDate(prof, watchAppointmentDate) !== null));
+      // console.log("[AppointmentForm] Skipping available professionals calculation due to missing data or loading state.");
+      setAvailableProfessionalsForTimeSlot(professionalsForCurrentLocation.filter(prof => {
+        const availability = getProfessionalAvailabilityForDate(prof, watchAppointmentDate);
+        return availability !== null && availability.startTime !== '' && availability.endTime !== '';
+      }));
       setSlotAvailabilityMessage('');
       return;
     }
-    console.log("[AppointmentForm] Recalculating available professionals...");
+    // console.log("[AppointmentForm] Recalculating available professionals...");
 
     const selectedService = servicesList.find(s => s.id === watchServiceId);
     if (!selectedService) {
       setAvailableProfessionalsForTimeSlot([]);
       setSlotAvailabilityMessage('Por favor, seleccione un servicio principal válido.');
-      console.log("[AppointmentForm] No valid main service selected.");
+      // console.log("[AppointmentForm] No valid main service selected.");
       return;
     }
 
@@ -195,7 +198,7 @@ export function AppointmentForm({
 
     const professionalsToConsider = watchSearchExternal ? allSystemProfessionals : professionalsForCurrentLocation;
     const availableProfs: Professional[] = [];
-    console.log(`[AppointmentForm] Professionals to consider (searchExternal: ${watchSearchExternal}): ${professionalsToConsider.length}`);
+    // console.log(`[AppointmentForm] Professionals to consider (searchExternal: ${watchSearchExternal}): ${professionalsToConsider.length}`);
 
     for (const prof of professionalsToConsider) {
       if (watchSearchExternal && prof.locationId === watchLocationId) {
@@ -246,11 +249,11 @@ export function AppointmentForm({
 
     setAvailableProfessionalsForTimeSlot(availableProfs);
     if (availableProfs.length === 0) {
-      setSlotAvailabilityMessage(watchSearchExternal ? 'No hay profesionales disponibles en otras sedes para este horario.' : 'No hay profesionales locales disponibles en este horario.');
-      console.log("[AppointmentForm] No professionals available for the selected slot.");
+      setSlotAvailabilityMessage(watchSearchExternal ? 'No hay profesionales disponibles en otras sedes para este horario.' : 'No hay profesionales locales disponibles en este horario. Todas las citas pueden estar tomadas o no hay personal.');
+      // console.log("[AppointmentForm] No professionals available for the selected slot.");
     } else {
       setSlotAvailabilityMessage('');
-      console.log(`[AppointmentForm] ${availableProfs.length} professionals available.`);
+      // console.log(`[AppointmentForm] ${availableProfs.length} professionals available.`);
     }
 
   }, [isOpen, watchAppointmentDate, watchAppointmentTime, watchServiceId, servicesList, professionalsForCurrentLocation, allSystemProfessionals, appointmentsForSelectedDate, isLoadingAppointments, watchSearchExternal, watchLocationId]);
@@ -302,17 +305,18 @@ export function AppointmentForm({
 
   async function onSubmit(data: FormSchemaType) {
     setIsLoading(true);
+    console.log("[AppointmentForm] onSubmit: Datos crudos del formulario:", JSON.stringify(data, null, 2));
+
 
     if (data.serviceId === DEFAULT_SERVICE_ID_PLACEHOLDER && servicesList.length > 0) {
-      data.serviceId = servicesList[0].id; // Default to first service if placeholder is still selected
+      data.serviceId = servicesList[0].id;
     } else if (data.serviceId === DEFAULT_SERVICE_ID_PLACEHOLDER) {
         toast({ title: "Error", description: "Servicio principal es requerido.", variant: "destructive" });
         setIsLoading(false);
         return;
     }
     
-    // Ensure addedServices have a valid serviceId
-    const validAddedServices = data.addedServices?.map(as => ({
+    const validAddedServices = (data.addedServices || []).map(as => ({
       ...as,
       serviceId: as.serviceId === DEFAULT_SERVICE_ID_PLACEHOLDER && servicesList.length > 0 ? servicesList[0].id : as.serviceId,
       professionalId: as.professionalId === NO_SELECTION_PLACEHOLDER ? null : as.professionalId,
@@ -338,12 +342,13 @@ export function AppointmentForm({
         preferredProfessionalId: data.preferredProfessionalId === ANY_PROFESSIONAL_VALUE ? null : data.preferredProfessionalId,
         patientPhone: (data.existingPatientId && user?.role !== USER_ROLES.ADMIN) ? undefined : data.patientPhone,
         isDiabetic: data.isDiabetic || false,
-        patientAge: data.patientAge === 0 ? null : data.patientAge, // Ensure 0 is treated as null if that's the intent
+        patientAge: data.patientAge === 0 ? null : data.patientAge, 
         bookingObservations: finalBookingObservations.trim() || undefined,
         isExternalProfessional: isExternalProfAssignment,
         externalProfessionalOriginLocationId: externalProfOriginLocId,
         addedServices: validAddedServices,
       };
+      console.log("[AppointmentForm] onSubmit: Datos procesados para enviar a addAppointment:", JSON.stringify(submitData, null, 2));
 
       await addAppointment(submitData);
       toast({
@@ -352,13 +357,13 @@ export function AppointmentForm({
         variant: "default",
       });
       onAppointmentCreated();
-      onOpenChange(false); // Close dialog on success
-      form.reset({ // Reset form to defaults
+      onOpenChange(false); 
+      form.reset({ 
         ...form.formState.defaultValues,
         appointmentDate: defaultDate || new Date(),
-        locationId: data.locationId, // Keep the last used location
+        locationId: data.locationId, 
         serviceId: servicesList.length > 0 ? servicesList[0].id : DEFAULT_SERVICE_ID_PLACEHOLDER,
-        appointmentTime: TIME_SLOTS[4], // Default to 10:00 AM
+        appointmentTime: TIME_SLOTS[4], 
         preferredProfessionalId: ANY_PROFESSIONAL_VALUE,
         patientFirstName: '',
         patientLastName: '',
@@ -376,7 +381,7 @@ export function AppointmentForm({
       console.error("Error creating appointment:", error);
       toast({
         title: "Error al Agendar",
-        description: "No se pudo crear la cita. Intente nuevamente.",
+        description: (error instanceof Error && error.message) ? error.message : "No se pudo crear la cita. Intente nuevamente.",
         variant: "destructive",
       });
     } finally {
@@ -388,13 +393,10 @@ export function AppointmentForm({
     if (isLoading || isLoadingServices || isLoadingAppointments ) return true;
     if (servicesList.length === 0 && form.getValues('serviceId') === DEFAULT_SERVICE_ID_PLACEHOLDER) return true;
 
-    // If a specific professional is chosen, they must be in the "available" list (which now considers external search)
     if (watchPreferredProfessionalId && watchPreferredProfessionalId !== ANY_PROFESSIONAL_VALUE) {
       return !availableProfessionalsForTimeSlot.find(p => p.id === watchPreferredProfessionalId);
     }
-    // If "any professional" is chosen AND we are NOT searching externally, there must be local professionals available
     if (watchPreferredProfessionalId === ANY_PROFESSIONAL_VALUE && !watchSearchExternal && availableProfessionalsForTimeSlot.length === 0) return true;
-    // If "any professional" is chosen AND we ARE searching externally, but still no one found (includes allSystemProfs filtered by availability)
     if (watchPreferredProfessionalId === ANY_PROFESSIONAL_VALUE && watchSearchExternal && availableProfessionalsForTimeSlot.length === 0) return true;
 
 
@@ -441,10 +443,10 @@ export function AppointmentForm({
           </DialogDescription>
         </DialogHeader>
 
-        <div className="flex-grow overflow-y-auto pr-2 -mr-2"> {/* Scrollable area */}
+        <div className="flex-grow overflow-y-auto pr-2 -mr-2"> 
           <Form {...form}>
             <form onSubmit={form.handleSubmit(onSubmit)} className="grid grid-cols-1 md:grid-cols-2 gap-6 py-4">
-              {/* Información del Paciente */}
+              
               <div className="md:col-span-2 space-y-4 p-4 border rounded-lg shadow-sm bg-card">
                 <h3 className="text-lg font-semibold flex items-center gap-2"><UserPlus /> Información del Paciente</h3>
                 <FormField
@@ -456,7 +458,7 @@ export function AppointmentForm({
                       <PatientSearchField
                         onPatientSelect={handlePatientSelect}
                         selectedPatientId={field.value}
-                        onClear={() => { // Clear all patient fields when "clear selection" is chosen
+                        onClear={() => { 
                           form.setValue('existingPatientId', null);
                           form.setValue('patientFirstName', '');
                           form.setValue('patientLastName', '');
@@ -557,7 +559,7 @@ export function AppointmentForm({
                 )}
               </div>
 
-              {/* Detalles de la Cita */}
+              
               <div className="space-y-4 p-4 border rounded-lg shadow-sm bg-card">
                  <h3 className="text-lg font-semibold flex items-center gap-2"><ConciergeBell /> Detalles de la Cita</h3>
                 <FormField
@@ -636,7 +638,7 @@ export function AppointmentForm({
                               mode="single"
                               selected={field.value}
                               onSelect={field.onChange}
-                              disabled={(date) => date < startOfDay(new Date())} // Allow today
+                              disabled={(date) => date < startOfDay(new Date())} 
                               initialFocus
                             />
                           </PopoverContent>
@@ -686,7 +688,7 @@ export function AppointmentForm({
                  )}
               </div>
 
-              {/* Profesional y Observaciones */}
+              
               <div className="space-y-4 p-4 border rounded-lg shadow-sm bg-card">
                 <h3 className="text-lg font-semibold flex items-center gap-2"><Briefcase /> Profesional y Observaciones</h3>
                  <FormField
@@ -730,7 +732,10 @@ export function AppointmentForm({
                         </FormControl>
                         <SelectContent>
                           <SelectItem value={ANY_PROFESSIONAL_VALUE}>Cualquier profesional disponible</SelectItem>
-                          {(watchSearchExternal ? allSystemProfessionals.filter(p => getProfessionalAvailabilityForDate(p, watchAppointmentDate) !== null) : availableProfessionalsForTimeSlot).map(prof => (
+                          {(watchSearchExternal ? allSystemProfessionals.filter(p => {
+                             const availability = getProfessionalAvailabilityForDate(p, watchAppointmentDate);
+                             return availability !== null && availability.startTime !== '' && availability.endTime !== '';
+                          }) : availableProfessionalsForTimeSlot).map(prof => (
                             <SelectItem key={prof.id} value={prof.id}>
                                 {prof.firstName} {prof.lastName} {watchSearchExternal && prof.locationId !== watchLocationId ? `(Sede: ${LOCATIONS.find(l=>l.id === prof.locationId)?.name})` : ''}
                             </SelectItem>
@@ -762,7 +767,7 @@ export function AppointmentForm({
                 />
               </div>
 
-              {/* Servicios Adicionales */}
+              
               {!isLoadingServices && servicesList && servicesList.length > 0 && (
                 <div className="md:col-span-2 space-y-4 p-4 border rounded-lg shadow-sm bg-card">
                   <div className="flex justify-between items-center">
@@ -821,7 +826,7 @@ export function AppointmentForm({
                         render={({ field }) => (
                           <FormItem>
                             <FormLabel>Precio (S/) (Opcional)</FormLabel>
-                            <FormControl><Input type="number" step="0.01" placeholder="Ej: 50.00" {...field} value={field.value || ''} onChange={e => field.onChange(e.target.value ? parseFloat(e.target.value) : undefined)} /></FormControl>
+                            <FormControl><Input type="number" step="0.01" placeholder="Ej: 50.00" {...field} value={field.value ?? ""} onChange={e => field.onChange(e.target.value ? parseFloat(e.target.value) : undefined)} /></FormControl>
                             <FormMessage />
                           </FormItem>
                         )}
@@ -844,7 +849,7 @@ export function AppointmentForm({
                 appointmentDate: defaultDate || new Date(),
                 locationId: initialData?.locationId || defaultLocation || LOCATIONS[0].id,
                 serviceId: servicesList.length > 0 ? servicesList[0].id : DEFAULT_SERVICE_ID_PLACEHOLDER,
-                appointmentTime: TIME_SLOTS[4], // 10:00 AM
+                appointmentTime: TIME_SLOTS[4], 
                 preferredProfessionalId: ANY_PROFESSIONAL_VALUE,
                 patientFirstName: '',
                 patientLastName: '',
