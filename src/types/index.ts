@@ -27,9 +27,7 @@ export interface Professional extends BaseEntity {
   lastName: string;
   locationId: LocationId;
   phone?: string | null;
-  birthDay?: number | null;
-  birthMonth?: number | null;
-  isManager?: boolean; // Nuevo campo para gerente
+  isManager?: boolean; 
 
   biWeeklyEarnings?: number;
 
@@ -84,7 +82,8 @@ export interface Appointment extends BaseEntity {
   serviceId: string;
   service?: Service;
   appointmentDateTime: string;
-  durationMinutes: number;
+  durationMinutes: number; // Duration of the main service
+  totalCalculatedDurationMinutes?: number; // Total duration including added services
   preferredProfessionalId?: string | null;
   bookingObservations?: string | null;
   status: AppointmentStatus;
@@ -126,9 +125,7 @@ export type ProfessionalFormData = {
   lastName: string;
   locationId: LocationId;
   phone?: string | null;
-  birthDay?: number | null;
-  birthMonth?: number | null;
-  isManager?: boolean; // Nuevo campo para gerente
+  isManager?: boolean;
 
   workSchedule: {
     [key in DayOfWeekId]?: { startTime?: string; endTime?: string; isWorking?: boolean };
