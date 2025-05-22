@@ -1,84 +1,19 @@
 
 // src/lib/data.ts
 import type { User, Professional, Patient, Service, Appointment, AppointmentFormData, ProfessionalFormData, AppointmentStatus, ServiceFormData, Contract, PeriodicReminder, ImportantNote, PeriodicReminderFormData, ImportantNoteFormData } from '@/types';
-import { LOCATIONS, USER_ROLES, SERVICES as SERVICES_CONSTANTS, APPOINTMENT_STATUS, LocationId, ServiceId as ConstantServiceId, APPOINTMENT_STATUS_DISPLAY, PAYMENT_METHODS, TIME_SLOTS, DAYS_OF_WEEK, COMPENSATORY_DAY_OFF_PLACEHOLDER_VALUE } from './constants';
+import { LOCATIONS, USER_ROLES, SERVICES as SERVICES_CONSTANTS, APPOINTMENT_STATUS, LocationId, ServiceId as ConstantServiceId, APPOINTMENT_STATUS_DISPLAY, PAYMENT_METHODS, TIME_SLOTS, DAYS_OF_WEEK } from './constants';
 import type { DayOfWeekId } from './constants';
 import { formatISO, parseISO, addDays, setHours, setMinutes, startOfDay, endOfDay, isSameDay as dateFnsIsSameDay, startOfMonth, endOfMonth, subDays, isEqual, isBefore, isAfter, getDate, getYear, getMonth, setMonth, setYear, getHours, addMinutes as dateFnsAddMinutes, isWithinInterval, getDay, format, differenceInCalendarDays, areIntervalsOverlapping, parse } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { firestore, useMockDatabase as globalUseMockDatabase } from './firebase-config'; // Centralized mock flag
 import { collection, addDoc, getDocs, doc, getDoc, updateDoc, query, where, deleteDoc, writeBatch, serverTimestamp, Timestamp, runTransaction, setDoc, QueryConstraint, orderBy, limit, startAfter,getCountFromServer, CollectionReference, DocumentData, documentId } from 'firebase/firestore';
 
-console.log(`[data.ts] Valor de globalUseMockDatabase importado de firebase-config.ts: ${globalUseMockDatabase}`);
 
-// --- Contract Status Helper ---
-export type ContractDisplayStatus = 'Activo' | 'Próximo a Vencer' | 'Vencido' | 'Sin Contrato' | 'No Vigente Aún';
+// Determine if using mock database based on environment variable, specific to this module
+const useMockDatabaseEnvData = process.env.NEXT_PUBLIC_USE_MOCK_DATABASE;
+const useMockDatabaseData = useMockDatabaseEnvData === 'true';
 
-export function getContractDisplayStatus(contract: Contract | null | undefined, referenceDateParam?: Date | string): ContractDisplayStatus {
-  const currentSystemDate = new Date();
-  let referenceDate: Date;
-
-  if (referenceDateParam) {
-    if (typeof referenceDateParam === 'string') {
-      try {
-        referenceDate = startOfDay(parseISO(referenceDateParam));
-        if (isNaN(referenceDate.getTime())) {
-          console.warn(`[data.ts] getContractDisplayStatus: Invalid referenceDateParam string after parsing. Falling back to currentSystemDate. Original:`, referenceDateParam);
-          referenceDate = startOfDay(currentSystemDate);
-        }
-      } catch (e) {
-        console.warn(`[data.ts] getContractDisplayStatus: Error parsing referenceDateParam string. Falling back to currentSystemDate. Original:`, referenceDateParam, "Error:", e);
-        referenceDate = startOfDay(currentSystemDate);
-      }
-    } else {
-      referenceDate = startOfDay(referenceDateParam);
-    }
-  } else {
-    referenceDate = startOfDay(currentSystemDate);
-  }
-
-  if (!contract || !contract.startDate || !contract.endDate) {
-    return 'Sin Contrato';
-  }
-
-  const { startDate: startDateStr, endDate: endDateStr } = contract;
-
-  if (typeof startDateStr !== 'string' || typeof endDateStr !== 'string' || startDateStr.length === 0 || endDateStr.length === 0) {
-    console.warn("[data.ts] getContractDisplayStatus: Invalid contract dates (not strings or empty). Contract:", contract);
-    return 'Sin Contrato';
-  }
-
-  let startDate: Date;
-  let endDate: Date;
-
-  try {
-    startDate = parseISO(startDateStr);
-    endDate = parseISO(endDateStr);
-  } catch (e) {
-    console.error("[data.ts] getContractDisplayStatus: Error parsing contract date strings. Contract:", contract, "Error:", e);
-    return 'Sin Contrato'; // Return a default status on error
-  }
-
-  if (isNaN(startDate.getTime()) || isNaN(endDate.getTime())) {
-    console.warn("[data.ts] getContractDisplayStatus: Contract dates are NaN after parsing. Original:", { startDateStr, endDateStr }, "Parsed:", { startDate, endDate });
-    return 'Sin Contrato';
-  }
-  
-  // console.log(`[getContractDisplayStatus] RefDate: ${formatISO(referenceDate)}, StartDate: ${formatISO(startDate)}, EndDate: ${formatISO(endDate)}`);
-
-  if (isBefore(referenceDate, startDate)) {
-    return 'No Vigente Aún';
-  }
-  if (isAfter(referenceDate, endDate)) {
-    return 'Vencido';
-  }
-
-  const daysUntilExpiry = differenceInCalendarDays(endDate, referenceDate);
-  if (daysUntilExpiry <= 15 && daysUntilExpiry >= 0) { 
-    return 'Próximo a Vencer';
-  }
-  return 'Activo';
-}
-// --- End Contract Status Helper ---
+console.log(`[data.ts] Configuración interna de useMockDatabaseData: ${useMockDatabaseData} (basado en NEXT_PUBLIC_USE_MOCK_DATABASE='${useMockDatabaseEnvData}')`);
 
 
 // --- Helper to convert Firestore Timestamps to ISO strings and vice-versa ---
@@ -87,7 +22,7 @@ const toFirestoreTimestamp = (date: Date | string | undefined | null): Timestamp
   try {
     const d = typeof date === 'string' ? parseISO(date) : date;
     if (isNaN(d.getTime())) {
-      // console.warn(`[data.ts] Invalid date value provided to toFirestoreTimestamp: ${date}`);
+      console.warn(`[data.ts] Invalid date value provided to toFirestoreTimestamp: ${date}`);
       return null;
     }
     return Timestamp.fromDate(d);
@@ -143,6 +78,89 @@ const convertDocumentData = (docData: DocumentData): any => {
 };
 // --- End Helper ---
 
+// --- Contract Status Helper ---
+export type ContractDisplayStatus = 'Activo' | 'Próximo a Vencer' | 'Vencido' | 'Sin Contrato' | 'No Vigente Aún';
+
+export function getContractDisplayStatus(contract: Contract | null | undefined, referenceDateParam?: Date | string): ContractDisplayStatus {
+  const currentSystemDate = new Date();
+  let referenceDate: Date;
+
+  if (referenceDateParam) {
+    if (typeof referenceDateParam === 'string') {
+      try {
+        referenceDate = startOfDay(parseISO(referenceDateParam));
+        if (isNaN(referenceDate.getTime())) {
+          console.warn(`[data.ts] getContractDisplayStatus: Invalid referenceDateParam string after parsing. Falling back to currentSystemDate. Original:`, referenceDateParam);
+          referenceDate = startOfDay(currentSystemDate);
+        }
+      } catch (e) {
+        console.warn(`[data.ts] getContractDisplayStatus: Error parsing referenceDateParam string. Falling back to currentSystemDate. Original:`, referenceDateParam, "Error:", e);
+        referenceDate = startOfDay(currentSystemDate);
+      }
+    } else if (referenceDateParam instanceof Date && !isNaN(referenceDateParam.getTime())) {
+      referenceDate = startOfDay(referenceDateParam);
+    }
+     else {
+      console.warn(`[data.ts] getContractDisplayStatus: Invalid referenceDateParam (not string or valid Date). Falling back to currentSystemDate. Param:`, referenceDateParam);
+      referenceDate = startOfDay(currentSystemDate);
+    }
+  } else {
+    referenceDate = startOfDay(currentSystemDate);
+  }
+
+  // console.log(`[getContractDisplayStatus] Reference Date: ${formatISO(referenceDate)}`);
+
+
+  if (!contract || !contract.startDate || !contract.endDate) {
+    // console.log(`[getContractDisplayStatus] No contract or invalid dates. Returning 'Sin Contrato'. Contract:`, contract);
+    return 'Sin Contrato';
+  }
+
+  const { startDate: startDateStr, endDate: endDateStr } = contract;
+
+  if (typeof startDateStr !== 'string' || typeof endDateStr !== 'string' || startDateStr.length === 0 || endDateStr.length === 0) {
+    // console.warn("[data.ts] getContractDisplayStatus: Invalid contract dates (not strings or empty). Contract:", contract);
+    return 'Sin Contrato';
+  }
+
+  let startDate: Date;
+  let endDate: Date;
+
+  try {
+    startDate = parseISO(startDateStr);
+    endDate = parseISO(endDateStr);
+  } catch (e) {
+    console.error("[data.ts] getContractDisplayStatus: Error parsing contract date strings. Contract:", contract, "Error:", e);
+    return 'Sin Contrato';
+  }
+
+  if (isNaN(startDate.getTime()) || isNaN(endDate.getTime())) {
+    // console.warn("[data.ts] getContractDisplayStatus: Contract dates are NaN after parsing. Original:", { startDateStr, endDateStr }, "Parsed:", { startDate, endDate });
+    return 'Sin Contrato';
+  }
+  
+  // console.log(`[getContractDisplayStatus] Contract ID: ${contract.id}, Prof: (not available here), Parsed Start: ${formatISO(startDate)}, Parsed End: ${formatISO(endDate)}`);
+
+
+  if (isBefore(referenceDate, startOfDay(startDate))) {
+    // console.log(`[getContractDisplayStatus] Reference date is BEFORE contract start. Returning 'No Vigente Aún'.`);
+    return 'No Vigente Aún';
+  }
+  if (isAfter(referenceDate, endOfDay(endDate))) { // Use endOfDay for endDate to include the whole last day
+    // console.log(`[getContractDisplayStatus] Reference date is AFTER contract end. Returning 'Vencido'.`);
+    return 'Vencido';
+  }
+
+  const daysUntilExpiry = differenceInCalendarDays(endOfDay(endDate), referenceDate);
+  if (daysUntilExpiry <= 15 && daysUntilExpiry >= 0) {
+    // console.log(`[getContractDisplayStatus] Contract is Próximo a Vencer (Days until expiry: ${daysUntilExpiry}).`);
+    return 'Próximo a Vencer';
+  }
+  // console.log(`[getContractDisplayStatus] Contract is Activo.`);
+  return 'Activo';
+}
+// --- End Contract Status Helper ---
+
 // --- Initial Mock Data Definitions ---
 const generateId = (): string => {
   try {
@@ -153,20 +171,20 @@ const generateId = (): string => {
   }
 };
 
-const todayMock = new Date(2025, 4, 20); // Martes, 20 de Mayo de 2025 (month is 0-indexed)
-const yesterdayMock = subDays(todayMock, 1); // 19 de Mayo 2025
-const tomorrowMock = addDays(todayMock,1); // 21 de Mayo 2025
+const todayMockDate = new Date(2025, 4, 20); // Martes, 20 de Mayo de 2025 (month is 0-indexed)
+const yesterdayMockDate = subDays(todayMockDate, 1); // 19 de Mayo 2025
+const tomorrowMockDate = addDays(todayMockDate,1); // 21 de Mayo 2025
 
 
 const initialMockUsersData: User[] = [
-  { id: 'admin001', username: 'Admin', password: 'admin', role: USER_ROLES.ADMIN, name: 'Administrador General del Sistema', locationId: undefined },
-  { id: 'contador001', username: 'Contador', password: 'admin', role: USER_ROLES.CONTADOR, name: 'Contador del Sistema', locationId: undefined },
-  { id: 'user-higuereta', username: 'HigueretaStaff', password: 'admin', role: USER_ROLES.LOCATION_STAFF, locationId: 'higuereta', name: 'Personal de Sede Higuereta' },
-  { id: 'user-eden_benavides', username: 'EdenBenavidesStaff', password: 'admin', role: USER_ROLES.LOCATION_STAFF, locationId: 'eden_benavides', name: 'Personal de Sede Edén Benavides' },
-  { id: 'user-crucetas', username: 'CrucetasStaff', password: 'admin', role: USER_ROLES.LOCATION_STAFF, locationId: 'crucetas', name: 'Personal de Sede Crucetas' },
-  { id: 'user-carpaccio', username: 'CarpaccioStaff', password: 'admin', role: USER_ROLES.LOCATION_STAFF, locationId: 'carpaccio', name: 'Personal de Sede Carpaccio' },
-  { id: 'user-vista_alegre', username: 'VistaAlegreStaff', password: 'admin', role: USER_ROLES.LOCATION_STAFF, locationId: 'vista_alegre', name: 'Personal de Sede Vista Alegre' },
-  { id: 'user-san_antonio', username: 'SanAntonioStaff', password: 'admin', role: USER_ROLES.LOCATION_STAFF, locationId: 'san_antonio', name: 'Personal de Sede San Antonio' },
+  { id: 'admin001', username: "admin@footprints.com", password: 'admin', role: USER_ROLES.ADMIN, name: 'Administrador General del Sistema', locationId: undefined },
+  { id: 'contador001', username: "contador@footprints.com", password: 'admin', role: USER_ROLES.CONTADOR, name: 'Contador del Sistema', locationId: undefined },
+  { id: 'user-higuereta', username: "higuereta@footprints.com", password: 'admin', role: USER_ROLES.LOCATION_STAFF, locationId: 'higuereta', name: 'Personal de Sede Higuereta' },
+  { id: 'user-eden_benavides', username: "edenbenavides@footprints.com", password: 'admin', role: USER_ROLES.LOCATION_STAFF, locationId: 'eden_benavides', name: 'Personal de Sede Edén Benavides' },
+  { id: 'user-crucetas', username: "crucetas@footprints.com", password: 'admin', role: USER_ROLES.LOCATION_STAFF, locationId: 'crucetas', name: 'Personal de Sede Crucetas' },
+  { id: 'user-carpaccio', username: "carpaccio@footprints.com", password: 'admin', role: USER_ROLES.LOCATION_STAFF, locationId: 'carpaccio', name: 'Personal de Sede Carpaccio' },
+  { id: 'user-vista_alegre', username: "vistaalegre@footprints.com", password: 'admin', role: USER_ROLES.LOCATION_STAFF, locationId: 'vista_alegre', name: 'Personal de Sede Vista Alegre' },
+  { id: 'user-san_antonio', username: "sanantonio@footprints.com", password: 'admin', role: USER_ROLES.LOCATION_STAFF, locationId: 'san_antonio', name: 'Personal de Sede San Antonio' },
 ];
 
 const professionalCounts: Record<LocationId, number> = {
@@ -193,11 +211,9 @@ const initialMockProfessionalsData: Professional[] = LOCATIONS.flatMap((location
     let currentContract: Contract | null = null;
     let contractHistory: Contract[] = [];
     
-    const isActiveContractScenario = i < 2 || (location.id === 'higuereta' && i < 5) || (location.id === 'san_antonio' && i < 3);
-
-    if (isActiveContractScenario) {
-      const contractStartDate = subDays(todayMock, Math.floor(Math.random() * 30) + 30); // Starts 30-60 days ago
-      const contractEndDate = addDays(todayMock, Math.floor(Math.random() * 60) + 45);  // Ends 45-105 days from now
+    if (i < 2) { // Ensure first two professionals in each location have an active contract
+      const contractStartDate = subDays(todayMockDate, 60); 
+      const contractEndDate = addDays(todayMockDate, 90); 
       currentContract = {
         id: generateId(),
         startDate: formatISO(contractStartDate, { representation: 'date' }),
@@ -206,10 +222,10 @@ const initialMockProfessionalsData: Professional[] = LOCATIONS.flatMap((location
         empresa: (i % 2 === 0) ? `Empresa Footprints ${location.name}` : `Servicios Podológicos Globales`,
       };
     } else { 
-      const contractType = i % 3; // Diversify other contract types
+      const contractType = i % 5; 
       if (contractType === 0) { // Vencido
-         const expiredContractStartDate = subDays(todayMock, 150);
-         const expiredContractEndDate = subDays(todayMock, 30);
+         const expiredContractStartDate = subDays(todayMockDate, 150);
+         const expiredContractEndDate = subDays(todayMockDate, 30);
          contractHistory.push({
              id: generateId(),
              startDate: formatISO(expiredContractStartDate, { representation: 'date' }),
@@ -219,8 +235,8 @@ const initialMockProfessionalsData: Professional[] = LOCATIONS.flatMap((location
          });
          currentContract = null;
       } else if (contractType === 1) { // Próximo a Vencer
-        const nearExpiryStartDate = subDays(todayMock, 75);
-        const nearExpiryEndDate = addDays(todayMock, 10); 
+        const nearExpiryStartDate = subDays(todayMockDate, 75);
+        const nearExpiryEndDate = addDays(todayMockDate, 10); 
          currentContract = {
              id: generateId(),
              startDate: formatISO(nearExpiryStartDate, { representation: 'date' }),
@@ -228,21 +244,40 @@ const initialMockProfessionalsData: Professional[] = LOCATIONS.flatMap((location
              notes: `Contrato próximo a vencer ${i + 1}`,
              empresa: 'Gestiones Rápidas SRL',
          };
-      } // else: Sin contrato (currentContract remains null)
+      } else if (contractType === 2) { // Activo pero diferente duración
+        const contractStartDate = subDays(todayMockDate, Math.floor(Math.random() * 30) + 15);
+        const contractEndDate = addDays(todayMockDate, Math.floor(Math.random() * 45) + 20);
+        currentContract = {
+          id: generateId(),
+          startDate: formatISO(contractStartDate, { representation: 'date' }),
+          endDate: formatISO(contractEndDate, { representation: 'date' }),
+          notes: `Otro contrato activo para prof ${i + 1}`,
+          empresa: (i % 3 === 0) ? `Podólogos Asociados ${location.name}` : undefined,
+        };
+      } else if (contractType === 3) { // No Vigente Aún
+        const futureContractStartDate = addDays(todayMockDate, 5);
+        const futureContractEndDate = addDays(todayMockDate, 95);
+        currentContract = {
+          id: generateId(),
+          startDate: formatISO(futureContractStartDate, { representation: 'date' }),
+          endDate: formatISO(futureContractEndDate, { representation: 'date' }),
+          notes: `Contrato futuro para prof ${i + 1}`,
+          empresa: 'Nuevos Horizontes Podológicos',
+        };
+      }
+      // contractType === 4 will result in Sin Contrato (currentContract remains null)
     }
     
     let customOverrides: Professional['customScheduleOverrides'] = [];
-    // Specific override for prof-higuereta-1 to be resting "todayMock"
     if (location.id === 'higuereta' && i === 0) { 
         customOverrides = [
-            { id: generateId(), date: formatISO(todayMock, {representation: 'date'}), isWorking: false, notes: "Descanso programado hoy"}, 
-            { id: generateId(), date: formatISO(addDays(todayMock, 7), {representation: 'date'}), isWorking: true, startTime: "14:00", endTime: "20:00", notes: "Turno especial tarde"} 
+            { id: generateId(), date: formatISO(todayMockDate, {representation: 'date'}), isWorking: false, notes: "Descanso programado hoy"}, 
+            { id: generateId(), date: formatISO(addDays(todayMockDate, 7), {representation: 'date'}), isWorking: true, startTime: "14:00", endTime: "20:00", notes: "Turno especial tarde"} 
         ];
     }
-    // Specific override for prof-san_antonio-1 to be resting "todayMock"
      if (location.id === 'san_antonio' && i === 0) { 
         customOverrides = [
-            { id: generateId(), date: formatISO(todayMock, {representation: 'date'}), isWorking: false, notes: "Cita médica personal hoy"},
+            { id: generateId(), date: formatISO(todayMockDate, {representation: 'date'}), isWorking: false, notes: "Cita médica personal hoy"},
         ];
     }
 
@@ -276,97 +311,96 @@ const initialMockServicesData: Service[] = [...SERVICES_CONSTANTS.map(s => ({...
 
 const initialMockAppointmentsData: Appointment[] = [
   {
-    id: 'appt001', patientId: 'pat001', locationId: LOCATIONS[0].id, professionalId: initialMockProfessionalsData.find(p => p.locationId === LOCATIONS[0].id && getContractDisplayStatus(p.currentContract, yesterdayMock) === 'Activo')?.id || initialMockProfessionalsData[0]?.id, serviceId: initialMockServicesData[0].id, appointmentDateTime: formatISO(setHours(setMinutes(yesterdayMock, 0), 10)), durationMinutes: initialMockServicesData[0].defaultDuration, status: APPOINTMENT_STATUS.COMPLETED, amountPaid: initialMockServicesData[0].price, paymentMethod: PAYMENT_METHODS[0], staffNotes: "Tratamiento exitoso, paciente refiere mejoría.", attachedPhotos: [`https://placehold.co/200x200.png?text=Appt001_Foto1&data-ai-hint=foot care` as string, `https://placehold.co/200x200.png?text=Appt001_Foto2&data-ai-hint=medical x-ray` as string ], addedServices: [{ serviceId: initialMockServicesData[2].id, price: initialMockServicesData[2].price, professionalId: initialMockProfessionalsData.find(p => p.locationId === LOCATIONS[0].id && getContractDisplayStatus(p.currentContract, yesterdayMock) === 'Activo')?.id || initialMockProfessionalsData[0]?.id }], createdAt: formatISO(subDays(yesterdayMock,1)), updatedAt: formatISO(yesterdayMock),
+    id: 'appt001', patientId: 'pat001', locationId: LOCATIONS[0].id, professionalId: initialMockProfessionalsData.find(p => p.locationId === LOCATIONS[0].id && (getContractDisplayStatus(p.currentContract, yesterdayMockDate) === 'Activo' || getContractDisplayStatus(p.currentContract, yesterdayMockDate) === 'Próximo a Vencer'))?.id || initialMockProfessionalsData[0]?.id, serviceId: initialMockServicesData[0].id, appointmentDateTime: formatISO(setHours(setMinutes(yesterdayMockDate, 0), 10)), durationMinutes: initialMockServicesData[0].defaultDuration, status: APPOINTMENT_STATUS.COMPLETED, amountPaid: initialMockServicesData[0].price, paymentMethod: PAYMENT_METHODS[0], staffNotes: "Tratamiento exitoso, paciente refiere mejoría.", attachedPhotos: [`https://placehold.co/200x200.png?text=Appt001_Foto1&data-ai-hint=foot care` as string, `https://placehold.co/200x200.png?text=Appt001_Foto2&data-ai-hint=medical x-ray` as string ], addedServices: [{ serviceId: initialMockServicesData[2].id, price: initialMockServicesData[2].price, professionalId: initialMockProfessionalsData.find(p => p.locationId === LOCATIONS[0].id && (getContractDisplayStatus(p.currentContract, yesterdayMockDate) === 'Activo' || getContractDisplayStatus(p.currentContract, yesterdayMockDate) === 'Próximo a Vencer'))?.id || initialMockProfessionalsData[0]?.id }], createdAt: formatISO(subDays(yesterdayMockDate,1)), updatedAt: formatISO(yesterdayMockDate),
   },
   {
-    id: 'appt002', patientId: 'pat002', locationId: LOCATIONS[1].id, professionalId: initialMockProfessionalsData.find(p => p.locationId === LOCATIONS[1].id && getContractDisplayStatus(p.currentContract, todayMock) === 'Activo')?.id || initialMockProfessionalsData.find(p=>p.locationId === LOCATIONS[1].id)?.id, serviceId: initialMockServicesData[1].id, appointmentDateTime: formatISO(setHours(setMinutes(startOfDay(todayMock), 30), 9)), durationMinutes: initialMockServicesData[1].defaultDuration, status: APPOINTMENT_STATUS.BOOKED, bookingObservations: "Paciente refiere dolor agudo.", createdAt: formatISO(subDays(todayMock,1)), updatedAt: formatISO(subDays(todayMock,1)), attachedPhotos: [], addedServices: [],
+    id: 'appt002', patientId: 'pat002', locationId: LOCATIONS[1].id, professionalId: initialMockProfessionalsData.find(p => p.locationId === LOCATIONS[1].id && (getContractDisplayStatus(p.currentContract, todayMockDate) === 'Activo' || getContractDisplayStatus(p.currentContract, todayMockDate) === 'Próximo a Vencer'))?.id || initialMockProfessionalsData.find(p=>p.locationId === LOCATIONS[1].id)?.id, serviceId: initialMockServicesData[1].id, appointmentDateTime: formatISO(setHours(setMinutes(startOfDay(todayMockDate), 30), 9)), durationMinutes: initialMockServicesData[1].defaultDuration, status: APPOINTMENT_STATUS.BOOKED, bookingObservations: "Paciente refiere dolor agudo.", createdAt: formatISO(subDays(todayMockDate,1)), updatedAt: formatISO(subDays(todayMockDate,1)), attachedPhotos: [], addedServices: [],
   },
   {
-    id: 'appt003', patientId: 'pat003', locationId: LOCATIONS[0].id, professionalId: initialMockProfessionalsData.find(p => p.locationId === LOCATIONS[0].id && getContractDisplayStatus(p.currentContract, todayMock) === 'Activo')?.id || initialMockProfessionalsData.find(p=>p.locationId === LOCATIONS[0].id)?.id, serviceId: initialMockServicesData[2].id, appointmentDateTime: formatISO(setHours(setMinutes(startOfDay(todayMock), 0), 14)), durationMinutes: initialMockServicesData[2].defaultDuration, status: APPOINTMENT_STATUS.CONFIRMED, actualArrivalTime: "13:55", createdAt: formatISO(subDays(todayMock,2)), updatedAt: formatISO(todayMock),
+    id: 'appt003', patientId: 'pat003', locationId: LOCATIONS[0].id, professionalId: initialMockProfessionalsData.find(p => p.locationId === LOCATIONS[0].id && (getContractDisplayStatus(p.currentContract, todayMockDate) === 'Activo' || getContractDisplayStatus(p.currentContract, todayMockDate) === 'Próximo a Vencer'))?.id || initialMockProfessionalsData.find(p=>p.locationId === LOCATIONS[0].id)?.id, serviceId: initialMockServicesData[2].id, appointmentDateTime: formatISO(setHours(setMinutes(startOfDay(todayMockDate), 0), 14)), durationMinutes: initialMockServicesData[2].defaultDuration, status: APPOINTMENT_STATUS.CONFIRMED, actualArrivalTime: "13:55", createdAt: formatISO(subDays(todayMockDate,2)), updatedAt: formatISO(todayMockDate),
     addedServices: [
       { serviceId: initialMockServicesData[0].id, professionalId: initialMockProfessionalsData.find(p => p.locationId === LOCATIONS[0].id)?.id, price: initialMockServicesData[0].price },
       { serviceId: initialMockServicesData[1].id, price: initialMockServicesData[1].price }
     ]
   },
   {
-    id: 'appt004', patientId: 'pat004', locationId: LOCATIONS[2].id, professionalId: initialMockProfessionalsData.find(p => p.locationId === LOCATIONS[2].id && getContractDisplayStatus(p.currentContract, todayMock) === 'Activo')?.id || initialMockProfessionalsData.find(p=>p.locationId === LOCATIONS[2].id)?.id, serviceId: initialMockServicesData[3].id, appointmentDateTime: formatISO(setHours(setMinutes(startOfDay(todayMock), 0), 11)), durationMinutes: initialMockServicesData[3].defaultDuration, status: APPOINTMENT_STATUS.CANCELLED_CLIENT, createdAt: formatISO(subDays(todayMock,1)), updatedAt: formatISO(todayMock), attachedPhotos: [], addedServices: [],
+    id: 'appt004', patientId: 'pat004', locationId: LOCATIONS[2].id, professionalId: initialMockProfessionalsData.find(p => p.locationId === LOCATIONS[2].id && (getContractDisplayStatus(p.currentContract, todayMockDate) === 'Activo' || getContractDisplayStatus(p.currentContract, todayMockDate) === 'Próximo a Vencer'))?.id || initialMockProfessionalsData.find(p=>p.locationId === LOCATIONS[2].id)?.id, serviceId: initialMockServicesData[3].id, appointmentDateTime: formatISO(setHours(setMinutes(startOfDay(todayMockDate), 0), 11)), durationMinutes: initialMockServicesData[3].defaultDuration, status: APPOINTMENT_STATUS.CANCELLED_CLIENT, createdAt: formatISO(subDays(todayMockDate,1)), updatedAt: formatISO(todayMockDate), attachedPhotos: [], addedServices: [],
   },
   {
-    id: 'appt-today-01', patientId: 'pat005', locationId: 'higuereta', professionalId: 'prof-higuereta-3', serviceId: 'quiropodia', // Assuming prof-higuereta-3 has active contract
-    appointmentDateTime: formatISO(setHours(setMinutes(startOfDay(todayMock), 0), 10)), durationMinutes: 60, status: APPOINTMENT_STATUS.BOOKED,
-    createdAt: formatISO(todayMock), updatedAt: formatISO(todayMock), attachedPhotos: [], addedServices: [],
+    id: 'appt-today-01', patientId: 'pat005', locationId: 'higuereta', professionalId: 'prof-higuereta-3', serviceId: 'quiropodia', 
+    appointmentDateTime: formatISO(setHours(setMinutes(startOfDay(todayMockDate), 0), 10)), durationMinutes: 60, status: APPOINTMENT_STATUS.BOOKED,
+    createdAt: formatISO(todayMockDate), updatedAt: formatISO(todayMockDate), attachedPhotos: [], addedServices: [],
   },
   {
-    id: 'appt-today-02', patientId: 'pat006', locationId: 'higuereta', professionalId: 'prof-higuereta-4', serviceId: 'consulta_general', // Assuming prof-higuereta-4 has active contract
-    appointmentDateTime: formatISO(setHours(setMinutes(startOfDay(todayMock), 30), 11)), durationMinutes: 30, status: APPOINTMENT_STATUS.CONFIRMED, actualArrivalTime: "11:25",
-    createdAt: formatISO(todayMock), updatedAt: formatISO(todayMock), attachedPhotos: [], addedServices: [],
+    id: 'appt-today-02', patientId: 'pat006', locationId: 'higuereta', professionalId: 'prof-higuereta-4', serviceId: 'consulta_general', 
+    appointmentDateTime: formatISO(setHours(setMinutes(startOfDay(todayMockDate), 30), 11)), durationMinutes: 30, status: APPOINTMENT_STATUS.CONFIRMED, actualArrivalTime: "11:25",
+    createdAt: formatISO(todayMockDate), updatedAt: formatISO(todayMockDate), attachedPhotos: [], addedServices: [],
   },
   {
-    id: 'appt-today-03', patientId: 'pat007', locationId: 'san_antonio', professionalId: 'prof-san_antonio-2', serviceId: 'tratamiento_unas', // Assuming prof-san_antonio-2 has active contract
-    appointmentDateTime: formatISO(setHours(setMinutes(startOfDay(todayMock), 0), 15)), durationMinutes: 45, status: APPOINTMENT_STATUS.BOOKED,
-    createdAt: formatISO(todayMock), updatedAt: formatISO(todayMock), attachedPhotos: [], addedServices: [],
+    id: 'appt-today-03', patientId: 'pat007', locationId: 'san_antonio', professionalId: 'prof-san_antonio-2', serviceId: 'tratamiento_unas', 
+    appointmentDateTime: formatISO(setHours(setMinutes(startOfDay(todayMockDate), 0), 15)), durationMinutes: 45, status: APPOINTMENT_STATUS.BOOKED,
+    createdAt: formatISO(todayMockDate), updatedAt: formatISO(todayMockDate), attachedPhotos: [], addedServices: [],
   },
   {
-    id: 'appt-today-comp-01', patientId: 'pat008', locationId: 'higuereta', professionalId: 'prof-higuereta-5', serviceId: 'reflexologia', // Assuming prof-higuereta-5 has active contract
-    appointmentDateTime: formatISO(setHours(setMinutes(startOfDay(todayMock), 0), 9)), durationMinutes: 45, status: APPOINTMENT_STATUS.COMPLETED, amountPaid: 75, paymentMethod: 'Yape/Plin',
-    createdAt: formatISO(todayMock), updatedAt: formatISO(todayMock), attachedPhotos: [], addedServices: [],
+    id: 'appt-today-comp-01', patientId: 'pat008', locationId: 'higuereta', professionalId: 'prof-higuereta-5', serviceId: 'reflexologia', 
+    appointmentDateTime: formatISO(setHours(setMinutes(startOfDay(todayMockDate), 0), 9)), durationMinutes: 45, status: APPOINTMENT_STATUS.COMPLETED, amountPaid: 75, paymentMethod: 'Yape/Plin',
+    createdAt: formatISO(todayMockDate), updatedAt: formatISO(todayMockDate), attachedPhotos: [], addedServices: [],
   },
   {
-    id: 'appt-yesterday-01', patientId: 'pat009', locationId: 'crucetas', professionalId: initialMockProfessionalsData.find(p=>p.locationId==='crucetas' && getContractDisplayStatus(p.currentContract, yesterdayMock) === 'Activo')?.id, serviceId: 'quiropodia',
-    appointmentDateTime: formatISO(setHours(setMinutes(startOfDay(yesterdayMock), 0), 12)), durationMinutes: 60, status: APPOINTMENT_STATUS.COMPLETED, amountPaid: 80, paymentMethod: 'Efectivo',
-    createdAt: formatISO(yesterdayMock), updatedAt: formatISO(yesterdayMock), attachedPhotos: [], addedServices: [],
+    id: 'appt-yesterday-01', patientId: 'pat009', locationId: 'crucetas', professionalId: initialMockProfessionalsData.find(p=>p.locationId==='crucetas' && (getContractDisplayStatus(p.currentContract, yesterdayMockDate) === 'Activo' || getContractDisplayStatus(p.currentContract, yesterdayMockDate) === 'Próximo a Vencer'))?.id, serviceId: 'quiropodia',
+    appointmentDateTime: formatISO(setHours(setMinutes(startOfDay(yesterdayMockDate), 0), 12)), durationMinutes: 60, status: APPOINTMENT_STATUS.COMPLETED, amountPaid: 80, paymentMethod: 'Efectivo',
+    createdAt: formatISO(yesterdayMockDate), updatedAt: formatISO(yesterdayMockDate), attachedPhotos: [], addedServices: [],
   },
   {
-    id: 'appt-tomorrow-01', patientId: 'pat010', locationId: 'eden_benavides', professionalId: initialMockProfessionalsData.find(p=>p.locationId==='eden_benavides' && getContractDisplayStatus(p.currentContract, tomorrowMock) === 'Activo')?.id, serviceId: 'consulta_general',
-    appointmentDateTime: formatISO(setHours(setMinutes(startOfDay(tomorrowMock), 0), 16)), durationMinutes: 30, status: APPOINTMENT_STATUS.BOOKED,
-    createdAt: formatISO(todayMock), updatedAt: formatISO(todayMock), attachedPhotos: [], addedServices: [],
+    id: 'appt-tomorrow-01', patientId: 'pat010', locationId: 'eden_benavides', professionalId: initialMockProfessionalsData.find(p=>p.locationId==='eden_benavides' && (getContractDisplayStatus(p.currentContract, tomorrowMockDate) === 'Activo' || getContractDisplayStatus(p.currentContract, tomorrowMockDate) === 'Próximo a Vencer'))?.id, serviceId: 'consulta_general',
+    appointmentDateTime: formatISO(setHours(setMinutes(startOfDay(tomorrowMockDate), 0), 16)), durationMinutes: 30, status: APPOINTMENT_STATUS.BOOKED,
+    createdAt: formatISO(todayMockDate), updatedAt: formatISO(todayMockDate), attachedPhotos: [], addedServices: [],
   },
-  { // For registry quincena
+  { 
     id: 'appt_reg_q2_abril_001', patientId: 'pat011', locationId: 'higuereta', professionalId: 'prof-higuereta-1', serviceId: 'quiropodia',
     appointmentDateTime: formatISO(new Date(2025, 3, 18, 10, 0)), durationMinutes: 60, status: APPOINTMENT_STATUS.COMPLETED, amountPaid: 85, paymentMethod: 'Tarjeta de Crédito',
     createdAt: formatISO(new Date(2025, 3, 18)), updatedAt: formatISO(new Date(2025, 3, 18)),
   },
-  { // For registry quincena
+  { 
     id: 'appt_reg_q2_abril_002', patientId: 'pat012', locationId: 'san_antonio', professionalId: 'prof-san_antonio-1', serviceId: 'tratamiento_unas',
     appointmentDateTime: formatISO(new Date(2025, 3, 25, 15, 30)), durationMinutes: 45, status: APPOINTMENT_STATUS.COMPLETED, amountPaid: 65, paymentMethod: 'Efectivo',
     createdAt: formatISO(new Date(2025, 3, 25)), updatedAt: formatISO(new Date(2025, 3, 25)),
   },
-  // More mock appointments for today for different locations
   {
-    id: 'appt-today-eden-01', patientId: 'pat013', locationId: 'eden_benavides', professionalId: 'prof-eden_benavides-1', serviceId: 'quiropodia',
-    appointmentDateTime: formatISO(setHours(setMinutes(startOfDay(todayMock), 0), 11)), durationMinutes: 60, status: APPOINTMENT_STATUS.BOOKED,
-    createdAt: formatISO(todayMock), updatedAt: formatISO(todayMock), attachedPhotos: [], addedServices: [],
+    id: 'appt-today-eden-01', patientId: 'pat013', locationId: 'eden_benavides', professionalId: initialMockProfessionalsData.find(p => p.locationId === 'eden_benavides' && (getContractDisplayStatus(p.currentContract, todayMockDate) === 'Activo' || getContractDisplayStatus(p.currentContract, todayMockDate) === 'Próximo a Vencer'))?.id || 'prof-eden_benavides-1', serviceId: 'quiropodia',
+    appointmentDateTime: formatISO(setHours(setMinutes(startOfDay(todayMockDate), 0), 11)), durationMinutes: 60, status: APPOINTMENT_STATUS.BOOKED,
+    createdAt: formatISO(todayMockDate), updatedAt: formatISO(todayMockDate), attachedPhotos: [], addedServices: [],
   },
   {
-    id: 'appt-today-crucetas-01', patientId: 'pat014', locationId: 'crucetas', professionalId: 'prof-crucetas-1', serviceId: 'consulta_general',
-    appointmentDateTime: formatISO(setHours(setMinutes(startOfDay(todayMock), 30), 14)), durationMinutes: 30, status: APPOINTMENT_STATUS.CONFIRMED, actualArrivalTime: "14:25",
-    createdAt: formatISO(todayMock), updatedAt: formatISO(todayMock), attachedPhotos: [], addedServices: [],
+    id: 'appt-today-crucetas-01', patientId: 'pat014', locationId: 'crucetas', professionalId: initialMockProfessionalsData.find(p => p.locationId === 'crucetas' && (getContractDisplayStatus(p.currentContract, todayMockDate) === 'Activo' || getContractDisplayStatus(p.currentContract, todayMockDate) === 'Próximo a Vencer'))?.id || 'prof-crucetas-1', serviceId: 'consulta_general',
+    appointmentDateTime: formatISO(setHours(setMinutes(startOfDay(todayMockDate), 30), 14)), durationMinutes: 30, status: APPOINTMENT_STATUS.CONFIRMED, actualArrivalTime: "14:25",
+    createdAt: formatISO(todayMockDate), updatedAt: formatISO(todayMockDate), attachedPhotos: [], addedServices: [],
   },
   {
-    id: 'appt-today-carpaccio-01', patientId: 'pat015', locationId: 'carpaccio', professionalId: 'prof-carpaccio-1', serviceId: 'tratamiento_unas',
-    appointmentDateTime: formatISO(setHours(setMinutes(startOfDay(todayMock), 0), 16)), durationMinutes: 45, status: APPOINTMENT_STATUS.COMPLETED, amountPaid: 70, paymentMethod: 'Tarjeta de Débito',
-    createdAt: formatISO(todayMock), updatedAt: formatISO(todayMock), attachedPhotos: [], addedServices: [],
+    id: 'appt-today-carpaccio-01', patientId: 'pat015', locationId: 'carpaccio', professionalId: initialMockProfessionalsData.find(p => p.locationId === 'carpaccio' && (getContractDisplayStatus(p.currentContract, todayMockDate) === 'Activo' || getContractDisplayStatus(p.currentContract, todayMockDate) === 'Próximo a Vencer'))?.id || 'prof-carpaccio-1', serviceId: 'tratamiento_unas',
+    appointmentDateTime: formatISO(setHours(setMinutes(startOfDay(todayMockDate), 0), 16)), durationMinutes: 45, status: APPOINTMENT_STATUS.COMPLETED, amountPaid: 70, paymentMethod: 'Tarjeta de Débito',
+    createdAt: formatISO(todayMockDate), updatedAt: formatISO(todayMockDate), attachedPhotos: [], addedServices: [],
   },
   {
-    id: 'appt-today-vista_alegre-01', patientId: 'pat016', locationId: 'vista_alegre', professionalId: 'prof-vista_alegre-1', serviceId: 'reflexologia',
-    appointmentDateTime: formatISO(setHours(setMinutes(startOfDay(todayMock), 0), 10)), durationMinutes: 45, status: APPOINTMENT_STATUS.BOOKED,
-    createdAt: formatISO(todayMock), updatedAt: formatISO(todayMock), attachedPhotos: [], addedServices: [],
+    id: 'appt-today-vista_alegre-01', patientId: 'pat016', locationId: 'vista_alegre', professionalId: initialMockProfessionalsData.find(p => p.locationId === 'vista_alegre' && (getContractDisplayStatus(p.currentContract, todayMockDate) === 'Activo' || getContractDisplayStatus(p.currentContract, todayMockDate) === 'Próximo a Vencer'))?.id || 'prof-vista_alegre-1', serviceId: 'reflexologia',
+    appointmentDateTime: formatISO(setHours(setMinutes(startOfDay(todayMockDate), 0), 10)), durationMinutes: 45, status: APPOINTMENT_STATUS.BOOKED,
+    createdAt: formatISO(todayMockDate), updatedAt: formatISO(todayMockDate), attachedPhotos: [], addedServices: [],
   },
 ];
 
 
 const initialMockPeriodicRemindersData: PeriodicReminder[] = [
   { id: 'rem001', title: 'Pago IGV Mayo 2025', dueDate: formatISO(new Date(2025, 4, 20), { representation: 'date' }), recurrence: 'monthly', amount: 350.50, status: 'pending', createdAt: formatISO(new Date(2025, 3, 20)), updatedAt: formatISO(new Date(2025, 3, 20))},
-  { id: 'rem002', title: 'Servicio de Limpieza Oficina', dueDate: formatISO(subDays(todayMock, 5), { representation: 'date' }), recurrence: 'monthly', amount: 120.00, status: 'pending', createdAt: formatISO(subDays(todayMock, 35)), updatedAt: formatISO(subDays(todayMock, 35))}, // Vencido
-  { id: 'rem003', title: 'Cuota Préstamo Banco X', dueDate: formatISO(addDays(todayMock, 2), { representation: 'date' }), recurrence: 'monthly', amount: 780.00, status: 'pending', createdAt: formatISO(subDays(todayMock, 28)), updatedAt: formatISO(subDays(todayMock, 28))}, // Próximo a vencer
-  { id: 'rem004', title: 'Suscripción Software Contable', dueDate: formatISO(addDays(todayMock, 10), { representation: 'date' }), recurrence: 'annually', amount: 500.00, status: 'pending', createdAt: formatISO(subDays(todayMock, 355)), updatedAt: formatISO(subDays(todayMock, 355))},
-  { id: 'rem005', title: 'Alquiler Local Higuereta - Junio', dueDate: formatISO(new Date(2025, 5, 5), { representation: 'date' }), recurrence: 'monthly', amount: 1200.00, status: 'pending', createdAt: formatISO(todayMock), updatedAt: formatISO(todayMock)},
+  { id: 'rem002', title: 'Servicio de Limpieza Oficina', dueDate: formatISO(subDays(new Date(), 5), { representation: 'date' }), recurrence: 'monthly', amount: 120.00, status: 'pending', createdAt: formatISO(subDays(new Date(), 35)), updatedAt: formatISO(subDays(new Date(), 35))}, // Vencido
+  { id: 'rem003', title: 'Cuota Préstamo Banco X', dueDate: formatISO(addDays(new Date(), 2), { representation: 'date' }), recurrence: 'monthly', amount: 780.00, status: 'pending', createdAt: formatISO(subDays(new Date(), 28)), updatedAt: formatISO(subDays(new Date(), 28))}, // Próximo a vencer
+  { id: 'rem004', title: 'Suscripción Software Contable', dueDate: formatISO(addDays(new Date(), 10), { representation: 'date' }), recurrence: 'annually', amount: 500.00, status: 'pending', createdAt: formatISO(subDays(new Date(), 355)), updatedAt: formatISO(subDays(new Date(), 355))},
+  { id: 'rem005', title: 'Alquiler Local Higuereta - Junio', dueDate: formatISO(new Date(getYear(new Date()), getMonth(new Date()) + 1, 5), { representation: 'date' }), recurrence: 'monthly', amount: 1200.00, status: 'pending', createdAt: formatISO(new Date()), updatedAt: formatISO(new Date())},
 ];
 
 const initialMockImportantNotesData: ImportantNote[] = [
-  { id: 'note001', title: 'Protocolo Cierre de Caja Diario', content: 'Recordar verificar todos los POS, efectivo contado y reporte Z antes de cerrar. Arqueo debe ser firmado por el encargado de turno.', createdAt: formatISO(subDays(todayMock, 2)) },
-  { id: 'note002', title: 'Contacto Proveedor Principal Insumos', content: 'Juan Pérez - JP Insumos Médicos - Cel: 987654321 - Correo: jperez@jpinsumos.com. Pedidos los lunes antes de las 12pm para entrega el miércoles.', createdAt: formatISO(subDays(todayMock, 10)) },
-  { id: 'note003', title: 'Mantenimiento Equipos Podológicos', content: 'Revisión y calibración programada para el 15 de Junio de 2025. Coordinar con servicio técnico "Podotec".', createdAt: formatISO(subDays(todayMock, 1)) },
+  { id: 'note001', title: 'Protocolo Cierre de Caja Diario', content: 'Recordar verificar todos los POS, efectivo contado y reporte Z antes de cerrar. Arqueo debe ser firmado por el encargado de turno.', createdAt: formatISO(subDays(new Date(), 2)), updatedAt: formatISO(subDays(new Date(), 2)) },
+  { id: 'note002', title: 'Contacto Proveedor Principal Insumos', content: 'Juan Pérez - JP Insumos Médicos - Cel: 987654321 - Correo: jperez@jpinsumos.com. Pedidos los lunes antes de las 12pm para entrega el miércoles.', createdAt: formatISO(subDays(new Date(), 10)), updatedAt: formatISO(subDays(new Date(), 10)) },
+  { id: 'note003', title: 'Mantenimiento Equipos Podológicos', content: 'Revisión y calibración programada para el 15 de Junio (próximo mes). Coordinar con servicio técnico "Podotec".', createdAt: formatISO(subDays(new Date(), 1)), updatedAt: formatISO(subDays(new Date(), 1)) },
 ];
 
 // Mock Database Store
@@ -391,8 +425,8 @@ let mockDB: MockDB = {
 };
 
 export const initializeGlobalMockStore = () => {
-  if (globalUseMockDatabase) {
-    if (mockDB.users.length === 0 && mockDB.professionals.length === 0 && mockDB.appointments.length === 0) {
+  if (useMockDatabaseData) {
+    if (mockDB.users.length === 0 && mockDB.professionals.length === 0 && mockDB.appointments.length === 0) { // Simple check if it's "empty"
       mockDB = {
         users: [...initialMockUsersData],
         professionals: [...initialMockProfessionalsData],
@@ -402,12 +436,12 @@ export const initializeGlobalMockStore = () => {
         periodicReminders: [...initialMockPeriodicRemindersData],
         importantNotes: [...initialMockImportantNotesData],
       };
-      console.log("[data.ts] MockDB initialized with new data because it was empty AND globalUseMockDatabase is true.");
+      console.log("[data.ts] MockDB initialized with new data because it was empty AND useMockDatabaseData is true.");
     } else if (mockDB.users.length > 0 || mockDB.professionals.length > 0 || mockDB.appointments.length > 0) {
        console.log("[data.ts] MockDB already has data. Not re-initializing.");
     }
   } else {
-    console.log("[data.ts] initializeGlobalMockStore: globalUseMockDatabase is false. MockDB will not be populated with initial mock data.");
+    console.log("[data.ts] initializeGlobalMockStore: useMockDatabaseData is false. MockDB will not be populated with initial mock data, and will be reset if it had data.");
     mockDB = { users: [], professionals: [], patients: [], services: [], appointments: [], periodicReminders: [], importantNotes: [] };
   }
 };
@@ -417,12 +451,12 @@ initializeGlobalMockStore();
 
 // --- Auth ---
 export async function getUserByUsername(identity: string): Promise<User | undefined> {
-  console.log(`[data.ts] getUserByUsername (globalUseMockDatabase: ${globalUseMockDatabase}) for identity: ${identity}`);
+  // console.log(`[data.ts] getUserByUsername (useMockDatabaseData: ${useMockDatabaseData}) for identity: ${identity}`);
   try {
-    if (globalUseMockDatabase) {
+    if (globalUseMockDatabase) { // Use the imported globalUseMockDatabase
       const user = mockDB.users.find(u => u.username.toLowerCase() === identity.toLowerCase());
       if (user) {
-        console.log(`[data.ts] getUserByUsername (mock): User ${identity} found.`);
+        // console.log(`[data.ts] getUserByUsername (mock): User ${identity} found.`);
         return { ...user };
       }
       console.warn(`[data.ts] getUserByUsername (mock): User ${identity} not found.`);
@@ -443,7 +477,7 @@ export async function getUserByUsername(identity: string): Promise<User | undefi
     }
     const userDoc = snapshot.docs[0];
     const userData = { id: userDoc.id, ...convertDocumentData(userDoc.data()) } as User;
-    console.log(`[data.ts] getUserByUsername (Firestore): User ${identity} found with ID: ${userData.id}`);
+    // console.log(`[data.ts] getUserByUsername (Firestore): User ${identity} found with ID: ${userData.id}`);
     return userData;
   } catch (error: any) {
     console.error(`[data.ts] Error en getUserByUsername para "${identity}":`, error);
@@ -481,11 +515,11 @@ export async function getProfessionals (locationId?: LocationId): Promise<(Profe
         const snapshot = await getDocs(finalQuery);
         professionalsToProcess = snapshot.docs.map(docSnap => ({ id: docSnap.id, ...convertDocumentData(docSnap.data()) } as Professional));
         
-        if (snapshot.empty && initialMockProfessionalsData.length > 0 && !locationId) { 
+        if (snapshot.empty && initialMockProfessionalsData.length > 0 && globalUseMockDatabase) { // Only fallback if mockDB is allowed conceptually
             console.warn(`[data.ts] Firestore 'profesionales' query returned no results for locationId '${locationId || 'all'}'. Falling back to mock list if empty, for UI stability during setup.`);
             professionalsToProcess = professionalsToProcess.length > 0 ? professionalsToProcess : (locationId ? initialMockProfessionalsData.filter(p => p.locationId === locationId) : [...initialMockProfessionalsData]);
         } else if (snapshot.empty && locationId) {
-           console.warn(`[data.ts] Firestore 'profesionales' query returned no results for locationId '${locationId}'. This might be correct if no professionals are in this location.`);
+           // console.warn(`[data.ts] Firestore 'profesionales' query returned no results for locationId '${locationId}'. This might be correct if no professionals are in this location.`);
         }
       }
     }
@@ -623,7 +657,7 @@ export async function updateProfessional (id: string, data: Partial<Professional
   try {
     const professionalToUpdate: Partial<Omit<Professional, 'id'|'biWeeklyEarnings'>> = {
       ...data,
-      phone: data.phone === undefined ? undefined : (data.phone || null), 
+      phone: data.phone === undefined ? undefined : (data.phone || null),
     };
     delete (professionalToUpdate as any).id; 
     delete (professionalToUpdate as any).currentContract_startDate;
@@ -663,7 +697,7 @@ export async function updateProfessional (id: string, data: Partial<Professional
                 notes: data.currentContract_notes || null,
                 empresa: data.currentContract_empresa || null,
             };
-        } else { // if start or end date is cleared, contract becomes null
+        } else { 
             newCurrentContractData = null; 
         }
     }
@@ -676,14 +710,12 @@ export async function updateProfessional (id: string, data: Partial<Professional
       const existingProfessional = mockDB.professionals[index];
       const updatedHistory = [...(existingProfessional.contractHistory || [])];
 
-      if (newCurrentContractData !== undefined) { // This means contract fields were present in form
+      if (newCurrentContractData !== undefined) { 
         if (existingProfessional.currentContract && newCurrentContractData && existingProfessional.currentContract.id !== newCurrentContractData.id) {
-           // If current contract exists and is different from new, archive old
            if (!updatedHistory.find(ch => ch.id === existingProfessional.currentContract!.id)) {
             updatedHistory.push(existingProfessional.currentContract);
           }
         } else if (existingProfessional.currentContract && newCurrentContractData === null) { 
-           // If current contract existed and new one is null (cleared), archive old
            if (!updatedHistory.find(ch => ch.id === existingProfessional.currentContract!.id)) {
             updatedHistory.push(existingProfessional.currentContract);
            }
@@ -702,7 +734,7 @@ export async function updateProfessional (id: string, data: Partial<Professional
     }
 
     const docRef = doc(firestore, 'profesionales', id);
-    const professionalDoc = await getDoc(docRef); // Fetch current doc for contract history
+    const professionalDoc = await getDoc(docRef); 
     if (!professionalDoc.exists()) {
         console.warn(`[data.ts] Professional with ID ${id} not found in Firestore for update.`);
         return undefined;
@@ -725,7 +757,7 @@ export async function updateProfessional (id: string, data: Partial<Professional
         firestoreUpdateData.customScheduleOverrides = [];
     }
     
-    if (newCurrentContractData !== undefined) { // This means contract fields were present in form
+    if (newCurrentContractData !== undefined) { 
         firestoreUpdateData.currentContract = newCurrentContractData ? {
             ...newCurrentContractData,
             id: newCurrentContractData.id || generateId(), 
@@ -792,20 +824,29 @@ export function getProfessionalAvailabilityForDate(
   targetDate: Date
 ): { startTime: string; endTime: string; notes?: string; reason?: string } | null {
   try {
-    const targetDateString = formatISO(targetDate, { representation: 'date' });
+    const targetDateOnly = startOfDay(targetDate); 
+    const targetDateString = formatISO(targetDateOnly, { representation: 'date' });
     // console.log(`[Availability] Prof ${professional.firstName} ${professional.lastName} (ID: ${professional.id}) - Checking for date: ${targetDateString}`);
     
-    const contractStatus = getContractDisplayStatus(professional.currentContract, targetDate);
+    const contractStatus = getContractDisplayStatus(professional.currentContract, targetDateOnly);
     // console.log(`[Availability] Prof ${professional.firstName} (ID: ${professional.id}) - Contract Status for ${targetDateString}: ${contractStatus}`);
     
-    if (contractStatus !== 'Activo') { // Only 'Activo' should allow work. 'Próximo a Vencer' is still active.
-      // console.log(`[Availability] Prof ${professional.firstName} (ID: ${professional.id}) - Contract not active for ${targetDateString}. Status: ${contractStatus}`);
-      return { startTime: '', endTime: '', reason: `Contrato: ${contractStatus}` };
+    if (contractStatus !== 'Activo' && contractStatus !== 'Próximo a Vencer') {
+        // console.log(`[Availability] Prof ${professional.firstName} (ID: ${professional.id}) - Contract not active/upcoming for ${targetDateString}. Status: ${contractStatus}`);
+        return { startTime: '', endTime: '', reason: `Contrato: ${contractStatus}` };
     }
+
 
     if (professional.customScheduleOverrides) {
       const override = professional.customScheduleOverrides.find(
-        ov => ov.date === targetDateString
+        ov => {
+            try {
+                return dateFnsIsSameDay(parseISO(ov.date), targetDateOnly);
+            } catch (e) {
+                console.warn(`[Availability] Prof ${professional.firstName} (ID: ${professional.id}) - Invalid date in override, skipping:`, ov, e);
+                return false;
+            }
+        }
       );
       if (override) {
         // console.log(`[Availability] Prof ${professional.firstName} (ID: ${professional.id}) - Found override for ${targetDateString}:`, override);
@@ -817,7 +858,7 @@ export function getProfessionalAvailabilityForDate(
     }
 
     if (professional.workSchedule) {
-      const dayOfWeekIndex = getDay(targetDate); 
+      const dayOfWeekIndex = getDay(targetDateOnly); 
       const dayKey = DAYS_OF_WEEK.find(d => d.id === (['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'] as DayOfWeekId[])[dayOfWeekIndex])?.id;
       // console.log(`[Availability] Prof ${professional.firstName} (ID: ${professional.id}) - DayKey for ${targetDateString}: ${dayKey}`);
 
@@ -826,16 +867,18 @@ export function getProfessionalAvailabilityForDate(
           // console.log(`[Availability] Prof ${professional.firstName} (ID: ${professional.id}) - Base schedule for ${dayKey}:`, dailySchedule);
           if (dailySchedule) {
             if (dailySchedule.isWorking === false) { 
+              // console.log(`[Availability] Prof ${professional.firstName} (ID: ${professional.id}) - Not working on ${dayKey} based on workSchedule.`);
               return { startTime: '', endTime: '', reason: `Descansando (Horario base: ${DAYS_OF_WEEK.find(d=>d.id === dayKey)?.name} libre)` };
             }
-            if ((dailySchedule.isWorking === true || dailySchedule.isWorking === undefined) && dailySchedule.startTime && dailySchedule.endTime) { // isWorking can be undefined if not explicitly set, assume true if times are present
+            if ((dailySchedule.isWorking === true || dailySchedule.isWorking === undefined) && dailySchedule.startTime && dailySchedule.endTime) {
+                // console.log(`[Availability] Prof ${professional.firstName} (ID: ${professional.id}) - Working on ${dayKey} from ${dailySchedule.startTime} to ${dailySchedule.endTime} based on workSchedule.`);
                 return { startTime: dailySchedule.startTime, endTime: dailySchedule.endTime, reason: "Horario base" };
             }
           }
       }
     }
     // console.log(`[Availability] Prof ${professional.firstName} (ID: ${professional.id}) - No specific schedule found for ${targetDateString}, defaulting to not available.`);
-    return { startTime: '', endTime: '', reason: `Descansando (Sin horario base definido para ${DAYS_OF_WEEK[getDay(targetDate)].name})` };
+    return { startTime: '', endTime: '', reason: `Descansando (Sin horario base definido para ${DAYS_OF_WEEK[getDay(targetDateOnly)].name})` };
   } catch (error) {
     console.error("[data.ts] Error in getProfessionalAvailabilityForDate:", error, "Professional:", professional, "TargetDate:", targetDate);
     return { startTime: '', endTime: '', reason: "Error al determinar disponibilidad" };
@@ -915,13 +958,12 @@ export async function getPatients (options?: { page?: number; limit?: number; se
         const patientIdsWithAppointmentsToday = new Set((appointmentsResponse.appointments || []).map(app => app.patientId));
         
         if (patientIdsWithAppointmentsToday.size > 0) {
-            if (patientIdsWithAppointmentsToday.size <= 30) { // Firestore 'in' query limit
+            if (patientIdsWithAppointmentsToday.size <= 30) { 
                 queryConstraints.push(where(documentId(), 'in', Array.from(patientIdsWithAppointmentsToday)));
                 countQueryConstraints.push(where(documentId(), 'in', Array.from(patientIdsWithAppointmentsToday)));
             } else {
                 console.warn("[data.ts] getPatients (Firestore): Too many patients with appointments today for 'in' query. Client-side filtering will be less efficient.");
-                // Fetch all and filter client-side if too many IDs, or implement more complex pagination/filtering
-                 const allPatientsSnapshot = await getDocs(query(patientsCol, ...queryConstraints.filter(c => (c as any)._field?.segments.join('.') !== documentId().toString()))); // remove previous 'in' if any
+                 const allPatientsSnapshot = await getDocs(query(patientsCol, ...queryConstraints.filter(c => (c as any)._field?.segments.join('.') !== documentId().toString()))); 
                 let allFetchedPatients = allPatientsSnapshot.docs.map(docSnap => ({ id: docSnap.id, ...convertDocumentData(docSnap.data()) } as Patient));
                 allFetchedPatients = allFetchedPatients.filter(p => patientIdsWithAppointmentsToday.has(p.id));
                 
@@ -934,7 +976,7 @@ export async function getPatients (options?: { page?: number; limit?: number; se
                     lastVisiblePatientId: paginatedPatients.length > 0 ? paginatedPatients[paginatedPatients.length - 1].id : null 
                 };
             }
-        } else { // No patients with appointments today, so the result should be empty
+        } else { 
              queryConstraints.push(where(documentId(), '==', 'non_existent_dummy_id_to_force_empty_result'));
              countQueryConstraints.push(where(documentId(), '==', 'non_existent_dummy_id_to_force_empty_result'));
         }
@@ -949,7 +991,7 @@ export async function getPatients (options?: { page?: number; limit?: number; se
         if (lastVisibleDoc.exists()) {
             queryConstraints.push(startAfter(lastVisibleDoc));
         } else {
-            console.warn(`[data.ts] getPatients (Firestore): lastVisiblePatientId ${startAfterId} not found. Fetching from beginning of page ${page}.`);
+            // console.warn(`[data.ts] getPatients (Firestore): lastVisiblePatientId ${startAfterId} not found. Fetching from beginning of page ${page}.`);
         }
     }
     
@@ -961,13 +1003,13 @@ export async function getPatients (options?: { page?: number; limit?: number; se
     let patients = snapshot.docs.map(docSnap => ({ id: docSnap.id, ...convertDocumentData(docSnap.data()) } as Patient));
     const newLastVisibleId = snapshot.docs.length > 0 ? snapshot.docs[snapshot.docs.length - 1].id : null;
 
-    if (searchTerm) { // Re-filter if searchTerm was complex or if client-side filtering for 'filterToday' was used
+    if (searchTerm) { 
         const lowerSearchTerm = searchTerm.toLowerCase();
         patients = patients.filter(p =>
             (`${p.firstName} ${p.lastName}`.toLowerCase().includes(lowerSearchTerm) ||
             (p.phone && p.phone.includes(searchTerm)))
         );
-         if (!queryConstraints.some(c => (c as any)._field?.segments.join('.') === 'firstName') && !(filterToday && patientIdsWithAppointmentsToday && patientIdsWithAppointmentsToday.size > 30)) {
+         if (!queryConstraints.some(c => (c as any)._field?.segments.join('.') === 'firstName') && !(filterToday && (options?.adminSelectedLocation || options?.user?.locationId) && patientIdsWithAppointmentsToday && patientIdsWithAppointmentsToday.size > 30)) {
             totalCount = patients.length; 
         }
     }
@@ -976,7 +1018,6 @@ export async function getPatients (options?: { page?: number; limit?: number; se
 
   } catch (error) {
     console.error("[data.ts] Error fetching patients from Firestore:", error);
-    // Fallback to mock on any error to prevent UI crash, but log the error
     const lowerSearchTerm = searchTerm.toLowerCase();
     const fallbackPatients = initialMockPatientsData.filter(p =>
         `${p.firstName} ${p.lastName}`.toLowerCase().includes(lowerSearchTerm) ||
@@ -1122,7 +1163,7 @@ export async function getServices (): Promise<Service[]> {
       return [...initialMockServicesData];
     }
     const snapshot = await getDocs(query(collection(firestore, 'servicios'), orderBy('name')));
-    if (snapshot.empty && initialMockServicesData.length > 0) {
+    if (snapshot.empty && initialMockServicesData.length > 0 && globalUseMockDatabase) { 
         console.warn("[data.ts] Firestore 'servicios' collection is empty. Falling back to mock data for UI stability.");
         return [...initialMockServicesData];
     }
@@ -1285,6 +1326,7 @@ export async function getAppointments (filters: { locationId?: LocationId | 'all
 
     if (snapshot.empty && !(locationId && locationId === 'all' && !date && (!statuses || statuses.length === 0) && !dateRange) ) {
       console.warn("[data.ts] Firestore 'citas' query returned no results with current filters. Falling back to mock if applicable, or empty array.");
+      if(globalUseMockDatabase) return {appointments: initialMockAppointmentsData.filter(a => statuses ? statuses.includes(a.status) : true)};
     }
     
     let appointmentsData = snapshot.docs.map(docSnap => ({ id: docSnap.id, ...convertDocumentData(docSnap.data()) } as Appointment));
@@ -1388,7 +1430,7 @@ export async function getPatientAppointmentHistory (patientId: string): Promise<
 }
 
 export async function addAppointment (data: AppointmentFormData & { isExternalProfessional?: boolean; externalProfessionalOriginLocationId?: LocationId | null; addedServices?: any[] }): Promise<Appointment> {
-  console.log("[data.ts] addAppointment: Iniciando creación de cita. (globalUseMockDatabase:", globalUseMockDatabase, ") Datos recibidos:", JSON.stringify(data, null, 2));
+  console.log(`[data.ts] addAppointment: Iniciando creación. Usando mockDB: ${globalUseMockDatabase}. Datos:`, JSON.stringify(data, null, 2).substring(0, 500));
   try {
     let service: Service | undefined;
     if (globalUseMockDatabase) {
@@ -1417,7 +1459,7 @@ export async function addAppointment (data: AppointmentFormData & { isExternalPr
 
     if (data.preferredProfessionalId && data.preferredProfessionalId !== '_any_professional_placeholder_') {
       actualProfessionalId = data.preferredProfessionalId;
-      const profDetails = globalUseMockDatabase 
+      const profDetails = globalUseMockDatabase
         ? mockDB.professionals.find(p => p.id === actualProfessionalId)
         : await getProfessionalById(actualProfessionalId); 
       if (profDetails && profDetails.locationId !== data.locationId) {
@@ -1428,10 +1470,10 @@ export async function addAppointment (data: AppointmentFormData & { isExternalPr
           console.log(`[data.ts] addAppointment: Profesional preferido ${profDetails.firstName} es local.`);
       } else {
         console.warn(`[data.ts] addAppointment: Profesional preferido con ID ${actualProfessionalId} no encontrado.`);
-        actualProfessionalId = null; // Ensure it's null if not found
+        actualProfessionalId = null; 
       }
     } else {
-      console.log(`[data.ts] addAppointment: No se especificó profesional preferido. Intentando auto-asignación para sede ${data.locationId} en ${formatISO(appointmentDateTimeObject)}. SearchExternal: ${data.searchExternal}`);
+      console.log(`[data.ts] addAppointment: No se especificó profesional preferido. Intentando auto-asignación para sede ${data.locationId} en ${format(appointmentDateTimeObject, 'yyyy-MM-dd HH:mm')}. SearchExternal: ${data.searchExternal}`);
       let professionalsToConsider: Professional[];
       if (globalUseMockDatabase) {
           professionalsToConsider = data.searchExternal 
@@ -1442,32 +1484,48 @@ export async function addAppointment (data: AppointmentFormData & { isExternalPr
           }
       } else { 
           const allProfsForConsideration = await getProfessionals(data.searchExternal ? undefined : data.locationId);
-          professionalsToConsider = allProfsForConsideration.map(p => p as Professional);
+          professionalsToConsider = allProfsForConsideration.map(p => p as Professional); 
            if (!data.searchExternal) {
-              console.log(`[data.ts] addAppointment (Firestore): Buscando profesional disponible solo en la sede: ${data.locationId}. Candidatos: ${professionalsToConsider.length}`);
+              console.log(`[data.ts] addAppointment (Firestore): Buscando profesional disponible solo en la sede: ${data.locationId}. Encontrados: ${professionalsToConsider.length}`);
           }
       }
       
       const appointmentsForSlotCheckResponse = await getAppointments({ 
         date: data.appointmentDate,
-        locationId: data.searchExternal && !globalUseMockDatabase ? 'all' : data.locationId, // Fetch all if searching external in Firestore
+        locationId: data.searchExternal && !globalUseMockDatabase ? 'all' : data.locationId, 
         statuses: [APPOINTMENT_STATUS.BOOKED, APPOINTMENT_STATUS.CONFIRMED]
       });
       const existingAppointmentsForDay = appointmentsForSlotCheckResponse.appointments || [];
-      // console.log(`[data.ts] addAppointment: Citas existentes para el día/sede a verificar superposición: ${existingAppointmentsForDay.length}`);
+      console.log(`[data.ts] addAppointment: Citas existentes para el día/sede a verificar superposición: ${existingAppointmentsForDay.length}`);
 
       for (const prof of professionalsToConsider) {
-          if (data.searchExternal && prof.locationId === data.locationId && professionalsToConsider.some(p=>p.locationId !== data.locationId)) {
-            console.log(`[data.ts] addAppointment: Saltando profesional local ${prof.firstName} (ID: ${prof.id}) durante búsqueda externa priorizando externos.`);
-            continue; 
+          // Prioritize professionals from the target location if searchExternal is true but local options exist
+          if (data.searchExternal && prof.locationId !== data.locationId) {
+            const localProfessionalsAvailable = professionalsToConsider.some(p => 
+                p.locationId === data.locationId && 
+                getProfessionalAvailabilityForDate(p, data.appointmentDate) && 
+                !existingAppointmentsForDay.some(existingAppt =>
+                    existingAppt.professionalId === p.id && 
+                    areIntervalsOverlapping(
+                        { start: appointmentDateTimeObject, end: appointmentEndTime },
+                        { start: parseISO(existingAppt.appointmentDateTime), end: dateFnsAddMinutes(parseISO(existingAppt.appointmentDateTime), existingAppt.durationMinutes) }
+                    )
+                )
+            );
+            if (localProfessionalsAvailable) {
+                console.log(`[data.ts] addAppointment: Saltando profesional externo ${prof.firstName} (ID: ${prof.id}) porque hay profesionales locales disponibles.`);
+                continue; 
+            }
           }
+
           const availability = getProfessionalAvailabilityForDate(prof, data.appointmentDate);
-          // console.log(`[data.ts] addAppointment: Verificando disponibilidad de ${prof.firstName} (ID: ${prof.id}). Availability:`, availability);
+          console.log(`[data.ts] addAppointment: Verificando disponibilidad de ${prof.firstName} (ID: ${prof.id}, Sede: ${prof.locationId}). Availability:`, availability ? {...availability} : null);
           if (availability && availability.startTime && availability.endTime) {
               const profWorkStartTime = parse(`${format(data.appointmentDate, 'yyyy-MM-dd')} ${availability.startTime}`, 'yyyy-MM-dd HH:mm', new Date());
               const profWorkEndTime = parse(`${format(data.appointmentDate, 'yyyy-MM-dd')} ${availability.endTime}`, 'yyyy-MM-dd HH:mm', new Date());
-              if (!isWithinInterval(appointmentDateTimeObject, { start: profWorkStartTime, end: dateFnsAddMinutes(profWorkEndTime, -(appointmentDuration -1)) })) { 
-                  console.log(`[data.ts] addAppointment: ${prof.firstName} (ID: ${prof.id}) no disponible: Cita fuera de horario laboral (${availability.startTime}-${availability.endTime}). Cita: ${format(appointmentDateTimeObject, 'HH:mm')}-${format(appointmentEndTime, 'HH:mm')}`);
+              
+              if (!isWithinInterval(appointmentDateTimeObject, { start: profWorkStartTime, end: dateFnsAddMinutes(profWorkEndTime, -appointmentDuration +1) })) { 
+                  console.log(`[data.ts] addAppointment: ${prof.firstName} (ID: ${prof.id}) no disponible: Cita (${format(appointmentDateTimeObject, 'HH:mm')}-${format(appointmentEndTime, 'HH:mm')}) fuera de horario laboral (${availability.startTime}-${availability.endTime}).`);
                   continue;
               }
               const isOverlappingExisting = existingAppointmentsForDay.some(existingAppt =>
@@ -1556,7 +1614,7 @@ export async function addAppointment (data: AppointmentFormData & { isExternalPr
 
 
     const docRef = await addDoc(collection(firestore, 'citas'), firestoreData);
-    const createdAppointment = { ...newAppointmentData, id: docRef.id } as Appointment; // Assume createdAt/updatedAt will be handled by server or read back
+    const createdAppointment = { ...newAppointmentData, id: docRef.id } as Appointment; 
     return createdAppointment; 
   } catch (error) {
     console.error("[data.ts] Error en addAppointment:", error);
@@ -1568,21 +1626,19 @@ export async function updateAppointment (id: string, data: Partial<Appointment>)
   try {
     const updatePayload: Partial<Appointment> = { ...data };
     
-    // Handle date and time conversion if they are passed in the "form" format
-    if (data.appointmentDate && data.appointmentTime && typeof data.appointmentDate === 'object' && typeof data.appointmentTime === 'string') {
-        const datePart = data.appointmentDate as Date;
-        const timePart = data.appointmentTime as string;
+    if ((data as any).appointmentDate && (data as any).appointmentTime && typeof (data as any).appointmentDate === 'object' && typeof (data as any).appointmentTime === 'string') {
+        const datePart = (data as any).appointmentDate as Date;
+        const timePart = (data as any).appointmentTime as string;
         const [hours, minutes] = timePart.split(':').map(Number);
         if (!isNaN(hours) && !isNaN(minutes)) {
             const finalDateObject = setMinutes(setHours(datePart, hours), minutes);
             updatePayload.appointmentDateTime = formatISO(finalDateObject);
         } else {
-            console.warn("[data.ts] updateAppointment: Invalid timePart for appointmentTime:", timePart);
+            // console.warn("[data.ts] updateAppointment: Invalid timePart for appointmentTime:", timePart);
         }
         delete (updatePayload as any).appointmentDate; 
         delete (updatePayload as any).appointmentTime;
     } else if (data.appointmentDateTime && typeof data.appointmentDateTime !== 'string') {
-        // If appointmentDateTime is already a Date object (e.g., from some other source)
         updatePayload.appointmentDateTime = formatISO(data.appointmentDateTime as unknown as Date);
     }
 
@@ -1612,7 +1668,6 @@ export async function updateAppointment (id: string, data: Partial<Appointment>)
       firestoreUpdateData.appointmentDateTime = toFirestoreTimestamp(firestoreUpdateData.appointmentDateTime);
     }
     
-    // Convert addedServices to Firestore format
     if (firestoreUpdateData.addedServices && Array.isArray(firestoreUpdateData.addedServices)) {
       firestoreUpdateData.addedServices = firestoreUpdateData.addedServices.map((as: any) => ({
         serviceId: as.serviceId,
@@ -1621,7 +1676,6 @@ export async function updateAppointment (id: string, data: Partial<Appointment>)
       }));
     }
 
-    // Ensure optional fields are set to null if undefined for Firestore
     const optionalFieldsToNullify = ['bookingObservations', 'actualArrivalTime', 'paymentMethod', 'amountPaid', 'staffNotes', 'professionalId', 'externalProfessionalOriginLocationId'];
     optionalFieldsToNullify.forEach(key => {
         if (firestoreUpdateData.hasOwnProperty(key) && firestoreUpdateData[key] === undefined) {
@@ -1635,13 +1689,11 @@ export async function updateAppointment (id: string, data: Partial<Appointment>)
         firestoreUpdateData.attachedPhotos = [];
     }
 
-
     await updateDoc(docRef, firestoreUpdateData);
     const updatedDoc = await getDoc(docRef);
     if (!updatedDoc.exists()) {
       return undefined;
     }
-    // Repopulate after update for consistency
     const apptData = { id: updatedDoc.id, ...convertDocumentData(updatedDoc.data()) } as Appointment;
       const [patientData, serviceData, professionalData] = await Promise.all([
           apptData.patientId ? getDoc(doc(firestore, 'pacientes', apptData.patientId)) : Promise.resolve(null),
@@ -1689,7 +1741,7 @@ export async function getPeriodicReminders(): Promise<PeriodicReminder[]> {
       return [...initialMockPeriodicRemindersData].sort((a,b) => parseISO(a.dueDate).getTime() - parseISO(b.dueDate).getTime());
     }
     const snapshot = await getDocs(query(collection(firestore, 'recordatorios'), orderBy('dueDate')));
-    if (snapshot.empty && initialMockPeriodicRemindersData.length > 0) {
+    if (snapshot.empty && initialMockPeriodicRemindersData.length > 0 && globalUseMockDatabase) {
         console.warn("[data.ts] Firestore 'recordatorios' collection is empty. Falling back to mock data for UI stability.");
         return [...initialMockPeriodicRemindersData].sort((a,b) => parseISO(a.dueDate).getTime() - parseISO(b.dueDate).getTime());
     }
@@ -1730,7 +1782,6 @@ export async function addPeriodicReminder(data: PeriodicReminderFormData): Promi
     firestoreData.amount = firestoreData.amount ?? null;
 
     const docRef = await addDoc(collection(firestore, 'recordatorios'), firestoreData);
-    // For consistency, return what would be read back (dates as ISO strings)
     const createdData = await getDoc(docRef);
     if (!createdData.exists()) throw new Error("Failed to create reminder in Firestore");
     return { id: docRef.id, ...convertDocumentData(createdData.data()) } as PeriodicReminder;
@@ -1807,7 +1858,7 @@ export async function getImportantNotes(): Promise<ImportantNote[]> {
         return [...initialMockImportantNotesData].sort((a,b) => parseISO(b.createdAt!).getTime() - parseISO(a.createdAt!).getTime());
     }
     const snapshot = await getDocs(query(collection(firestore, 'notasImportantes'), orderBy('createdAt', 'desc')));
-    if (snapshot.empty && initialMockImportantNotesData.length > 0) {
+    if (snapshot.empty && initialMockImportantNotesData.length > 0 && globalUseMockDatabase) {
          console.warn("[data.ts] Firestore 'notasImportantes' collection is empty. Falling back to mock data for UI stability.");
         return [...initialMockImportantNotesData].sort((a,b) => parseISO(b.createdAt!).getTime() - parseISO(a.createdAt!).getTime());
     }
@@ -1897,7 +1948,6 @@ export const seedFirestoreWithMockData = async () => {
   const batch = writeBatch(firestore);
 
   try {
-    // Seed Users
     initialMockUsersData.forEach(user => {
       const { id, ...userData } = user;
       const userToSeed: any = { ...userData, password: "admin" }; 
@@ -1907,7 +1957,6 @@ export const seedFirestoreWithMockData = async () => {
     });
     console.log(`[data.ts] ${initialMockUsersData.length} users prepared for batch.`);
 
-    // Seed Services
     initialMockServicesData.forEach(service => {
       const { id, ...serviceData } = service;
       const firestoreService: any = {...serviceData};
@@ -1917,14 +1966,12 @@ export const seedFirestoreWithMockData = async () => {
     });
     console.log(`[data.ts] ${initialMockServicesData.length} services prepared for batch.`);
     
-    // Seed Sedes 
     LOCATIONS.forEach(location => {
         const sedeRef = doc(firestore, 'sedes', location.id);
         batch.set(sedeRef, { name: location.name });
     });
     console.log(`[data.ts] ${LOCATIONS.length} sedes prepared for batch.`);
 
-    // Seed Professionals
     initialMockProfessionalsData.forEach(prof => {
       const { id, ...profData } = prof;
       const firestoreProfData: any = { ...profData };
@@ -1964,7 +2011,6 @@ export const seedFirestoreWithMockData = async () => {
     });
     console.log(`[data.ts] ${initialMockProfessionalsData.length} professionals prepared for batch.`);
 
-    // Seed Patients
     initialMockPatientsData.forEach(patient => {
       const { id, ...patientData } = patient;
       const firestorePatientData: any = { ...patientData };
@@ -1979,7 +2025,6 @@ export const seedFirestoreWithMockData = async () => {
     });
     console.log(`[data.ts] ${initialMockPatientsData.length} patients prepared for batch.`);
 
-    // Seed Appointments
     initialMockAppointmentsData.forEach(appt => {
       const { id, patient, professional, service, ...apptData } = appt; 
       const firestoreApptData: any = { ...apptData };
@@ -2007,7 +2052,6 @@ export const seedFirestoreWithMockData = async () => {
     });
     console.log(`[data.ts] ${initialMockAppointmentsData.length} appointments prepared for batch.`);
 
-    // Seed Reminders
     initialMockPeriodicRemindersData.forEach(reminder => {
         const { id, ...reminderData } = reminder;
         const firestoreReminderData: any = {...reminderData};
@@ -2022,7 +2066,6 @@ export const seedFirestoreWithMockData = async () => {
     });
     console.log(`[data.ts] ${initialMockPeriodicRemindersData.length} reminders prepared for batch.`);
 
-    // Seed Important Notes
     initialMockImportantNotesData.forEach(note => {
         const { id, ...noteData } = note;
         const firestoreNoteData: any = {...noteData};
@@ -2043,25 +2086,9 @@ export const seedFirestoreWithMockData = async () => {
   }
 };
 
-// Asegúrate de exportar todas las funciones que se usan en otras partes de la aplicación.
-// Algunas ya están marcadas con `export`, otras podrían estar faltando.
-// Por ejemplo, si getUserByUsername se usa en auth-provider, necesita ser exportada.
-
-// Nota: La exportación de `initialMockProfessionalsData` e `initialMockServicesData`
-// podría no ser necesaria si solo se usan internamente o a través de funciones `get...`.
-// Las funciones CRUD como `getProfessionals`, `addProfessional`, etc., deben ser exportadas.
-
-// Las funciones que ya tienen "export async function" están bien.
-// Si hay otras que no lo tienen y se necesitan fuera, hay que añadírselo o exportarlas al final.
 
 export {
-  // No es necesario exportar initialMock... si solo se usan aquí o a través de funciones get.
-  // initialMockUsersData,
-  // initialMockProfessionalsData,
-  // initialMockPatientsData,
-  // initialMockServicesData,
-  // initialMockAppointmentsData,
-  // initialMockPeriodicRemindersData,
-  // initialMockImportantNotesData,
-  mockDB, // Exportar mockDB puede ser útil para pruebas o depuración, pero considera si es necesario.
+  mockDB, 
 };
+
+    
