@@ -16,17 +16,28 @@ import {
   DialogFooter,
   DialogClose,
 } from '@/components/ui/dialog';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
-import { Button } from '@/components/ui/button';
+import { Button, buttonVariants } from '@/components/ui/button';
 import { Calendar } from '@/components/ui/calendar';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { useForm, useFieldArray } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { AppointmentUpdateSchema } from '@/lib/schemas';
 import { Form, FormControl, FormItem, FormLabel, FormMessage, FormField } from "@/components/ui/form";
-import { getProfessionals, updateAppointment as updateAppointmentData, getServices } from '@/lib/data';
+import { getProfessionals, updateAppointment as updateAppointmentData, getServices, deleteAppointment as deleteAppointmentData } from '@/lib/data';
 import React, { useState, useEffect, useRef } from 'react';
 import { useToast } from '@/hooks/use-toast';
 import Image from 'next/image';
@@ -36,7 +47,7 @@ interface AppointmentEditDialogProps {
   appointment: Appointment;
   isOpen: boolean;
   onOpenChange: (isOpen: boolean) => void;
-  onAppointmentUpdated: (updatedAppointment: Appointment) => void;
+  onAppointmentUpdated: (updatedAppointment: Appointment | null) => void; // Allow null for deletion
 }
 
 type AppointmentUpdateFormData = Zod.infer<typeof AppointmentUpdateSchema>;
@@ -62,6 +73,8 @@ export function AppointmentEditDialog({ appointment, isOpen, onOpenChange, onApp
   const [isLoadingServices, setIsLoadingServices] = useState(true);
   const [isUploadingImage, setIsUploadingImage] = useState(false);
   const [isSubmittingForm, setIsSubmittingForm] = useState(false);
+  const [isConfirmDeleteOpen, setIsConfirmDeleteOpen] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const form = useForm<AppointmentUpdateFormData>({
@@ -119,11 +132,11 @@ export function AppointmentEditDialog({ appointment, isOpen, onOpenChange, onApp
         serviceId: currentServiceId,
         appointmentDate: appointmentDateTime,
         appointmentTime: format(appointmentDateTime, 'HH:mm'),
-        actualArrivalTime: appointment.actualArrivalTime || format(new Date(), 'HH:mm'),
+        actualArrivalTime: appointment.actualArrivalTime || undefined,
         professionalId: appointment.professionalId || NO_SELECTION_PLACEHOLDER,
         durationMinutes: initialDurationMinutes,
         paymentMethod: appointment.paymentMethod || undefined,
-        amountPaid: appointment.amountPaid || undefined,
+        amountPaid: appointment.amountPaid ?? undefined,
         staffNotes: appointment.staffNotes || '',
         attachedPhotos: appointment.attachedPhotos?.filter(p => typeof p === 'string' && p.startsWith("data:image/")) || [],
         addedServices: appointment.addedServices?.map(as => ({
@@ -157,7 +170,7 @@ export function AppointmentEditDialog({ appointment, isOpen, onOpenChange, onApp
   };
 
   const onSubmitUpdate = async (data: AppointmentUpdateFormData) => {
-    if (!allServices?.length && data.serviceId === DEFAULT_SERVICE_ID_PLACEHOLDER) {
+    if (allServices && !allServices.length && data.serviceId === DEFAULT_SERVICE_ID_PLACEHOLDER) {
         toast({ title: "Error", description: "No hay servicios disponibles o no se ha seleccionado uno.", variant: "destructive" });
         return;
     }
@@ -186,13 +199,14 @@ export function AppointmentEditDialog({ appointment, isOpen, onOpenChange, onApp
         professionalId: data.professionalId === NO_SELECTION_PLACEHOLDER ? null : data.professionalId,
         durationMinutes: data.durationMinutes,
         amountPaid: data.amountPaid,
+        actualArrivalTime: data.actualArrivalTime || undefined,
         attachedPhotos: (data.attachedPhotos || []).filter(photo => photo && typeof photo === 'string' && photo.startsWith("data:image/")),
         addedServices: data.addedServices?.map(as => ({
           ...as,
-          serviceId: as.serviceId === DEFAULT_SERVICE_ID_PLACEHOLDER ? (allServices?.length ? allServices[0].id : '') : as.serviceId,
+          serviceId: as.serviceId === DEFAULT_SERVICE_ID_PLACEHOLDER && allServices?.length ? allServices[0].id : as.serviceId,
           professionalId: as.professionalId === NO_SELECTION_PLACEHOLDER ? null : as.professionalId,
           price: as.price,
-        })),
+        })).filter(as => as.serviceId && as.serviceId !== DEFAULT_SERVICE_ID_PLACEHOLDER),
       };
 
       const result = await updateAppointmentData(appointment.id, updatedData);
@@ -210,6 +224,27 @@ export function AppointmentEditDialog({ appointment, isOpen, onOpenChange, onApp
       setIsSubmittingForm(false);
     }
   };
+
+  const handleDelete = async () => {
+    setIsDeleting(true);
+    try {
+      const success = await deleteAppointmentData(appointment.id);
+      if (success) {
+        toast({ title: "Cita Eliminada", description: "La cita ha sido eliminada exitosamente." });
+        onAppointmentUpdated(null); // Notify parent to remove from list
+        setIsConfirmDeleteOpen(false);
+        onOpenChange(false); // Close the edit dialog
+      } else {
+        toast({ title: "Error", description: "No se pudo eliminar la cita.", variant: "destructive" });
+      }
+    } catch (error) {
+      console.error("Error deleting appointment:", error);
+      toast({ title: "Error Inesperado", description: "Ocurrió un error al eliminar la cita.", variant: "destructive" });
+    } finally {
+      setIsDeleting(false);
+    }
+  };
+
 
   if (!isOpen) return null;
 
@@ -278,7 +313,7 @@ export function AppointmentEditDialog({ appointment, isOpen, onOpenChange, onApp
                         mode="single"
                         selected={field.value}
                         onSelect={field.onChange}
-                        disabled={(date) => date < new Date(new Date().setHours(0,0,0,0))}
+                        // disabled={(date) => date < new Date(new Date().setHours(0,0,0,0))} // Allow past dates for editing history
                         initialFocus
                       />
                     </PopoverContent>
@@ -317,18 +352,18 @@ export function AppointmentEditDialog({ appointment, isOpen, onOpenChange, onApp
                 <FormLabel className="flex items-center gap-1"><ConciergeBell size={16}/>Motivo de la Reserva (Servicio Principal)</FormLabel>
                 <Select
                   onValueChange={field.onChange}
-                  value={field.value}
-                  disabled={isLoadingServices || !allServices?.length}
+                  value={field.value === DEFAULT_SERVICE_ID_PLACEHOLDER && allServices && allServices.length > 0 ? allServices[0].id : field.value}
+                  disabled={isLoadingServices || (allServices && !allServices.length)}
                 >
                   <FormControl>
                     <SelectTrigger>
-                      <SelectValue placeholder={isLoadingServices ? "Cargando servicios..." : (!allServices?.length ? "No hay servicios" : "Seleccionar servicio")} />
+                      <SelectValue placeholder={isLoadingServices ? "Cargando servicios..." : (allServices && !allServices.length ? "No hay servicios" : "Seleccionar servicio")} />
                     </SelectTrigger>
                   </FormControl>
                   <SelectContent>
                     {isLoadingServices && <SelectItem value={DEFAULT_SERVICE_ID_PLACEHOLDER} disabled>Cargando...</SelectItem>}
-                    {!isLoadingServices && !allServices?.length && <SelectItem value={DEFAULT_SERVICE_ID_PLACEHOLDER} disabled>No hay servicios disponibles</SelectItem>}
-                    {!isLoadingServices && allServices?.map(s => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}
+                    {!isLoadingServices && allServices && !allServices.length && <SelectItem value={DEFAULT_SERVICE_ID_PLACEHOLDER} disabled>No hay servicios disponibles</SelectItem>}
+                    {!isLoadingServices && allServices && allServices.map(s => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}
                   </SelectContent>
                 </Select>
                 <FormMessage />
@@ -491,7 +526,7 @@ export function AppointmentEditDialog({ appointment, isOpen, onOpenChange, onApp
                 {attachedPhotoFields.map((fieldItem, index) => (
                   fieldItem.value && typeof fieldItem.value === 'string' && fieldItem.value.startsWith("data:image/") ? (
                     <div key={fieldItem.id} className="relative group">
-                      <Image src={fieldItem.value} alt={`Foto adjunta ${index + 1}`} width={80} height={80} className="rounded object-cover aspect-square border" data-ai-hint="medical image" />
+                      <Image src={fieldItem.value} alt={`Foto adjunta ${index + 1}`} width={80} height={80} className="rounded object-cover aspect-square border" data-ai-hint="medical record" />
                       <Button
                         type="button"
                         variant="destructive"
@@ -538,11 +573,11 @@ export function AppointmentEditDialog({ appointment, isOpen, onOpenChange, onApp
                     render={({ field }) => (
                       <FormItem>
                         <FormLabel>Servicio Adicional</FormLabel>
-                        <Select onValueChange={field.onChange} value={field.value} disabled={!allServices?.length}>
-                          <FormControl><SelectTrigger><SelectValue placeholder={allServices?.length ? "Seleccionar servicio" : "No hay servicios"} /></SelectTrigger></FormControl>
+                        <Select onValueChange={field.onChange} value={field.value} disabled={allServices && !allServices.length}>
+                          <FormControl><SelectTrigger><SelectValue placeholder={allServices && allServices.length > 0 ? "Seleccionar servicio" : "No hay servicios"} /></SelectTrigger></FormControl>
                           <SelectContent>
-                             {!allServices?.length && <SelectItem value={DEFAULT_SERVICE_ID_PLACEHOLDER} disabled>No hay servicios</SelectItem>}
-                             {allServices?.map(s => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}
+                             {allServices && !allServices.length && <SelectItem value={DEFAULT_SERVICE_ID_PLACEHOLDER} disabled>No hay servicios</SelectItem>}
+                             {allServices && allServices.map(s => <SelectItem key={`added-${s.id}-${index}`} value={s.id}>{s.name}</SelectItem>)}
                           </SelectContent>
                         </Select>
                         <FormMessage />
@@ -559,7 +594,7 @@ export function AppointmentEditDialog({ appointment, isOpen, onOpenChange, onApp
                          <FormControl><SelectTrigger><SelectValue placeholder="Mismo prof. / Cualquiera" /></SelectTrigger></FormControl>
                           <SelectContent>
                             <SelectItem value={NO_SELECTION_PLACEHOLDER}>Mismo prof. / Cualquiera</SelectItem>
-                            {professionals.map(p => <SelectItem key={p.id} value={p.id}>{p.firstName} {p.lastName}</SelectItem>)}
+                            {professionals.map(p => <SelectItem key={`added-prof-${p.id}-${index}`} value={p.id}>{p.firstName} {p.lastName}</SelectItem>)}
                           </SelectContent>
                         </Select>
                         <FormMessage />
@@ -579,16 +614,54 @@ export function AppointmentEditDialog({ appointment, isOpen, onOpenChange, onApp
                   />
                 </div>
               ))}
+               <FormField control={form.control} name="addedServices" render={() => <FormMessage />} />
             </div>
           )}
 
-
-          <DialogFooter className="pt-4">
+          <DialogFooter className="pt-6 flex flex-col-reverse sm:flex-row sm:justify-end sm:space-x-2">
+            {user && user.role === USER_ROLES.ADMIN && (
+              <div className="sm:mr-auto mt-2 sm:mt-0">
+                <AlertDialog open={isConfirmDeleteOpen} onOpenChange={setIsConfirmDeleteOpen}>
+                  <AlertDialogTrigger asChild>
+                    <Button variant="destructive" type="button" className="w-full sm:w-auto" disabled={isDeleting}>
+                      {isDeleting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                      <Trash2 className="mr-2 h-4 w-4" />
+                      Eliminar Cita
+                    </Button>
+                  </AlertDialogTrigger>
+                  <AlertDialogContent>
+                    <AlertDialogHeader>
+                      <AlertDialogTitle>¿Confirmar Eliminación?</AlertDialogTitle>
+                      <AlertDialogDescription>
+                        ¿Estás seguro de que quieres eliminar la cita para {appointment.patient?.firstName} {appointment.patient?.lastName}? Esta acción no se puede deshacer.
+                      </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                      <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                      <AlertDialogAction
+                        onClick={handleDelete}
+                        className={buttonVariants({ variant: "destructive" })}
+                        disabled={isDeleting}
+                      >
+                        {isDeleting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                        Eliminar
+                      </AlertDialogAction>
+                    </AlertDialogFooter>
+                  </AlertDialogContent>
+                </AlertDialog>
+              </div>
+            )}
             <DialogClose asChild>
-              <Button type="button" variant="outline">Cancelar</Button>
+              <Button type="button" variant="outline" className="w-full sm:w-auto">
+                Cancelar
+              </Button>
             </DialogClose>
-            <Button type="submit" disabled={isSubmittingForm || isUploadingImage || isLoadingServices || !allServices?.length}>
-              {(isSubmittingForm || isUploadingImage || isLoadingServices) && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+            <Button
+              type="submit"
+              className="w-full sm:w-auto"
+              disabled={isSubmittingForm || isUploadingImage || isLoadingServices || (allServices && !allServices.length) || isDeleting}
+            >
+              {(isSubmittingForm || isUploadingImage || isLoadingServices || isDeleting) && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
               Guardar Cambios
             </Button>
           </DialogFooter>
@@ -598,3 +671,4 @@ export function AppointmentEditDialog({ appointment, isOpen, onOpenChange, onApp
     </Dialog>
   );
 }
+
