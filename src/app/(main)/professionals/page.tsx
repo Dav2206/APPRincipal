@@ -33,7 +33,7 @@ import {
   DialogDescription,
 } from '@/components/ui/dialog';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
-import { PlusCircle, Edit2, Briefcase, Search, Loader2, CalendarDays, Clock, Trash2, Calendar as CalendarIconLucide, AlertTriangle, Users, Moon, ChevronsDown, FileText, Building, Gift } from 'lucide-react';
+import { PlusCircle, Edit2, Users, Search, Loader2, CalendarDays, Clock, Trash2, Calendar as CalendarIconLucide, AlertTriangle, Moon, ChevronsDown, FileText, Building, Gift } from 'lucide-react';
 import { useForm, useFieldArray, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { ProfessionalFormSchema } from '@/lib/schemas';
@@ -83,8 +83,6 @@ export default function ProfessionalsPage() {
       lastName: '',
       locationId: LOCATIONS[0].id,
       phone: '',
-      birthDay: null,
-      birthMonth: null,
       workSchedule: defaultBaseWorkSchedule,
       customScheduleOverrides: [],
       currentContract_startDate: null,
@@ -173,8 +171,6 @@ export default function ProfessionalsPage() {
       lastName: '',
       locationId: defaultLoc as LocationId,
       phone: '',
-      birthDay: null,
-      birthMonth: null,
       workSchedule: defaultBaseWorkSchedule,
       customScheduleOverrides: [],
       currentContract_startDate: null,
@@ -207,8 +203,6 @@ export default function ProfessionalsPage() {
         lastName: professional.lastName,
         locationId: professional.locationId as LocationId, 
         phone: professional.phone || '',
-        birthDay: professional.birthDay ?? null,
-        birthMonth: professional.birthMonth ?? null,
         workSchedule: formWorkSchedule,
         customScheduleOverrides: professional.customScheduleOverrides?.map(ov => ({
             id: ov.id || generateId(), 
@@ -261,8 +255,6 @@ export default function ProfessionalsPage() {
         lastName: data.lastName,
         locationId: data.locationId,
         phone: data.phone || undefined,
-        birthDay: data.birthDay === 0 ? null : data.birthDay,
-        birthMonth: data.birthMonth === 0 ? null : data.birthMonth,
         workSchedule: {},
         customScheduleOverrides: data.customScheduleOverrides?.map(ov => ({
             id: ov.id || generateId(),
@@ -276,12 +268,11 @@ export default function ProfessionalsPage() {
         contractHistory: editingProfessional?.contractHistory || [],
       };
       
-      // Logic to move old currentContract to history if new contract is different
       if (editingProfessional?.currentContract && currentContract && editingProfessional.currentContract.id !== currentContract.id) {
          if (!professionalToSave.contractHistory.find(ch => ch.id === editingProfessional.currentContract!.id)) {
             professionalToSave.contractHistory.push(editingProfessional.currentContract);
          }
-      } else if (editingProfessional?.currentContract && !currentContract) { // Case where contract is removed
+      } else if (editingProfessional?.currentContract && !currentContract) { 
           if (!professionalToSave.contractHistory.find(ch => ch.id === editingProfessional.currentContract!.id)) {
             professionalToSave.contractHistory.push(editingProfessional.currentContract);
          }
@@ -358,7 +349,7 @@ export default function ProfessionalsPage() {
   for (let i = 0; i <= 30; i++) { 
     const checkDate = dateFnsAddDays(referenceDate, i);
     const availability = getProfessionalAvailabilityForDate(prof, checkDate);
-    if (!availability) { 
+    if (!availability || (availability && !availability.startTime && !availability.endTime)) { 
       return checkDate;
     }
   }
@@ -371,18 +362,15 @@ export default function ProfessionalsPage() {
   const availabilityToday = getProfessionalAvailabilityForDate(prof, today);
 
   let todayStr = "Hoy: ";
-  if (availabilityToday) {
+  if (availabilityToday && availabilityToday.startTime && availabilityToday.endTime) {
     todayStr += `${availabilityToday.startTime}-${availabilityToday.endTime}`;
     if (availabilityToday.notes) todayStr += ` (${availabilityToday.notes})`;
   } else {
-    let reason = "Descansando";
-    const override = prof.customScheduleOverrides?.find(ov => isSameDay(parseISO(ov.date), today) && !ov.isWorking);
-    if (override) {
-      reason = `Descansando (Anulación${override.notes ? `: ${override.notes}` : ''})`;
-    } else if (prof.workSchedule && !prof.workSchedule[DAYS_OF_WEEK[getDay(today)].id as DayOfWeekId]?.isWorking && !override) {
-        reason = `Descansando (Horario base: ${DAYS_OF_WEEK[getDay(today)].name} libre)`;
+    if (availabilityToday && availabilityToday.reason && availabilityToday.reason.trim() !== "") {
+      todayStr += availabilityToday.reason; 
+    } else {
+      todayStr += "Descansando"; 
     }
-    todayStr += reason;
   }
   
   const nextDayOffDate = calculateNextGeneralDayOff(prof, today);
@@ -461,10 +449,10 @@ export default function ProfessionalsPage() {
                           <span className={cn(
                             prof.contractDisplayStatus === 'Activo' && 'text-green-600',
                             prof.contractDisplayStatus === 'Próximo a Vencer' && 'text-orange-500',
-                            prof.contractDisplayStatus === 'Vencido' && 'text-red-600',
+                            (prof.contractDisplayStatus === 'Vencido' || prof.contractDisplayStatus === 'No Vigente Aún') && 'text-red-600',
                             prof.contractDisplayStatus === 'Sin Contrato' && 'text-muted-foreground',
                           )}>
-                            {prof.contractDisplayStatus === 'Próximo a Vencer' || prof.contractDisplayStatus === 'Vencido' ? <AlertTriangle className="inline-block mr-1 h-3 w-3" /> : null}
+                            {(prof.contractDisplayStatus === 'Próximo a Vencer' || prof.contractDisplayStatus === 'Vencido' || prof.contractDisplayStatus === 'No Vigente Aún') && <AlertTriangle className="inline-block mr-1 h-3 w-3" />}
                             {prof.contractDisplayStatus}
                           </span>
                         </TableCell>
@@ -538,52 +526,6 @@ export default function ProfessionalsPage() {
                     <FormField control={form.control} name="phone" render={({ field }) => (
                         <FormItem className="mt-4"><FormLabel>Teléfono (Opcional)</FormLabel><FormControl><Input type="tel" placeholder="Ej: 987654321" {...field} value={field.value || ''} /></FormControl><FormMessage /></FormItem>
                     )}/>
-                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <FormField
-                          control={form.control}
-                          name="birthDay"
-                          render={({ field }) => (
-                            <FormItem>
-                              <FormLabel className="flex items-center gap-1"><Gift size={16}/>Día de Cumpleaños (Opcional)</FormLabel>
-                               <Select
-                                onValueChange={(value) => field.onChange(value === NO_SPECIFY_BIRTHDAY_ITEM_VALUE ? null : parseInt(value))}
-                                value={field.value === null ? NO_SPECIFY_BIRTHDAY_ITEM_VALUE : (field.value?.toString() || NO_SPECIFY_BIRTHDAY_ITEM_VALUE)}
-                              >
-                                <FormControl><SelectTrigger><SelectValue placeholder="Día" /></SelectTrigger></FormControl>
-                                <SelectContent>
-                                  <SelectItem value={NO_SPECIFY_BIRTHDAY_ITEM_VALUE}><em>No especificar</em></SelectItem>
-                                  {Array.from({ length: 31 }, (_, i) => i + 1).map(day => (
-                                    <SelectItem key={`day-${day}`} value={day.toString()}>{day}</SelectItem>
-                                  ))}
-                                </SelectContent>
-                              </Select>
-                              <FormMessage />
-                            </FormItem>
-                          )}
-                        />
-                        <FormField
-                          control={form.control}
-                          name="birthMonth"
-                          render={({ field }) => (
-                            <FormItem>
-                              <FormLabel className="flex items-center gap-1"><Gift size={16}/>Mes de Cumpleaños (Opcional)</FormLabel>
-                              <Select
-                                onValueChange={(value) => field.onChange(value === NO_SPECIFY_BIRTHDAY_ITEM_VALUE ? null : parseInt(value))}
-                                value={field.value === null ? NO_SPECIFY_BIRTHDAY_ITEM_VALUE : (field.value?.toString() || NO_SPECIFY_BIRTHDAY_ITEM_VALUE)}
-                              >
-                                <FormControl><SelectTrigger><SelectValue placeholder="Mes" /></SelectTrigger></FormControl>
-                                <SelectContent>
-                                  <SelectItem value={NO_SPECIFY_BIRTHDAY_ITEM_VALUE}><em>No especificar</em></SelectItem>
-                                  {MONTH_NAMES.map((monthName, index) => (
-                                    <SelectItem key={`month-${index + 1}`} value={(index + 1).toString()}>{monthName}</SelectItem>
-                                  ))}
-                                </SelectContent>
-                              </Select>
-                              <FormMessage />
-                            </FormItem>
-                          )}
-                        />
-                      </div>
                   </AccordionContent>
                 </AccordionItem>
 
@@ -765,5 +707,6 @@ export default function ProfessionalsPage() {
     </div>
   );
 }
+
 
 
