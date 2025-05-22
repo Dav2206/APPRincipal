@@ -12,18 +12,20 @@ import { Button } from '@/components/ui/button';
 import { Calendar } from '@/components/ui/calendar';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { format, addDays, subDays, startOfDay, isEqual, parseISO, formatISO } from 'date-fns'; // Added formatISO
+import { format, addDays, subDays, startOfDay, isEqual, parseISO, formatISO } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { CalendarIcon, ChevronLeftIcon, ChevronRightIcon, AlertTriangle, Loader2, CalendarClock, PlusCircleIcon } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { AppointmentEditDialog } from '@/components/appointments/appointment-edit-dialog';
 import { AppointmentForm } from '@/components/appointments/appointment-form';
+import { useToast } from "@/hooks/use-toast"; // Import useToast
 
 const timeSlotsForView = TIME_SLOTS.filter(slot => parseInt(slot.split(':')[0]) >= 9);
 
 export default function SchedulePage() {
   const { user } = useAuth();
   const { selectedLocationId: adminSelectedLocation } = useAppState();
+  const { toast } = useToast(); // Initialize useToast
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [allSystemProfessionals, setAllSystemProfessionals] = useState<Professional[]>([]);
   const [workingProfessionalsForTimeline, setWorkingProfessionalsForTimeline] = useState<Professional[]>([]);
@@ -56,7 +58,6 @@ export default function SchedulePage() {
         getProfessionals(),
         getAppointments({
           date: currentDate,
-          // Fetch all relevant statuses for the timeline view
           statuses: [APPOINTMENT_STATUS.BOOKED, APPOINTMENT_STATUS.CONFIRMED, APPOINTMENT_STATUS.COMPLETED],
         }),
       ]);
@@ -74,13 +75,11 @@ export default function SchedulePage() {
       allRelevantAppointmentsToday
         .filter(appt => appt.locationId === actualEffectiveLocationId && !appt.isTravelBlock)
         .forEach(appt => {
-          // Only add appointments with statuses that should be displayed on the timeline
           if ([APPOINTMENT_STATUS.BOOKED, APPOINTMENT_STATUS.CONFIRMED, APPOINTMENT_STATUS.COMPLETED].includes(appt.status)) {
             displayableAppointments.push(appt);
           }
           if (appt.professionalId && !processedProfIdsForColumns.has(appt.professionalId)) {
             const prof = allSystemProfs.find(p => p.id === appt.professionalId);
-            // Add to columns if they are not a manager and have availability (contract active, working today)
             if (prof && !prof.isManager && getProfessionalAvailabilityForDate(prof, currentDate)) {
               professionalsForColumnsSet.add(prof);
               processedProfIdsForColumns.add(prof.id);
@@ -92,10 +91,6 @@ export default function SchedulePage() {
       allSystemProfs
         .filter(prof => {
             const availability = getProfessionalAvailabilityForDate(prof, currentDate);
-            // Condition for a professional to have a column:
-            // 1. Belongs to the currently viewed location OR is involved in a travel block for this location (handled separately for appt display)
-            // 2. Is NOT a manager
-            // 3. Has availability (contract active and working today)
             return prof.locationId === actualEffectiveLocationId && !prof.isManager && availability;
         })
         .forEach(localProf => {
@@ -103,21 +98,12 @@ export default function SchedulePage() {
             professionalsForColumnsSet.add(localProf);
             processedProfIdsForColumns.add(localProf.id);
           }
-
-          // Logic for travel blocks: if a professional from ANOTHER location is scheduled
-          // for a "travel block" appointment AT THIS viewingLocationId, they get a column.
-          // And if a professional from THIS viewingLocationId is scheduled for a travel block
-          // TO another location, that travel block appointment should be shown in THEIR column.
           allRelevantAppointmentsToday
-            .filter(appt => appt.professionalId === localProf.id && appt.isTravelBlock) // appt.isExternalProfessional is for appt form
+            .filter(appt => appt.professionalId === localProf.id && appt.isTravelBlock)
             .forEach(travelAppt => {
               if (!displayableAppointments.find(da => da.id === travelAppt.id || (da.id.startsWith('travel-') && da.id.includes(travelAppt.id)))) {
-                // Ensure the travel block is displayed in the correct professional's column
-                // The travel block itself might be for a different location if the professional is traveling FROM viewingLocationId
-                // Or it might be FOR viewingLocationId if an external professional is traveling TO viewingLocationId
                 displayableAppointments.push({
                   ...travelAppt,
-                  // id: `travel-${travelAppt.id}-${localProf.id}`, // ID generation for travel blocks could be refined
                 });
               }
             });
@@ -143,14 +129,14 @@ export default function SchedulePage() {
     } finally {
       setIsLoading(false);
     }
-  }, [user, actualEffectiveLocationId, currentDate, toast]); // Added toast
+  }, [user, actualEffectiveLocationId, currentDate, toast]); 
 
 
   useEffect(() => {
-    if(actualEffectiveLocationId) { // Fetch data only if there's an effective location
+    if(actualEffectiveLocationId) { 
       fetchData();
-    } else if (isAdminOrContador && !adminSelectedLocation) { // Admin/Contador has not selected a location yet
-      setIsLoading(false); // Stop loading, show placeholder or selection prompt
+    } else if (isAdminOrContador && !adminSelectedLocation) { 
+      setIsLoading(false); 
       setAppointments([]);
       setWorkingProfessionalsForTimeline([]);
     }
@@ -164,7 +150,7 @@ export default function SchedulePage() {
   };
 
   const handleTimelineAppointmentClick = useCallback(async (appointment: Appointment) => {
-    if (appointment.isTravelBlock) return; // Do not open edit for travel blocks
+    if (appointment.isTravelBlock) return; 
 
     try {
       if (!appointment || !appointment.id || appointment.id.startsWith('travel-')) {
@@ -186,21 +172,21 @@ export default function SchedulePage() {
         description: "No se pudieron cargar los detalles completos de la cita.",
         variant: "destructive",
       });
-      setSelectedAppointmentForEdit(appointment); // Fallback to timeline data on error
+      setSelectedAppointmentForEdit(appointment); 
       setIsEditModalOpen(true);
     }
   }, [toast]);
 
 
   const handleAppointmentUpdated = useCallback(() => {
-    fetchData(); // Re-fetch all data for the current view
+    fetchData(); 
     setIsEditModalOpen(false);
     setSelectedAppointmentForEdit(null);
   }, [fetchData]);
 
   const handleNewAppointmentCreated = useCallback(async () => {
     setIsNewAppointmentFormOpen(false);
-    await fetchData(); // Re-fetch all data
+    await fetchData(); 
   }, [fetchData]);
 
   const NoDataCard = ({ title, message }: { title: string; message: string }) => (
