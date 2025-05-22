@@ -271,8 +271,8 @@ export default function ProfessionalsPage() {
         lastName: data.lastName,
         locationId: data.locationId,
         phone: data.phone || null,
-        birthDay: data.birthDay === 0 ? null : data.birthDay,
-        birthMonth: data.birthMonth === 0 ? null : data.birthMonth,
+        birthDay: data.birthDay === undefined || data.birthDay === 0 ? null : data.birthDay,
+        birthMonth: data.birthMonth === undefined || data.birthMonth === 0 ? null : data.birthMonth,
         isManager: data.isManager || false,
         workSchedule: {},
         customScheduleOverrides: data.customScheduleOverrides?.map(ov => ({
