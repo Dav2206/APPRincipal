@@ -12,7 +12,7 @@ import { Button } from '@/components/ui/button';
 import { Calendar } from '@/components/ui/calendar';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { format, addDays, subDays, startOfDay, isEqual, parseISO } from 'date-fns';
+import { format, addDays, subDays, startOfDay, isEqual, parseISO, formatISO } from 'date-fns'; // Added formatISO
 import { es } from 'date-fns/locale';
 import { CalendarIcon, ChevronLeftIcon, ChevronRightIcon, AlertTriangle, Loader2, CalendarClock, PlusCircleIcon } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -49,13 +49,14 @@ export default function SchedulePage() {
       return;
     }
     setIsLoading(true);
-    console.log(`[SchedulePage] fetchData for date: ${formatISO(currentDate)}, location: ${actualEffectiveLocationId}`);
+    console.log(`[SchedulePage] fetchData for date: ${currentDate ? formatISO(currentDate) : 'N/A'}, location: ${actualEffectiveLocationId}`);
 
     try {
       const [allSystemProfsResponse, allRelevantAppointmentsTodayResponse] = await Promise.all([
         getProfessionals(),
         getAppointments({
           date: currentDate,
+          // Fetch all relevant statuses for the timeline view
           statuses: [APPOINTMENT_STATUS.BOOKED, APPOINTMENT_STATUS.CONFIRMED, APPOINTMENT_STATUS.COMPLETED],
         }),
       ]);
@@ -73,9 +74,13 @@ export default function SchedulePage() {
       allRelevantAppointmentsToday
         .filter(appt => appt.locationId === actualEffectiveLocationId && !appt.isTravelBlock)
         .forEach(appt => {
-          displayableAppointments.push(appt);
+          // Only add appointments with statuses that should be displayed on the timeline
+          if ([APPOINTMENT_STATUS.BOOKED, APPOINTMENT_STATUS.CONFIRMED, APPOINTMENT_STATUS.COMPLETED].includes(appt.status)) {
+            displayableAppointments.push(appt);
+          }
           if (appt.professionalId && !processedProfIdsForColumns.has(appt.professionalId)) {
             const prof = allSystemProfs.find(p => p.id === appt.professionalId);
+            // Add to columns if they are not a manager and have availability (contract active, working today)
             if (prof && !prof.isManager && getProfessionalAvailabilityForDate(prof, currentDate)) {
               professionalsForColumnsSet.add(prof);
               processedProfIdsForColumns.add(prof.id);
@@ -87,6 +92,10 @@ export default function SchedulePage() {
       allSystemProfs
         .filter(prof => {
             const availability = getProfessionalAvailabilityForDate(prof, currentDate);
+            // Condition for a professional to have a column:
+            // 1. Belongs to the currently viewed location OR is involved in a travel block for this location (handled separately for appt display)
+            // 2. Is NOT a manager
+            // 3. Has availability (contract active and working today)
             return prof.locationId === actualEffectiveLocationId && !prof.isManager && availability;
         })
         .forEach(localProf => {
@@ -95,14 +104,20 @@ export default function SchedulePage() {
             processedProfIdsForColumns.add(localProf.id);
           }
 
+          // Logic for travel blocks: if a professional from ANOTHER location is scheduled
+          // for a "travel block" appointment AT THIS viewingLocationId, they get a column.
+          // And if a professional from THIS viewingLocationId is scheduled for a travel block
+          // TO another location, that travel block appointment should be shown in THEIR column.
           allRelevantAppointmentsToday
-            .filter(appt => appt.professionalId === localProf.id && appt.isExternalProfessional && appt.locationId !== actualEffectiveLocationId)
+            .filter(appt => appt.professionalId === localProf.id && appt.isTravelBlock) // appt.isExternalProfessional is for appt form
             .forEach(travelAppt => {
-              if (!displayableAppointments.find(da => da.id === `travel-${travelAppt.id}-${localProf.id}`)) {
+              if (!displayableAppointments.find(da => da.id === travelAppt.id || (da.id.startsWith('travel-') && da.id.includes(travelAppt.id)))) {
+                // Ensure the travel block is displayed in the correct professional's column
+                // The travel block itself might be for a different location if the professional is traveling FROM viewingLocationId
+                // Or it might be FOR viewingLocationId if an external professional is traveling TO viewingLocationId
                 displayableAppointments.push({
                   ...travelAppt,
-                  id: `travel-${travelAppt.id}-${localProf.id}`,
-                  isTravelBlock: true,
+                  // id: `travel-${travelAppt.id}-${localProf.id}`, // ID generation for travel blocks could be refined
                 });
               }
             });
@@ -118,17 +133,28 @@ export default function SchedulePage() {
 
     } catch (error) {
       console.error("[SchedulePage] Error fetching schedule data:", error);
+      toast({
+        title: "Error al Cargar Agenda",
+        description: "No se pudieron obtener los datos de la agenda. Intente de nuevo.",
+        variant: "destructive",
+      });
       setAppointments([]);
       setWorkingProfessionalsForTimeline([]);
     } finally {
       setIsLoading(false);
     }
-  }, [user, actualEffectiveLocationId, currentDate]);
+  }, [user, actualEffectiveLocationId, currentDate, toast]); // Added toast
 
 
   useEffect(() => {
-    fetchData();
-  }, [fetchData]);
+    if(actualEffectiveLocationId) { // Fetch data only if there's an effective location
+      fetchData();
+    } else if (isAdminOrContador && !adminSelectedLocation) { // Admin/Contador has not selected a location yet
+      setIsLoading(false); // Stop loading, show placeholder or selection prompt
+      setAppointments([]);
+      setWorkingProfessionalsForTimeline([]);
+    }
+  }, [fetchData, actualEffectiveLocationId, isAdminOrContador, adminSelectedLocation]);
 
 
   const handleDateChange = (date: Date | undefined) => {
@@ -138,41 +164,43 @@ export default function SchedulePage() {
   };
 
   const handleTimelineAppointmentClick = useCallback(async (appointment: Appointment) => {
-    if (appointment.isTravelBlock) return;
+    if (appointment.isTravelBlock) return; // Do not open edit for travel blocks
 
     try {
       if (!appointment || !appointment.id || appointment.id.startsWith('travel-')) {
         console.error("Invalid appointment object or travel block passed to handleTimelineAppointmentClick");
         return;
       }
-      // Attempt to fetch the most up-to-date details, especially if it's an external professional's appointment
-      // where some details might not be fully populated initially.
-      const fullAppointmentDetails = await getAppointmentById(appointment.id.replace(/^travel-/, '').split('-')[0]); // Get original ID if it was a travel block ID
+      const fullAppointmentDetails = await getAppointmentById(appointment.id);
       if (fullAppointmentDetails) {
         setSelectedAppointmentForEdit(fullAppointmentDetails);
       } else {
-        // Fallback to the appointment data from the timeline if full details can't be fetched
-        // This might happen if it's a newly created appointment not yet fully retrievable by ID in some mock scenarios
         setSelectedAppointmentForEdit(appointment);
-        console.warn("[SchedulePage] Could not fetch full appointment details for edit, using timeline data for edit modal. Original ID:", appointment.id.replace(/^travel-/, '').split('-')[0]);
+        console.warn("[SchedulePage] Could not fetch full appointment details for edit, using timeline data for edit modal. Original ID:", appointment.id);
       }
       setIsEditModalOpen(true);
     } catch (error) {
       console.error("[SchedulePage] Error fetching appointment details for edit:", error);
+      toast({
+        title: "Error",
+        description: "No se pudieron cargar los detalles completos de la cita.",
+        variant: "destructive",
+      });
       setSelectedAppointmentForEdit(appointment); // Fallback to timeline data on error
       setIsEditModalOpen(true);
     }
-  }, []);
+  }, [toast]);
 
 
   const handleAppointmentUpdated = useCallback(() => {
-    fetchData();
+    fetchData(); // Re-fetch all data for the current view
     setIsEditModalOpen(false);
+    setSelectedAppointmentForEdit(null);
   }, [fetchData]);
 
   const handleNewAppointmentCreated = useCallback(async () => {
     setIsNewAppointmentFormOpen(false);
-    await fetchData();
+    await fetchData(); // Re-fetch all data
   }, [fetchData]);
 
   const NoDataCard = ({ title, message }: { title: string; message: string }) => (
@@ -200,7 +228,7 @@ export default function SchedulePage() {
             <div className='flex-grow'>
               <CardTitle className="text-3xl flex items-center gap-2">
                 <CalendarClock className="text-primary" />
-                Agenda Horaria - {format(currentDate, "PPP", { locale: es })}
+                Agenda Horaria - {currentDate ? format(currentDate, "PPP", { locale: es }) : "Seleccione fecha"}
               </CardTitle>
               <CardDescription>
                 Vista de la agenda en formato de línea de tiempo por profesional (excluye Gerentes de Sede).
@@ -214,7 +242,7 @@ export default function SchedulePage() {
                 <PopoverTrigger asChild>
                   <Button variant="outline" className={cn("w-full sm:w-[200px] justify-start text-left font-normal", !currentDate && "text-muted-foreground")}>
                     <CalendarIcon className="mr-2 h-4 w-4" />
-                    {format(currentDate, "PPP", { locale: es })}
+                    {currentDate ? format(currentDate, "PPP", { locale: es }) : "Seleccione fecha"}
                   </Button>
                 </PopoverTrigger>
                 <PopoverContent className="w-auto p-0">
@@ -225,7 +253,7 @@ export default function SchedulePage() {
                 <ChevronRightIcon className="h-4 w-4" />
               </Button>
               <Button
-                variant={isEqual(currentDate, startOfDay(new Date())) ? "secondary" : "outline"}
+                variant={currentDate && isEqual(currentDate, startOfDay(new Date())) ? "secondary" : "outline"}
                 onClick={() => handleDateChange(new Date())}
                 className="hidden sm:inline-flex"
               >
@@ -240,7 +268,7 @@ export default function SchedulePage() {
           </div>
           {(isAdminOrContador || user?.role === USER_ROLES.LOCATION_STAFF) && (
             <div className="mt-2 text-sm text-muted-foreground">
-              Viendo: {LOCATIONS.find(l => l.id === actualEffectiveLocationId)?.name || 'Sede no especificada'}
+              Viendo para: {LOCATIONS.find(l => l.id === actualEffectiveLocationId)?.name || 'Sede no especificada o no seleccionada'}
             </div>
           )}
         </CardHeader>
@@ -250,10 +278,10 @@ export default function SchedulePage() {
           ) : !actualEffectiveLocationId ? (
              <NoDataCard
               title="Seleccione una sede"
-              message="Por favor, seleccione una sede para ver la agenda horaria."
+              message="Por favor, seleccione una sede desde el menú superior para ver la agenda horaria."
             />
           )
-          : workingProfessionalsForTimeline.length === 0 && appointments.filter(a => a.locationId === actualEffectiveLocationId && !a.isTravelBlock && (a.status === APPOINTMENT_STATUS.BOOKED || a.status === APPOINTMENT_STATUS.CONFIRMED || a.status === APPOINTMENT_STATUS.COMPLETED)).length === 0 ? (
+          : workingProfessionalsForTimeline.length === 0 && appointments.filter(a => a.locationId === actualEffectiveLocationId && !a.isTravelBlock && [APPOINTMENT_STATUS.BOOKED, APPOINTMENT_STATUS.CONFIRMED, APPOINTMENT_STATUS.COMPLETED].includes(a.status)).length === 0 ? (
             <NoDataCard
               title="No hay profesionales ni citas"
               message={`No se encontraron profesionales activos (no gerentes) ni citas para ${LOCATIONS.find(l => l.id === actualEffectiveLocationId)?.name || 'la selección actual'} en esta fecha.`}
@@ -275,7 +303,10 @@ export default function SchedulePage() {
         <AppointmentEditDialog
           appointment={selectedAppointmentForEdit}
           isOpen={isEditModalOpen}
-          onOpenChange={setIsEditModalOpen}
+          onOpenChange={(open) => {
+            setIsEditModalOpen(open);
+            if (!open) setSelectedAppointmentForEdit(null);
+          }}
           onAppointmentUpdated={handleAppointmentUpdated}
         />
       )}
@@ -293,3 +324,4 @@ export default function SchedulePage() {
     </div>
   );
 }
+
