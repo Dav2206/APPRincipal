@@ -5,16 +5,15 @@ import { getFirestore, connectFirestoreEmulator, type Firestore, doc, getDoc } f
 import { getFunctions, connectFunctionsEmulator, type Functions } from 'firebase/functions';
 import { getAuth, connectAuthEmulator, type Auth } from 'firebase/auth';
 
+// Determine if using mock database based on environment variable
+// This variable should be 'true' (string) in .env.local to use mock, otherwise it defaults to false (uses Firebase real/emulator)
+const useMockDatabaseEnv = process.env.NEXT_PUBLIC_USE_MOCK_DATABASE;
+const useMockDatabase = useMockDatabaseEnv === 'true';
+
 console.log("[FirebaseConfig] Inicio de configuración. Timestamp:", new Date().toISOString());
 console.log("[FirebaseConfig] Valor de process.env.NODE_ENV:", process.env.NODE_ENV);
 console.log("[FirebaseConfig] Valor de process.env.NEXT_PUBLIC_USE_MOCK_DATABASE:", process.env.NEXT_PUBLIC_USE_MOCK_DATABASE);
-
-// Esta variable determinará si se usan los datos mock o se intenta conectar a Firebase real.
-// Para producción o para usar Firestore real, NEXT_PUBLIC_USE_MOCK_DATABASE debe ser 'false' o no estar definido.
-const useMockDatabaseEnv = process.env.NEXT_PUBLIC_USE_MOCK_DATABASE;
-const useMockDatabase = useMockDatabaseEnv === 'true'; // Removed 'export' here
-
-console.log(`[FirebaseConfig] ¿Usar Base de Datos Mock (en memoria)?: ${useMockDatabase} (basado en NEXT_PUBLIC_USE_MOCK_DATABASE='${useMockDatabaseEnv}')`);
+console.log(`[FirebaseConfig] ¿Usar Base de Datos Mock (en memoria)?: ${useMockDatabase}`);
 
 let app: FirebaseApp | undefined;
 let firestoreInstance: Firestore | undefined;
@@ -70,32 +69,91 @@ if (useMockDatabase) {
         authInstance = getAuth(app);
         console.log("[FirebaseConfig] Instancia de Authentication obtenida (apuntando a la nube).");
 
-        // Lectura de diagnóstico (opcional, pero útil)
-        const performDiagnosticRead = async (db: Firestore) => {
-          console.log("[FirebaseConfig-Diagnóstico] Intentando lectura de diagnóstico a Firestore en la nube...");
-          try {
-            const testDocRef = doc(db, "_connectivity_test_collection_debug", "test_doc_debug_cloud");
-            await getDoc(testDocRef);
-            console.log("[FirebaseConfig-Diagnóstico] ÉXITO: Lectura de diagnóstico a Firestore en la nube realizada.");
-          } catch (error: any) {
-            console.warn("[FirebaseConfig-Diagnóstico] FALLO: Error durante la lectura de diagnóstico a Firestore en la nube. Esto es esperado si la DB está vacía o las reglas son restrictivas. Error:", error.message);
-            if (error.code === 'permission-denied') {
-              console.warn("[FirebaseConfig-Diagnóstico] El error es 'permission-denied'. Verifica tus reglas de seguridad de Firestore.");
-            } else if (error.code === 'unavailable' || error.message.includes('Could not reach Cloud Firestore backend')) {
-              console.warn("[FirebaseConfig-Diagnóstico] El error es 'unavailable'. Verifica tu conexión a internet y la configuración de tu proyecto Firebase (API habilitada, facturación).");
-            } else if (error.message && error.message.includes("firestore/indexes?create_composite")) {
-              console.warn("[FirebaseConfig-Diagnóstico] El error indica que falta un índice en Firestore. Revisa la consola de Firebase para crear el índice necesario: ", error.message);
-            }
-          }
-        };
+        // Lógica de conexión a emuladores SOLO si estamos en desarrollo Y NO usando mock DB explícitamente con el emulador
+        if (process.env.NODE_ENV === 'development') {
+          console.log("[FirebaseConfig] Modo DESARROLLO detectado (y NO usando mock DB).");
 
-        // Descomentar para probar la conexión a Firestore real
-        // if (firestoreInstance && process.env.NODE_ENV === 'development') { // Solo en desarrollo para no spamear en prod
-        //   performDiagnosticRead(firestoreInstance);
-        // }
+          if (firestoreInstance) {
+            console.log("[FirebaseConfig] Intentando conectar Firestore al emulador en localhost:8080.");
+            try {
+              if (!(firestoreInstance as any)._settings?.host?.includes('localhost')) { // Prevenir múltiples conexiones
+                connectFirestoreEmulator(firestoreInstance, 'localhost', 8080);
+                console.log("[FirebaseConfig] ÉXITO - Conexión al emulador de Firestore CONFIGURADA para localhost:8080.");
+              } else {
+                console.log("[FirebaseConfig] Emulador de Firestore YA configurado para localhost:8080.");
+              }
+              console.log("[FirebaseConfig] Si usas el emulador, asegúrate de que esté ejecutándose (ej: 'firebase emulators:start').");
+            } catch (emulatorError: any) {
+              console.error("[FirebaseConfig] ERROR conectando al emulador de Firestore en localhost:8080:", emulatorError);
+              console.warn("[FirebaseConfig] Firestore usará la conexión a la NUBE porque la conexión al emulador falló o no se intentó.");
+            }
+          } else {
+            console.error("[FirebaseConfig] Instancia de Firestore no disponible en DESARROLLO para conectar al emulador.");
+          }
+
+          if (functionsInstance) {
+             console.log("[FirebaseConfig] Intentando conectar Functions al emulador en localhost:5001.");
+            try {
+                // Evitar reconexión si ya está conectado al emulador
+                if (!(functionsInstance as any).customDomain?.includes('localhost')) {
+                    connectFunctionsEmulator(functionsInstance, 'localhost', 5001);
+                    console.log("[FirebaseConfig] ÉXITO - Conexión al emulador de Functions CONFIGURADA para localhost:5001.");
+                } else {
+                    console.log("[FirebaseConfig] Emulador de Functions YA configurado para localhost:5001.");
+                }
+            } catch (emulatorError: any) {
+                console.error("[FirebaseConfig] ERROR conectando al emulador de Functions en localhost:5001:", emulatorError);
+                console.warn("[FirebaseConfig] Functions usará la conexión a la NUBE.");
+            }
+          } else {
+            console.warn("[FirebaseConfig] Instancia de Functions no disponible en DESARROLLO para conectar al emulador.");
+          }
+
+          if (authInstance) {
+             console.log("[FirebaseConfig] Intentando conectar Auth al emulador en localhost:9099.");
+              try {
+                  // Evitar reconexión si ya está conectado al emulador
+                  if (!(authInstance as any).config?.emulator?.url?.includes('localhost')) {
+                      connectAuthEmulator(authInstance, 'http://localhost:9099');
+                      console.log("[FirebaseConfig] ÉXITO - Conexión al emulador de Auth CONFIGURADA para localhost:9099.");
+                  } else {
+                      console.log("[FirebaseConfig] Emulador de Auth YA configurado para localhost:9099.");
+                  }
+              } catch (emulatorError: any) {
+                  console.error("[FirebaseConfig] ERROR conectando al emulador de Auth en localhost:9099:", emulatorError);
+                  console.warn("[FirebaseConfig] Auth usará la conexión a la NUBE.");
+              }
+          } else {
+              console.warn("[FirebaseConfig] Instancia de Auth no disponible en DESARROLLO para conectar al emulador.");
+          }
+        } else {
+          console.log(`[FirebaseConfig] Modo PRODUCCIÓN (o entorno no 'development') detectado. Conectando a Cloud Firebase real, proyecto ID: '${firebaseConfig.projectId}'.`);
+        }
+
+        // Diagnóstico de lectura después de la configuración
+        if (firestoreInstance) {
+          const performDiagnosticRead = async (db: Firestore) => {
+            console.log("[FirebaseConfig-Diagnóstico] Intentando lectura de diagnóstico a Firestore...");
+            try {
+              const testDocRef = doc(db, "_connectivity_test_collection_debug", "test_doc_debug");
+              await getDoc(testDocRef);
+              console.log("[FirebaseConfig-Diagnóstico] ÉXITO: Lectura de diagnóstico a Firestore realizada (no implica que el documento exista, solo que la conexión fue posible).");
+            } catch (error: any) {
+              console.error("[FirebaseConfig-Diagnóstico] FALLO: Error durante la lectura de diagnóstico a Firestore. Código:", error.code, "Mensaje:", error.message);
+              if (error.code === 'permission-denied') {
+                console.warn("[FirebaseConfig-Diagnóstico] El error es 'permission-denied'. Verifica tus REGLAS DE SEGURIDAD de Firestore.");
+              } else if (error.code === 'unavailable') {
+                console.warn("[FirebaseConfig-Diagnóstico] El error es 'unavailable'. Verifica tu CONEXIÓN A INTERNET y la configuración de tu proyecto Firebase (API de Firestore habilitada, facturación).");
+              } else if (error.message && error.message.includes("firestore/indexes?create_composite")) {
+                console.warn("[FirebaseConfig-Diagnóstico] El error indica que falta un ÍNDICE en Firestore. Revisa la consola de Firebase para crear el índice necesario: ", error.message);
+              }
+            }
+          };
+          performDiagnosticRead(firestoreInstance);
+        }
 
       } catch (e) {
-        console.error("[FirebaseConfig] Error obteniendo instancia de Firestore/Functions/Auth para la nube:", e);
+        console.error("[FirebaseConfig] Error obteniendo instancias de servicios Firebase o durante la lógica de emulador/producción:", e);
         firestoreInstance = undefined;
         functionsInstance = undefined;
         authInstance = undefined;
@@ -107,89 +165,27 @@ if (useMockDatabase) {
 }
 
 
-// Lógica de conexión a emuladores SOLO si NO estamos usando la base de datos mock Y estamos en desarrollo
-if (!useMockDatabase && process.env.NODE_ENV === 'development') {
-  console.log("[FirebaseConfig] Modo DESARROLLO detectado (y NO usando mock DB).");
-  if (firestoreInstance) {
-    console.log("[FirebaseConfig] Intentando conectar Firestore al emulador en localhost:8080.");
-    try {
-      // Para evitar múltiples conexiones si el módulo se recarga (HMR)
-      if (!(firestoreInstance as any)._settingsExperimental?.host?.includes('localhost')) {
-        connectFirestoreEmulator(firestoreInstance, 'localhost', 8080);
-        console.log("[FirebaseConfig] ÉXITO - Conexión al emulador de Firestore CONFIGURADA para localhost:8080.");
-      } else {
-        console.log("[FirebaseConfig] Emulador de Firestore YA configurado para localhost:8080.");
-      }
-    } catch (emulatorError: any) {
-      console.error("[FirebaseConfig] ERROR conectando al emulador de Firestore en localhost:8080:", emulatorError);
-      console.warn("[FirebaseConfig] Firestore usará la conexión a la NUBE. Asegúrate de que el emulador de Firestore esté ejecutándose si quieres usarlo.");
-    }
-  } else {
-    console.warn("[FirebaseConfig] Instancia de Firestore no disponible para conectar al emulador.");
-  }
-
-  if (functionsInstance) {
-    console.log("[FirebaseConfig] Intentando conectar Functions al emulador en localhost:5001.");
-    try {
-      // Para evitar múltiples conexiones
-      if (!(functionsInstance as any).customDomain?.includes('localhost')) {
-         connectFunctionsEmulator(functionsInstance, 'localhost', 5001);
-         console.log("[FirebaseConfig] ÉXITO - Conexión al emulador de Functions CONFIGURADA para localhost:5001.");
-      } else {
-         console.log("[FirebaseConfig] Emulador de Functions YA configurado para localhost:5001.");
-      }
-    } catch (emulatorError: any) {
-      console.error("[FirebaseConfig] ERROR conectando al emulador de Functions en localhost:5001:", emulatorError);
-      console.warn("[FirebaseConfig] Functions usará la conexión a la NUBE.");
-    }
-  } else {
-    console.warn("[FirebaseConfig] Instancia de Functions no disponible para conectar al emulador.");
-  }
-
-  if (authInstance) {
-    console.log("[FirebaseConfig] Intentando conectar Auth al emulador en localhost:9099.");
-    try {
-        // Para evitar múltiples conexiones
-        // La propiedad para verificar si el emulador de Auth ya está conectado es un poco menos directa.
-        // Una forma es verificar si el `authInstance.emulatorConfig` ya está seteado.
-        if (!(authInstance as any).config?.emulator?.url) {
-            connectAuthEmulator(authInstance, 'http://localhost:9099');
-            console.log("[FirebaseConfig] ÉXITO - Conexión al emulador de Auth CONFIGURADA para localhost:9099.");
-        } else {
-            console.log("[FirebaseConfig] Emulador de Auth YA configurado para localhost:9099.");
-        }
-    } catch (emulatorError: any) {
-        console.error("[FirebaseConfig] ERROR conectando al emulador de Auth en localhost:9099:", emulatorError);
-        console.warn("[FirebaseConfig] Auth usará la conexión a la NUBE.");
-    }
-  } else {
-      console.warn("[FirebaseConfig] Instancia de Auth no disponible para conectar al emulador.");
-  }
-} else if (!useMockDatabase && process.env.NODE_ENV !== 'development') {
-    console.log(`[FirebaseConfig] Modo PRODUCCIÓN detectado (o entorno no 'development'). Conectando a Cloud Firebase real, proyecto ID: '${firebaseConfig.projectId}'.`);
-    console.log("[FirebaseConfig] Si la conexión falla, revisa las credenciales en este archivo, la configuración de tu proyecto Firebase (servicios habilitados, estado de facturación, APIs habilitadas) y tu conectividad de red.");
-}
-
-
 if (useMockDatabase) {
   console.log("[FirebaseConfig] ESTADO FINAL: La aplicación está usando la BASE DE DATOS MOCK (en memoria). Firestore, Functions y Auth reales no serán contactados.");
 } else {
   if (!firestoreInstance) {
       console.warn("[FirebaseConfig] ALERTA FINAL: La instancia de Firestore NO está disponible. Las operaciones de datos con Firestore fallarán.");
   } else {
-      console.log("[FirebaseConfig] ESTADO FINAL: La instancia de Firestore ESTÁ disponible para la aplicación (intentando usar base de datos REAL o EMULADA).");
+      console.log("[FirebaseConfig] ESTADO FINAL: La instancia de Firestore ESTÁ disponible para la aplicación (intentando usar base de datos REAL en la nube o EMULADA).");
   }
   if (!functionsInstance) {
       console.warn("[FirebaseConfig] ALERTA FINAL: La instancia de Functions NO está disponible. Las llamadas a Firebase Functions fallarán.");
   } else {
-      console.log("[FirebaseConfig] ESTADO FINAL: La instancia de Functions ESTÁ disponible para la aplicación (intentando usar base de datos REAL o EMULADA).");
+      console.log("[FirebaseConfig] ESTADO FINAL: La instancia de Functions ESTÁ disponible para la aplicación (intentando usar base de datos REAL en la nube o EMULADA).");
   }
    if (!authInstance) {
       console.warn("[FirebaseConfig] ALERTA FINAL: La instancia de Authentication NO está disponible. Las operaciones de autenticación fallarán.");
   } else {
-      console.log("[FirebaseConfig] ESTADO FINAL: La instancia de Authentication ESTÁ disponible para la aplicación (intentando usar base de datos REAL o EMULADA).");
+      console.log("[FirebaseConfig] ESTADO FINAL: La instancia de Authentication ESTÁ disponible para la aplicación (intentando usar base de datos REAL en la nube o EMULADA).");
   }
 }
 console.log("--- [FirebaseConfig] FIN CONFIGURACIÓN FIREBASE/FIRESTORE/FUNCTIONS/AUTH ---");
 
 export { firestoreInstance as firestore, app, functionsInstance as functions, authInstance as auth, useMockDatabase };
+
+    
