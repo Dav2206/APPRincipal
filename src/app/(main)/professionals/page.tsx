@@ -32,7 +32,7 @@ import {
   DialogClose,
   DialogDescription,
 } from '@/components/ui/dialog';
-import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
+import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage, FormDescription } from "@/components/ui/form";
 import { PlusCircle, Edit2, Users, Search, Loader2, CalendarDays, Clock, Trash2, Calendar as CalendarIconLucide, AlertTriangle, Moon, ChevronsDown, FileText, Building, Gift, Briefcase as BriefcaseIcon } from 'lucide-react';
 import { useForm, useFieldArray, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -45,9 +45,11 @@ import { cn } from '@/lib/utils';
 import { format, parseISO, getDay, isSameDay, differenceInDays, startOfDay, addDays as dateFnsAddDays, formatISO as dateFnsFormatISO } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
+import { Badge } from '@/components/ui/badge';
 
 
 const PROFESSIONALS_PER_PAGE = 5;
+const NO_SPECIFY_BIRTHDAY_ITEM_VALUE = "_no_specify_birthday_";
 
 
 export default function ProfessionalsPage() {
@@ -73,6 +75,12 @@ export default function ProfessionalsPage() {
     sunday: { isWorking: true, startTime: '10:00', endTime: '18:00' },
   };
 
+  const months = Array.from({ length: 12 }, (_, i) => ({
+    value: i + 1,
+    label: format(new Date(2000, i, 1), "MMMM", { locale: es }),
+  }));
+  const days = Array.from({ length: 31 }, (_, i) => ({ value: i + 1, label: (i + 1).toString() }));
+
 
   const form = useForm<ProfessionalFormData>({
     resolver: zodResolver(ProfessionalFormSchema),
@@ -88,6 +96,8 @@ export default function ProfessionalsPage() {
       currentContract_endDate: null,
       currentContract_notes: '',
       currentContract_empresa: '',
+      birthDay: null,
+      birthMonth: null,
     }
   });
 
@@ -177,6 +187,8 @@ export default function ProfessionalsPage() {
       currentContract_endDate: null,
       currentContract_notes: '',
       currentContract_empresa: '',
+      birthDay: null,
+      birthMonth: null,
     });
     setIsFormOpen(true);
   };
@@ -217,6 +229,8 @@ export default function ProfessionalsPage() {
         currentContract_endDate: professional.currentContract?.endDate ? parseISO(professional.currentContract.endDate) : null,
         currentContract_notes: professional.currentContract?.notes || '',
         currentContract_empresa: professional.currentContract?.empresa || '',
+        birthDay: professional.birthDay ?? null,
+        birthMonth: professional.birthMonth ?? null,
     });
     setIsFormOpen(true);
   };
@@ -257,6 +271,8 @@ export default function ProfessionalsPage() {
         lastName: data.lastName,
         locationId: data.locationId,
         phone: data.phone || null,
+        birthDay: data.birthDay === 0 ? null : data.birthDay,
+        birthMonth: data.birthMonth === 0 ? null : data.birthMonth,
         isManager: data.isManager || false,
         workSchedule: {},
         customScheduleOverrides: data.customScheduleOverrides?.map(ov => ({
@@ -349,14 +365,14 @@ export default function ProfessionalsPage() {
   }
 
  const calculateNextGeneralDayOff = (prof: Professional, referenceDate: Date): Date | null => {
-    for (let i = 0; i <= 30; i++) {
+    for (let i = 0; i <= 30; i++) { // Check next 30 days
       const checkDate = dateFnsAddDays(referenceDate, i);
       const availability = getProfessionalAvailabilityForDate(prof, checkDate);
-      if (!availability || (availability && !availability.startTime && !availability.endTime)) {
+      if (!availability || (availability && !availability.startTime && !availability.endTime)) { // Not working or override to not working
         return checkDate;
       }
     }
-    return null;
+    return null; // No day off found in the next 30 days
   };
 
 
@@ -367,8 +383,11 @@ export default function ProfessionalsPage() {
     let todayStr = "Hoy: ";
     if (availabilityToday && availabilityToday.startTime && availabilityToday.endTime) {
       todayStr += `${availabilityToday.startTime}-${availabilityToday.endTime}`;
-      if (availabilityToday.notes && availabilityToday.notes.trim() !== "") todayStr += ` (${availabilityToday.notes})`;
-      else if (availabilityToday.reason && availabilityToday.reason.trim() !== "" && availabilityToday.reason !== "Horario base") todayStr += ` (${availabilityToday.reason})`;
+      if (availabilityToday.notes && availabilityToday.notes.trim() !== "") {
+         todayStr += ` (${availabilityToday.notes.substring(0,30)}${availabilityToday.notes.length > 30 ? '...' : ''})`;
+      } else if (availabilityToday.reason && availabilityToday.reason.trim() !== "" && availabilityToday.reason !== "Horario base") {
+         todayStr += ` (${availabilityToday.reason})`;
+      }
     } else {
       todayStr += availabilityToday?.reason || "Descansando";
     }
@@ -456,7 +475,7 @@ export default function ProfessionalsPage() {
                             prof.contractDisplayStatus === 'Sin Contrato' && 'text-muted-foreground',
                           )}>
                             {(prof.contractDisplayStatus === 'Próximo a Vencer' || prof.contractDisplayStatus === 'Vencido' || prof.contractDisplayStatus === 'No Vigente Aún') && <AlertTriangle className="inline-block mr-1 h-3 w-3" />}
-                            {getContractDisplayStatus(prof.currentContract)}
+                            {getContractDisplayStatus(prof.currentContract, new Date())}
                           </span>
                         </TableCell>
                         <TableCell className="hidden md:table-cell text-xs">{prof.currentContract?.empresa || 'N/A'}</TableCell>
@@ -529,6 +548,42 @@ export default function ProfessionalsPage() {
                     <FormField control={form.control} name="phone" render={({ field }) => (
                         <FormItem className="mt-4"><FormLabel>Teléfono (Opcional)</FormLabel><FormControl><Input type="tel" placeholder="Ej: 987654321" {...field} value={field.value || ''} /></FormControl><FormMessage /></FormItem>
                     )}/>
+                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <FormField
+                        control={form.control}
+                        name="birthDay"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel className="flex items-center gap-1"><Gift size={16}/>Día de Cumpleaños (Opcional)</FormLabel>
+                            <Select onValueChange={(value) => field.onChange(value === NO_SPECIFY_BIRTHDAY_ITEM_VALUE ? null : parseInt(value))} value={field.value === null ? NO_SPECIFY_BIRTHDAY_ITEM_VALUE : (field.value?.toString() || NO_SPECIFY_BIRTHDAY_ITEM_VALUE)}>
+                              <FormControl><SelectTrigger><SelectValue placeholder="Día" /></SelectTrigger></FormControl>
+                              <SelectContent>
+                                <SelectItem value={NO_SPECIFY_BIRTHDAY_ITEM_VALUE}>No especificar</SelectItem>
+                                {days.map(d => <SelectItem key={`day-${d.value}`} value={d.value.toString()}>{d.label}</SelectItem>)}
+                              </SelectContent>
+                            </Select>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                      <FormField
+                        control={form.control}
+                        name="birthMonth"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel className="flex items-center gap-1"><CalendarIconLucide size={16}/>Mes de Cumpleaños (Opcional)</FormLabel>
+                             <Select onValueChange={(value) => field.onChange(value === NO_SPECIFY_BIRTHDAY_ITEM_VALUE ? null : parseInt(value))} value={field.value === null ? NO_SPECIFY_BIRTHDAY_ITEM_VALUE : (field.value?.toString() || NO_SPECIFY_BIRTHDAY_ITEM_VALUE)}>
+                              <FormControl><SelectTrigger><SelectValue placeholder="Mes" /></SelectTrigger></FormControl>
+                              <SelectContent>
+                                <SelectItem value={NO_SPECIFY_BIRTHDAY_ITEM_VALUE}>No especificar</SelectItem>
+                                {months.map(m => <SelectItem key={`month-${m.value}`} value={m.value.toString()}>{m.label}</SelectItem>)}
+                              </SelectContent>
+                            </Select>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                    </div>
                     <FormField
                       control={form.control}
                       name="isManager"
@@ -731,3 +786,4 @@ export default function ProfessionalsPage() {
     </div>
   );
 }
+
