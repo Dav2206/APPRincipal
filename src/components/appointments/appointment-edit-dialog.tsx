@@ -47,7 +47,7 @@ interface AppointmentEditDialogProps {
   appointment: Appointment;
   isOpen: boolean;
   onOpenChange: (isOpen: boolean) => void;
-  onAppointmentUpdated: (updatedAppointment: Appointment | null) => void; // Allow null for deletion
+  onAppointmentUpdated: (updatedAppointment: Appointment | null | { id: string; _deleted: true }) => void;
 }
 
 type AppointmentUpdateFormData = Zod.infer<typeof AppointmentUpdateSchema>;
@@ -231,7 +231,7 @@ export function AppointmentEditDialog({ appointment, isOpen, onOpenChange, onApp
       const success = await deleteAppointmentData(appointment.id);
       if (success) {
         toast({ title: "Cita Eliminada", description: "La cita ha sido eliminada exitosamente." });
-        onAppointmentUpdated(null); // Notify parent to remove from list
+        onAppointmentUpdated({ id: appointment.id, _deleted: true }); // Notify parent to remove from list
         setIsConfirmDeleteOpen(false);
         onOpenChange(false); // Close the edit dialog
       } else {
@@ -572,7 +572,7 @@ export function AppointmentEditDialog({ appointment, isOpen, onOpenChange, onApp
                     name={`addedServices.${index}.serviceId`}
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel>Servicio Adicional</FormLabel>
+                        <FormLabel>Servicio Adicional {index + 1}</FormLabel>
                         <Select onValueChange={field.onChange} value={field.value} disabled={allServices && !allServices.length}>
                           <FormControl><SelectTrigger><SelectValue placeholder={allServices && allServices.length > 0 ? "Seleccionar servicio" : "No hay servicios"} /></SelectTrigger></FormControl>
                           <SelectContent>
@@ -590,7 +590,7 @@ export function AppointmentEditDialog({ appointment, isOpen, onOpenChange, onApp
                     render={({ field }) => (
                       <FormItem>
                         <FormLabel>Profesional (Opcional)</FormLabel>
-                        <Select onValueChange={field.onChange} value={field.value || NO_SELECTION_PLACEHOLDER}>
+                        <Select onValueChange={(value) => field.onChange(value === NO_SELECTION_PLACEHOLDER ? null : value)} value={field.value || NO_SELECTION_PLACEHOLDER}>
                          <FormControl><SelectTrigger><SelectValue placeholder="Mismo prof. / Cualquiera" /></SelectTrigger></FormControl>
                           <SelectContent>
                             <SelectItem value={NO_SELECTION_PLACEHOLDER}>Mismo prof. / Cualquiera</SelectItem>
@@ -607,7 +607,7 @@ export function AppointmentEditDialog({ appointment, isOpen, onOpenChange, onApp
                     render={({ field }) => (
                       <FormItem>
                         <FormLabel>Precio (S/) (Opcional)</FormLabel>
-                        <FormControl><Input type="number" step="0.01" placeholder="Ej: 50.00" {...field} value={field.value || ''} onChange={e => field.onChange(e.target.value ? parseFloat(e.target.value) : undefined)} /></FormControl>
+                        <FormControl><Input type="number" step="0.01" placeholder="Ej: 50.00" {...field} value={field.value ?? ""} onChange={e => field.onChange(e.target.value ? parseFloat(e.target.value) : undefined)} /></FormControl>
                         <FormMessage />
                       </FormItem>
                     )}
@@ -618,9 +618,9 @@ export function AppointmentEditDialog({ appointment, isOpen, onOpenChange, onApp
             </div>
           )}
 
-          <DialogFooter className="pt-6 flex flex-col-reverse sm:flex-row sm:justify-end sm:space-x-2">
-            {user && user.role === USER_ROLES.ADMIN && (
-              <div className="sm:mr-auto mt-2 sm:mt-0">
+          <DialogFooter className="pt-6 flex flex-col sm:flex-row sm:justify-between sm:items-center gap-2">
+            <div>
+              {user && user.role === USER_ROLES.ADMIN && (
                 <AlertDialog open={isConfirmDeleteOpen} onOpenChange={setIsConfirmDeleteOpen}>
                   <AlertDialogTrigger asChild>
                     <Button variant="destructive" type="button" className="w-full sm:w-auto" disabled={isDeleting}>
@@ -649,21 +649,23 @@ export function AppointmentEditDialog({ appointment, isOpen, onOpenChange, onApp
                     </AlertDialogFooter>
                   </AlertDialogContent>
                 </AlertDialog>
-              </div>
-            )}
-            <DialogClose asChild>
-              <Button type="button" variant="outline" className="w-full sm:w-auto">
-                Cancelar
+              )}
+            </div>
+            <div className="flex flex-col-reverse sm:flex-row sm:justify-end sm:space-x-2">
+              <DialogClose asChild>
+                <Button type="button" variant="outline" className="w-full sm:w-auto">
+                  Cancelar
+                </Button>
+              </DialogClose>
+              <Button
+                type="submit"
+                className="w-full sm:w-auto"
+                disabled={isSubmittingForm || isUploadingImage || isLoadingServices || (allServices && !allServices.length) || isDeleting}
+              >
+                {(isSubmittingForm || isUploadingImage || isLoadingServices || isDeleting) && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                Guardar Cambios
               </Button>
-            </DialogClose>
-            <Button
-              type="submit"
-              className="w-full sm:w-auto"
-              disabled={isSubmittingForm || isUploadingImage || isLoadingServices || (allServices && !allServices.length) || isDeleting}
-            >
-              {(isSubmittingForm || isUploadingImage || isLoadingServices || isDeleting) && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-              Guardar Cambios
-            </Button>
+            </div>
           </DialogFooter>
         </form>
         </Form>

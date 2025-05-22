@@ -94,13 +94,24 @@ export function AppointmentsDisplay() {
     }
   };
 
-  const handleAppointmentUpdate = useCallback((updatedAppointment: Appointment) => {
-    setAppointments(prev => 
-      prev.map(appt => appt.id === updatedAppointment.id ? updatedAppointment : appt)
-        .sort((a, b) => parseISO(a.appointmentDateTime).getTime() - parseISO(b.appointmentDateTime).getTime())
-    );
+  const handleAppointmentUpdate = useCallback((updatedOrDeletedAppointment: Appointment | null | { id: string; _deleted: true }) => {
+    if (updatedOrDeletedAppointment && (updatedOrDeletedAppointment as any)._deleted === true) {
+      // Cita eliminada
+      setAppointments(prev => 
+        prev.filter(appt => appt.id !== (updatedOrDeletedAppointment as { id: string; _deleted: true }).id)
+      );
+    } else if (updatedOrDeletedAppointment) {
+      // Cita actualizada
+      setAppointments(prev => 
+        prev.map(appt => appt.id === (updatedOrDeletedAppointment as Appointment).id ? (updatedOrDeletedAppointment as Appointment) : appt)
+          .sort((a, b) => parseISO(a.appointmentDateTime).getTime() - parseISO(b.appointmentDateTime).getTime())
+      );
+    }
+    // Si updatedOrDeletedAppointment es null (no debería pasar con la nueva lógica, pero por seguridad)
+    // o si la lógica de arriba ya actualizó/filtró, re-fetch para consistencia.
     fetchAppointmentData(); 
   }, [fetchAppointmentData]);
+
 
   const handleNewAppointmentCreated = useCallback(() => {
     fetchAppointmentData();
@@ -116,7 +127,7 @@ export function AppointmentsDisplay() {
           No se encontraron citas para {effectiveLocationId ? LOCATIONS.find(l=>l.id === effectiveLocationId)?.name : 'todas las sedes'} en la fecha seleccionada.
         </p>
         {(user?.role === USER_ROLES.ADMIN || user?.role === USER_ROLES.LOCATION_STAFF || user?.role === USER_ROLES.CONTADOR) && (
-          <Button onClick={() => setIsFormOpen(true)} disabled={isLoadingProfessionals}>
+          <Button onClick={() => setIsFormOpen(true)} disabled={isLoadingProfessionals && isFormOpen}>
             {isLoadingProfessionals && isFormOpen ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <PlusCircleIcon className="mr-2 h-4 w-4" />}
              Agendar Nueva Cita
           </Button>
