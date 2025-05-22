@@ -6,7 +6,7 @@ import React from 'react';
 import { parseISO, getHours, getMinutes, addMinutes, format } from 'date-fns';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { ScrollArea, ScrollBar } from '@/components/ui/scroll-area';
-import { User, Clock, AlertTriangle, Shuffle, Navigation } from 'lucide-react';
+import { User, Clock, AlertTriangle, Shuffle, Navigation, ShoppingBag } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { LOCATIONS } from '@/lib/constants';
 import { Badge } from '@/components/ui/badge';
@@ -14,7 +14,7 @@ import { es } from 'date-fns/locale';
 
 interface DailyTimelineProps {
   professionals: Professional[];
-  appointments: Appointment[]; // This now includes actual appointments and "travel block" appointments
+  appointments: Appointment[];
   timeSlots: string[];
   currentDate: Date;
   onAppointmentClick?: (appointment: Appointment) => void;
@@ -24,19 +24,19 @@ interface DailyTimelineProps {
 const PIXELS_PER_MINUTE = 1.5;
 const DAY_START_HOUR = 9;
 
-// This function is not used with the current PIXELS_PER_MINUTE approach for top/height
-// const timeToMinutesOffset = (timeStr: string): number => {
-//   const [hours, minutes] = timeStr.split(':').map(Number);
-//   return (hours - DAY_START_HOUR) * 60 + minutes;
-// };
 
 const isOverlapping = (apptA: Appointment, apptB: Appointment): boolean => {
-  if (apptA.isTravelBlock || apptB.isTravelBlock) return false; // Travel blocks don't overlap with actual appts for collision detection
-  const startA = parseISO(apptA.appointmentDateTime);
-  const endA = addMinutes(startA, apptA.durationMinutes);
-  const startB = parseISO(apptB.appointmentDateTime);
-  const endB = addMinutes(startB, apptB.durationMinutes);
-  return startA < endB && endA > startB;
+  if (apptA.isTravelBlock || apptB.isTravelBlock) return false;
+  try {
+    const startA = parseISO(apptA.appointmentDateTime);
+    const endA = addMinutes(startA, apptA.durationMinutes);
+    const startB = parseISO(apptB.appointmentDateTime);
+    const endB = addMinutes(startB, apptB.durationMinutes);
+    return startA < endB && endA > startB;
+  } catch (error) {
+    console.error("Error in isOverlapping with appointments:", apptA, apptB, error);
+    return false; // Treat as not overlapping if parsing fails
+  }
 };
 
 const DailyTimelineComponent = ({ professionals, appointments, timeSlots, onAppointmentClick, viewingLocationId }: DailyTimelineProps) => {
@@ -45,24 +45,26 @@ const DailyTimelineComponent = ({ professionals, appointments, timeSlots, onAppo
     return <p className="text-muted-foreground text-center py-8">No hay profesionales trabajando ni citas para mostrar en esta sede para la fecha seleccionada.</p>;
   }
    if (professionals.length === 0 && appointments.filter(a => a.locationId === viewingLocationId && !a.isTravelBlock).length > 0) {
-    // This case implies appointments exist but no professionals are in the columns, which means unassigned appointments.
-    // The current logic for building `professionalsForColumns` might need adjustment if unassigned appts should create columns.
-    // For now, if `professionals` is empty, we show the "no professionals" message.
      return <p className="text-muted-foreground text-center py-8">No hay profesionales asignados para mostrar en columnas, pero pueden existir citas sin asignar para esta fecha.</p>;
   }
 
 
   const getAppointmentStyle = (appointment: Appointment) => {
-    const appointmentStartDateTime = parseISO(appointment.appointmentDateTime);
-    const apptHours = getHours(appointmentStartDateTime);
-    const apptMinutes = getMinutes(appointmentStartDateTime);
-    const minutesFromTimelineStart = (apptHours - DAY_START_HOUR) * 60 + apptMinutes;
-    const top = minutesFromTimelineStart * PIXELS_PER_MINUTE;
-    const height = appointment.durationMinutes * PIXELS_PER_MINUTE;
-    return {
-      top: `${top}px`,
-      height: `${height}px`,
-    };
+    try {
+      const appointmentStartDateTime = parseISO(appointment.appointmentDateTime);
+      const apptHours = getHours(appointmentStartDateTime);
+      const apptMinutes = getMinutes(appointmentStartDateTime);
+      const minutesFromTimelineStart = (apptHours - DAY_START_HOUR) * 60 + apptMinutes;
+      const top = minutesFromTimelineStart * PIXELS_PER_MINUTE;
+      const height = appointment.durationMinutes * PIXELS_PER_MINUTE;
+      return {
+        top: `${top}px`,
+        height: `${height}px`,
+      };
+    } catch (error) {
+      console.error("Error in getAppointmentStyle with appointment:", appointment, error);
+      return { top: '0px', height: '0px' }; // Fallback style
+    }
   };
   
   const totalTimelineHeight = (timeSlots.length * 30 * PIXELS_PER_MINUTE) + PIXELS_PER_MINUTE * 30;
@@ -94,13 +96,18 @@ const DailyTimelineComponent = ({ professionals, appointments, timeSlots, onAppo
           {/* Professionals Columns */}
           <div className="flex flex-nowrap">
             {professionals.map(prof => {
-              // Filter appointments for THIS professional. This includes actual appts AT viewingLocationId OR travel blocks FOR this prof.
               const professionalTimelineItems = appointments
                 .filter(appt => appt.professionalId === prof.id)
-                .filter(appt => appt.locationId === viewingLocationId || appt.isTravelBlock) // Show appts at this location OR travel blocks
-                .sort((a, b) => parseISO(a.appointmentDateTime).getTime() - parseISO(b.appointmentDateTime).getTime());
+                .filter(appt => appt.locationId === viewingLocationId || appt.isTravelBlock)
+                .sort((a, b) => {
+                  try {
+                    return parseISO(a.appointmentDateTime).getTime() - parseISO(b.appointmentDateTime).getTime();
+                  } catch (error) {
+                    console.error("Error sorting appointments in DailyTimeline:", a, b, error);
+                    return 0;
+                  }
+                });
 
-              // Collision detection only for actual appointments at this location
               const actualAppointmentsForCollision = professionalTimelineItems.filter(appt => !appt.isTravelBlock && appt.locationId === viewingLocationId);
               const overlappingAppointmentIds = new Set<string>();
               for (let i = 0; i < actualAppointmentsForCollision.length; i++) {
@@ -137,7 +144,6 @@ const DailyTimelineComponent = ({ professionals, appointments, timeSlots, onAppo
                       const isApptOverlapping = overlappingAppointmentIds.has(appt.id) && !appt.isTravelBlock;
                       
                       if (appt.isTravelBlock) {
-                        // Render Travel Block
                         const destinationLocationName = LOCATIONS.find(l => l.id === appt.locationId)?.name || 'Otra Sede';
                         return (
                           <Tooltip key={appt.id} delayDuration={100}>
@@ -145,7 +151,7 @@ const DailyTimelineComponent = ({ professionals, appointments, timeSlots, onAppo
                               <div
                                 className={cn(
                                   "absolute left-1 right-1 rounded-md p-1.5 shadow-md text-xs overflow-hidden cursor-default flex flex-col justify-center items-center text-center",
-                                  "bg-slate-200 text-slate-600 border-slate-300" // Travel block specific style
+                                  "bg-slate-200 text-slate-600 border-slate-300" 
                                 )}
                                 style={getAppointmentStyle(appt)}
                               >
@@ -165,7 +171,6 @@ const DailyTimelineComponent = ({ professionals, appointments, timeSlots, onAppo
                         );
                       }
                       
-                      // Render Actual Appointment (either local or incoming external)
                       let appointmentMainText = `${appt.patient?.firstName || ''} ${appt.patient?.lastName || ''}`.trim();
                       if (!appointmentMainText) appointmentMainText = "Cita Reservada";
                       
@@ -201,6 +206,20 @@ const DailyTimelineComponent = ({ professionals, appointments, timeSlots, onAppo
                               {appt.durationMinutes > 30 && <p className="text-[10px] leading-tight opacity-80 mt-0.5">({appt.durationMinutes} min)</p>}
                             </div>
                             
+                            {appt.addedServices && appt.addedServices.length > 0 && appt.durationMinutes > 45 && (
+                              <div className="mt-1 pt-1 border-t border-[hsla(var(--accent-foreground),0.3)] text-[9px] leading-snug">
+                                <p className="font-medium opacity-80 flex items-center gap-0.5"><ShoppingBag size={10}/>Adicional:</p>
+                                <ul className="list-disc list-inside pl-1 opacity-80 max-h-[30px] overflow-hidden">
+                                  {appt.addedServices.slice(0, 1).map((as, index) => ( // Show only first one if many for space
+                                    <li key={index} className="truncate">
+                                      {as.service?.name || as.serviceId}
+                                    </li>
+                                  ))}
+                                  {appt.addedServices.length > 1 && <li className="truncate">...y más</li>}
+                                </ul>
+                              </div>
+                            )}
+
                             {appt.isExternalProfessional && appt.professionalId === prof.id && prof.locationId !== viewingLocationId && originLocationName && (
                               <Badge variant="outline" className="mt-1 text-[9px] p-0.5 h-fit bg-orange-100 text-orange-700 border-orange-300 self-start truncate">
                                 <Shuffle size={10} className="mr-1"/> De: {originLocationName}
@@ -213,6 +232,16 @@ const DailyTimelineComponent = ({ professionals, appointments, timeSlots, onAppo
                           <p className="font-bold text-sm">{appointmentMainText}</p>
                           <p><User size={12} className="inline mr-1"/> {appt.service?.name}</p>
                           <p><Clock size={12} className="inline mr-1"/> {format(parseISO(appt.appointmentDateTime), "HH:mm", { locale: es })} ({appt.durationMinutes} min)</p>
+                          {appt.addedServices && appt.addedServices.length > 0 && (
+                            <div className="mt-1">
+                              <p className="text-xs font-semibold">Servicios Adicionales:</p>
+                              <ul className="list-disc list-inside pl-2 text-xs">
+                                {appt.addedServices.map((as, idx) => (
+                                  <li key={idx}>{as.service?.name || as.serviceId}</li>
+                                ))}
+                              </ul>
+                            </div>
+                          )}
                           {appt.isExternalProfessional && appt.professionalId === prof.id && prof.locationId !== viewingLocationId && originLocationName && (
                             <p className="text-orange-600 text-xs mt-1 flex items-center gap-1">
                               <Shuffle size={12} className="inline"/> Profesional de: {originLocationName}
