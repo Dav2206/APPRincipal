@@ -239,7 +239,18 @@ export default function ContractsPage() {
         const statusCompare = statusOrder[a.contractDisplayStatus] - statusOrder[b.contractDisplayStatus];
         if (statusCompare !== 0) return statusCompare;
         if (a.currentContract?.endDate && b.currentContract?.endDate) {
-          return parseISO(a.currentContract.endDate).getTime() - parseISO(b.currentContract.endDate).getTime();
+          // Ensure dates are valid before parsing
+          const dateAValid = a.currentContract.endDate && typeof a.currentContract.endDate === 'string';
+          const dateBValid = b.currentContract.endDate && typeof b.currentContract.endDate === 'string';
+          if (dateAValid && dateBValid) {
+            try {
+                return parseISO(a.currentContract.endDate).getTime() - parseISO(b.currentContract.endDate).getTime();
+            } catch (e) {
+                // Fallback if parsing fails, or handle as needed
+            }
+          } else if (dateAValid) return -1; // a before b if b is invalid
+          else if (dateBValid) return 1;  // b before a if a is invalid
+
         }
         return `${a.firstName} ${a.lastName}`.localeCompare(`${b.firstName} ${b.lastName}`);
       });
@@ -673,17 +684,35 @@ export default function ContractsPage() {
                     {selectedProfessionalForHistory.currentContract && (
                       <TableRow className="bg-primary/5 hover:bg-primary/10">
                         <TableCell><Badge variant="default">Vigente</Badge></TableCell>
-                        <TableCell className="text-xs">{format(parseISO(selectedProfessionalForHistory.currentContract.startDate), 'dd/MM/yyyy')}</TableCell>
-                        <TableCell className="text-xs">{format(parseISO(selectedProfessionalForHistory.currentContract.endDate), 'dd/MM/yyyy')}</TableCell>
+                        <TableCell className="text-xs">{selectedProfessionalForHistory.currentContract.startDate ? format(parseISO(selectedProfessionalForHistory.currentContract.startDate), 'dd/MM/yyyy') : '-'}</TableCell>
+                        <TableCell className="text-xs">{selectedProfessionalForHistory.currentContract.endDate ? format(parseISO(selectedProfessionalForHistory.currentContract.endDate), 'dd/MM/yyyy') : '-'}</TableCell>
                         <TableCell className="text-xs">{selectedProfessionalForHistory.currentContract.empresa || '-'}</TableCell>
                         <TableCell className="text-xs">{selectedProfessionalForHistory.currentContract.notes || '-'}</TableCell>
                       </TableRow>
                     )}
-                    {selectedProfessionalForHistory.contractHistory && selectedProfessionalForHistory.contractHistory.sort((a,b) => parseISO(b.startDate).getTime() - parseISO(a.startDate).getTime()).map((contract, index) => (
+                    {selectedProfessionalForHistory.contractHistory && selectedProfessionalForHistory.contractHistory
+                      .sort((a, b) => {
+                        const dateAValid = a && typeof a.startDate === 'string' && a.startDate.length > 0;
+                        const dateBValid = b && typeof b.startDate === 'string' && b.startDate.length > 0;
+
+                        if (!dateBValid && !dateAValid) return 0; 
+                        if (!dateBValid) return 1; 
+                        if (!dateAValid) return -1;
+
+                        const timeA = parseISO(a.startDate!).getTime();
+                        const timeB = parseISO(b.startDate!).getTime();
+                        
+                        if (isNaN(timeB) && isNaN(timeA)) return 0;
+                        if (isNaN(timeB)) return 1;
+                        if (isNaN(timeA)) return -1;
+
+                        return timeB - timeA;
+                      })
+                      .map((contract, index) => (
                       <TableRow key={contract.id || `history-${index}`}>
                         <TableCell><Badge variant="outline">Archivado</Badge></TableCell>
-                        <TableCell className="text-xs">{format(parseISO(contract.startDate), 'dd/MM/yyyy')}</TableCell>
-                        <TableCell className="text-xs">{format(parseISO(contract.endDate), 'dd/MM/yyyy')}</TableCell>
+                        <TableCell className="text-xs">{contract.startDate ? format(parseISO(contract.startDate), 'dd/MM/yyyy') : '-'}</TableCell>
+                        <TableCell className="text-xs">{contract.endDate ? format(parseISO(contract.endDate), 'dd/MM/yyyy') : '-'}</TableCell>
                         <TableCell className="text-xs">{contract.empresa || '-'}</TableCell>
                         <TableCell className="text-xs">{contract.notes || '-'}</TableCell>
                       </TableRow>
@@ -705,6 +734,3 @@ export default function ContractsPage() {
     </div>
   );
 }
-
-
-      
