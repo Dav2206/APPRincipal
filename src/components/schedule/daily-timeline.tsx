@@ -22,12 +22,12 @@ interface DailyTimelineProps {
 }
 
 const PIXELS_PER_MINUTE = 1.5;
-const DAY_START_HOUR = 9;
+const DAY_START_HOUR = 9; // Assuming timeline starts at 9 AM
 
 interface RenderableServiceBlock {
   id: string; // Combination of appt.id and serviceId/index for uniqueness
   originalAppointmentId: string;
-  assignedProfessionalId: string | null; // ID del profesional que realiza ESTE servicio
+  assignedProfessionalId: string | null;
   patientName: string;
   serviceName: string;
   serviceId: string;
@@ -38,7 +38,7 @@ interface RenderableServiceBlock {
   isExternalProfessional?: boolean;
   externalProfessionalOriginLocationId?: LocationId | null;
   bookingObservations?: string | null;
-  originalAppointmentData: Appointment; // Keep original appointment for context
+  originalAppointmentData: Appointment;
 }
 
 const isOverlapping = (blockA: RenderableServiceBlock, blockB: RenderableServiceBlock): boolean => {
@@ -55,13 +55,14 @@ const isOverlapping = (blockA: RenderableServiceBlock, blockB: RenderableService
   }
 };
 
-const DailyTimelineComponent = ({ professionals, appointments, timeSlots, onAppointmentClick, viewingLocationId, currentDate }: DailyTimelineProps) => {
 
+const DailyTimelineComponent = ({ professionals, appointments, timeSlots, onAppointmentClick, viewingLocationId, currentDate }: DailyTimelineProps) => {
   const relevantAppointments = appointments.filter(
-    appt => appt.locationId === viewingLocationId || (appt.isTravelBlock && appt.professional?.locationId !== viewingLocationId && appt.locationId === viewingLocationId)
+    appt => appt.locationId === viewingLocationId || 
+            (appt.isTravelBlock && appt.professional?.locationId !== viewingLocationId && appt.locationId === viewingLocationId) || // Travel block to this location
+            (appt.isTravelBlock && appt.professional?.locationId === viewingLocationId && appt.externalProfessionalOriginLocationId !== viewingLocationId) // Travel block from this location
   );
 
-  // 1. Crear una lista plana de TODOS los bloques de servicio (principales y adicionales)
   const allServiceBlocks: RenderableServiceBlock[] = [];
   relevantAppointments
     .sort((a, b) => parseISO(a.appointmentDateTime).getTime() - parseISO(b.appointmentDateTime).getTime())
@@ -72,10 +73,10 @@ const DailyTimelineComponent = ({ professionals, appointments, timeSlots, onAppo
         allServiceBlocks.push({
           id: appt.id,
           originalAppointmentId: appt.id,
-          assignedProfessionalId: appt.professionalId, // El viaje es del profesional
-          patientName: `Traslado a ${LOCATIONS.find(l => l.id === appt.locationId)?.name || 'esta sede'}`,
+          assignedProfessionalId: appt.professionalId,
+          patientName: `Traslado ${appt.professional?.locationId === viewingLocationId ? 'desde esta sede' : `a ${LOCATIONS.find(l => l.id === appt.locationId)?.name || 'esta sede'}`}`,
           serviceName: 'Viaje',
-          serviceId: 'travel',
+          serviceId: 'travel', // Special serviceId for travel blocks
           startTime: currentTimeForBlockCalculation,
           durationMinutes: appt.durationMinutes,
           isMainService: false,
@@ -84,7 +85,7 @@ const DailyTimelineComponent = ({ professionals, appointments, timeSlots, onAppo
           externalProfessionalOriginLocationId: appt.externalProfessionalOriginLocationId,
           originalAppointmentData: appt,
         });
-        return; // No hay más servicios si es un bloque de viaje
+        return;
       }
 
       // Servicio Principal
@@ -92,12 +93,12 @@ const DailyTimelineComponent = ({ professionals, appointments, timeSlots, onAppo
         allServiceBlocks.push({
           id: `${appt.id}-main-${appt.serviceId}`,
           originalAppointmentId: appt.id,
-          assignedProfessionalId: appt.professionalId, // El servicio principal lo hace el profesional de la cita
+          assignedProfessionalId: appt.professionalId,
           patientName: `${appt.patient?.firstName || ''} ${appt.patient?.lastName || ''}`.trim() || "Cita Reservada",
           serviceName: appt.service?.name || 'Servicio Principal',
           serviceId: appt.serviceId,
           startTime: currentTimeForBlockCalculation,
-          durationMinutes: appt.durationMinutes, // Duración del servicio principal
+          durationMinutes: appt.durationMinutes,
           isMainService: true,
           isTravelBlock: false,
           isExternalProfessional: appt.isExternalProfessional,
@@ -114,7 +115,7 @@ const DailyTimelineComponent = ({ professionals, appointments, timeSlots, onAppo
           allServiceBlocks.push({
             id: `${appt.id}-added-${addedSvc.serviceId}-${index}`,
             originalAppointmentId: appt.id,
-            assignedProfessionalId: addedSvc.professionalId || appt.professionalId, // Profesional del servicio adicional o el principal
+            assignedProfessionalId: addedSvc.professionalId || appt.professionalId, // Assign to added service's prof or main appt prof
             patientName: `${appt.patient?.firstName || ''} ${appt.patient?.lastName || ''}`.trim() || "Cita Reservada",
             serviceName: addedSvc.service.name,
             serviceId: addedSvc.serviceId,
@@ -129,12 +130,13 @@ const DailyTimelineComponent = ({ professionals, appointments, timeSlots, onAppo
       });
     });
 
+  const professionalsToDisplay = professionals.filter(prof => !prof.isManager);
 
-  if (professionals.length === 0 && relevantAppointments.filter(a => !a.isTravelBlock && [APPOINTMENT_STATUS.BOOKED, APPOINTMENT_STATUS.CONFIRMED, APPOINTMENT_STATUS.COMPLETED].includes(a.status)).length === 0) {
-    return <p className="text-muted-foreground text-center py-8">No hay profesionales trabajando ni citas para mostrar en esta sede para la fecha seleccionada.</p>;
+  if (professionalsToDisplay.length === 0 && relevantAppointments.filter(a => !a.isTravelBlock && [APPOINTMENT_STATUS.BOOKED, APPOINTMENT_STATUS.CONFIRMED, APPOINTMENT_STATUS.COMPLETED].includes(a.status)).length === 0) {
+    return <p className="text-muted-foreground text-center py-8">No hay profesionales activos (no gerentes) trabajando ni citas para mostrar en esta sede para la fecha seleccionada.</p>;
   }
-  if (professionals.length === 0 && relevantAppointments.filter(a => !a.isTravelBlock && [APPOINTMENT_STATUS.BOOKED, APPOINTMENT_STATUS.CONFIRMED, APPOINTMENT_STATUS.COMPLETED].includes(a.status)).length > 0) {
-    return <p className="text-muted-foreground text-center py-8">No hay profesionales asignados para mostrar en columnas, pero pueden existir citas sin asignar o de profesionales externos para esta fecha y sede.</p>;
+  if (professionalsToDisplay.length === 0 && relevantAppointments.filter(a => !a.isTravelBlock && [APPOINTMENT_STATUS.BOOKED, APPOINTMENT_STATUS.CONFIRMED, APPOINTMENT_STATUS.COMPLETED].includes(a.status)).length > 0) {
+     return <p className="text-muted-foreground text-center py-8">No hay profesionales asignados para mostrar en columnas (o son gerentes), pero pueden existir citas sin asignar o de profesionales externos para esta fecha y sede.</p>;
   }
 
   const getServiceBlockStyle = (startTime: Date, duration: number) => {
@@ -182,9 +184,10 @@ const DailyTimelineComponent = ({ professionals, appointments, timeSlots, onAppo
 
           {/* Professionals Columns */}
           <div className="flex flex-nowrap">
-            {professionals.map(prof => {
+            {professionalsToDisplay.map(prof => {
               const blocksForThisProfessional = allServiceBlocks.filter(
-                block => block.assignedProfessionalId === prof.id && block.originalAppointmentData.locationId === viewingLocationId
+                block => block.assignedProfessionalId === prof.id && 
+                         (block.isTravelBlock ? true : block.originalAppointmentData.locationId === viewingLocationId)
               );
 
               const overlappingServiceBlockIds = new Set<string>();
@@ -221,44 +224,29 @@ const DailyTimelineComponent = ({ professionals, appointments, timeSlots, onAppo
                     {blocksForThisProfessional.map(block => {
                       const isBlockOverlapping = overlappingServiceBlockIds.has(block.id) && !block.isTravelBlock;
                       const style = getServiceBlockStyle(block.startTime, block.durationMinutes);
-                      const durationToDisplay = block.isMainService ? (block.originalAppointmentData.totalCalculatedDurationMinutes || block.durationMinutes) : block.durationMinutes;
-
-
+                      
                       if (block.isTravelBlock) {
-                        // Asegurarse que el bloque de viaje solo se muestre si el profesional es el del viaje
-                        // y la cita original (de donde se deriva el viaje) era para la sede que se está viendo.
-                        // Esto previene mostrar viajes de un profesional que viene de otra sede si la cita principal no es en esta sede.
-                        if (block.assignedProfessionalId !== prof.id || block.originalAppointmentData.locationId !== viewingLocationId) {
-                           // return null; // No debería llegar aquí con el filtro anterior, pero por si acaso.
-                        }
-
                         return (
                           <Tooltip key={block.id} delayDuration={100}>
                             <TooltipTrigger asChild>
                               <div
                                 className={cn(
                                   "absolute left-1 right-1 rounded-md p-1.5 shadow-md text-xs overflow-hidden cursor-default flex flex-col justify-center items-center text-center",
-                                  "bg-amber-100 text-amber-700 border-amber-300"
+                                  "bg-orange-100 text-orange-700 border-orange-300"
                                 )}
                                 style={style}
+                                onClick={() => onAppointmentClick?.(block.originalAppointmentData)}
                               >
                                 <Navigation size={14} className="mb-0.5" />
                                 <p className="font-semibold truncate leading-tight text-[10px]">
-                                  Traslado
-                                  {block.originalAppointmentData.professional?.locationId !== viewingLocationId ? 
-                                   ` desde ${LOCATIONS.find(l => l.id === block.originalAppointmentData.professional?.locationId)?.name || 'Origen'}`
-                                   : ''}
+                                   {block.patientName}
                                 </p>
                                 <p className="text-[9px] leading-tight opacity-80 mt-0.5">({block.durationMinutes} min)</p>
                               </div>
                             </TooltipTrigger>
                             <TooltipContent className="bg-popover text-popover-foreground p-2 rounded-md shadow-lg max-w-xs">
                                 <p className="font-bold text-sm">
-                                  Viaje de {prof.firstName} {prof.lastName}
-                                  {block.originalAppointmentData.professional?.locationId !== viewingLocationId ? 
-                                    ` desde ${LOCATIONS.find(l => l.id === block.originalAppointmentData.professional?.locationId)?.name || 'Origen Desc.'}`
-                                    : ''}
-                                  a {LOCATIONS.find(l => l.id === viewingLocationId)?.name}
+                                  {block.patientName} ({prof.firstName} {prof.lastName})
                                 </p>
                               <p><Clock size={12} className="inline mr-1" /> {format(block.startTime, "HH:mm", { locale: es })} ({block.durationMinutes} min)</p>
                             </TooltipContent>
@@ -266,25 +254,29 @@ const DailyTimelineComponent = ({ professionals, appointments, timeSlots, onAppo
                         );
                       }
 
-
-                      const mainServiceBackgroundColor = `hsl(var(--chart-${(block.serviceId.charCodeAt(0) % 5) + 1}))`;
-                      const addedServiceBackgroundColor = `hsla(var(--chart-${(block.serviceId.charCodeAt(0) % 5) + 1}), 0.7)`; // Más opaco
+                      const serviceColorVar = `chart-${(block.serviceId.charCodeAt(0) % 5) + 1}`;
+                      const blockBackgroundColor = `hsl(var(--${serviceColorVar}))`;
+                      const durationToDisplay = block.isMainService 
+                        ? (block.originalAppointmentData.totalCalculatedDurationMinutes || block.durationMinutes) 
+                        : block.durationMinutes;
 
                       return (
                         <Tooltip key={block.id} delayDuration={100}>
                           <TooltipTrigger asChild>
                             <div
                               className={cn(
-                                "absolute left-1 right-1 rounded-md p-1.5 shadow-md text-xs overflow-hidden cursor-pointer hover:opacity-80 transition-opacity flex flex-col justify-start",
+                                "absolute left-1 right-1 rounded-md p-1.5 shadow-md text-xs overflow-hidden cursor-pointer hover:brightness-90 transition-all flex flex-col justify-start",
                                 isBlockOverlapping && "ring-2 ring-destructive border-destructive",
-                                !block.isMainService && "border-dashed" // No más opacidad, solo borde discontinuo
+                                !block.isMainService && "border-dashed"
                               )}
                               style={{
                                 ...style,
-                                backgroundColor: block.isMainService ? mainServiceBackgroundColor : addedServiceBackgroundColor,
+                                backgroundColor: blockBackgroundColor,
                                 color: 'hsl(var(--accent-foreground))',
-                                borderColor: isBlockOverlapping ? 'hsl(var(--destructive))' : (block.isMainService ? mainServiceBackgroundColor : `hsla(var(--chart-${(block.serviceId.charCodeAt(0) % 5) + 1}), 0.9)`),
+                                opacity: block.isMainService ? 1 : 0.75,
+                                borderColor: isBlockOverlapping ? 'hsl(var(--destructive))' : blockBackgroundColor,
                                 borderWidth: isBlockOverlapping ? '2px' : '1px',
+                                borderStyle: !block.isMainService ? 'dashed' : 'solid',
                               }}
                               onClick={() => onAppointmentClick?.(block.originalAppointmentData, block.serviceId)}
                             >
@@ -298,13 +290,13 @@ const DailyTimelineComponent = ({ professionals, appointments, timeSlots, onAppo
                                   )}
                                 </div>
                                 {block.isMainService && <p className="truncate text-[10px] leading-tight opacity-90">{block.serviceName}</p>}
-
-                                {block.durationMinutes > (block.isMainService ? (block.originalAppointmentData.addedServices && block.originalAppointmentData.addedServices.length > 0 ? 15 : 30) : 15) && (
+                                
+                                {durationToDisplay > (block.isMainService ? (block.originalAppointmentData.addedServices && block.originalAppointmentData.addedServices.length > 0 ? 15 : 30) : 15) && (
                                   <p className="text-[10px] leading-tight opacity-80 mt-0.5">
                                     ({block.isMainService ? `Total: ${durationToDisplay} min` : `${block.durationMinutes} min`})
                                   </p>
                                 )}
-                                {block.isMainService && block.originalAppointmentData.addedServices && block.originalAppointmentData.addedServices.length > 0 && block.durationMinutes <= 45 && (
+                                {block.isMainService && block.originalAppointmentData.addedServices && block.originalAppointmentData.addedServices.length > 0 && durationToDisplay <= 45 && (
                                   <p className="text-[9px] opacity-70 mt-0.5 flex items-center gap-0.5"><ShoppingBag size={10}/> +Serv.</p>
                                 )}
                               </div>
@@ -323,8 +315,8 @@ const DailyTimelineComponent = ({ professionals, appointments, timeSlots, onAppo
                             {block.isMainService && block.originalAppointmentData.totalCalculatedDurationMinutes && block.originalAppointmentData.totalCalculatedDurationMinutes !== block.durationMinutes && (
                                 <p className="text-xs mt-0.5">Duración Total Cita: {block.originalAppointmentData.totalCalculatedDurationMinutes} min</p>
                             )}
-                             {block.assignedProfessionalId !== block.originalAppointmentData.professionalId && block.originalAppointmentData.professional && (
-                                <p className="text-xs mt-0.5">Asignado a: {professionals.find(p=>p.id === block.assignedProfessionalId)?.firstName} (Serv. Principal con: {block.originalAppointmentData.professional.firstName})</p>
+                             {block.assignedProfessionalId !== block.originalAppointmentData.professionalId && block.originalAppointmentData.professional && !block.isMainService && (
+                                <p className="text-xs mt-0.5">Realizado por: {professionals.find(p=>p.id === block.assignedProfessionalId)?.firstName || 'prof.'} (Cita principal con: {block.originalAppointmentData.professional.firstName})</p>
                             )}
                             {block.isExternalProfessional && block.isMainService && (
                               <p className="text-orange-600 text-xs mt-1 flex items-center gap-1">
@@ -343,7 +335,7 @@ const DailyTimelineComponent = ({ professionals, appointments, timeSlots, onAppo
           </div>
         </div>
         <ScrollBar orientation="horizontal" />
-        {relevantAppointments.length === 0 && professionals.length > 0 && (
+        {relevantAppointments.length === 0 && professionalsToDisplay.length > 0 && (
           <p className="text-muted-foreground text-center py-8">No hay citas programadas para este día y selección.</p>
         )}
       </ScrollArea>
