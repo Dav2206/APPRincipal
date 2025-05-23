@@ -85,11 +85,8 @@ export default function DashboardPage() {
             const allLocationsAppointmentsPromises = LOCATIONS.map(loc => getAppointments({ date: today, locationId: loc.id, statuses: [APPOINTMENT_STATUS.BOOKED, APPOINTMENT_STATUS.CONFIRMED] }));
             const allLocationsAppointmentsResults = await Promise.all(allLocationsAppointmentsPromises);
             todayAppointmentsCount = allLocationsAppointmentsResults.reduce((sum, result) => sum + (result.appointments ? result.appointments.length : 0), 0);
-          } else if (selectedLocationId && selectedLocationId !== 'all' && (isAdminOrContador || user.locationId === selectedLocationId)) {
-            const { appointments } = await getAppointments({ date: today, locationId: selectedLocationId as LocationId, statuses: [APPOINTMENT_STATUS.BOOKED, APPOINTMENT_STATUS.CONFIRMED] });
-            todayAppointmentsCount = appointments ? appointments.length : 0;
-          } else if (user.role === USER_ROLES.LOCATION_STAFF && user.locationId) {
-            const { appointments } = await getAppointments({ date: today, locationId: user.locationId, statuses: [APPOINTMENT_STATUS.BOOKED, APPOINTMENT_STATUS.CONFIRMED] });
+          } else if (effectiveLocationId) { // Covers Admin/Contador with specific sede AND Staff
+            const { appointments } = await getAppointments({ date: today, locationId: effectiveLocationId, statuses: [APPOINTMENT_STATUS.BOOKED, APPOINTMENT_STATUS.CONFIRMED] });
             todayAppointmentsCount = appointments ? appointments.length : 0;
           }
         }
@@ -100,11 +97,8 @@ export default function DashboardPage() {
              const allLocationsPendingPromises = LOCATIONS.map(loc => getAppointments({ statuses: [APPOINTMENT_STATUS.BOOKED], locationId: loc.id }));
              const allLocationsPendingResults = await Promise.all(allLocationsPendingPromises);
              pendingConfirmationsCount = allLocationsPendingResults.reduce((sum, result) => sum + (result.appointments ? result.appointments.length : 0), 0);
-          } else if (selectedLocationId && selectedLocationId !== 'all' && (isAdminOrContador || user.locationId === selectedLocationId)) {
-            const { appointments } = await getAppointments({ statuses: [APPOINTMENT_STATUS.BOOKED], locationId: selectedLocationId as LocationId });
-            pendingConfirmationsCount = appointments ? appointments.length : 0;
-          } else if (user.role === USER_ROLES.LOCATION_STAFF && user.locationId) {
-            const { appointments } = await getAppointments({ statuses: [APPOINTMENT_STATUS.BOOKED], locationId: user.locationId });
+          } else if (effectiveLocationId) { // Covers Admin/Contador with specific sede AND Staff
+            const { appointments } = await getAppointments({ statuses: [APPOINTMENT_STATUS.BOOKED], locationId: effectiveLocationId });
             pendingConfirmationsCount = appointments ? appointments.length : 0;
           }
         }
@@ -121,10 +115,10 @@ export default function DashboardPage() {
             totalRevenueMonthValue = allLocationsCompletedResults.reduce((totalSum, locationResults) => 
               totalSum + (locationResults.appointments ? locationResults.appointments.reduce((locationSum, appt) => locationSum + (appt.amountPaid || 0), 0) : 0), 
             0);
-          } else if (selectedLocationId && selectedLocationId !== 'all') {
+          } else if (effectiveLocationId) {
             const { appointments } = await getAppointments({
               statuses: [APPOINTMENT_STATUS.COMPLETED],
-              locationId: selectedLocationId as LocationId,
+              locationId: effectiveLocationId,
               dateRange: { start: currentMonthStart, end: currentMonthEnd },
             });
             totalRevenueMonthValue = appointments ? appointments.reduce((sum, appt) => sum + (appt.amountPaid || 0), 0) : 0;
@@ -147,8 +141,10 @@ export default function DashboardPage() {
         
         activeProfessionalsCount = allFetchedProfessionals.filter(prof => {
           const availability = getProfessionalAvailabilityForDate(prof, today);
-          return !!availability;
+          // Consider active if they have availability (isWorking) and contract is active or próximo a vencer
+          return !!availability && availability.isWorking && (getContractDisplayStatus(prof.currentContract, today) === 'Activo' || getContractDisplayStatus(prof.currentContract, today) === 'Próximo a Vencer');
         }).length;
+
 
         setStats({
           todayAppointments: todayAppointmentsCount.toString(),
@@ -166,19 +162,22 @@ export default function DashboardPage() {
         
         for (const prof of allFetchedProfessionals) {
           const availabilityToday = getProfessionalAvailabilityForDate(prof, today);
-          if (!availabilityToday) {
+          const contractStatusToday = getContractDisplayStatus(prof.currentContract, today);
+
+          if (!(availabilityToday && availabilityToday.isWorking && (contractStatusToday === 'Activo' || contractStatusToday === 'Próximo a Vencer'))) {
             restingToday.push(prof);
           }
 
           const availabilityNextSunday = getProfessionalAvailabilityForDate(prof, workingNextSundayDate);
-          if (availabilityNextSunday) {
+          const contractStatusNextSunday = getContractDisplayStatus(prof.currentContract, workingNextSundayDate);
+          if (availabilityNextSunday && availabilityNextSunday.isWorking && (contractStatusNextSunday === 'Activo' || contractStatusNextSunday === 'Próximo a Vencer')) {
             workingNextSunday.push(prof);
           }
 
           if (prof.birthDay && prof.birthMonth) {
             const currentYear = getYear(today);
             let nextBirthdayThisYear = new Date(currentYear, prof.birthMonth - 1, prof.birthDay);
-            if (nextBirthdayThisYear < today) { 
+            if (isBefore(nextBirthdayThisYear, today) && !isToday(nextBirthdayThisYear)) { 
               nextBirthdayThisYear = new Date(currentYear + 1, prof.birthMonth - 1, prof.birthDay);
             }
             const daysToBirthday = differenceInDays(nextBirthdayThisYear, today);
@@ -192,8 +191,8 @@ export default function DashboardPage() {
         setProfessionalsWithUpcomingBirthdays(upcomingBirthdaysList.sort((a,b) => {
           const dateA = new Date(getYear(today), (a.birthMonth || 1) -1, a.birthDay || 1);
           const dateB = new Date(getYear(today), (b.birthMonth || 1) -1, b.birthDay || 1);
-          if (dateA < today) dateA.setFullYear(getYear(today) + 1);
-          if (dateB < today) dateB.setFullYear(getYear(today) + 1);
+          if (isBefore(dateA, today) && !isToday(dateA)) dateA.setFullYear(getYear(today) + 1);
+          if (isBefore(dateB, today) && !isToday(dateB)) dateB.setFullYear(getYear(today) + 1);
           return dateA.getTime() - dateB.getTime();
         }));
         setIsLoadingProfessionalStatus(false);
@@ -258,15 +257,21 @@ export default function DashboardPage() {
 
   const greetingName = user.name || user.username;
   let roleDescription = '';
-  if (user.role === USER_ROLES.ADMIN) roleDescription = 'Administrador Global';
-  else if (user.role === USER_ROLES.CONTADOR) roleDescription = 'Contador Principal';
-  else roleDescription = `Staff de ${LOCATIONS.find(l => l.id === user.locationId)?.name || 'Sede'}`;
+  if (user.role === USER_ROLES.ADMIN) {
+    roleDescription = 'Administrador Global';
+  } else if (user.role === USER_ROLES.CONTADOR) {
+    roleDescription = 'Contador Principal';
+  } else if (user.role === USER_ROLES.LOCATION_STAFF) {
+    roleDescription = 'Staff de Sede'; // Changed to generic "Staff de Sede"
+  } else {
+    roleDescription = 'Usuario'; // Fallback
+  }
 
 
-  let displayLocationName = "Todas las Sedes";
+  let displayLocationName = "Todas las Sedes"; // Default for Admin/Contador if 'all' is selected
   if (user.role === USER_ROLES.LOCATION_STAFF && user.locationId) {
     displayLocationName = LOCATIONS.find(l => l.id === user.locationId)?.name || "Tu Sede";
-  } else if ((isAdminOrContador) && selectedLocationId && selectedLocationId !== 'all') {
+  } else if (isAdminOrContador && selectedLocationId && selectedLocationId !== 'all') {
     displayLocationName = LOCATIONS.find(l => l.id === selectedLocationId)?.name || "Sede Seleccionada";
   }
   
