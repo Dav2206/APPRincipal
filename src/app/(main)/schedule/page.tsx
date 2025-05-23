@@ -23,15 +23,15 @@ import { useToast } from "@/hooks/use-toast";
 const timeSlotsForView = TIME_SLOTS.filter(slot => parseInt(slot.split(':')[0]) >= 9);
 
 export default function SchedulePage() {
-  const { user, isLoading: authIsLoading } = useAuth(); // Usar isLoading de useAuth
+  const { user, isLoading: authIsLoading } = useAuth();
   const { selectedLocationId: adminSelectedLocation } = useAppState();
   const { toast } = useToast();
 
   const [appointments, setAppointments] = useState<Appointment[]>([]);
-  const [allSystemProfessionals, setAllSystemProfessionals] = useState<Professional[]>([]); // Para el formulario
+  const [allSystemProfessionals, setAllSystemProfessionals] = useState<Professional[]>([]);
   const [workingProfessionalsForTimeline, setWorkingProfessionalsForTimeline] = useState<Professional[]>([]);
   const [currentDate, setCurrentDate] = useState<Date>(startOfDay(new Date()));
-  const [isLoading, setIsLoading] = useState(true); // Loading state para datos de la página
+  const [isLoading, setIsLoading] = useState(true);
   const [selectedAppointmentForEdit, setSelectedAppointmentForEdit] = useState<Appointment | null>(null);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [isNewAppointmentFormOpen, setIsNewAppointmentFormOpen] = useState(false);
@@ -42,39 +42,41 @@ export default function SchedulePage() {
   }, [user]);
 
   const actualEffectiveLocationId = useMemo(() => {
-    if (!user) return null; // Si el usuario no está cargado, no hay sede efectiva
+    if (!user) return null;
 
     if (isAdminOrContador) {
       const defaultAdminLocation = adminSelectedLocation === 'all' || !adminSelectedLocation
                                    ? (LOCATIONS.length > 0 ? LOCATIONS[0].id : null)
                                    : adminSelectedLocation as LocationId;
-      console.log("[SchedulePage] Admin/Contador. adminSelectedLocation:", adminSelectedLocation, "defaultAdminLocation:", defaultAdminLocation);
+      // console.log("[SchedulePage] Admin/Contador. adminSelectedLocation:", adminSelectedLocation, "Resolved to:", defaultAdminLocation);
       return defaultAdminLocation;
     }
-    console.log("[SchedulePage] Staff. user.locationId:", user.locationId);
-    return user.locationId || null; // Para staff, su locationId o null si no tiene
+    // console.log("[SchedulePage] Staff. user.locationId:", user.locationId);
+    return user.locationId || null;
   }, [user, isAdminOrContador, adminSelectedLocation]);
 
 
   const fetchData = useCallback(async () => {
     if (!user || !actualEffectiveLocationId) {
-      console.warn("[SchedulePage] fetchData: Abortando. User o actualEffectiveLocationId no disponible.", { userExists: !!user, actualEffectiveLocationId });
+      console.warn("[SchedulePage] fetchData: Abortando. User o actualEffectiveLocationId no disponible.", {
+        userExists: !!user,
+        actualEffectiveLocationIdValue: actualEffectiveLocationId,
+      });
       setIsLoading(false);
       setAppointments([]);
       setWorkingProfessionalsForTimeline([]);
+      setAllSystemProfessionals([]);
       return;
     }
 
     setIsLoading(true);
-    console.log(`[SchedulePage] fetchData for date: ${formatISO(currentDate)}, location: ${actualEffectiveLocationId}`);
+    // console.log(`[SchedulePage] fetchData for date: ${currentDate ? formatISO(currentDate) : 'N/A'}, location: ${actualEffectiveLocationId}`);
 
     try {
-      // Obtener TODOS los profesionales del sistema para pasarlos al formulario de Nueva Cita.
-      // La lista de profesionales para las columnas de la agenda se filtrará después.
-      const allProfsResponsePromise = getProfessionals(); // Fetch all professionals
-
+      const allProfsResponsePromise = getProfessionals(); // Fetch all professionals for the form
+      
       const appointmentsResponsePromise = getAppointments({
-        locationId: actualEffectiveLocationId,
+        locationId: actualEffectiveLocationId, // Fetch only for the effective location
         date: currentDate,
         statuses: [APPOINTMENT_STATUS.BOOKED, APPOINTMENT_STATUS.CONFIRMED, APPOINTMENT_STATUS.COMPLETED],
       });
@@ -83,16 +85,16 @@ export default function SchedulePage() {
       
       const systemProfs = allProfsResult || [];
       setAllSystemProfessionals(systemProfs);
-      console.log(`[SchedulePage] fetchData: Fetched ${systemProfs.length} total system professionals.`);
+      // console.log(`[SchedulePage] fetchData: Fetched ${systemProfs.length} total system professionals.`);
 
       const dailyAppointments = appointmentsResult.appointments || [];
-      console.log(`[SchedulePage] fetchData: Fetched ${dailyAppointments.length} appointments for location ${actualEffectiveLocationId} on ${formatISO(currentDate)}.`);
+      // console.log(`[SchedulePage] fetchData: Fetched ${dailyAppointments.length} appointments for location ${actualEffectiveLocationId} on ${currentDate ? formatISO(currentDate) : 'N/A'}.`);
       
       const professionalsForColumns = systemProfs.filter(prof => {
-        if (prof.isManager) return false; // Excluir gerentes de las columnas
+        if (prof.isManager) return false; 
         const availability = getProfessionalAvailabilityForDate(prof, currentDate);
-        // Profesional debe trabajar en la sede efectiva o ser externo con cita en la sede efectiva
         const worksAtEffectiveLocation = prof.locationId === actualEffectiveLocationId && availability && availability.isWorking;
+        
         const isExternalWithAppointmentAtEffectiveLocation = dailyAppointments.some(appt => 
             appt.professionalId === prof.id && 
             appt.isExternalProfessional && 
@@ -103,13 +105,12 @@ export default function SchedulePage() {
 
       setWorkingProfessionalsForTimeline(professionalsForColumns);
       
-      const displayableAppointments = dailyAppointments.filter(appt => 
-        (appt.locationId === actualEffectiveLocationId) || 
-        (appt.isTravelBlock && appt.locationId === actualEffectiveLocationId)
-      ).sort((a,b) => parseISO(a.appointmentDateTime).getTime() - parseISO(b.appointmentDateTime).getTime());
+      // Appointments are already filtered by locationId from getAppointments
+      const displayableAppointments = dailyAppointments
+        .sort((a,b) => parseISO(a.appointmentDateTime).getTime() - parseISO(b.appointmentDateTime).getTime());
       
       setAppointments(displayableAppointments);
-      console.log(`[SchedulePage] fetchData: Displaying ${professionalsForColumns.length} professionals in timeline and ${displayableAppointments.length} appointment items for location ${actualEffectiveLocationId}.`);
+      // console.log(`[SchedulePage] fetchData: Displaying ${professionalsForColumns.length} professionals in timeline and ${displayableAppointments.length} appointment items for location ${actualEffectiveLocationId}.`);
 
     } catch (error) {
       console.error("[SchedulePage] Error fetching schedule data:", error);
@@ -120,40 +121,46 @@ export default function SchedulePage() {
       });
       setAppointments([]);
       setWorkingProfessionalsForTimeline([]);
+      setAllSystemProfessionals([]); // Also reset this on error
     } finally {
       setIsLoading(false);
-      console.log("[SchedulePage] fetchData: setIsLoading(false) executed.");
+      // console.log("[SchedulePage] fetchData: setIsLoading(false) executed.");
     }
-  }, [user, actualEffectiveLocationId, currentDate, toast]); // fetchData depende de user y actualEffectiveLocationId
+  }, [user, actualEffectiveLocationId, currentDate, toast]);
 
 
   useEffect(() => {
-    // Esperar a que el usuario esté cargado y que actualEffectiveLocationId tenga un valor
     if (authIsLoading) {
-        console.log("[SchedulePage] useEffect (fetch data trigger): Auth is loading, waiting...");
-        setIsLoading(true); // Mantener la página en estado de carga si auth está cargando
+        // console.log("[SchedulePage] useEffect (fetch data trigger): Auth is loading, waiting...");
+        setIsLoading(true); 
         return;
     }
     if (!user) {
-        console.log("[SchedulePage] useEffect (fetch data trigger): User is null after auth load. This shouldn't happen if MainLayout protects.");
-        setIsLoading(false); // No hay usuario, no hay nada que cargar
+        // console.log("[SchedulePage] useEffect (fetch data trigger): User is null after auth load.");
+        setIsLoading(false);
+        setAppointments([]);
+        setWorkingProfessionalsForTimeline([]);
+        setAllSystemProfessionals([]);
         return;
     }
 
     if (actualEffectiveLocationId) {
-      console.log("[SchedulePage] useEffect (fetch data trigger): Auth loaded, user present, actualEffectiveLocationId available. Calling fetchData.", { actualEffectiveLocationId });
+      // console.log("[SchedulePage] useEffect (fetch data trigger): Auth loaded, user present, actualEffectiveLocationId available. Calling fetchData.", { actualEffectiveLocationId });
       fetchData();
     } else {
-      console.warn("[SchedulePage] useEffect (fetch data trigger): actualEffectiveLocationId is still falsy after auth load. Not fetching data.", {
-        actualEffectiveLocationIdValue: actualEffectiveLocationId,
-        isAdminOrContador,
-        adminSelectedLocation,
-        userLocationId: user?.locationId,
-        userRole: user?.role,
-      });
+      // This case should ideally be handled by the render logic for Admin/Contador if no location is selected.
+      // For staff, actualEffectiveLocationId should always be their locationId if user object is correct.
+      // console.warn("[SchedulePage] useEffect (fetch data trigger): actualEffectiveLocationId is still falsy after auth load. Not fetching data.", {
+      //   actualEffectiveLocationIdValue: actualEffectiveLocationId,
+      //   isAdminOrContador,
+      //   adminSelectedLocation,
+      //   userLocationId: user?.locationId,
+      //   userRole: user?.role,
+      // });
       setIsLoading(false);
       setAppointments([]);
       setWorkingProfessionalsForTimeline([]);
+      setAllSystemProfessionals([]);
     }
   }, [fetchData, actualEffectiveLocationId, user, authIsLoading, isAdminOrContador, adminSelectedLocation]);
 
@@ -166,7 +173,7 @@ export default function SchedulePage() {
 
   const handleTimelineAppointmentClick = useCallback(async (appointment: Appointment) => {
     if (appointment.isTravelBlock) {
-      console.log("[SchedulePage] Clicked on a travel block, no edit action:", appointment);
+      // console.log("[SchedulePage] Clicked on a travel block, no edit action:", appointment);
       return;
     }
     try {
@@ -184,20 +191,22 @@ export default function SchedulePage() {
         description: "No se pudieron cargar los detalles completos de la cita.",
         variant: "destructive",
       });
-      setSelectedAppointmentForEdit(appointment);
+      setSelectedAppointmentForEdit(appointment); // Fallback to basic details
       setIsEditModalOpen(true);
     }
   }, [toast]);
 
-  const handleAppointmentUpdated = useCallback((updatedOrDeletedAppointment: Appointment | { id: string; _deleted: true } | null) => {
-    fetchData();
+  const handleAppointmentUpdated = useCallback((updatedOrDeletedAppointment: Appointment | null | { id: string; _deleted: true }) => {
+    // console.log("[SchedulePage] handleAppointmentUpdated called with:", updatedOrDeletedAppointment);
+    fetchData(); // Always refetch data for consistency after any update/delete
     setIsEditModalOpen(false);
     setSelectedAppointmentForEdit(null);
   }, [fetchData]);
 
   const handleNewAppointmentCreated = useCallback(async () => {
+    // console.log("[SchedulePage] handleNewAppointmentCreated called");
     setIsNewAppointmentFormOpen(false);
-    await fetchData();
+    await fetchData(); // Refetch data to show the new appointment
   }, [fetchData]);
 
   const LoadingState = () => (
@@ -218,12 +227,47 @@ export default function SchedulePage() {
   );
   
   const displayLocationName = actualEffectiveLocationId 
-    ? (LOCATIONS.find(l => l.id === actualEffectiveLocationId)?.name || `ID Sede: ${actualEffectiveLocationId}`) 
-    : 'Sede no especificada';
+    ? (LOCATIONS.find(l => l.id === actualEffectiveLocationId)?.name || `Sede Desconocida (ID: ${actualEffectiveLocationId})`) 
+    : 'Ninguna sede especificada';
   
   if (authIsLoading) {
     return <LoadingState />;
   }
+  
+  if (!user) { // Should be caught by MainLayout, but as a safeguard
+    return <NoDataCard title="Acceso Denegado" message="Debe iniciar sesión para ver la agenda." />;
+  }
+
+  // Specific handling for staff users
+  if (user.role === USER_ROLES.LOCATION_STAFF && !actualEffectiveLocationId) {
+    return <NoDataCard title="Error de Configuración de Sede" message="Su usuario no tiene una sede asignada. Por favor, contacte al administrador." />;
+  }
+
+  // For Admin/Contador if no location is effectively selected (e.g. 'all' was selected but no default could be determined)
+  if ((isAdminOrContador && !actualEffectiveLocationId) || (isAdminOrContador && adminSelectedLocation === 'all' && !LOCATIONS.find(l=> l.id === actualEffectiveLocationId))) {
+    return (
+       <div className="container mx-auto py-8 px-4 md:px-0 space-y-6">
+         <Card className="shadow-lg">
+           <CardHeader>
+             <CardTitle className="text-3xl flex items-center gap-2">
+               <CalendarClock className="text-primary" />
+               Agenda Horaria
+             </CardTitle>
+             <CardDescription>
+               Seleccione una sede desde el menú superior para ver la agenda.
+             </CardDescription>
+           </CardHeader>
+           <CardContent>
+             <NoDataCard
+               title="Seleccione una sede"
+               message="Por favor, seleccione una sede específica desde el menú superior para ver la agenda horaria."
+             />
+           </CardContent>
+         </Card>
+       </div>
+     );
+  }
+
 
   return (
     <div className="container mx-auto py-8 px-4 md:px-0 space-y-6">
@@ -271,25 +315,18 @@ export default function SchedulePage() {
               )}
             </div>
           </div>
-          {(isAdminOrContador || user?.role === USER_ROLES.LOCATION_STAFF) && (
-            <div className="mt-2 text-sm text-muted-foreground">
-              Viendo para: {displayLocationName}
-            </div>
-          )}
+          <div className="mt-2 text-sm text-muted-foreground">
+             Viendo para: {displayLocationName}
+          </div>
         </CardHeader>
         <CardContent>
           {isLoading ? (
             <LoadingState />
-          ) : !actualEffectiveLocationId ? ( // Si después de todo, no hay sede efectiva
-             <NoDataCard
-              title="Seleccione una sede"
-              message="Por favor, seleccione una sede desde el menú superior para ver la agenda horaria. Si es personal de sede y no ve su sede, contacte al administrador."
-            />
-          )
-          : workingProfessionalsForTimeline.length === 0 && appointments.filter(a => a.locationId === actualEffectiveLocationId && !a.isTravelBlock && [APPOINTMENT_STATUS.BOOKED, APPOINTMENT_STATUS.CONFIRMED, APPOINTMENT_STATUS.COMPLETED].includes(a.status)).length === 0 ? (
+          ) 
+          : workingProfessionalsForTimeline.length === 0 && appointments.filter(a => !a.isTravelBlock && [APPOINTMENT_STATUS.BOOKED, APPOINTMENT_STATUS.CONFIRMED, APPOINTMENT_STATUS.COMPLETED].includes(a.status)).length === 0 ? (
             <NoDataCard
               title="No hay profesionales ni citas"
-              message={`No se encontraron profesionales activos (no gerentes) ni citas para ${displayLocationName} en esta fecha.`}
+              message={`No se encontraron profesionales activos (no gerentes) trabajando ni citas para ${displayLocationName} en esta fecha.`}
             />
           ) : (
             <DailyTimeline
@@ -298,7 +335,7 @@ export default function SchedulePage() {
               timeSlots={timeSlotsForView}
               currentDate={currentDate}
               onAppointmentClick={handleTimelineAppointmentClick}
-              viewingLocationId={actualEffectiveLocationId}
+              viewingLocationId={actualEffectiveLocationId!} 
             />
           )}
         </CardContent>
@@ -329,4 +366,3 @@ export default function SchedulePage() {
     </div>
   );
 }
-
