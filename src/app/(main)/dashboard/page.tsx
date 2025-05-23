@@ -10,7 +10,7 @@ import Link from 'next/link';
 import { CalendarPlus, Users, History, Briefcase, Loader2, Bed, CalendarCheck2, Gift, Bell, StickyNote } from 'lucide-react';
 import { useAppState } from '@/contexts/app-state-provider';
 import { useState, useEffect, useMemo } from 'react';
-import { getAppointments, getProfessionals, getProfessionalAvailabilityForDate, getPeriodicReminders, getImportantNotes } from '@/lib/data';
+import { getAppointments, getProfessionals, getProfessionalAvailabilityForDate, getPeriodicReminders, getImportantNotes, getContractDisplayStatus } from '@/lib/data';
 import { startOfDay, endOfDay, startOfMonth, endOfMonth, nextSunday, isToday, addDays, differenceInDays, getYear, getMonth, getDate, parseISO, isBefore } from 'date-fns';
 import { StatCard } from '@/components/dashboard/stat-card';
 import { ActionCard } from '@/components/dashboard/action-card';
@@ -262,7 +262,7 @@ export default function DashboardPage() {
   } else if (user.role === USER_ROLES.CONTADOR) {
     roleDescription = 'Contador Principal';
   } else if (user.role === USER_ROLES.LOCATION_STAFF) {
-    roleDescription = 'Staff de Sede'; // Changed to generic "Staff de Sede"
+    roleDescription = 'Staff de Sede';
   } else {
     roleDescription = 'Usuario'; // Fallback
   }
