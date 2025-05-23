@@ -141,8 +141,9 @@ export default function DashboardPage() {
         
         activeProfessionalsCount = allFetchedProfessionals.filter(prof => {
           const availability = getProfessionalAvailabilityForDate(prof, today);
+          const contractStatus = getContractDisplayStatus(prof.currentContract, today);
           // Consider active if they have availability (isWorking) and contract is active or próximo a vencer
-          return !!availability && availability.isWorking && (getContractDisplayStatus(prof.currentContract, today) === 'Activo' || getContractDisplayStatus(prof.currentContract, today) === 'Próximo a Vencer');
+          return !!availability && availability.isWorking && (contractStatus === 'Activo' || contractStatus === 'Próximo a Vencer');
         }).length;
 
 
@@ -267,12 +268,19 @@ export default function DashboardPage() {
     roleDescription = 'Usuario'; // Fallback
   }
 
-
-  let displayLocationName = "Todas las Sedes"; // Default for Admin/Contador if 'all' is selected
-  if (user.role === USER_ROLES.LOCATION_STAFF && user.locationId) {
-    displayLocationName = LOCATIONS.find(l => l.id === user.locationId)?.name || "Tu Sede";
-  } else if (isAdminOrContador && selectedLocationId && selectedLocationId !== 'all') {
-    displayLocationName = LOCATIONS.find(l => l.id === selectedLocationId)?.name || "Sede Seleccionada";
+  let displayLocationName = "Vista Desconocida";
+  if (user.role === USER_ROLES.LOCATION_STAFF) {
+    if (user.locationId) {
+      displayLocationName = LOCATIONS.find(l => l.id === user.locationId)?.name || "Sede del Staff no Válida";
+    } else {
+      displayLocationName = "Staff sin Sede Asignada";
+    }
+  } else if (isAdminOrContador) {
+    if (selectedLocationId === 'all' || !selectedLocationId) {
+      displayLocationName = "Todas las Sedes";
+    } else {
+      displayLocationName = LOCATIONS.find(l => l.id === selectedLocationId)?.name || "Sede Seleccionada no Válida";
+    }
   }
   
   return (
