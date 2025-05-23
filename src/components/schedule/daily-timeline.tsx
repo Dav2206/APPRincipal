@@ -8,7 +8,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/comp
 import { ScrollArea, ScrollBar } from '@/components/ui/scroll-area';
 import { User, Clock, AlertTriangle, Shuffle, Navigation, ShoppingBag } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { LOCATIONS } from '@/lib/constants';
+import { LOCATIONS, APPOINTMENT_STATUS } from '@/lib/constants';
 import { Badge } from '@/components/ui/badge';
 import { es } from 'date-fns/locale';
 
@@ -21,31 +21,36 @@ interface DailyTimelineProps {
   viewingLocationId: LocationId;
 }
 
-const PIXELS_PER_MINUTE = 1.5;
-const DAY_START_HOUR = 9;
+const PIXELS_PER_MINUTE = 1.5; // Ajusta esto para cambiar la escala de la línea de tiempo
+const DAY_START_HOUR = 9; // La hora en que comienza tu línea de tiempo visualmente
 
 
 const isOverlapping = (apptA: Appointment, apptB: Appointment): boolean => {
   if (apptA.isTravelBlock || apptB.isTravelBlock) return false;
   try {
     const startA = parseISO(apptA.appointmentDateTime);
-    const endA = addMinutes(startA, apptA.durationMinutes);
+    // Usa totalCalculatedDurationMinutes si está disponible, sino durationMinutes
+    const endA = addMinutes(startA, apptA.totalCalculatedDurationMinutes || apptA.durationMinutes);
     const startB = parseISO(apptB.appointmentDateTime);
-    const endB = addMinutes(startB, apptB.durationMinutes);
+    const endB = addMinutes(startB, apptB.totalCalculatedDurationMinutes || apptB.durationMinutes);
     return startA < endB && endA > startB;
   } catch (error) {
-    console.error("Error in isOverlapping with appointments:", apptA, apptB, error);
+    console.error("[DailyTimeline] Error in isOverlapping with appointments:", apptA, apptB, error);
     return false; // Treat as not overlapping if parsing fails
   }
 };
 
 const DailyTimelineComponent = ({ professionals, appointments, timeSlots, onAppointmentClick, viewingLocationId }: DailyTimelineProps) => {
   
-  if (professionals.length === 0 && appointments.filter(a => a.locationId === viewingLocationId && !a.isTravelBlock).length === 0) {
+  const relevantAppointments = appointments.filter(
+    appt => appt.locationId === viewingLocationId || (appt.isTravelBlock && appt.professional?.locationId !== viewingLocationId && appt.locationId === viewingLocationId)
+  );
+
+  if (professionals.length === 0 && relevantAppointments.filter(a => !a.isTravelBlock && [APPOINTMENT_STATUS.BOOKED, APPOINTMENT_STATUS.CONFIRMED, APPOINTMENT_STATUS.COMPLETED].includes(a.status)).length === 0) {
     return <p className="text-muted-foreground text-center py-8">No hay profesionales trabajando ni citas para mostrar en esta sede para la fecha seleccionada.</p>;
   }
-   if (professionals.length === 0 && appointments.filter(a => a.locationId === viewingLocationId && !a.isTravelBlock).length > 0) {
-     return <p className="text-muted-foreground text-center py-8">No hay profesionales asignados para mostrar en columnas, pero pueden existir citas sin asignar para esta fecha.</p>;
+   if (professionals.length === 0 && relevantAppointments.filter(a => !a.isTravelBlock && [APPOINTMENT_STATUS.BOOKED, APPOINTMENT_STATUS.CONFIRMED, APPOINTMENT_STATUS.COMPLETED].includes(a.status)).length > 0) {
+     return <p className="text-muted-foreground text-center py-8">No hay profesionales asignados para mostrar en columnas, pero pueden existir citas sin asignar o de profesionales externos para esta fecha y sede.</p>;
   }
 
 
@@ -56,18 +61,19 @@ const DailyTimelineComponent = ({ professionals, appointments, timeSlots, onAppo
       const apptMinutes = getMinutes(appointmentStartDateTime);
       const minutesFromTimelineStart = (apptHours - DAY_START_HOUR) * 60 + apptMinutes;
       const top = minutesFromTimelineStart * PIXELS_PER_MINUTE;
-      const height = appointment.durationMinutes * PIXELS_PER_MINUTE;
+      const durationToUse = appointment.totalCalculatedDurationMinutes || appointment.durationMinutes;
+      const height = durationToUse * PIXELS_PER_MINUTE;
       return {
         top: `${top}px`,
         height: `${height}px`,
       };
     } catch (error) {
-      console.error("Error in getAppointmentStyle with appointment:", appointment, error);
+      console.error("[DailyTimeline] Error in getAppointmentStyle with appointment:", appointment, error);
       return { top: '0px', height: '0px' }; // Fallback style
     }
   };
   
-  const totalTimelineHeight = (timeSlots.length * 30 * PIXELS_PER_MINUTE) + PIXELS_PER_MINUTE * 30;
+  const totalTimelineHeight = (timeSlots.length * 30 * PIXELS_PER_MINUTE) + PIXELS_PER_MINUTE * 30; // +30 for one extra slot at the end
 
   return (
     <TooltipProvider>
@@ -86,7 +92,7 @@ const DailyTimelineComponent = ({ professionals, appointments, timeSlots, onAppo
               </div>
             ))}
             <div 
-                className="h-[45px] flex items-center justify-center text-xs border-b px-2 opacity-50"
+                className="h-[45px] flex items-center justify-center text-xs border-b px-2 opacity-50" // Extra slot visual
                 style={{ height: `${30 * PIXELS_PER_MINUTE}px` }}
               >
                 {`${parseInt(timeSlots[timeSlots.length-1].split(':')[0]) + (timeSlots[timeSlots.length-1].split(':')[1] === '30' ? 1 : 0)}:${timeSlots[timeSlots.length-1].split(':')[1] === '30' ? '00' : '30'}`}
@@ -96,14 +102,18 @@ const DailyTimelineComponent = ({ professionals, appointments, timeSlots, onAppo
           {/* Professionals Columns */}
           <div className="flex flex-nowrap">
             {professionals.map(prof => {
+              // Filtra citas para este profesional Y que ocurran en la sede que se está viendo (viewingLocationId)
+              // O si es un bloque de viaje HACIA esta viewingLocationId
               const professionalTimelineItems = appointments
-                .filter(appt => appt.professionalId === prof.id)
-                .filter(appt => appt.locationId === viewingLocationId || appt.isTravelBlock)
+                .filter(appt => 
+                  appt.professionalId === prof.id && 
+                  (appt.locationId === viewingLocationId || (appt.isTravelBlock && appt.locationId === viewingLocationId))
+                )
                 .sort((a, b) => {
                   try {
                     return parseISO(a.appointmentDateTime).getTime() - parseISO(b.appointmentDateTime).getTime();
                   } catch (error) {
-                    console.error("Error sorting appointments in DailyTimeline:", a, b, error);
+                    console.error("[DailyTimeline] Error sorting appointments:", a, b, error);
                     return 0;
                   }
                 });
@@ -135,37 +145,39 @@ const DailyTimelineComponent = ({ professionals, appointments, timeSlots, onAppo
                     )}
                   </div>
                   <div className="relative" style={{ height: `${totalTimelineHeight}px` }}>
+                    {/* Render background lines for each time slot */}
                     {timeSlots.map((slot) => (
                        <div key={`${prof.id}-${slot}-line`} className="border-b border-dashed border-muted/50" style={{ height: `${30 * PIXELS_PER_MINUTE}px` }}></div>
                     ))}
-                     <div className="border-b border-dashed border-muted/50" style={{ height: `${30 * PIXELS_PER_MINUTE}px` }}></div>
+                     <div className="border-b border-dashed border-muted/50" style={{ height: `${30 * PIXELS_PER_MINUTE}px` }}></div> {/* Extra slot line */}
 
+                    {/* Render appointments */}
                     {professionalTimelineItems.map(appt => {
                       const isApptOverlapping = overlappingAppointmentIds.has(appt.id) && !appt.isTravelBlock;
+                      const durationToDisplay = appt.totalCalculatedDurationMinutes || appt.durationMinutes;
                       
                       if (appt.isTravelBlock) {
-                        const destinationLocationName = LOCATIONS.find(l => l.id === appt.locationId)?.name || 'Otra Sede';
+                        // Render travel block (profesional viajando a la sede `viewingLocationId`)
+                        const originLocationName = LOCATIONS.find(l => l.id === appt.professional?.locationId)?.name || 'Origen Desc.';
                         return (
                           <Tooltip key={appt.id} delayDuration={100}>
                             <TooltipTrigger asChild>
                               <div
                                 className={cn(
                                   "absolute left-1 right-1 rounded-md p-1.5 shadow-md text-xs overflow-hidden cursor-default flex flex-col justify-center items-center text-center",
-                                  "bg-slate-200 text-slate-600 border-slate-300" 
+                                  "bg-amber-100 text-amber-700 border-amber-300" 
                                 )}
                                 style={getAppointmentStyle(appt)}
                               >
                                 <Navigation size={14} className="mb-0.5"/>
-                                <p className="font-semibold truncate leading-tight text-[10px]">Traslado a</p>
-                                <p className="truncate text-[10px] leading-tight">{destinationLocationName}</p>
-                                <p className="text-[9px] leading-tight opacity-80 mt-0.5">({appt.durationMinutes} min)</p>
+                                <p className="font-semibold truncate leading-tight text-[10px]">Traslado desde</p>
+                                <p className="truncate text-[10px] leading-tight">{originLocationName}</p>
+                                <p className="text-[9px] leading-tight opacity-80 mt-0.5">({durationToDisplay} min)</p>
                               </div>
                             </TooltipTrigger>
-                            <TooltipContent className="bg-popover text-popover-foreground p-2 rounded-md shadow-lg max-w-xs">
-                              <p className="font-bold text-sm">Viaje a {destinationLocationName}</p>
-                              <p><Clock size={12} className="inline mr-1"/> {format(parseISO(appt.appointmentDateTime), "HH:mm", { locale: es })} ({appt.durationMinutes} min)</p>
-                              {appt.service?.name && <p className="text-xs mt-1">Servicio: {appt.service.name}</p>}
-                              {appt.patient?.firstName && <p className="text-xs mt-0.5">Paciente: {appt.patient.firstName} {appt.patient.lastName}</p>}
+                             <TooltipContent className="bg-popover text-popover-foreground p-2 rounded-md shadow-lg max-w-xs">
+                              <p className="font-bold text-sm">Viaje desde {originLocationName} a {LOCATIONS.find(l => l.id === appt.locationId)?.name}</p>
+                              <p><Clock size={12} className="inline mr-1"/> {format(parseISO(appt.appointmentDateTime), "HH:mm", { locale: es })} ({durationToDisplay} min)</p>
                             </TooltipContent>
                           </Tooltip>
                         );
@@ -203,14 +215,14 @@ const DailyTimelineComponent = ({ professionals, appointments, timeSlots, onAppo
                                 )}
                               </div>
                               <p className="truncate text-[10px] leading-tight opacity-90">{appt.service?.name}</p>
-                              {appt.durationMinutes > 30 && <p className="text-[10px] leading-tight opacity-80 mt-0.5">({appt.durationMinutes} min)</p>}
+                              {durationToDisplay > 30 && <p className="text-[10px] leading-tight opacity-80 mt-0.5">({durationToDisplay} min)</p>}
                             </div>
                             
-                            {appt.addedServices && appt.addedServices.length > 0 && appt.durationMinutes > 45 && (
+                            {appt.addedServices && appt.addedServices.length > 0 && durationToDisplay > 45 && (
                               <div className="mt-1 pt-1 border-t border-[hsla(var(--accent-foreground),0.3)] text-[9px] leading-snug">
                                 <p className="font-medium opacity-80 flex items-center gap-0.5"><ShoppingBag size={10}/>Adicional:</p>
                                 <ul className="list-disc list-inside pl-1 opacity-80 max-h-[30px] overflow-hidden">
-                                  {appt.addedServices.slice(0, 1).map((as, index) => ( // Show only first one if many for space
+                                  {appt.addedServices.slice(0, 1).map((as, index) => ( 
                                     <li key={index} className="truncate">
                                       {as.service?.name || as.serviceId}
                                     </li>
@@ -231,7 +243,7 @@ const DailyTimelineComponent = ({ professionals, appointments, timeSlots, onAppo
                           {isApptOverlapping && <p className="text-destructive font-semibold text-xs flex items-center gap-1 mb-1"><AlertTriangle size={12} /> ¡Cita Superpuesta!</p>}
                           <p className="font-bold text-sm">{appointmentMainText}</p>
                           <p><User size={12} className="inline mr-1"/> {appt.service?.name}</p>
-                          <p><Clock size={12} className="inline mr-1"/> {format(parseISO(appt.appointmentDateTime), "HH:mm", { locale: es })} ({appt.durationMinutes} min)</p>
+                          <p><Clock size={12} className="inline mr-1"/> {format(parseISO(appt.appointmentDateTime), "HH:mm", { locale: es })} ({durationToDisplay} min)</p>
                           {appt.addedServices && appt.addedServices.length > 0 && (
                             <div className="mt-1">
                               <p className="text-xs font-semibold">Servicios Adicionales:</p>
@@ -259,7 +271,7 @@ const DailyTimelineComponent = ({ professionals, appointments, timeSlots, onAppo
           </div>
         </div>
         <ScrollBar orientation="horizontal" />
-       {appointments.length === 0 && professionals.length > 0 && (
+       {relevantAppointments.length === 0 && professionals.length > 0 && (
         <p className="text-muted-foreground text-center py-8">No hay citas programadas para este día y selección.</p>
       )}
       </ScrollArea>
