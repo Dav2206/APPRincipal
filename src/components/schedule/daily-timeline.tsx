@@ -27,18 +27,18 @@ const DAY_START_HOUR = 9; // Assuming timeline starts at 9 AM
 interface RenderableServiceBlock {
   id: string; // Combination of appt.id and serviceId/index for uniqueness
   originalAppointmentId: string;
-  assignedProfessionalId: string | null;
+  assignedProfessionalId: string | null; // Professional who PERFORMS this specific service block
   patientName: string;
   serviceName: string;
   serviceId: string;
   startTime: Date;
-  durationMinutes: number;
+  durationMinutes: number; // Duration of THIS specific service block
   isMainService: boolean;
   isTravelBlock: boolean;
-  isExternalProfessional?: boolean;
-  externalProfessionalOriginLocationId?: LocationId | null;
+  isExternalProfessional?: boolean; // Was the main appointment's professional external?
+  externalProfessionalOriginLocationId?: LocationId | null; // Origin of main appointment's professional
   bookingObservations?: string | null;
-  originalAppointmentData: Appointment;
+  originalAppointmentData: Appointment; // Reference to the full original appointment
 }
 
 const isOverlapping = (blockA: RenderableServiceBlock, blockB: RenderableServiceBlock): boolean => {
@@ -57,13 +57,14 @@ const isOverlapping = (blockA: RenderableServiceBlock, blockB: RenderableService
 
 
 const DailyTimelineComponent = ({ professionals, appointments, timeSlots, onAppointmentClick, viewingLocationId, currentDate }: DailyTimelineProps) => {
+  const allServiceBlocks: RenderableServiceBlock[] = [];
+
   const relevantAppointments = appointments.filter(
     appt => appt.locationId === viewingLocationId || 
-            (appt.isTravelBlock && appt.professional?.locationId !== viewingLocationId && appt.locationId === viewingLocationId) || // Travel block to this location
-            (appt.isTravelBlock && appt.professional?.locationId === viewingLocationId && appt.externalProfessionalOriginLocationId !== viewingLocationId) // Travel block from this location
+            (appt.isTravelBlock && appt.professional?.locationId !== viewingLocationId && appt.locationId === viewingLocationId) ||
+            (appt.isTravelBlock && appt.professional?.locationId === viewingLocationId && appt.externalProfessionalOriginLocationId !== viewingLocationId)
   );
 
-  const allServiceBlocks: RenderableServiceBlock[] = [];
   relevantAppointments
     .sort((a, b) => parseISO(a.appointmentDateTime).getTime() - parseISO(b.appointmentDateTime).getTime())
     .forEach(appt => {
@@ -71,24 +72,24 @@ const DailyTimelineComponent = ({ professionals, appointments, timeSlots, onAppo
 
       if (appt.isTravelBlock) {
         allServiceBlocks.push({
-          id: appt.id,
+          id: appt.id, // Travel blocks have unique IDs
           originalAppointmentId: appt.id,
           assignedProfessionalId: appt.professionalId,
           patientName: `Traslado ${appt.professional?.locationId === viewingLocationId ? 'desde esta sede' : `a ${LOCATIONS.find(l => l.id === appt.locationId)?.name || 'esta sede'}`}`,
           serviceName: 'Viaje',
-          serviceId: 'travel', // Special serviceId for travel blocks
+          serviceId: 'travel',
           startTime: currentTimeForBlockCalculation,
           durationMinutes: appt.durationMinutes,
-          isMainService: false,
+          isMainService: false, // Treat as not main for styling
           isTravelBlock: true,
           isExternalProfessional: appt.isExternalProfessional,
           externalProfessionalOriginLocationId: appt.externalProfessionalOriginLocationId,
           originalAppointmentData: appt,
         });
-        return;
+        return; // Skip further processing for travel blocks
       }
 
-      // Servicio Principal
+      // Main Service
       if (appt.service) {
         allServiceBlocks.push({
           id: `${appt.id}-main-${appt.serviceId}`,
@@ -98,7 +99,7 @@ const DailyTimelineComponent = ({ professionals, appointments, timeSlots, onAppo
           serviceName: appt.service?.name || 'Servicio Principal',
           serviceId: appt.serviceId,
           startTime: currentTimeForBlockCalculation,
-          durationMinutes: appt.durationMinutes,
+          durationMinutes: appt.durationMinutes, // Duration of the main service
           isMainService: true,
           isTravelBlock: false,
           isExternalProfessional: appt.isExternalProfessional,
@@ -109,7 +110,7 @@ const DailyTimelineComponent = ({ professionals, appointments, timeSlots, onAppo
         currentTimeForBlockCalculation = addMinutes(currentTimeForBlockCalculation, appt.durationMinutes);
       }
 
-      // Servicios Adicionales
+      // Added Services
       (appt.addedServices || []).forEach((addedSvc, index) => {
         if (addedSvc.service && typeof addedSvc.service.defaultDuration === 'number' && addedSvc.service.defaultDuration > 0) {
           allServiceBlocks.push({
@@ -117,7 +118,7 @@ const DailyTimelineComponent = ({ professionals, appointments, timeSlots, onAppo
             originalAppointmentId: appt.id,
             assignedProfessionalId: addedSvc.professionalId || appt.professionalId, // Assign to added service's prof or main appt prof
             patientName: `${appt.patient?.firstName || ''} ${appt.patient?.lastName || ''}`.trim() || "Cita Reservada",
-            serviceName: addedSvc.service.name,
+            serviceName: addedSvc.service.name || 'Servicio Adicional',
             serviceId: addedSvc.serviceId,
             startTime: currentTimeForBlockCalculation,
             durationMinutes: addedSvc.service.defaultDuration,
@@ -147,12 +148,12 @@ const DailyTimelineComponent = ({ professionals, appointments, timeSlots, onAppo
       const top = minutesFromTimelineStart * PIXELS_PER_MINUTE;
       const height = duration * PIXELS_PER_MINUTE;
       return {
-        top: `${top}px`,
-        height: `${height}px`,
+        top: `${Math.max(0, top)}px`, // Ensure top is not negative
+        height: `${Math.max(10, height)}px`, // Ensure minimum height for visibility
       };
     } catch (error) {
       console.error("[DailyTimeline] Error in getServiceBlockStyle:", startTime, duration, error);
-      return { top: '0px', height: '0px' };
+      return { top: '0px', height: '10px' }; // Fallback style
     }
   };
 
@@ -186,7 +187,7 @@ const DailyTimelineComponent = ({ professionals, appointments, timeSlots, onAppo
           <div className="flex flex-nowrap">
             {professionalsToDisplay.map(prof => {
               const blocksForThisProfessional = allServiceBlocks.filter(
-                block => block.assignedProfessionalId === prof.id && 
+                block => block.assignedProfessionalId === prof.id &&
                          (block.isTravelBlock ? true : block.originalAppointmentData.locationId === viewingLocationId)
               );
 
@@ -256,23 +257,19 @@ const DailyTimelineComponent = ({ professionals, appointments, timeSlots, onAppo
 
                       const serviceColorVar = `chart-${(block.serviceId.charCodeAt(0) % 5) + 1}`;
                       const blockBackgroundColor = `hsl(var(--${serviceColorVar}))`;
-                      const durationToDisplay = block.isMainService 
-                        ? (block.originalAppointmentData.totalCalculatedDurationMinutes || block.durationMinutes) 
-                        : block.durationMinutes;
-
+                     
                       return (
                         <Tooltip key={block.id} delayDuration={100}>
                           <TooltipTrigger asChild>
                             <div
                               className={cn(
                                 "absolute left-1 right-1 rounded-md p-1.5 shadow-md text-xs overflow-hidden cursor-pointer hover:brightness-90 transition-all flex flex-col justify-start",
-                                isBlockOverlapping && "ring-2 ring-destructive border-destructive",
-                                !block.isMainService && "border-dashed"
+                                isBlockOverlapping && "ring-2 ring-destructive border-destructive"
                               )}
                               style={{
                                 ...style,
                                 backgroundColor: blockBackgroundColor,
-                                color: 'hsl(var(--accent-foreground))',
+                                color: 'hsl(var(--accent-foreground))', // Assuming light text on colored background
                                 opacity: block.isMainService ? 1 : 0.75,
                                 borderColor: isBlockOverlapping ? 'hsl(var(--destructive))' : blockBackgroundColor,
                                 borderWidth: isBlockOverlapping ? '2px' : '1px',
@@ -291,12 +288,12 @@ const DailyTimelineComponent = ({ professionals, appointments, timeSlots, onAppo
                                 </div>
                                 {block.isMainService && <p className="truncate text-[10px] leading-tight opacity-90">{block.serviceName}</p>}
                                 
-                                {durationToDisplay > (block.isMainService ? (block.originalAppointmentData.addedServices && block.originalAppointmentData.addedServices.length > 0 ? 15 : 30) : 15) && (
+                                {block.durationMinutes > (block.isMainService && block.originalAppointmentData.addedServices && block.originalAppointmentData.addedServices.length > 0 ? 15 : 30) && (
                                   <p className="text-[10px] leading-tight opacity-80 mt-0.5">
-                                    ({block.isMainService ? `Total: ${durationToDisplay} min` : `${block.durationMinutes} min`})
+                                    ({`${block.durationMinutes} min`}) {/* Muestra duración del bloque actual */}
                                   </p>
                                 )}
-                                {block.isMainService && block.originalAppointmentData.addedServices && block.originalAppointmentData.addedServices.length > 0 && durationToDisplay <= 45 && (
+                                {block.isMainService && block.originalAppointmentData.addedServices && block.originalAppointmentData.addedServices.length > 0 && block.durationMinutes <= 45 && (
                                   <p className="text-[9px] opacity-70 mt-0.5 flex items-center gap-0.5"><ShoppingBag size={10}/> +Serv.</p>
                                 )}
                               </div>
@@ -344,4 +341,3 @@ const DailyTimelineComponent = ({ professionals, appointments, timeSlots, onAppo
 };
 
 export const DailyTimeline = React.memo(DailyTimelineComponent);
-
