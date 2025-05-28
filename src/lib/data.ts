@@ -495,126 +495,85 @@ export const initializeGlobalMockStore = () => {
 initializeGlobalMockStore(); 
 
 // --- Auth ---
-export async function getUserByUsername(identity: string): Promise<User | undefined> {
-  console.log(`[data.ts] getUserByUsername. globalUseMockDatabase: ${globalUseMockDatabase}. Buscando por identidad: ${identity}`);
-  try {
-    if (globalUseMockDatabase) {
-      console.log(`[data.ts] getUserByUsername (mock) for: ${identity}`);
-      const user = mockDB.users.find(u => u.username.toLowerCase() === identity.toLowerCase());
-      if (user) {
-        console.log(`[data.ts] getUserByUsername (mock): User ${identity} found.`);
-        return { ...user };
-      }
-      console.warn(`[data.ts] getUserByUsername (mock): User ${identity} not found.`);
-      return undefined;
+export const getUserByUsername = async (username: string): Promise<User | undefined> => {
+    if (useMockDatabase) {
+        return mockDB.users.find(u => u.username === username);
     }
-
     if (!firestore) {
-      console.error("[data.ts] getUserByUsername (Firestore): Firestore is not initialized. Cannot fetch user.");
-      return undefined;
+      console.warn("Firestore not initialized in getUserByUsername. Using mock as fallback.");
+      return mockDB.users.find(u => u.username === username);
     }
-    console.log(`[data.ts] getUserByUsername (Firestore) buscando por username: ${identity}`);
     const usersCol = collection(firestore, 'usuarios');
-    const q = query(usersCol, where('username', '==', identity));
+    const q = query(usersCol, where('username', '==', username));
     const snapshot = await getDocs(q);
+    if (snapshot.empty) return undefined;
+    return { id: snapshot.docs[0].id, ...convertDocumentData(snapshot.docs[0].data()) } as User;
+};
 
-    if (snapshot.empty) {
-      console.warn(`[data.ts] getUserByUsername (Firestore): No se encontró ningún usuario con username: ${identity}`);
-      return undefined;
-    }
-    const userDoc = snapshot.docs[0];
-    const userData = { id: userDoc.id, ...convertDocumentData(userDoc.data()) } as User;
-    console.log(`[data.ts] getUserByUsername (Firestore): User ${identity} found with ID: ${userData.id}`);
-    return userData;
-  } catch (error: any) {
-    console.error(`[data.ts] Error en getUserByUsername para "${identity}":`, error);
-    if (error.code === 'unavailable') {
-       console.error("[data.ts] Firestore is unavailable. Check connection and Firebase/Firestore status.");
-    } else if (error.message && error.message.includes("firestore/indexes?create_composite")) {
-       console.error("[data.ts] Firestore query requires an index. Please create it using the link in the error message:", error.message);
-    }
-    return undefined;
-  }
-}
 
 
 // --- Professionals ---
-export async function getProfessionals (locationId?: LocationId): Promise<(Professional & { contractDisplayStatus: ContractDisplayStatus })[]> {
-  let professionalsToProcess: Professional[];
-  const currentSystemDate = new Date(); 
 
-  // console.log(`[data.ts] getProfessionals called for locationId: ${locationId || 'all'}. Using globalUseMockDatabase: ${globalUseMockDatabase}`);
+export async function getProfessionals (locationId?: LocationId): Promise<(Professional & { contractDisplayStatus: ContractDisplayStatus })[]> {
+  const currentSystemDate = new Date();
 
   try {
-    if (globalUseMockDatabase) {
-      professionalsToProcess = locationId ? mockDB.professionals.filter(p => p.locationId === locationId) : [...mockDB.professionals];
-    } else {
-      if (!firestore) {
-        console.warn("[data.ts] getProfessionals: Firestore not available, falling back to mock data for this call.");
-        professionalsToProcess = locationId ? initialMockProfessionalsData.filter(p => p.locationId === locationId) : [...initialMockProfessionalsData];
-      } else {
-        const professionalsCol = collection(firestore, 'profesionales');
-        let qConstraints: QueryConstraint[] = [];
-        if (locationId) {
-          qConstraints.push(where('locationId', '==', locationId));
-        }
-        // qConstraints.push(orderBy("lastName"), orderBy("firstName")); // This requires a composite index
-        
-        const finalQuery = query(professionalsCol, ...qConstraints);
-        const snapshot = await getDocs(finalQuery);
-        professionalsToProcess = snapshot.docs.map(docSnap => ({ id: docSnap.id, ...convertDocumentData(docSnap.data()) } as Professional));
-        
-        if (snapshot.empty && initialMockProfessionalsData.length > 0 && globalUseMockDatabase) { 
-            console.warn(`[data.ts] Firestore 'profesionales' query returned no results for locationId '${locationId || 'all'}'. Falling back to mock list as globalUseMockDatabase is true.`);
-            professionalsToProcess = professionalsToProcess.length > 0 ? professionalsToProcess : (locationId ? initialMockProfessionalsData.filter(p => p.locationId === locationId) : [...initialMockProfessionalsData]);
-        }
-      }
+    if (!firestore) {
+      console.warn("[data.ts] getProfessionals: Firestore not available, returning empty array."); // Mensaje actualizado
+      return []; // Retorna un array vacío
     }
-    
-    professionalsToProcess.sort((a, b) => {
+
+    const professionalsCol = collection(firestore, 'profesionales') as CollectionReference<DocumentData>;
+    let qConstraints: QueryConstraint[] = [];
+    if (locationId) {
+      qConstraints.push(where('locationId', '==', locationId));
+    }
+    // qConstraints.push(orderBy("lastName"), orderBy("firstName")); // Esto requiere un índice compuesto
+
+    const finalQuery = query(professionalsCol, ...qConstraints);
+    const snapshot = await getDocs(finalQuery);
+    let fetchedProfessionals = snapshot.docs.map(docSnap => ({ id: docSnap.id, ...convertDocumentData(docSnap.data()) } as Professional));
+
+    // Se elimina el bloque que dependía de snapshot.empty y globalUseMockDatabase
+
+    fetchedProfessionals.sort((a, b) => {
       const nameA = `${a.firstName || ''} ${a.lastName || ''}`.toLowerCase();
       const nameB = `${b.firstName || ''} ${b.lastName || ''}`.toLowerCase();
       return nameA.localeCompare(nameB);
     });
-    
-    return professionalsToProcess.map(prof => ({
+
+    return fetchedProfessionals.map(prof => ({
       ...prof,
       contractDisplayStatus: getContractDisplayStatus(prof.currentContract, currentSystemDate)
     }));
 
   } catch (error: any) {
-    console.error("[data.ts] Error in getProfessionals. Query was for locationId:", locationId, "Error:", error);
+    console.error("[data.ts] Error in getProfessionals. Query was for locationId:", locationId, "Error:", error); // Mensaje actualizado
     if (error.message && error.message.includes("firestore/indexes?create_composite")) {
         console.error("[data.ts] Firestore query in getProfessionals requires an index. Please create it using the link in the error message:", error.message);
     }
-    professionalsToProcess = locationId ? initialMockProfessionalsData.filter(p => p.locationId === locationId) : [...initialMockProfessionalsData];
-    return professionalsToProcess.map(prof => ({
-      ...prof,
-      contractDisplayStatus: getContractDisplayStatus(prof.currentContract, currentSystemDate)
-    })).sort((a,b) => `${a.firstName} ${a.lastName}`.localeCompare(`${b.firstName} ${b.lastName}`));
+    // En caso de error, retorna un array vacío en lugar de datos simulados
+    return [];
   }
 }
 
-
 export async function getProfessionalById (id: string): Promise<Professional | undefined> {
   try {
-    if (globalUseMockDatabase) {
-      const professional = mockDB.professionals.find(p => p.id === id);
-      return professional ? { ...professional } : undefined;
-    }
+   
     if (!firestore) {
-      console.warn("[data.ts] getProfessionalById: Firestore not available, falling back to mock data.");
-      return initialMockProfessionalsData.find(p => p.id === id);
+      console.warn("[data.ts] getProfessionalById: Firestore not available, returning undefined.");
+      return undefined;
     }
     const docRef = doc(firestore, 'profesionales', id);
     const docSnap = await getDoc(docRef);
     if (docSnap.exists()) {
-      return { id: docSnap.id, ...convertDocumentData(docSnap.data()) } as Professional;
+ return { id: docSnap.id, ...convertDocumentData(docSnap.data()) } as Professional;
     }
     return undefined;
   } catch (error) {
-    console.error(`[data.ts] Error fetching professional by ID "${id}", falling back to mock:`, error);
-    return initialMockProfessionalsData.find(p => p.id === id);
+    console.error(`[data.ts] Error fetching professional by ID "${id}":`, error);
+  
+ return undefined;
   }
 }
 
@@ -664,13 +623,6 @@ export async function addProfessional (data: Omit<ProfessionalFormData, 'id'>): 
         DAYS_OF_WEEK.forEach(dayInfo => {
              newProfessionalData.workSchedule[dayInfo.id] = { startTime: '00:00', endTime: '00:00', isWorking: false };
         });
-    }
-    
-    if (globalUseMockDatabase) {
-      const newId = generateId();
-      const newProfWithId = { ...newProfessionalData, id: newId, biWeeklyEarnings: 0 } as Professional;
-      mockDB.professionals.push(newProfWithId);
-      return { ...newProfWithId };
     }
 
     if (!firestore) {
@@ -762,7 +714,7 @@ export async function updateProfessional (id: string, data: Partial<Professional
     }
     
     let newCurrentContractData: Contract | null | undefined = undefined; 
-    const existingProfForContract = globalUseMockDatabase ? mockDB.professionals.find(p=>p.id === id) : await getProfessionalById(id);
+    const existingProfForContract = await getProfessionalById(id);
 
     const contractFieldsPresent = ['currentContract_startDate', 'currentContract_endDate', 'currentContract_notes', 'currentContract_empresa']
         .some(field => data.hasOwnProperty(field));
@@ -804,31 +756,7 @@ export async function updateProfessional (id: string, data: Partial<Professional
         professionalToUpdate.currentContract = newCurrentContractData;
     }
 
-    if (globalUseMockDatabase) {
-      const index = mockDB.professionals.findIndex(p => p.id === id);
-      if (index === -1) return undefined;
-      
-      const existingProfessional = mockDB.professionals[index];
-      const updatedHistory = [...(existingProfessional.contractHistory || [])];
-
-      if (newCurrentContractData !== undefined) { 
-        if (existingProfessional.currentContract && newCurrentContractData && existingProfessional.currentContract.id !== newCurrentContractData.id) {
-           if (!updatedHistory.find(ch => ch.id === existingProfessional.currentContract!.id)) {
-            updatedHistory.push(existingProfessional.currentContract);
-          }
-        } else if (existingProfessional.currentContract && newCurrentContractData === null) { 
-           if (!updatedHistory.find(ch => ch.id === existingProfessional.currentContract!.id)) {
-            updatedHistory.push(existingProfessional.currentContract);
-           }
-        }
-        professionalToUpdate.contractHistory = updatedHistory;
-      } else {
-        professionalToUpdate.contractHistory = existingProfessional.contractHistory;
-      }
-
-      mockDB.professionals[index] = { ...existingProfessional, ...professionalToUpdate } as Professional;
-      return { ...mockDB.professionals[index] };
-    }
+  
 
     if (!firestore) {
       console.error("[data.ts] updateProfessional: Firestore is not initialized.");
@@ -918,31 +846,7 @@ export async function getPatients (options?: { page?: number, limit?: number, se
   const { page = 1, limit: pageSize = 10, searchTerm, filterToday, adminSelectedLocation, user, lastVisiblePatientId: lastVisibleId } = options || {};
 
   try {
-    if (globalUseMockDatabase) {
-      let filteredPatients = [...mockDB.patients];
-      if (searchTerm) {
-        filteredPatients = filteredPatients.filter(p =>
-          (`${p.firstName} ${p.lastName}`.toLowerCase().includes(searchTerm.toLowerCase()) ||
-          (p.phone && p.phone.includes(searchTerm)))
-        );
-      }
-       if (filterToday && user) {
-        const today = startOfDay(new Date());
-        const effectiveLocationId = (user.role === USER_ROLES.ADMIN || user.role === USER_ROLES.CONTADOR)
-            ? (adminSelectedLocation === 'all' ? undefined : adminSelectedLocation as LocationId)
-            : user.locationId;
-        
-        const dailyAppointmentsResponse = await getAppointments({ date: today, locationId: effectiveLocationId });
-        const patientIdsWithApptsToday = new Set((dailyAppointmentsResponse.appointments || []).map(appt => appt.patientId));
-        filteredPatients = filteredPatients.filter(p => patientIdsWithApptsToday.has(p.id));
-      }
-
-      const totalCount = filteredPatients.length;
-      const startIndex = (page - 1) * pageSize;
-      const paginatedPatients = filteredPatients.slice(startIndex, startIndex + pageSize);
-      const newLastVisibleId = paginatedPatients.length > 0 ? paginatedPatients[paginatedPatients.length - 1].id : null;
-      return { patients: paginatedPatients, totalCount, lastVisiblePatientId: newLastVisibleId };
-    }
+   
 
     if (!firestore) {
       console.warn("[data.ts] getPatients: Firestore not available, returning empty results.");
@@ -1043,11 +947,7 @@ export async function addPatient (data: Omit<Patient, 'id'>): Promise<Patient> {
     notes: data.notes || null,
   };
 
-  if (globalUseMockDatabase) {
-    const newPatient = { ...patientData, id: generateId() };
-    mockDB.patients.push(newPatient);
-    return { ...newPatient };
-  }
+  
   if (!firestore) throw new Error("Firestore not initialized");
   const docRef = await addDoc(collection(firestore, 'pacientes'), patientData);
   return { id: docRef.id, ...patientData };
@@ -1062,12 +962,7 @@ export async function updatePatient (id: string, data: Partial<Patient>): Promis
     if (patientUpdateData.hasOwnProperty('notes')) patientUpdateData.notes = patientUpdateData.notes || null;
 
 
-  if (globalUseMockDatabase) {
-    const index = mockDB.patients.findIndex(p => p.id === id);
-    if (index === -1) return undefined;
-    mockDB.patients[index] = { ...mockDB.patients[index], ...patientUpdateData } as Patient;
-    return { ...mockDB.patients[index] };
-  }
+ 
   if (!firestore) throw new Error("Firestore not initialized");
   const docRef = doc(firestore, 'pacientes', id);
   await updateDoc(docRef, patientUpdateData);
@@ -1076,9 +971,7 @@ export async function updatePatient (id: string, data: Partial<Patient>): Promis
 }
 
 export async function getPatientById (id: string): Promise<Patient | undefined> {
-  if (globalUseMockDatabase) {
-    return mockDB.patients.find(p => p.id === id);
-  }
+ 
   if (!firestore) {
      console.warn("[data.ts] getPatientById: Firestore not available, returning undefined.");
      return undefined;
@@ -1089,9 +982,7 @@ export async function getPatientById (id: string): Promise<Patient | undefined> 
 }
 
 export async function findPatient(firstName: string, lastName: string): Promise<Patient | null> {
-  if (globalUseMockDatabase) {
-    return mockDB.patients.find(p => p.firstName.toLowerCase() === firstName.toLowerCase() && p.lastName.toLowerCase() === lastName.toLowerCase()) || null;
-  }
+  
   if (!firestore) return null;
   const patientsCol = collection(firestore, 'pacientes');
   const q = query(patientsCol, where('firstName', '==', firstName), where('lastName', '==', lastName));
@@ -1104,18 +995,16 @@ export async function findPatient(firstName: string, lastName: string): Promise<
 
 // --- Services ---
 export async function getServices(): Promise<Service[]> {
-  if (globalUseMockDatabase) {
-    return [...mockDB.services];
-  }
+  
   if (!firestore) {
-     console.warn("[data.ts] getServices: Firestore not available, returning mock data.");
-     return [...initialMockServicesData]; 
+     console.warn("[data.ts] getServices: Firestore not available, returning empty array");
+     return []; 
   }
   try {
     const servicesCol = collection(firestore, 'servicios');
     const snapshot = await getDocs(query(servicesCol, orderBy("name")));
-    if (snapshot.empty && initialMockServicesData.length > 0) {
-        console.warn("[data.ts] Firestore 'servicios' collection is empty. Seed with 'seedFirestoreWithMockData()' or add services manually if this is not expected.");
+    if (snapshot.empty ) {
+        console.warn("[data.ts] Firestore 'servicios' collection is empty. add services manually if this is not expected.");
     }
     return snapshot.docs.map(docSnap => ({ id: docSnap.id, ...convertDocumentData(docSnap.data()) } as Service));
   } catch (error) {
@@ -1132,11 +1021,7 @@ export async function addService (data: ServiceFormData): Promise<Service> {
     price: data.price ?? null,
   };
 
-  if (globalUseMockDatabase) {
-    const newService = { ...newServiceData, id: data.id || generateId() };
-    mockDB.services.push(newService);
-    return { ...newService };
-  }
+  
   if (!firestore) throw new Error("Firestore not initialized");
   const docRef = await addDoc(collection(firestore, 'servicios'), newServiceData);
   return { id: docRef.id, ...newServiceData };
@@ -1151,12 +1036,6 @@ export async function updateService (id: string, data: Partial<ServiceFormData>)
   if (data.hasOwnProperty('price')) serviceUpdateData.price = data.price ?? null;
 
 
-  if (globalUseMockDatabase) {
-    const index = mockDB.services.findIndex(s => s.id === id);
-    if (index === -1) return undefined;
-    mockDB.services[index] = { ...mockDB.services[index], ...serviceUpdateData } as Service;
-    return { ...mockDB.services[index] };
-  }
   if (!firestore) throw new Error("Firestore not initialized");
   const docRef = doc(firestore, 'servicios', id);
   await updateDoc(docRef, serviceUpdateData);
@@ -1179,49 +1058,7 @@ export async function getAppointments(options: GetAppointmentsOptions = {}): Pro
   const { locationId, professionalId, patientId, date, dateRange, statuses } = options;
   
   try {
-    if (globalUseMockDatabase) {
-      let filteredAppointments = [...mockDB.appointments];
-      if (locationId) filteredAppointments = filteredAppointments.filter(a => a.locationId === locationId);
-      if (professionalId) filteredAppointments = filteredAppointments.filter(a => a.professionalId === professionalId);
-      if (patientId) filteredAppointments = filteredAppointments.filter(a => a.patientId === patientId);
-      if (date) {
-        const targetDate = startOfDay(date);
-        filteredAppointments = filteredAppointments.filter(a => dateFnsIsSameDay(parseISO(a.appointmentDateTime), targetDate));
-      }
-      if (dateRange) {
-        const rangeStart = startOfDay(dateRange.start);
-        const rangeEnd = endOfDay(dateRange.end);
-        filteredAppointments = filteredAppointments.filter(a => {
-          const apptDate = parseISO(a.appointmentDateTime);
-          return isWithinInterval(apptDate, { start: rangeStart, end: rangeEnd });
-        });
-      }
-      if (statuses && statuses.length > 0) {
-        filteredAppointments = filteredAppointments.filter(a => statuses.includes(a.status));
-      }
-
-      const populatedAppointments = filteredAppointments.map(appt => {
-        const patient = mockDB.patients.find(p => p.id === appt.patientId);
-        const professional = mockDB.professionals.find(p => p.id === appt.professionalId);
-        const service = mockDB.services.find(s => s.id === appt.serviceId);
-        const addedServicesPopulated = appt.addedServices?.map(as => {
-            let foundService = mockDB.services.find(s => s.id === as.serviceId);
-            return {
-                ...as,
-                service: foundService ? {...foundService} : undefined,
-                professional: as.professionalId ? mockDB.professionals.find(p => p.id === as.professionalId) : undefined,
-            }
-        });
-        let totalDuration = appt.durationMinutes || 0;
-        addedServicesPopulated?.forEach(as => {
-            if(as.service) totalDuration += as.service.defaultDuration;
-        });
-        return { ...appt, patient, professional, service, addedServices: addedServicesPopulated, totalCalculatedDurationMinutes: totalDuration };
-      });
-      return { appointments: populatedAppointments };
-    }
-
-    if (!firestore) {
+     if (!firestore) {
       console.warn("[data.ts] getAppointments: Firestore not available, returning empty array.");
       return { appointments: [] };
     }
@@ -1255,8 +1092,8 @@ export async function getAppointments(options: GetAppointmentsOptions = {}): Pro
     const finalQuery = query(appointmentsCol, ...qConstraints);
     const snapshot = await getDocs(finalQuery);
 
-    if (snapshot.empty && globalUseMockDatabase) {
-      console.warn("[data.ts] Firestore 'citas' query returned no results with current filters. Falling back to mock as globalUseMockDatabase is true.");
+    if (snapshot.empty) {
+      console.warn("[data.ts] Firestore 'citas' query returned no results with current filters.");
     }
     
     const allServicesFromDb = await getServices(); 
@@ -1306,26 +1143,7 @@ export async function getAppointments(options: GetAppointmentsOptions = {}): Pro
 }
 
 export async function getAppointmentById(id: string): Promise<Appointment | undefined> {
-  if (globalUseMockDatabase) {
-    const appointment = mockDB.appointments.find(a => a.id === id);
-    if (!appointment) return undefined;
-    const patient = mockDB.patients.find(p => p.id === appointment.patientId);
-    const professional = mockDB.professionals.find(p => p.id === appointment.professionalId);
-    const service = mockDB.services.find(s => s.id === appointment.serviceId);
-     const addedServicesPopulated = appointment.addedServices?.map(as => {
-        let foundService = mockDB.services.find(s => s.id === as.serviceId);
-        return {
-            ...as,
-            service: foundService ? {...foundService} : undefined,
-            professional: as.professionalId ? mockDB.professionals.find(p => p.id === as.professionalId) : undefined,
-        }
-    });
-    let totalDuration = appointment.durationMinutes || 0;
-    addedServicesPopulated?.forEach(as => {
-        if(as.service) totalDuration += as.service.defaultDuration;
-    });
-    return { ...appointment, patient, professional, service, addedServices: addedServicesPopulated, totalCalculatedDurationMinutes: totalDuration };
-  }
+ 
   if (!firestore) {
      console.warn("[data.ts] getAppointmentById: Firestore not available, returning undefined.");
      return undefined;
@@ -1364,9 +1182,9 @@ export async function getAppointmentById(id: string): Promise<Appointment | unde
 }
 
 export async function addAppointment(data: AppointmentFormData): Promise<Appointment> {
-  console.log(`[data.ts] addAppointment. globalUseMockDatabase: ${globalUseMockDatabase}. Form data received:`, data);
+  console.log(`[data.ts] addAppointment.  Form data received:`, data);
 
-  const allServicesList = globalUseMockDatabase ? mockDB.services : await getServices();
+  const allServicesList = await getServices();
   const service = allServicesList.find(s => s.id === data.serviceId);
 
   if (!service) {
@@ -1509,9 +1327,7 @@ export async function addAppointment(data: AppointmentFormData): Promise<Appoint
         console.warn(`[data.ts] addAppointment: No professional available for auto-assignment for the selected slot and service.`);
     }
   } else {
-     const preferredProf = globalUseMockDatabase 
-        ? mockDB.professionals.find(p => p.id === actualProfessionalId) 
-        : (await getProfessionals()).find(p => p.id === actualProfessionalId); // Fetch all and find
+     const preferredProf = (await getProfessionals()).find(p => p.id === actualProfessionalId); // Fetch all and find
      if (preferredProf && preferredProf.locationId !== data.locationId) {
          isExternal = true;
          externalOrigin = preferredProf.locationId;
@@ -1557,17 +1373,7 @@ export async function addAppointment(data: AppointmentFormData): Promise<Appoint
     })) || [],
   };
 
-  if (globalUseMockDatabase) {
-    const newAppointment = { ...newAppointmentData, id: generateId() };
-    mockDB.appointments.push(newAppointment);
-    if (travelBlockAppointment) {
-        const newTravelBlock = { ...travelBlockAppointment, id: generateId()};
-        mockDB.appointments.push(newTravelBlock);
-        console.log("[data.ts] addAppointment (Mock): New travel block added:", newTravelBlock.id);
-    }
-    console.log("[data.ts] addAppointment (Mock): New appointment added:", newAppointment.id);
-    return { ...newAppointment };
-  }
+
   if (!firestore) throw new Error("Firestore not initialized");
   
   const batch = writeBatch(firestore);
@@ -1601,14 +1407,12 @@ export async function addAppointment(data: AppointmentFormData): Promise<Appoint
 }
 
 export async function updateAppointment (id: string, data: Partial<AppointmentUpdateFormData>): Promise<Appointment | undefined> {
-  console.log(`[data.ts] updateAppointment. globalUseMockDatabase: ${globalUseMockDatabase}. ID: ${id}. Data:`, data);
+  console.log(`[data.ts] updateAppointment.  ID: ${id}. Data:`, data);
   
   let appointmentToUpdate: Partial<Omit<Appointment, 'id' | 'createdAt'>> = {};
   let originalAppointment: Appointment | undefined;
 
-  if (globalUseMockDatabase) {
-    originalAppointment = mockDB.appointments.find(a => a.id === id);
-  } else if (firestore) {
+   if (firestore) {
     const docSnap = await getDoc(doc(firestore, 'citas', id));
     if (docSnap.exists()) {
       originalAppointment = {id: docSnap.id, ...convertDocumentData(docSnap.data())} as Appointment;
@@ -1623,9 +1427,9 @@ export async function updateAppointment (id: string, data: Partial<AppointmentUp
   if (data.status) appointmentToUpdate.status = data.status;
   if (data.serviceId) appointmentToUpdate.serviceId = data.serviceId;
   
-  const serviceForDuration = globalUseMockDatabase
-    ? mockDB.services.find(s => s.id === (data.serviceId || originalAppointment.serviceId))
-    : (await getServices()).find(s => s.id === (data.serviceId || originalAppointment.serviceId));
+  const serviceForDuration =
+
+ (await getServices()).find(s => s.id === (data.serviceId || originalAppointment.serviceId));
 
   const mainServiceDuration = data.durationMinutes ?? serviceForDuration?.defaultDuration ?? originalAppointment.durationMinutes ?? 60;
   appointmentToUpdate.durationMinutes = mainServiceDuration;
@@ -1666,7 +1470,7 @@ export async function updateAppointment (id: string, data: Partial<AppointmentUp
 
   if (data.serviceId || data.hasOwnProperty('addedServices') || data.hasOwnProperty('durationMinutes')) {
     let totalDuration = appointmentToUpdate.durationMinutes || mainServiceDuration; 
-    const allServicesList = globalUseMockDatabase ? mockDB.services : await getServices();
+    const allServicesList = await getServices();
     
     const servicesToSum = appointmentToUpdate.addedServices || originalAppointment.addedServices || [];
 
@@ -1682,14 +1486,6 @@ export async function updateAppointment (id: string, data: Partial<AppointmentUp
 
   appointmentToUpdate.updatedAt = formatISO(new Date());
 
-
-  if (globalUseMockDatabase) {
-    const index = mockDB.appointments.findIndex(a => a.id === id);
-    if (index === -1) return undefined; // Should not happen if originalAppointment was found
-    mockDB.appointments[index] = { ...originalAppointment, ...appointmentToUpdate } as Appointment;
-    console.log("[data.ts] updateAppointment (Mock): Appointment updated:", mockDB.appointments[index].id);
-    return { ...mockDB.appointments[index] };
-  }
 
   if (!firestore) throw new Error("Firestore not initialized");
   
@@ -1730,12 +1526,8 @@ export async function updateAppointment (id: string, data: Partial<AppointmentUp
 
 
 export async function deleteAppointment(appointmentId: string): Promise<boolean> {
-  console.log(`[data.ts] deleteAppointment. globalUseMockDatabase: ${globalUseMockDatabase}. ID: ${appointmentId}`);
-  if (globalUseMockDatabase) {
-    const initialLength = mockDB.appointments.length;
-    mockDB.appointments = mockDB.appointments.filter(appt => appt.id !== appointmentId);
-    return mockDB.appointments.length < initialLength;
-  }
+  console.log(`[data.ts] deleteAppointment. ID: ${appointmentId}`);
+ 
   if (!firestore) {
     console.error("[data.ts] deleteAppointment: Firestore not initialized.");
     throw new Error("Firestore not initialized. Appointment not deleted.");
@@ -1812,9 +1604,7 @@ export function getProfessionalAvailabilityForDate(
 
 // --- Periodic Reminders ---
 export async function getPeriodicReminders(): Promise<PeriodicReminder[]> {
-  if (globalUseMockDatabase) {
-    return [...mockDB.periodicReminders].sort((a,b) => parseISO(a.dueDate).getTime() - parseISO(b.dueDate).getTime());
-  }
+ 
   if (!firestore) {
     console.warn("[data.ts] getPeriodicReminders: Firestore not available, returning empty array.");
     return [];
@@ -1839,11 +1629,7 @@ export async function addPeriodicReminder(data: PeriodicReminderFormData): Promi
     updatedAt: formatISO(new Date()),
   };
 
-  if (globalUseMockDatabase) {
-    const newReminder = { ...newReminderData, id: generateId() };
-    mockDB.periodicReminders.push(newReminder);
-    return { ...newReminder };
-  }
+
   if (!firestore) throw new Error("Firestore not initialized for addPeriodicReminder");
 
   const firestoreData = {
@@ -1866,12 +1652,7 @@ export async function updatePeriodicReminder(id: string, data: Partial<PeriodicR
   delete (reminderUpdateData as any).id;
 
 
-  if (globalUseMockDatabase) {
-    const index = mockDB.periodicReminders.findIndex(r => r.id === id);
-    if (index === -1) return undefined;
-    mockDB.periodicReminders[index] = { ...mockDB.periodicReminders[index], ...reminderUpdateData } as PeriodicReminder;
-    return { ...mockDB.periodicReminders[index] };
-  }
+
   if (!firestore) throw new Error("Firestore not initialized for updatePeriodicReminder");
 
   const docRef = doc(firestore, 'recordatorios', id);
@@ -1885,11 +1666,7 @@ export async function updatePeriodicReminder(id: string, data: Partial<PeriodicR
 }
 
 export async function deletePeriodicReminder(reminderId: string): Promise<boolean> {
-  if (globalUseMockDatabase) {
-    const initialLength = mockDB.periodicReminders.length;
-    mockDB.periodicReminders = mockDB.periodicReminders.filter(r => r.id !== reminderId);
-    return mockDB.periodicReminders.length < initialLength;
-  }
+  
   if (!firestore) throw new Error("Firestore not initialized for deletePeriodicReminder");
   try {
     await deleteDoc(doc(firestore, 'recordatorios', reminderId));
@@ -1904,9 +1681,7 @@ export async function deletePeriodicReminder(reminderId: string): Promise<boolea
 
 // --- Important Notes ---
 export async function getImportantNotes(): Promise<ImportantNote[]> {
-  if (globalUseMockDatabase) {
-    return [...mockDB.importantNotes].sort((a,b) => parseISO(b.createdAt!).getTime() - parseISO(a.createdAt!).getTime());
-  }
+
    if (!firestore) {
     console.warn("[data.ts] getImportantNotes: Firestore not available, returning empty array.");
     return [];
@@ -1928,11 +1703,7 @@ export async function addImportantNote(data: ImportantNoteFormData): Promise<Imp
     createdAt: formatISO(new Date()),
     updatedAt: formatISO(new Date()),
   };
-  if (globalUseMockDatabase) {
-    const newNote = { ...newNoteData, id: generateId() };
-    mockDB.importantNotes.push(newNote);
-    return { ...newNote };
-  }
+
   if (!firestore) throw new Error("Firestore not initialized for addImportantNote");
   
   const firestoreData = {
@@ -1949,12 +1720,7 @@ export async function updateImportantNote(id: string, data: Partial<ImportantNot
     ...data,
     updatedAt: formatISO(new Date()),
   };
-  if (globalUseMockDatabase) {
-    const index = mockDB.importantNotes.findIndex(n => n.id === id);
-    if (index === -1) return undefined;
-    mockDB.importantNotes[index] = { ...mockDB.importantNotes[index], ...noteUpdateData } as ImportantNote;
-    return { ...mockDB.importantNotes[index] };
-  }
+
   if (!firestore) throw new Error("Firestore not initialized for updateImportantNote");
 
   const docRef = doc(firestore, 'notasImportantes', id);
@@ -1967,11 +1733,7 @@ export async function updateImportantNote(id: string, data: Partial<ImportantNot
 }
 
 export async function deleteImportantNote(noteId: string): Promise<boolean> {
-  if (globalUseMockDatabase) {
-    const initialLength = mockDB.importantNotes.length;
-    mockDB.importantNotes = mockDB.importantNotes.filter(n => n.id !== noteId);
-    return mockDB.importantNotes.length < initialLength;
-  }
+
   if (!firestore) throw new Error("Firestore not initialized for deleteImportantNote");
   try {
     await deleteDoc(doc(firestore, 'notasImportantes', noteId));
@@ -1982,163 +1744,3 @@ export async function deleteImportantNote(noteId: string): Promise<boolean> {
   }
 }
 // --- End Important Notes ---
-
-
-// --- Seed Firestore ---
-export async function seedFirestoreWithMockData() {
-  if (globalUseMockDatabase) {
-    console.warn("[data.ts] seedFirestoreWithMockData: Called while globalUseMockDatabase is true. No action taken for Firestore.");
-    return;
-  }
-  if (!firestore) {
-    console.error("[data.ts] seedFirestoreWithMockData: Firestore is not initialized. Cannot seed data.");
-    throw new Error("Firestore not initialized. Cannot seed data.");
-  }
-  console.log("[data.ts] Starting to seed Firestore with mock data...");
-
-  const batch = writeBatch(firestore);
-
-  // Seed Usuarios
-  console.log(`[data.ts] Seeding ${initialMockUsersData.length} users...`);
-  initialMockUsersData.forEach(user => {
-    const { id, ...userData } = user;
-    const userRef = doc(firestore, "usuarios", id); 
-    const firestoreUserData = {
-        ...userData,
-        password: "admin", 
-    }
-    batch.set(userRef, firestoreUserData);
-  });
-
-  // Seed Servicios
-  console.log(`[data.ts] Seeding ${initialMockServicesData.length} services...`);
-  initialMockServicesData.forEach(service => {
-    const { id, ...serviceData } = service;
-    const serviceRef = doc(firestore, "servicios", id); 
-    batch.set(serviceRef, serviceData);
-  });
-  
-  // Seed Profesionales
-  console.log(`[data.ts] Seeding ${initialMockProfessionalsData.length} professionals...`);
-  initialMockProfessionalsData.forEach(prof => {
-    const { id, ...profData } = prof;
-    const profRef = doc(firestore, "profesionales", id); 
-    const firestoreProfData = {
-        ...profData,
-        phone: profData.phone || null,
-        isManager: profData.isManager || false,
-        birthDay: profData.birthDay || null,
-        birthMonth: profData.birthMonth || null,
-        biWeeklyEarnings: profData.biWeeklyEarnings || 0,
-        currentContract: profData.currentContract ? {
-            ...profData.currentContract,
-            startDate: toFirestoreTimestamp(profData.currentContract.startDate),
-            endDate: toFirestoreTimestamp(profData.currentContract.endDate),
-            notes: profData.currentContract.notes || null,
-            empresa: profData.currentContract.empresa || null,
-        } : null,
-        customScheduleOverrides: (profData.customScheduleOverrides || []).map(ov => ({
-            ...ov,
-            date: toFirestoreTimestamp(ov.date),
-            startTime: ov.startTime || null,
-            endTime: ov.endTime || null,
-            notes: ov.notes || null,
-        })),
-        contractHistory: (profData.contractHistory || []).map(ch => ({
-            ...ch,
-            startDate: toFirestoreTimestamp(ch.startDate),
-            endDate: toFirestoreTimestamp(ch.endDate),
-            notes: ch.notes || null,
-            empresa: ch.empresa || null,
-        })),
-    };
-    batch.set(profRef, firestoreProfData);
-  });
-
-  // Seed Pacientes
-  console.log(`[data.ts] Seeding ${initialMockPatientsData.length} patients...`);
-  initialMockPatientsData.forEach(patient => {
-    const { id, ...patientData } = patient;
-    const patientRef = doc(firestore, "pacientes", id); 
-    const firestorePatientData = {
-        ...patientData,
-        phone: patientData.phone || null,
-        age: patientData.age === undefined || patientData.age === 0 ? null : patientData.age,
-        isDiabetic: patientData.isDiabetic || false,
-        preferredProfessionalId: patientData.preferredProfessionalId || null,
-        notes: patientData.notes || null,
-    };
-    batch.set(patientRef, firestorePatientData);
-  });
-
-  // Seed Citas
-  console.log(`[data.ts] Seeding ${initialMockAppointmentsData.length} appointments...`);
-  initialMockAppointmentsData.forEach(appt => {
-    const { id, patient, professional, service, ...apptData } = appt; 
-    const apptRef = doc(firestore, "citas", id); 
-    const firestoreApptData = {
-        ...apptData,
-        appointmentDateTime: toFirestoreTimestamp(apptData.appointmentDateTime),
-        createdAt: apptData.createdAt ? toFirestoreTimestamp(apptData.createdAt) : serverTimestamp(),
-        updatedAt: apptData.updatedAt ? toFirestoreTimestamp(apptData.updatedAt) : serverTimestamp(),
-        professionalId: apptData.professionalId || null,
-        bookingObservations: apptData.bookingObservations || null,
-        actualArrivalTime: apptData.actualArrivalTime || null,
-        paymentMethod: apptData.paymentMethod || null,
-        amountPaid: apptData.amountPaid ?? null,
-        staffNotes: apptData.staffNotes || null,
-        attachedPhotos: apptData.attachedPhotos || [],
-        addedServices: (apptData.addedServices || []).map(as => ({
-            serviceId: as.serviceId,
-            professionalId: as.professionalId || null,
-            price: as.price ?? null,
-        })),
-        isExternalProfessional: apptData.isExternalProfessional || false,
-        externalProfessionalOriginLocationId: apptData.externalProfessionalOriginLocationId || null,
-        isTravelBlock: apptData.isTravelBlock || false,
-    };
-    batch.set(apptRef, firestoreApptData);
-  });
-
-  // Seed Recordatorios Periódicos
-  console.log(`[data.ts] Seeding ${initialMockPeriodicRemindersData.length} periodic reminders...`);
-  initialMockPeriodicRemindersData.forEach(reminder => {
-    const { id, ...reminderData } = reminder;
-    const reminderRef = doc(firestore, "recordatorios", id);
-    const firestoreReminderData = {
-        ...reminderData,
-        dueDate: toFirestoreTimestamp(reminderData.dueDate),
-        amount: reminderData.amount ?? null,
-        createdAt: reminderData.createdAt ? toFirestoreTimestamp(reminderData.createdAt) : serverTimestamp(),
-        updatedAt: reminderData.updatedAt ? toFirestoreTimestamp(reminderData.updatedAt) : serverTimestamp(),
-    };
-    batch.set(reminderRef, firestoreReminderData);
-  });
-
-  // Seed Notas Importantes
-  console.log(`[data.ts] Seeding ${initialMockImportantNotesData.length} important notes...`);
-  initialMockImportantNotesData.forEach(note => {
-    const { id, ...noteData } = note;
-    const noteRef = doc(firestore, "notasImportantes", id);
-     const firestoreNoteData = {
-        ...noteData,
-        createdAt: noteData.createdAt ? toFirestoreTimestamp(noteData.createdAt) : serverTimestamp(),
-        updatedAt: noteData.updatedAt ? toFirestoreTimestamp(noteData.updatedAt) : serverTimestamp(),
-    };
-    batch.set(noteRef, firestoreNoteData);
-  });
-
-
-  try {
-    await batch.commit();
-    console.log("[data.ts] Firestore successfully seeded with mock data.");
-  } catch (error) {
-    console.error("[data.ts] Error seeding Firestore:", error);
-    throw error;
-  }
-}
-// --- End Seed Firestore ---
-
-export {
-  mockDB, 
-};
