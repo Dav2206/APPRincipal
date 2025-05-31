@@ -3,7 +3,7 @@
 
 import type { Appointment, Professional, LocationId, Service, AddedServiceItem } from '@/types';
 import React from 'react';
-import { parseISO, getHours, getMinutes, addMinutes, format } from 'date-fns';
+import { parseISO, getHours, getMinutes, addMinutes, format, setMinutes, setHours, startOfDay } from 'date-fns';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { ScrollArea, ScrollBar } from '@/components/ui/scroll-area';
 import { User, Clock, AlertTriangle, Shuffle, Navigation, ShoppingBag } from 'lucide-react';
@@ -20,6 +20,17 @@ interface DailyTimelineProps {
   onAppointmentClick?: (appointment: Appointment, serviceId?: string) => void;
   viewingLocationId: LocationId;
 }
+
+// Function to generate a color based on a string (e.g., appointment ID)
+const stringToColor = (str: string): string => {
+  let hash = 0;
+  for (let i = 0; i < str.length; i++) {
+    hash = str.charCodeAt(i) + ((hash << 5) - hash);
+    hash = hash & hash; // Convert to 32bit integer
+  }
+  const hue = Math.abs(hash % 360);
+  return `hsl(${hue}, 70%, 85%)`; // Pastel colors
+};
 
 const PIXELS_PER_MINUTE = 1.5;
 const DAY_START_HOUR = 9; // Assuming timeline starts at 9 AM
@@ -38,6 +49,8 @@ interface RenderableServiceBlock {
   isExternalProfessional?: boolean; // Was the main appointment's professional external?
   externalProfessionalOriginLocationId?: LocationId | null; // Origin of main appointment's professional
   bookingObservations?: string | null;
+  // Using string to store the group color (HSL)
+  groupColor: string; // Color to visually group blocks of the same appointment
   originalAppointmentData: Appointment; // Reference to the full original appointment
 }
 
@@ -59,17 +72,26 @@ const isOverlapping = (blockA: RenderableServiceBlock, blockB: RenderableService
 const DailyTimelineComponent = ({ professionals, appointments, timeSlots, onAppointmentClick, viewingLocationId, currentDate }: DailyTimelineProps) => {
   const allServiceBlocks: RenderableServiceBlock[] = [];
 
-  const relevantAppointments = appointments.filter(
-    appt => appt.locationId === viewingLocationId || 
-            (appt.isTravelBlock && appt.professional?.locationId !== viewingLocationId && appt.locationId === viewingLocationId) ||
-            (appt.isTravelBlock && appt.professional?.locationId === viewingLocationId && appt.externalProfessionalOriginLocationId !== viewingLocationId)
-  );
+  const relevantAppointments = appointments.filter(appt =>
+    appt.locationId === viewingLocationId ||
+    (appt.isTravelBlock && appt.professional?.locationId !== viewingLocationId && appt.locationId === viewingLocationId) ||
+    (appt.isTravelBlock && appt.professional?.locationId === viewingLocationId && appt.externalProfessionalOriginLocationId !== viewingLocationId));
 
   relevantAppointments
     .sort((a, b) => parseISO(a.appointmentDateTime).getTime() - parseISO(b.appointmentDateTime).getTime())
     .forEach(appt => {
-      let currentTimeForBlockCalculation = parseISO(appt.appointmentDateTime);
+ let previousBlockEndTimeForSequence: Date | null = null; // Initialize for each appointment
+      // Ensure appointmentDateTime is a string before processing
+      if (typeof appt.appointmentDateTime !== 'string') {
+ console.error("[DailyTimeline] Invalid appointmentDateTime format:", appt.appointmentDateTime, "Skipping appointment:", appt);
+ return; // Skip this appointment if date format is invalid
+      }
 
+      const apptGroupColor = stringToColor(appt.id || ''); // Ensure ID is not null for color generation
+      const appointmentDate = parseISO(appt.appointmentDateTime);      // Track the end time of the last block for this appointment to handle sequential added services
+      let lastBlockProfessionalId: string | null | undefined = appt.professionalId;
+
+      
       if (appt.isTravelBlock) {
         allServiceBlocks.push({
           id: appt.id, // Travel blocks have unique IDs
@@ -78,16 +100,19 @@ const DailyTimelineComponent = ({ professionals, appointments, timeSlots, onAppo
           patientName: `Traslado ${appt.professional?.locationId === viewingLocationId ? 'desde esta sede' : `a ${LOCATIONS.find(l => l.id === appt.locationId)?.name || 'esta sede'}`}`,
           serviceName: 'Viaje',
           serviceId: 'travel',
-          startTime: currentTimeForBlockCalculation,
-          durationMinutes: appt.durationMinutes,
+          startTime: appointmentDate, // Travel block starts at the appointment time
+          durationMinutes: appt.durationMinutes, // Assuming travel block duration is in the appointment data
           isMainService: false, // Treat as not main for styling
           isTravelBlock: true,
-          isExternalProfessional: appt.isExternalProfessional,
           externalProfessionalOriginLocationId: appt.externalProfessionalOriginLocationId,
+          groupColor: apptGroupColor, // Assign group color to travel blocks too if they are part of the same flow
           originalAppointmentData: appt,
         });
-        return; // Skip further processing for travel blocks
+        // Update the end time and professional after the travel block
+ previousBlockEndTimeForSequence = addMinutes(appointmentDate, appt.durationMinutes);
+        lastBlockProfessionalId = appt.professionalId;
       }
+
 
       // Main Service
       if (appt.service) {
@@ -98,36 +123,68 @@ const DailyTimelineComponent = ({ professionals, appointments, timeSlots, onAppo
           patientName: `${appt.patient?.firstName || ''} ${appt.patient?.lastName || ''}`.trim() || "Cita Reservada",
           serviceName: appt.service?.name || 'Servicio Principal',
           serviceId: appt.serviceId,
-          startTime: currentTimeForBlockCalculation,
+          startTime: appointmentDate,
           durationMinutes: appt.durationMinutes, // Duration of the main service
           isMainService: true,
           isTravelBlock: false,
           isExternalProfessional: appt.isExternalProfessional,
-          externalProfessionalOriginLocationId: appt.externalProfessionalOriginLocationId,
+          groupColor: apptGroupColor, // Assign group color
           bookingObservations: appt.bookingObservations,
           originalAppointmentData: appt,
         });
-        currentTimeForBlockCalculation = addMinutes(currentTimeForBlockCalculation, appt.durationMinutes);
+        // Update the end time after the main service
+ previousBlockEndTimeForSequence = addMinutes(appointmentDate, appt.durationMinutes);
+      } else {
+         // If there's no main service but there are added services,
+         // the sequential positioning should probably start from the appointment's start time.
+         // Initialize previousBlockEndTimeForSequence with the appointment's start time.
+         previousBlockEndTimeForSequence = appointmentDate;
       }
 
       // Added Services
       (appt.addedServices || []).forEach((addedSvc, index) => {
         if (addedSvc.service && typeof addedSvc.service.defaultDuration === 'number' && addedSvc.service.defaultDuration > 0) {
-          allServiceBlocks.push({
-            id: `${appt.id}-added-${addedSvc.serviceId}-${index}`,
+          let addedServiceStartTime: Date;
+          // Check if a specific start time is provided for the added service
+          if (addedSvc.startTime) {
+            try {
+              // Parse the specific start time from the string, combining with the appointment date
+              const [hours, minutes] = addedSvc.startTime.split(':').map(Number);
+              addedServiceStartTime = setMinutes(setHours(startOfDay(appointmentDate), hours), minutes);
+            } catch (error) {
+               console.error("[DailyTimeline] Error parsing added service start time:", addedSvc.startTime, error);
+               // Fallback to main appointment start time if parsing fails
+               addedServiceStartTime = parseISO(appt.appointmentDateTime); // Consider falling back to lastBlockEndTime if professional is same?
+            }
+          } else {
+            // If no specific time is provided, AND the professional is the same as the previous block,
+            // start immediately after the previous block.
+
+            if (previousBlockEndTimeForSequence !== null) {
+ addedServiceStartTime = previousBlockEndTimeForSequence;
+               // console.log(`[DailyTimeline] Added Service ${index} (${addedSvc.service?.name}): Positioning sequentially after previous block. Start time: ${format(addedServiceStartTime, 'HH:mm')}`);
+            } else {
+               // Fallback if no specific time and no previous block processed yet for this appointment
+               addedServiceStartTime = appointmentDate;
+               // console.log(`[DailyTimeline] Added Service ${index} (${addedSvc.service?.name}): No specific time, no previous block. Using main appt time: ${format(addedServiceStartTime, 'HH:mm')}`);
+            }
+          }
+           allServiceBlocks.push({
+            id: `${appt.id}-added-${addedSvc.serviceId}-${index}`, // Unique ID for added service block
             originalAppointmentId: appt.id,
             assignedProfessionalId: addedSvc.professionalId || appt.professionalId, // Assign to added service's prof or main appt prof
             patientName: `${appt.patient?.firstName || ''} ${appt.patient?.lastName || ''}`.trim() || "Cita Reservada",
-            serviceName: addedSvc.service.name || 'Servicio Adicional',
+ serviceName: addedSvc.service?.name || 'Servicio Adicional',
             serviceId: addedSvc.serviceId,
-            startTime: currentTimeForBlockCalculation,
+            startTime: addedServiceStartTime, // Use the calculated or specified start time
             durationMinutes: addedSvc.service.defaultDuration,
             isMainService: false,
             isTravelBlock: false,
+            groupColor: apptGroupColor, // Assign group color
             originalAppointmentData: appt,
           });
-          currentTimeForBlockCalculation = addMinutes(currentTimeForBlockCalculation, addedSvc.service.defaultDuration);
-        }
+ previousBlockEndTimeForSequence = addMinutes(addedServiceStartTime, addedSvc.service.defaultDuration);
+ }
       });
     });
 
@@ -246,9 +303,10 @@ const DailyTimelineComponent = ({ professionals, appointments, timeSlots, onAppo
                               </div>
                             </TooltipTrigger>
                             <TooltipContent className="bg-popover text-popover-foreground p-2 rounded-md shadow-lg max-w-xs">
-                                <p className="font-bold text-sm">
-                                  {block.patientName} ({prof.firstName} {prof.lastName})
-                                </p>
+ <p className="font-bold text-sm">{prof.firstName} {prof.lastName}</p>
+ {block.bookingObservations && (
+ <p className="text-sm mt-1 italic">{block.bookingObservations}</p>
+ )}
                               <p><Clock size={12} className="inline mr-1" /> {format(block.startTime, "HH:mm", { locale: es })} ({block.durationMinutes} min)</p>
                             </TooltipContent>
                           </Tooltip>
@@ -272,7 +330,8 @@ const DailyTimelineComponent = ({ professionals, appointments, timeSlots, onAppo
                                 color: 'hsl(var(--accent-foreground))', // Assuming light text on colored background
                                 opacity: block.isMainService ? 1 : 0.75,
                                 borderColor: isBlockOverlapping ? 'hsl(var(--destructive))' : blockBackgroundColor,
-                                borderWidth: isBlockOverlapping ? '2px' : '1px',
+                                // Use groupColor for a subtle left border to visually group
+                                borderLeft: `4px solid ${block.groupColor}`, // Ensure groupColor is always applied
                                 borderStyle: !block.isMainService ? 'dashed' : 'solid',
                               }}
                               onClick={() => onAppointmentClick?.(block.originalAppointmentData, block.serviceId)}

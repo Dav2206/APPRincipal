@@ -52,7 +52,7 @@ export const APPOINTMENT_STATUS_DISPLAY: Record<AppointmentStatus, string> = {
 };
 
 
-export const TIME_SLOTS = Array.from({ length: (20 - 8) * 2 }, (_, i) => { // From 8 AM to 8 PM, 30 min slots
+export const TIME_SLOTS = Array.from({ length: (22 - 8) * 2 }, (_, i) => { // From 8 AM to 10 PM, 30 min slots
   const hour = Math.floor(i / 2) + 8;
   const minute = (i % 2) * 30;
   return `${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}`;

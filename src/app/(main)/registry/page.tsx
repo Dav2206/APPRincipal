@@ -151,35 +151,82 @@ export default function RegistryPage() {
       
       const appointmentsForDate = appointmentsForDateResponse.appointments || [];
 
-      const dailyReportMap = new Map<string, Omit<DailyActivityReportItem, 'professionalName' | 'locationName' | 'type' | 'servicesBreakdown' | 'totalServicesCount' > & { locationId: LocationId, services: Map<string, { serviceName: string, count: number }> }>();
+      const dailyReportMap = new Map<string, Omit<DailyActivityReportItem, 'professionalName' | 'locationName' | 'type' > & { services: Map<string, { serviceName: string, count: number }> }>();
 
       appointmentsForDate.forEach(appt => {
-        const professionalForAppt = currentProfessionals.find(p => p.id === appt.professionalId);
-        if (appt.professionalId && professionalForAppt && appt.status === APPOINTMENT_STATUS.COMPLETED && allServices) { // Ensure professional is active today
-          const reportEntry = dailyReportMap.get(appt.professionalId) || {
-            professionalId: appt.professionalId,
-            locationId: appt.locationId,
-            totalRevenue: 0,
-            services: new Map<string, { serviceName: string, count: number }>(),
-          };
-          
-          const mainServiceName = allServices.find(s => s.id === appt.serviceId)?.name || 'Servicio Desconocido';
-          const mainServiceEntry = reportEntry.services.get(appt.serviceId) || { serviceName: mainServiceName, count: 0 };
-          mainServiceEntry.count += 1;
-          reportEntry.services.set(appt.serviceId, mainServiceEntry);
-
-          appt.addedServices?.forEach(added => {
-            const addedServiceName = allServices.find(s => s.id === added.serviceId)?.name || 'Servicio Adicional Desc.';
-            const addedServiceEntry = reportEntry.services.get(added.serviceId) || { serviceName: addedServiceName, count: 0 };
-            addedServiceEntry.count += 1;
-            reportEntry.services.set(added.serviceId, addedServiceEntry);
-          });
-          
-          reportEntry.totalRevenue += appt.amountPaid || 0;
-          dailyReportMap.set(appt.professionalId, reportEntry);
+        // Only process completed appointments
+        if (appt.status !== APPOINTMENT_STATUS.COMPLETED || !allServices) {
+ return;
         }
+
+        // Process the main service if it has a professional assigned
+        if (appt.professionalId) {
+ const professionalIdPrincipal = appt.professionalId;
+
+ // Ensure entry exists for the principal professional
+ const reportEntryPrincipal = dailyReportMap.get(professionalIdPrincipal) || {
+ professionalId: professionalIdPrincipal,
+ locationId: appt.locationId, // Use appointment's location
+ totalRevenue: 0,
+ services: new Map<string, { serviceName: string, count: number }>(),
+ };
+
+ // Count the main service
+ const mainServiceName = allServices.find(s => s.id === appt.serviceId)?.name || 'Servicio Principal Desc.';
+ const mainServiceEntry = reportEntryPrincipal.services.get(appt.serviceId) || { serviceName: mainServiceName, count: 0 };
+ mainServiceEntry.count += 1;
+ reportEntryPrincipal.services.set(appt.serviceId, mainServiceEntry);
+
+           // >>>>> AÑADIR LÓGICA PARA SUMAR EL MONTO PAGADO DE LA CITA PRINCIPAL <<<<<
+           // Sumar el total pagado de la cita al profesional principal.
+           // Esto ASUME que appt.amountPaid es el total de la cita.
+           // Si necesitas una distribución más compleja, esto podría necesitar ajuste.
+ if (typeof appt.amountPaid === 'number' && appt.amountPaid > 0) {
+               reportEntryPrincipal.totalRevenue += appt.amountPaid;
+                // console.log(`[RegistryPage] Sumando S/${appt.amountPaid} a profesional principal ${professionalForAppt.firstName} por cita ${appt.id}. Nuevo total: ${reportEntryPrincipal.totalRevenue}`);
+           } else {
+                // console.log(`[RegistryPage] Cita ${appt.id} (principal) para prof ${professionalForAppt.firstName} no tiene monto pagado total válido o > 0.`);
+           }
+
+
+ // Update the map with the principal professional's entry
+ dailyReportMap.set(professionalIdPrincipal, reportEntryPrincipal);
+        }
+
+        // Process added services
+ appt.addedServices?.forEach(added => {
+          // Identify the professional for the added service (use added.professionalId or fallback to main professional)
+ const professionalIdForAddedService = added.professionalId || appt.professionalId;
+
+ // Only process if there is a professional assigned to this added service (or the main as fallback)
+ if (professionalIdForAddedService) {
+ // Ensure entry exists for the added service professional
+ const reportEntryAdded = dailyReportMap.get(professionalIdForAddedService) || {
+ professionalId: professionalIdForAddedService,
+ locationId: appt.locationId, // Use appointment's location
+ totalRevenue: 0,
+ services: new Map<string, { serviceName: string, count: number }>(),
+ };
+
+ // Count the added service
+ const addedServiceName = allServices.find(s => s.id === added.serviceId)?.name || 'Servicio Adicional Desc.';
+ const addedServiceEntry = reportEntryAdded.services.get(added.serviceId) || { serviceName: addedServiceName, count: 0 };
+ addedServiceEntry.count += 1;
+ reportEntryAdded.services.set(added.serviceId, addedServiceEntry);
+
+ // SUM THE AMOUNT PAID FOR THE ADDED SERVICE TO THE TOTAL OF THE PROFESSIONAL WHO PERFORMED IT
+ console.log("[RegistryPage] Procesando servicio adicional", added.serviceId, "amountPaid:", added.amountPaid, "(Tipo:", typeof added.amountPaid + ")"); // <-- ADDED LOG
+ if (typeof added.amountPaid === 'number' && added.amountPaid > 0) {
+ reportEntryAdded.totalRevenue += added.amountPaid;
+ }
+
+ // Update the map with the added service professional's entry
+ dailyReportMap.set(professionalIdForAddedService, reportEntryAdded);
+ }
+          });
       });
 
+      console.log("[RegistryPage] dailyReportMap before final report:", dailyReportMap); // <-- ADDED LOG
       const finalReport: DailyActivityReportItem[] = Array.from(dailyReportMap.values()).map(item => {
         const professional = currentProfessionals.find(p => p.id === item.professionalId);
         const location = LOCATIONS.find(l => l.id === item.locationId);

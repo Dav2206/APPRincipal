@@ -10,6 +10,15 @@ import { collection, addDoc, getDocs, doc, getDoc, updateDoc, query, where, dele
 
 console.log(`[data.ts] Valor de globalUseMockDatabase importado de firebase-config.ts: ${globalUseMockDatabase}`);
 
+// --- Helper to generate unique IDs ---
+const generateId = (): string => {
+  try {
+    return Math.random().toString(36).substring(2, 11) + Date.now().toString(36).substring(2, 7);
+  } catch (error) {
+    console.error("[data.ts] Error in generateId:", error);
+    return "fallback_id_" + Date.now();
+  }
+};
 
 // --- Helper to convert Firestore Timestamps to ISO strings and vice-versa ---
 const toFirestoreTimestamp = (date: Date | string | undefined | null): Timestamp | null => {
@@ -103,6 +112,9 @@ export function getContractDisplayStatus(contract: Contract | null | undefined, 
     referenceDate = startOfDay(currentSystemDate);
   }
 
+  // AÑADIR CONSOLE.LOGS AL PRINCIPIO
+  console.log(`[getContractDisplayStatus] Checking contract (ID: ${contract?.id || 'N/A'}) for Reference Date: ${formatISO(referenceDate)}`);
+
   // console.log(`[data.ts] getContractDisplayStatus - Reference Date: ${formatISO(referenceDate)}`);
 
   if (!contract || !contract.startDate || !contract.endDate) {
@@ -116,6 +128,8 @@ export function getContractDisplayStatus(contract: Contract | null | undefined, 
     // console.log("[data.ts] getContractDisplayStatus - Contract start/end date strings are invalid. Status: Sin Contrato. Contract:", contract);
     return 'Sin Contrato';
   }
+
+   console.log(`[getContractDisplayStatus] Contract Dates - Start: ${startDateStr}, End: ${endDateStr}`);
 
   let startDate: Date;
   let endDate: Date;
@@ -146,25 +160,13 @@ export function getContractDisplayStatus(contract: Contract | null | undefined, 
 
   const daysUntilExpiry = differenceInCalendarDays(endOfDay(endDate), referenceDate);
   if (daysUntilExpiry <= 15 && daysUntilExpiry >= 0) {
-    // console.log(`[data.ts] getContractDisplayStatus - Days until expiry: ${daysUntilExpiry}. Status: Próximo a Vencer`);
+    console.log(`[data.ts] getContractDisplayStatus - Days until expiry: ${daysUntilExpiry} for contract ending ${endDateStr}. Status: Próximo a Vencer`);
     return 'Próximo a Vencer';
   }
   // console.log(`[data.ts] getContractDisplayStatus - Contract is active. Status: Activo`);
   return 'Activo';
 }
 // --- End Contract Status Helper ---
-
-
-// --- Initial Mock Data Definitions ---
-const generateId = (): string => {
-  try {
-    return Math.random().toString(36).substring(2, 11) + Date.now().toString(36).substring(2, 7);
-  } catch (error) {
-    console.error("[data.ts] Error in generateId:", error);
-    return "fallback_id_" + Date.now();
-  }
-};
-
 
 
 // --- Auth ---
@@ -265,6 +267,7 @@ export async function addProfessional (data: Omit<ProfessionalFormData, 'id'>): 
         startTime: ov.isWorking ? ov.startTime : undefined,
         endTime: ov.isWorking ? ov.endTime : undefined,
         notes: ov.notes || null,
+ locationId: ov.locationId || null, // Save locationId if present
       })) || [],
       currentContract: (data.currentContract_startDate && data.currentContract_endDate) ? {
         id: generateId(),
@@ -321,6 +324,7 @@ export async function addProfessional (data: Omit<ProfessionalFormData, 'id'>): 
         startTime: ov.startTime ?? null,
         endTime: ov.endTime ?? null,
         notes: ov.notes ?? null,
+ locationId: ov.locationId ?? null, // Ensure locationId is saved or null
       }));
     } else {
       firestoreData.customScheduleOverrides = [];
@@ -380,6 +384,7 @@ export async function updateProfessional (id: string, data: Partial<Professional
         startTime: ov.isWorking ? ov.startTime : undefined,
         endTime: ov.isWorking ? ov.endTime : undefined,
         notes: ov.notes || null,
+ locationId: ov.locationId || null, // Include locationId from form data
       })) || [];
     }
     
@@ -454,6 +459,7 @@ export async function updateProfessional (id: string, data: Partial<Professional
         startTime: ov.startTime ?? null,
         endTime: ov.endTime ?? null,
         notes: ov.notes ?? null,
+ locationId: ov.locationId ?? null, // Include locationId from form data
       }));
     }
    
@@ -720,6 +726,7 @@ interface GetAppointmentsOptions {
   date?: Date;
   dateRange?: { start: Date; end: Date };
   statuses?: AppointmentStatus[];
+  professionalIds?: string[]; // Add this line
 }
 
 export async function getAppointments(options: GetAppointmentsOptions = {}): Promise<{ appointments: Appointment[] }> {
@@ -737,6 +744,11 @@ export async function getAppointments(options: GetAppointmentsOptions = {}): Pro
     if (locationId) qConstraints.push(where('locationId', '==', locationId));
     if (professionalId) qConstraints.push(where('professionalId', '==', professionalId));
     if (patientId) qConstraints.push(where('patientId', '==', patientId));
+
+    // Add constraint for professionalIds if provided and not empty
+    if (options.professionalIds && options.professionalIds.length > 0) {
+        qConstraints.push(where('professionalId', 'in', options.professionalIds));
+    }
     
     if (date) {
       qConstraints.push(where('appointmentDateTime', '>=', toFirestoreTimestamp(startOfDay(date))!));
@@ -850,7 +862,8 @@ export async function getAppointmentById(id: string): Promise<Appointment | unde
 }
 
 export async function addAppointment(data: AppointmentFormData): Promise<Appointment> {
-  console.log(`[data.ts] addAppointment.  Form data received:`, data);
+  console.log(`[data.ts] addAppointment: Datos de entrada recibidos:`, data); // Log de datos de entrada
+
 
   const allServicesList = await getServices();
   const service = allServicesList.find(s => s.id === data.serviceId);
@@ -963,7 +976,7 @@ export async function addAppointment(data: AppointmentFormData): Promise<Appoint
           // Create travel block
           const travelDuration = 60; // Assume 1 hour travel time
           travelBlockAppointment = {
-            patientId: `travel-block-${prof.id}-${formatISO(appointmentDateTimeObject, {representation: 'date'})}`,
+            patientId: `travel-block-${prof.id}-${formatISO(appointmentDateTimeObject, { representation: 'date' })}`, // Unique ID based on prof and date
             locationId: data.locationId, // Destination of travel is the appointment's location
             professionalId: prof.id,
             serviceId: 'travel', // Special serviceId for travel
@@ -997,9 +1010,9 @@ export async function addAppointment(data: AppointmentFormData): Promise<Appoint
          externalOrigin = preferredProf.locationId;
          console.log(`[data.ts] addAppointment: Preferred prof ${actualProfessionalId} is external from ${externalOrigin}. Creating travel block.`);
           const travelDuration = 60; 
-          travelBlockAppointment = {
-            patientId: `travel-block-${preferredProf.id}-${formatISO(appointmentDateTimeObject, {representation: 'date'})}`,
-            locationId: data.locationId, 
+ travelBlockAppointment = {
+ patientId: `travel-block-${preferredProf.id}-${formatISO(appointmentDateTimeObject, { representation: 'date' })}`,
+            locationId: externalOrigin, // Ensure travel block appears in origin location
             professionalId: preferredProf.id,
             serviceId: 'travel', 
             appointmentDateTime: formatISO(dateFnsAddMinutes(appointmentDateTimeObject, -travelDuration)),
@@ -1033,9 +1046,13 @@ export async function addAppointment(data: AppointmentFormData): Promise<Appoint
     addedServices: data.addedServices?.map(as => ({
         serviceId: as.serviceId!, 
         professionalId: as.professionalId === '_no_selection_placeholder_' ? null : (as.professionalId || null),
-        price: as.price ?? null,
+ amountPaid: as.amountPaid ?? null,
+ startTime: as.startTime ?? null, // Add startTime here
     })) || [],
   };
+
+  
+  console.log("[data.ts] addAppointment: Datos de appointmentData antes de preparar para Firestore:", JSON.parse(JSON.stringify(newAppointmentData))); // Log antes de Firestore
 
 
   if (!firestore) throw new Error("Firestore not initialized");
@@ -1048,8 +1065,12 @@ export async function addAppointment(data: AppointmentFormData): Promise<Appoint
       createdAt: toFirestoreTimestamp(newAppointmentData.createdAt),
       updatedAt: toFirestoreTimestamp(newAppointmentData.updatedAt),
   };
+  console.log("[data.ts] addAppointment: Objeto final enviado a Firestore:", JSON.parse(JSON.stringify(firestoreAppointmentData)));
   const newApptDocRef = doc(collection(firestore, 'citas')); // Create new doc ref for appt
-  batch.set(newApptDocRef, firestoreAppointmentData);
+  if (firestoreAppointmentData.addedServices) {
+ console.log("[data.ts] addAppointment (Firestore): addedServices data being sent to Firestore:", JSON.parse(JSON.stringify(firestoreAppointmentData.addedServices))); // Log de servicios adicionales enviados a Firestore
+   }
+  batch.set(newApptDocRef, {...firestoreAppointmentData});
   console.log("[data.ts] addAppointment (Firestore): New appointment prepared for batch:", newApptDocRef.id);
 
   if (travelBlockAppointment) {
@@ -1060,18 +1081,24 @@ export async function addAppointment(data: AppointmentFormData): Promise<Appoint
         updatedAt: toFirestoreTimestamp(travelBlockAppointment.updatedAt),
     };
     const newTravelBlockDocRef = doc(collection(firestore, 'citas')); // Create new doc ref for travel block
-    batch.set(newTravelBlockDocRef, firestoreTravelBlockData);
+    batch.set(newTravelBlockDocRef, {...firestoreTravelBlockData});
     console.log("[data.ts] addAppointment (Firestore): New travel block prepared for batch:", newTravelBlockDocRef.id);
   }
   
   await batch.commit();
-  console.log("[data.ts] addAppointment (Firestore): Batch committed successfully.");
+  console.log("[data.ts] addAppointment (Firestore): Batch committed successfully. Reading saved document..."); // Log después del commit
+
+  const savedDocSnap = await getDoc(newApptDocRef);
+
+  console.log("[data.ts] addAppointment (Firestore): Datos guardados en Firestore:", savedDocSnap.exists() ? convertDocumentData(savedDocSnap.data()) : 'Doc not found'); // Log de datos guardados
+
+
 
   return { id: newApptDocRef.id, ...newAppointmentData }; 
 }
 
 export async function updateAppointment (id: string, data: Partial<AppointmentUpdateFormData>): Promise<Appointment | undefined> {
-  console.log(`[data.ts] updateAppointment.  ID: ${id}. Data:`, data);
+  console.log(`[data.ts] updateAppointment: Datos de entrada recibidos para ID ${id}:`, data); // Log de datos de entrada
   
   let appointmentToUpdate: Partial<Omit<Appointment, 'id' | 'createdAt'>> = {};
   let originalAppointment: Appointment | undefined;
@@ -1124,12 +1151,17 @@ export async function updateAppointment (id: string, data: Partial<AppointmentUp
   if (data.hasOwnProperty('staffNotes')) appointmentToUpdate.staffNotes = data.staffNotes || null;
   if (data.hasOwnProperty('attachedPhotos')) appointmentToUpdate.attachedPhotos = data.attachedPhotos || [];
   
-  if (data.hasOwnProperty('addedServices')) {
-    appointmentToUpdate.addedServices = (data.addedServices || []).map((as: { serviceId: any; professionalId: string; price: any; }) => ({
+ if (data.hasOwnProperty('addedServices')) {
+    appointmentToUpdate.addedServices = (data.addedServices || []).map((as) => ({
       serviceId: as.serviceId!,
       professionalId: as.professionalId === '_no_selection_placeholder_' ? null : (as.professionalId || null),
-      price: as.price ?? null,
+ amountPaid: (as as any).amountPaid ?? null,
+ startTime: as.startTime ?? null, // Add startTime here
     }));
+ if (appointmentToUpdate.addedServices) {
+
+ console.log("[data.ts] updateAppointment: addedServices data in appointmentToUpdate:", JSON.parse(JSON.stringify(appointmentToUpdate.addedServices))); // Log después del mapeo
+   }
   }
 
   if (data.serviceId || data.hasOwnProperty('addedServices') || data.hasOwnProperty('durationMinutes')) {
@@ -1161,12 +1193,19 @@ export async function updateAppointment (id: string, data: Partial<AppointmentUp
   Object.keys(firestoreUpdateData).forEach(key => {
     if (firestoreUpdateData[key] === undefined) {
       firestoreUpdateData[key] = null; 
+ // Consider if you truly want to nullify undefined fields or just omit them
     }
   });
+  console.log("[data.ts] updateAppointment: Objeto final enviado a Firestore para ID", id, ":", JSON.parse(JSON.stringify(firestoreUpdateData)));
   
+   if (firestoreUpdateData.addedServices) {
+
+ console.log("[data.ts] updateAppointment: addedServices data being sent to Firestore:", JSON.parse(JSON.stringify(firestoreUpdateData.addedServices))); // Log de servicios adicionales enviados a Firestore
+   }
+
   await updateDoc(docRef, firestoreUpdateData);
-  console.log("[data.ts] updateAppointment (Firestore): Appointment updated:", id);
-  
+  console.log(`[data.ts] updateAppointment (Firestore): Appointment updated successfully for ID ${id}. Reading updated document...`); // Log después del update
+
   const updatedDoc = await getDoc(docRef);
   if(updatedDoc.exists()){
       let populatedUpdatedAppt = {id: updatedDoc.id, ...convertDocumentData(updatedDoc.data())} as Appointment;
@@ -1183,6 +1222,11 @@ export async function updateAppointment (id: string, data: Partial<AppointmentUp
               return {...as, service: serviceDetail ? {...serviceDetail}: undefined, professional: profDetail ? {...profDetail} : undefined };
           });
       }
+       console.log(`[data.ts] updateAppointment: Datos guardados en Firestore para ID ${id}:`, convertDocumentData(updatedDoc.data())); // Log de datos guardados
+       if (populatedUpdatedAppt.addedServices) {
+            console.log(`[data.ts] updateAppointment: Deserialized addedServices from Firestore for ID ${id}:`, JSON.parse(JSON.stringify(populatedUpdatedAppt.addedServices))); // Log de servicios adicionales deserializados
+       }
+
       return populatedUpdatedAppt;
   }
   return undefined;
@@ -1217,7 +1261,7 @@ export async function getPatientAppointmentHistory(patientId: string): Promise<{
 export function getProfessionalAvailabilityForDate(
   professional: Professional,
   targetDate: Date
-): { startTime: string; endTime: string; isWorking: boolean; reason?: string, notes?: string } | null {
+): { startTime: string; endTime: string; isWorking: boolean; reason?: string, notes?: string, workingLocationId?: LocationId | null } | null {
   const contractStatus = getContractDisplayStatus(professional.currentContract, targetDate);
 
   if (contractStatus !== 'Activo' && contractStatus !== 'Próximo a Vencer') {
@@ -1233,7 +1277,7 @@ export function getProfessionalAvailabilityForDate(
   if (customOverride) {
     // console.log(`[Availability] Prof ${professional.id} - Found custom override for ${targetDateISO}:`, customOverride);
     if (!customOverride.isWorking) {
-      return { startTime: '', endTime: '', isWorking: false, reason: `Descansando (Anulación: ${customOverride.notes || 'Sin especificar'})`, notes: customOverride.notes || undefined };
+      return { startTime: '', endTime: '', isWorking: false, reason: `Descansando (Anulación: ${customOverride.notes || 'Sin especificar'})`, notes: customOverride.notes || undefined, workingLocationId: customOverride.locationId ?? professional.locationId };
     }
     if (customOverride.startTime && customOverride.endTime) {
       return {
@@ -1241,8 +1285,9 @@ export function getProfessionalAvailabilityForDate(
         endTime: customOverride.endTime,
         isWorking: true,
         reason: `Horario Especial (Anulación: ${customOverride.notes || 'Sin especificar'})`,
-        notes: customOverride.notes || undefined
-      };
+        notes: customOverride.notes || undefined,
+ workingLocationId: customOverride.locationId ?? professional.locationId, // Use override location if specified, else professional's base
+      }; 
     }
   }
 
@@ -1258,10 +1303,11 @@ export function getProfessionalAvailabilityForDate(
       endTime: baseSchedule.endTime,
       isWorking: true,
       reason: "Horario base",
+ workingLocationId: professional.locationId, // Base schedule means working at base location
     };
   }
   // console.log(`[Availability] Prof ${professional.id} - Not working based on base schedule or missing start/end times for ${dayOfWeekId} on ${targetDateISO}.`);
-  return { startTime: '', endTime: '', isWorking: false, reason: `Descansando (Horario base: ${format(targetDate, 'EEEE', {locale: es})} libre)` };
+  return { startTime: '', endTime: '', isWorking: false, reason: `Descansando (Horario base: ${format(targetDate, 'EEEE', {locale: es})} libre)`, workingLocationId: null }; // Not working, no location
 }
 // --- End Professional Availability ---
 

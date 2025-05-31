@@ -41,6 +41,7 @@ export interface Professional extends BaseEntity {
     isWorking: boolean;
     startTime?: string;
     endTime?: string;
+    locationId?: LocationId | null; // Optional override location
     notes?: string | null;
   }>;
 
@@ -68,7 +69,8 @@ export interface Service {
 export interface AddedServiceItem {
   serviceId: string;
   professionalId?: string | null;
-  price?: number | null;
+  amountPaid?: number | null;
+  startTime?: string | null; // Add this line
   service?: Service; // Populated for display
   professional?: Professional; // Populated for display
 }

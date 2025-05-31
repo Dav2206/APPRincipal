@@ -857,7 +857,7 @@ export function AppointmentForm({
                         type="button"
                         variant="outline"
                         size="sm"
-                        onClick={() => appendAddedService({ serviceId: servicesList?.length ? servicesList[0].id : '', professionalId: NO_SELECTION_PLACEHOLDER, price: undefined })}
+                        onClick={() => appendAddedService({ serviceId: servicesList?.length ? servicesList[0].id : '', professionalId: NO_SELECTION_PLACEHOLDER, startTime: null, price: undefined })}
                       >
                         <PlusCircle className="mr-2 h-4 w-4" /> Agregar
                       </Button>
@@ -903,11 +903,28 @@ export function AppointmentForm({
                         />
                         <FormField
                           control={form.control}
-                          name={`addedServices.${index}.price`}
+                          name={`addedServices.${index}.startTime`}
                           render={({ field }) => (
                             <FormItem>
-                              <FormLabel className="text-xs">Precio (S/) (Opcional)</FormLabel>
-                              <FormControl><Input type="number" step="0.01" placeholder="Ej: 50.00" {...field} value={field.value ?? ""} onChange={e => field.onChange(e.target.value ? parseFloat(e.target.value) : undefined)} /></FormControl>
+                              <FormLabel className="text-xs">Hora de Inicio (Opcional)</FormLabel>
+                              <Select
+                                onValueChange={(value) => field.onChange(value === NO_SELECTION_PLACEHOLDER ? null : value)}
+                                value={field.value || NO_SELECTION_PLACEHOLDER}
+                              >
+                                <FormControl>
+                                  <SelectTrigger>
+                                    <SelectValue placeholder="Misma hora principal" />
+                                  </SelectTrigger>
+                                </FormControl>
+                                <SelectContent>
+                                  <SelectItem value={NO_SELECTION_PLACEHOLDER}>Misma hora principal</SelectItem>
+                                  {TIME_SLOTS.map(slot => (
+                                    <SelectItem key={`${slot}-${index}`} value={slot}>
+                                      {slot}
+                                    </SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
                               <FormMessage />
                             </FormItem>
                           )}

@@ -142,7 +142,8 @@ export function AppointmentEditDialog({ appointment, isOpen, onOpenChange, onApp
         addedServices: appointment.addedServices?.map(as => ({
           serviceId: as.serviceId || (allServices && allServices.length > 0 ? allServices[0].id : DEFAULT_SERVICE_ID_PLACEHOLDER),
           professionalId: as.professionalId || NO_SELECTION_PLACEHOLDER,
-          price: as.price ?? undefined,
+          amountPaid: as.amountPaid ?? undefined,
+          startTime: as.startTime, // <--- Include startTime when initializing
         })) || [],
       });
     }
@@ -204,8 +205,8 @@ export function AppointmentEditDialog({ appointment, isOpen, onOpenChange, onApp
         addedServices: data.addedServices?.map(as => ({
           ...as,
           serviceId: as.serviceId === DEFAULT_SERVICE_ID_PLACEHOLDER && allServices?.length ? allServices[0].id : as.serviceId,
-          professionalId: as.professionalId === NO_SELECTION_PLACEHOLDER ? null : as.professionalId,
-          price: as.price,
+          professionalId: as.professionalId === NO_SELECTION_PLACEHOLDER ? null : as.professionalId, // Still keep original professionalId logic
+          amountPaid: as.amountPaid, // startTime should be included by ...as from form data
         })).filter(as => as.serviceId && as.serviceId !== DEFAULT_SERVICE_ID_PLACEHOLDER),
       };
 
@@ -558,12 +559,12 @@ export function AppointmentEditDialog({ appointment, isOpen, onOpenChange, onApp
             <div className="space-y-3 pt-3 mt-3 border-t">
               <div className="flex justify-between items-center">
                 <h4 className="text-md font-semibold flex items-center gap-2"><ShoppingBag/> Servicios Adicionales</h4>
-                <Button type="button" size="sm" variant="outline" onClick={() => appendAddedService({ serviceId: allServices?.length ? allServices[0].id : DEFAULT_SERVICE_ID_PLACEHOLDER, professionalId: NO_SELECTION_PLACEHOLDER, price: undefined })}>
+                <Button type="button" size="sm" variant="outline" onClick={() => appendAddedService({ serviceId: allServices?.length ? allServices[0].id : DEFAULT_SERVICE_ID_PLACEholder, professionalId: NO_SELECTION_PLACEHOLDER, amountPaid: undefined, startTime: undefined })}>
                   <PlusCircle className="mr-2 h-4 w-4" /> Agregar Servicio
                 </Button>
               </div>
               {addedServiceFields.map((item, index) => (
-                <div key={item.id} className="p-3 border rounded-md space-y-3 bg-muted/50 relative">
+                <div key={item.id} className="p-3 border rounded-md space-y-3 bg-muted/50 relative grid grid-cols-1 sm:grid-cols-2 gap-3">
                    <Button type="button" variant="ghost" size="icon" className="absolute top-1 right-1 h-6 w-6" onClick={() => removeAddedService(index)}>
                       <Trash2 className="h-4 w-4 text-destructive" />
                     </Button>
@@ -579,7 +580,7 @@ export function AppointmentEditDialog({ appointment, isOpen, onOpenChange, onApp
                              {allServices && !allServices.length && <SelectItem value={DEFAULT_SERVICE_ID_PLACEHOLDER} disabled>No hay servicios</SelectItem>}
                              {allServices && allServices.map(s => <SelectItem key={`added-${s.id}-${index}`} value={s.id}>{s.name}</SelectItem>)}
                           </SelectContent>
-                        </Select>
+            </Select>
                         <FormMessage />
                       </FormItem>
                     )}
@@ -601,17 +602,34 @@ export function AppointmentEditDialog({ appointment, isOpen, onOpenChange, onApp
                       </FormItem>
                     )}
                   />
-                  <FormField
-                    control={form.control}
-                    name={`addedServices.${index}.price`}
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Precio (S/) (Opcional)</FormLabel>
-                        <FormControl><Input type="number" step="0.01" placeholder="Ej: 50.00" {...field} value={field.value ?? ""} onChange={e => field.onChange(e.target.value ? parseFloat(e.target.value) : undefined)} /></FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
+
+                  {/* Show Amount Paid field only if status is Completed */}
+                  {form.watch('status') === APPOINTMENT_STATUS.COMPLETED && (
+                    <>
+                      <FormField // Wrapped this FormField with the conditional check
+                        control={form.control}
+                        name={`addedServices.${index}.amountPaid`}
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel className="text-xs">Monto Pagado (S/) (Opcional)</FormLabel>
+                            <FormControl><Input type="number" step="0.01" placeholder="Ej: 50.00" {...field} value={field.value ?? ""} onChange={e => field.onChange(e.target.value ? parseFloat(e.target.value) : undefined)} /></FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                       <FormField
+                        control={form.control}
+                        name={`addedServices.${index}.startTime`}
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel className="text-xs">Hora de Inicio (Opcional)</FormLabel>
+                            <FormControl><Input type="time" {...field} value={field.value || ''} /></FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                    </>
+                  )}
                 </div>
               ))}
                <FormField control={form.control} name="addedServices" render={() => <FormMessage />} />

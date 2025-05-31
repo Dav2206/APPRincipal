@@ -46,7 +46,8 @@ export const AppointmentFormSchema = z.object({
   addedServices: z.array(z.object({
     serviceId: z.string().min(1, "Servicio adicional inválido."),
     professionalId: z.string().optional().nullable(),
-    price: z.coerce.number().positive("El precio debe ser positivo.").optional().nullable(),
+    amountPaid: z.coerce.number().positive("El monto pagado debe ser positivo.").optional().nullable(),
+    startTime: z.string().regex(/^([01]\d|2[0-3]):([0-5]\d)$/, "Formato HH:MM").optional().nullable(),
   })).optional().nullable(),
 });
 
@@ -57,14 +58,8 @@ const DayScheduleSchema = z.object({
   startTime: z.string().regex(/^([01]\d|2[0-3]):([0-5]\d)$/, "Formato HH:MM").optional().nullable(),
   endTime: z.string().regex(/^([01]\d|2[0-3]):([0-5]\d)$/, "Formato HH:MM").optional().nullable(),
 }).refine(data => {
-  if (data.isWorking) {
-    return data.startTime && data.endTime && data.startTime < data.endTime;
-  }
-  return true;
-}, {
-  message: "Si trabaja, inicio y fin son requeridos, y inicio debe ser antes que fin.",
-  path: ["startTime"],
-});
+  if (data.isWorking) return data.startTime && data.endTime && data.startTime < data.endTime;
+  return true;}, {message: "Si trabaja, inicio y fin son requeridos, y inicio debe ser antes que fin.", path: ["startTime"],});
 
 export const ProfessionalFormSchema = z.object({
   id: z.string().optional(),
@@ -131,7 +126,8 @@ export const AppointmentUpdateSchema = z.object({
   addedServices: z.array(z.object({
     serviceId: z.string().min(1, "Servicio adicional inválido."),
     professionalId: z.string().optional().nullable(),
-    price: z.coerce.number().positive("El precio debe ser positivo.").optional().nullable(),
+    amountPaid: z.coerce.number().positive("El monto pagado debe ser positivo.").optional().nullable(),
+    startTime: z.string().regex(/^([01]\d|2[0-3]):([0-5]\d)$/, "Formato HH:MM").optional().nullable(),
   })).optional().nullable(),
 });
 
