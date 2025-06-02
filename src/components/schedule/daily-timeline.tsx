@@ -29,7 +29,7 @@ const stringToColor = (str: string): string => {
     hash = hash & hash; // Convert to 32bit integer
   }
   const hue = Math.abs(hash % 360);
-  return `hsl(${hue}, 70%, 85%)`; // Pastel colors
+  return `hsl(${hue}, 60%, 90%)`; // Lighter pastel colors for grouping
 };
 
 const PIXELS_PER_MINUTE = 1.5;
@@ -313,23 +313,23 @@ const DailyTimelineComponent = ({ professionals, appointments, timeSlots, onAppo
                         );
                       }
                      
-                      let blockBgClass = 'bg-slate-400 hover:bg-slate-500'; 
-                      let blockTextClass = 'text-slate-50';
-                      let blockBorderColorClass = 'border-slate-600';
+                      let blockBgClass = 'bg-slate-200 hover:bg-slate-300'; 
+                      let blockTextClass = 'text-slate-700';
+                      let blockBorderColorClass = 'border-slate-400';
 
                       const status = block.originalAppointmentData.status;
                       if (status === APPOINTMENT_STATUS.COMPLETED) {
-                        blockBgClass = 'bg-green-500 hover:bg-green-600';
-                        blockTextClass = 'text-green-50';
-                        blockBorderColorClass = 'border-green-700';
+                        blockBgClass = 'bg-green-200 hover:bg-green-300';
+                        blockTextClass = 'text-green-800';
+                        blockBorderColorClass = 'border-green-400';
                       } else if (status === APPOINTMENT_STATUS.BOOKED) {
-                        blockBgClass = 'bg-blue-500 hover:bg-blue-600';
-                        blockTextClass = 'text-blue-50';
-                        blockBorderColorClass = 'border-blue-700';
+                        blockBgClass = 'bg-blue-200 hover:bg-blue-300';
+                        blockTextClass = 'text-blue-800';
+                        blockBorderColorClass = 'border-blue-400';
                       } else if (status === APPOINTMENT_STATUS.CONFIRMED) {
-                        blockBgClass = 'bg-purple-500 hover:bg-purple-600';
-                        blockTextClass = 'text-purple-50';
-                        blockBorderColorClass = 'border-purple-700';
+                        blockBgClass = 'bg-purple-200 hover:bg-purple-300';
+                        blockTextClass = 'text-purple-800';
+                        blockBorderColorClass = 'border-purple-400';
                       }
                      
                       return (
@@ -344,7 +344,7 @@ const DailyTimelineComponent = ({ professionals, appointments, timeSlots, onAppo
                               )}
                               style={{
                                 ...styleProps,
-                                opacity: block.isMainService ? 1 : 0.75,
+                                opacity: block.isMainService ? 1 : 0.85, // Slightly less opacity for added services
                                 borderLeft: `4px solid ${block.groupColor}`, 
                                 borderStyle: !block.isMainService ? 'dashed' : 'solid',
                               }}
