@@ -281,7 +281,7 @@ const DailyTimelineComponent = ({ professionals, appointments, timeSlots, onAppo
 
                     {blocksForThisProfessional.map(block => {
                       const isBlockOverlapping = overlappingServiceBlockIds.has(block.id) && !block.isTravelBlock;
-                      const style = getServiceBlockStyle(block.startTime, block.durationMinutes);
+                      const styleProps = getServiceBlockStyle(block.startTime, block.durationMinutes);
                       
                       if (block.isTravelBlock) {
                         return (
@@ -292,7 +292,7 @@ const DailyTimelineComponent = ({ professionals, appointments, timeSlots, onAppo
                                   "absolute left-1 right-1 rounded-md p-1.5 shadow-md text-xs overflow-hidden cursor-default flex flex-col justify-center items-center text-center",
                                   "bg-orange-100 text-orange-700 border-orange-300"
                                 )}
-                                style={style}
+                                style={styleProps}
                                 onClick={() => onAppointmentClick?.(block.originalAppointmentData)}
                               >
                                 <Navigation size={14} className="mb-0.5" />
@@ -312,26 +312,40 @@ const DailyTimelineComponent = ({ professionals, appointments, timeSlots, onAppo
                           </Tooltip>
                         );
                       }
+                     
+                      let blockBgClass = 'bg-slate-400 hover:bg-slate-500'; 
+                      let blockTextClass = 'text-slate-50';
+                      let blockBorderColorClass = 'border-slate-600';
 
-                      const serviceColorVar = `chart-${(block.serviceId.charCodeAt(0) % 5) + 1}`;
-                      const blockBackgroundColor = `hsl(var(--${serviceColorVar}))`;
+                      const status = block.originalAppointmentData.status;
+                      if (status === APPOINTMENT_STATUS.COMPLETED) {
+                        blockBgClass = 'bg-green-500 hover:bg-green-600';
+                        blockTextClass = 'text-green-50';
+                        blockBorderColorClass = 'border-green-700';
+                      } else if (status === APPOINTMENT_STATUS.BOOKED) {
+                        blockBgClass = 'bg-blue-500 hover:bg-blue-600';
+                        blockTextClass = 'text-blue-50';
+                        blockBorderColorClass = 'border-blue-700';
+                      } else if (status === APPOINTMENT_STATUS.CONFIRMED) {
+                        blockBgClass = 'bg-purple-500 hover:bg-purple-600';
+                        blockTextClass = 'text-purple-50';
+                        blockBorderColorClass = 'border-purple-700';
+                      }
                      
                       return (
                         <Tooltip key={block.id} delayDuration={100}>
                           <TooltipTrigger asChild>
                             <div
                               className={cn(
-                                "absolute left-1 right-1 rounded-md p-1.5 shadow-md text-xs overflow-hidden cursor-pointer hover:brightness-90 transition-all flex flex-col justify-start",
-                                isBlockOverlapping && "ring-2 ring-destructive border-destructive"
+                                "absolute left-1 right-1 rounded-md p-1.5 shadow-md text-xs overflow-hidden cursor-pointer transition-all flex flex-col justify-start border",
+                                blockBgClass,
+                                blockTextClass,
+                                isBlockOverlapping ? "ring-2 ring-destructive border-destructive" : blockBorderColorClass
                               )}
                               style={{
-                                ...style,
-                                backgroundColor: blockBackgroundColor,
-                                color: 'hsl(var(--accent-foreground))', // Assuming light text on colored background
+                                ...styleProps,
                                 opacity: block.isMainService ? 1 : 0.75,
-                                borderColor: isBlockOverlapping ? 'hsl(var(--destructive))' : blockBackgroundColor,
-                                // Use groupColor for a subtle left border to visually group
-                                borderLeft: `4px solid ${block.groupColor}`, // Ensure groupColor is always applied
+                                borderLeft: `4px solid ${block.groupColor}`, 
                                 borderStyle: !block.isMainService ? 'dashed' : 'solid',
                               }}
                               onClick={() => onAppointmentClick?.(block.originalAppointmentData, block.serviceId)}
@@ -400,3 +414,4 @@ const DailyTimelineComponent = ({ professionals, appointments, timeSlots, onAppo
 };
 
 export const DailyTimeline = React.memo(DailyTimelineComponent);
+

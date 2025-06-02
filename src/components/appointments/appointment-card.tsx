@@ -186,7 +186,20 @@ const AppointmentCardComponent = ({ appointment, onUpdate }: AppointmentCardProp
 
   return (
     <>
-      <Card className="w-full shadow-lg hover:shadow-xl transition-shadow duration-300 flex flex-col">
+ <Card
+ className={`w-full shadow-lg hover:shadow-xl transition-shadow duration-300 flex flex-col ${
+ appointment.isTravelBlock
+ ? "bg-orange-50 border-orange-200"
+ : appointment.status === APPOINTMENT_STATUS.COMPLETED
+ ? "bg-green-100 border-green-200"
+ : appointment.status === APPOINTMENT_STATUS.BOOKED
+ ? "bg-blue-100 border-blue-200"
+ : appointment.status === APPOINTMENT_STATUS.CONFIRMED
+ ? "bg-purple-100 border-purple-200"
+ : "" // Default or other statuses
+ }`}
+ >
+ {/* <Card className="w-full shadow-lg hover:shadow-xl transition-shadow duration-300 flex flex-col"> */}
         <CardHeader>
           <div className="flex justify-between items-start">
             <div>

@@ -31,7 +31,7 @@ import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
 import { Button, buttonVariants } from '@/components/ui/button';
-import { CalendarIcon } from "@radix-ui/react-icons"
+
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { useForm, useFieldArray } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -44,6 +44,7 @@ import Image from 'next/image';
 import { cn } from '@/lib/utils';
 import { storage } from '@/lib/firebase-config';
 import { ref, uploadBytes, getDownloadURL, deleteObject } from 'firebase/storage';
+import { Calendar } from '@/components/ui/calendar';
 
 interface AppointmentEditDialogProps {
   appointment: Appointment;
@@ -334,7 +335,7 @@ export function AppointmentEditDialog({ appointment, isOpen, onOpenChange, onApp
                           ) : (
                             <span>Seleccionar fecha</span>
                           )}
-                          <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
+                          <CalendarIconLucide className="ml-auto h-4 w-4 opacity-50" />
                         </Button>
                       </FormControl>
                     </PopoverTrigger>
