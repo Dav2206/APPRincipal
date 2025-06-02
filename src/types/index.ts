@@ -94,7 +94,7 @@ export interface Appointment extends BaseEntity {
   paymentMethod?: PaymentMethod | null;
   amountPaid?: number | null;
   staffNotes?: string | null;
-  attachedPhotos?: string[];
+  attachedPhotos?: string[]; // Now storing URLs
   createdAt?: string;
   updatedAt?: string;
   isExternalProfessional?: boolean;

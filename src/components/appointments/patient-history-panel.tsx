@@ -43,12 +43,12 @@ const PatientHistoryPanelComponent = ({ patient }: PatientHistoryPanelProps) => 
       setLoading(true);
       const historyData = await getPatientAppointmentHistory(patient.id);
       const rawAppointmentHistory = historyData.appointments;
-      
+
       const today = startOfDay(new Date());
       const pastAppointments = Array.isArray(rawAppointmentHistory)
         ? rawAppointmentHistory.filter(appt => parseISO(appt.appointmentDateTime) < today)
         : [];
-      
+
       setHistory(pastAppointments);
 
       if (patient.preferredProfessionalId) {
@@ -64,7 +64,7 @@ const PatientHistoryPanelComponent = ({ patient }: PatientHistoryPanelProps) => 
       }
 
       setAgeToDisplay(patient.age ?? null);
-      
+
       const completedVisits = pastAppointments.filter(appt => appt.status === APPOINTMENT_STATUS.COMPLETED)
         .sort((a,b) => parseISO(a.appointmentDateTime).getTime() - parseISO(b.appointmentDateTime).getTime());
 
@@ -77,9 +77,9 @@ const PatientHistoryPanelComponent = ({ patient }: PatientHistoryPanelProps) => 
         }
         const avgDays = Math.round(totalDaysDifference / (completedVisits.length - 1));
         setAverageDaysBetweenVisits(avgDays);
-        
+
         const lastCompletedVisitDate = parseISO(completedVisits[completedVisits.length - 1].appointmentDateTime);
-        if (avgDays > 0) { 
+        if (avgDays > 0) {
             const recommendedNextDate = dateFnsAddDays(lastCompletedVisitDate, avgDays);
             setNextRecommendedVisit(format(recommendedNextDate, "PPP", { locale: es }));
         } else {
@@ -87,9 +87,9 @@ const PatientHistoryPanelComponent = ({ patient }: PatientHistoryPanelProps) => 
         }
       } else if (completedVisits.length === 1) {
         const lastCompletedVisitDate = parseISO(completedVisits[0].appointmentDateTime);
-        const recommendedNextDate = dateFnsAddDays(lastCompletedVisitDate, 30); 
+        const recommendedNextDate = dateFnsAddDays(lastCompletedVisitDate, 30);
         setNextRecommendedVisit(format(recommendedNextDate, "PPP", { locale: es }));
-        setAverageDaysBetweenVisits(null); 
+        setAverageDaysBetweenVisits(null);
       }
        else {
         setAverageDaysBetweenVisits(null);
@@ -110,12 +110,12 @@ const PatientHistoryPanelComponent = ({ patient }: PatientHistoryPanelProps) => 
 
   const handleWheel = (e: React.WheelEvent<HTMLDivElement>) => {
     e.preventDefault();
-    const zoomFactor = e.deltaY < 0 ? 1.1 : 0.9; 
-    setZoomLevel(prevZoom => Math.max(0.5, Math.min(prevZoom * zoomFactor, 5))); 
+    const zoomFactor = e.deltaY < 0 ? 1.1 : 0.9;
+    setZoomLevel(prevZoom => Math.max(0.5, Math.min(prevZoom * zoomFactor, 5)));
   };
 
   const handleMouseDown = (e: React.MouseEvent<HTMLDivElement>) => {
-    if (zoomLevel <= 1) return; 
+    if (zoomLevel <= 1) return;
     setIsDragging(true);
     setDragStart({ x: e.clientX - imagePosition.x, y: e.clientY - imagePosition.y });
     e.currentTarget.style.cursor = 'grabbing';
@@ -133,7 +133,7 @@ const PatientHistoryPanelComponent = ({ patient }: PatientHistoryPanelProps) => 
     setIsDragging(false);
      e.currentTarget.style.cursor = zoomLevel > 1 ? 'grab' : 'default';
   };
-  
+
   const resetZoomAndPosition = () => {
     setZoomLevel(1);
     setImagePosition({ x: 0, y: 0 });
@@ -150,7 +150,7 @@ const PatientHistoryPanelComponent = ({ patient }: PatientHistoryPanelProps) => 
 
 
   const appointmentsWithPhotos = history.filter(appt => appt.attachedPhotos && appt.attachedPhotos.length > 0)
-    .sort((a,b) => parseISO(b.appointmentDateTime).getTime() - parseISO(a.appointmentDateTime).getTime()); 
+    .sort((a,b) => parseISO(b.appointmentDateTime).getTime() - parseISO(a.appointmentDateTime).getTime());
   const lastFourAppointmentsWithPhotos = appointmentsWithPhotos.slice(0, 4);
 
   return (
@@ -209,39 +209,40 @@ const PatientHistoryPanelComponent = ({ patient }: PatientHistoryPanelProps) => 
               <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2">
                 {lastFourAppointmentsWithPhotos.map(appt =>
                   appt.attachedPhotos?.map((photoUri, index) => (
-                    photoUri && typeof photoUri === 'string' && photoUri.startsWith("data:image/") && (
-                    <div 
-                        key={`${appt.id}-photo-${index}`} 
-                        className="relative group aspect-square cursor-pointer"
-                        onClick={() => handleImageClick(photoUri)}
-                        onDoubleClick={() => handleImageClick(photoUri)}
-                    >
-                      <Image 
-                          src={photoUri} 
-                          alt={`Foto de cita ${format(parseISO(appt.appointmentDateTime), "dd/MM/yy", { locale: es })} - ${index + 1}`} 
-                          layout="fill"
-                          objectFit="cover" 
-                          className="rounded-md border"
-                          data-ai-hint="patient chart" 
-                      />
-                      <div className="absolute bottom-0 left-0 right-0 bg-black/50 text-white text-xs p-1 text-center opacity-0 group-hover:opacity-100 transition-opacity">
-                          {format(parseISO(appt.appointmentDateTime), "dd/MM/yy", { locale: es })}
-                      </div>
-                    </div>
-                    )
+                    (photoUri && typeof photoUri === 'string' && photoUri.startsWith("data:image/"))
+                      ? (
+                        <div
+                            key={`${appt.id}-photo-${index}`}
+                            className="relative group aspect-square cursor-pointer"
+                            onClick={() => handleImageClick(photoUri)}
+                            onDoubleClick={() => handleImageClick(photoUri)}
+                        >
+                          <Image
+                              src={photoUri}
+                              alt={`Foto de cita ${format(parseISO(appt.appointmentDateTime), "dd/MM/yy", { locale: es })} - ${index + 1}`}
+                              layout="fill"
+                              objectFit="cover"
+                              className="rounded-md border"
+                              data-ai-hint="patient chart"
+                          />
+                          <div className="absolute bottom-0 left-0 right-0 bg-black/50 text-white text-xs p-1 text-center opacity-0 group-hover:opacity-100 transition-opacity">
+                              {format(parseISO(appt.appointmentDateTime), "dd/MM/yy", { locale: es })}
+                          </div>
+                        </div>
+                        )
+                      : null
                   ))
                 )}
               </div>
             </div>
           )}
-
-          {history.length > 0 && (
+          {history.length > 0 ? (
             <div className="mt-4">
               <Separator className="my-3" />
               <h4 className="font-semibold mb-2 text-md">Citas Anteriores (más recientes primero):</h4>
-              <ScrollArea className="h-40 rounded-md border p-2 bg-background">
+              <ScrollArea className="h-60 rounded-md border p-2 bg-background">
                 <ul className="space-y-2">
-                  {history.slice(0, 10).map(appt => ( 
+                  {history.slice(0, 10).map(appt => (
                     <li key={appt.id} className="p-2 border-b last:border-b-0 text-xs">
                       <div className="flex justify-between items-center">
                         <span>{format(parseISO(appt.appointmentDateTime), "dd/MM/yy HH:mm", { locale: es })} - {appt.service?.name}</span>
@@ -257,14 +258,15 @@ const PatientHistoryPanelComponent = ({ patient }: PatientHistoryPanelProps) => 
                           <p className="text-xs font-medium text-muted-foreground flex items-center gap-1"><Paperclip size={12}/> Fotos:</p>
                           <div className="flex flex-wrap gap-1 mt-0.5">
                             {appt.attachedPhotos.map((photoUri, index) => (
-                              photoUri && typeof photoUri === 'string' && photoUri.startsWith("data:image/") ? (
-                              <Image 
-                                key={index} 
-                                src={photoUri} 
-                                alt={`Foto ${index + 1}`} 
-                                width={24} 
-                                height={24} 
-                                className="rounded object-cover aspect-square cursor-pointer" 
+                              (photoUri && typeof photoUri === 'string')
+                              ? (
+                              <Image
+                                key={index}
+                                src={photoUri}
+                                alt={`Foto ${index + 1}`}
+                                width={30}
+                                height={30}
+                                className="rounded object-cover aspect-square cursor-pointer"
                                 data-ai-hint="medical thumbnail"
                                 onClick={() => handleImageClick(photoUri)}
                                 onDoubleClick={() => handleImageClick(photoUri)}
@@ -279,12 +281,11 @@ const PatientHistoryPanelComponent = ({ patient }: PatientHistoryPanelProps) => 
                 </ul>
               </ScrollArea>
             </div>
-          )}
-          {history.length === 0 && !loading && (
-              <div className="text-center py-4 text-muted-foreground">
+          ) : (
+            <div className="text-center py-4 text-muted-foreground">
                   <AlertTriangle className="mx-auto h-8 w-8 mb-2" />
                   <p>No hay historial de citas previas para este paciente.</p>
-              </div>
+            </div>
           )}
         </CardContent>
       </Card>
@@ -303,13 +304,13 @@ const PatientHistoryPanelComponent = ({ patient }: PatientHistoryPanelProps) => 
                 </DialogClose>
               </div>
             </DialogHeader>
-            <div 
+            <div
               className="flex-grow overflow-hidden p-2 flex items-center justify-center relative"
               onWheel={handleWheel}
               onMouseDown={handleMouseDown}
               onMouseMove={handleMouseMove}
               onMouseUp={handleMouseUp}
-              onMouseLeave={handleMouseUp} 
+              onMouseLeave={handleMouseUp}
               style={{ cursor: zoomLevel > 1 ? (isDragging ? 'grabbing' : 'grab') : 'default' }}
             >
               <div
@@ -320,17 +321,17 @@ const PatientHistoryPanelComponent = ({ patient }: PatientHistoryPanelProps) => 
                   maxHeight: '100%',
                   willChange: 'transform',
                 }}
-                className="flex items-center justify-center" 
+                className="flex items-center justify-center"
               >
-                <Image 
+                <Image
                   ref={imageRef}
-                  src={selectedImageForModal} 
-                  alt="Vista ampliada" 
-                  width={800} 
-                  height={600} 
-                  className="max-w-full max-h-[calc(90vh-100px)] object-contain rounded-md select-none" 
-                  draggable="false" 
-                  data-ai-hint="medical chart" 
+                  src={selectedImageForModal}
+                  alt="Vista ampliada"
+                  width={800}
+                  height={600}
+                  className="max-w-full max-h-[calc(90vh-100px)] object-contain rounded-md select-none"
+                  draggable="false"
+                  data-ai-hint="medical chart"
                 />
               </div>
             </div>
@@ -342,3 +343,4 @@ const PatientHistoryPanelComponent = ({ patient }: PatientHistoryPanelProps) => 
 }
 
 export const PatientHistoryPanel = React.memo(PatientHistoryPanelComponent);
+

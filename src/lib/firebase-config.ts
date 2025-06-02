@@ -5,6 +5,7 @@ import { getFirestore, type Firestore, doc, getDoc, Timestamp } from 'firebase/f
 // a menos que se decida explícitamente volver a habilitar los emuladores para desarrollo.
 import { getFunctions, type Functions } from 'firebase/functions';
 import { getAuth, type Auth } from 'firebase/auth';
+import { getStorage, type FirebaseStorage } from 'firebase/storage';
 
 // Determinar si se usa la base de datos mock basada en la variable de entorno
 const useMockDatabaseEnv = process.env.NEXT_PUBLIC_USE_MOCK_DATABASE;
@@ -19,6 +20,7 @@ let app: FirebaseApp | undefined;
 let firestoreInstance: Firestore | undefined;
 let functionsInstance: Functions | undefined;
 let authInstance: Auth | undefined;
+let storageInstance: FirebaseStorage | undefined;
 
 // Configuración de Firebase (directamente en el código según tu solicitud)
 const firebaseConfig = {
@@ -67,6 +69,9 @@ if (useMockDatabase) {
 
         authInstance = getAuth(app);
         console.log("[FirebaseConfig] Instancia de Authentication obtenida (apuntando a la nube).");
+
+        storageInstance = getStorage(app);
+        console.log("[FirebaseConfig] Instancia de Storage obtenida (apuntando a la nube).");
         
         // Lógica del emulador eliminada para forzar conexión a la nube
         // if (process.env.NODE_ENV === 'development') {
@@ -111,6 +116,7 @@ if (useMockDatabase) {
         firestoreInstance = undefined;
         functionsInstance = undefined;
         authInstance = undefined;
+        storageInstance = undefined;
       }
     } else {
       console.error("[FirebaseConfig] App de Firebase NO inicializada. Firestore, Functions y Auth no pueden ser configurados o usados.");
@@ -136,7 +142,12 @@ if (useMockDatabase) {
   } else {
       console.log("[FirebaseConfig] ESTADO FINAL: La instancia de Authentication ESTÁ disponible para la aplicación (intentando usar base de datos REAL en la nube).");
   }
+  if (!storageInstance) {
+      console.warn("[FirebaseConfig] ALERTA FINAL: La instancia de Storage NO está disponible. Las operaciones de almacenamiento fallarán.");
+  } else {
+      console.log("[FirebaseConfig] ESTADO FINAL: La instancia de Storage ESTÁ disponible para la aplicación (intentando usar base de datos REAL en la nube).");
+  }
 }
-console.log("--- [FirebaseConfig] FIN CONFIGURACIÓN FIREBASE/FIRESTORE/FUNCTIONS/AUTH ---");
+console.log("--- [FirebaseConfig] FIN CONFIGURACIÓN FIREBASE/FIRESTORE/FUNCTIONS/AUTH/STORAGE ---");
 
-export { firestoreInstance as firestore, app, functionsInstance as functions, authInstance as auth, useMockDatabase };
+export { firestoreInstance as firestore, app, functionsInstance as functions, authInstance as auth, storageInstance as storage, useMockDatabase };

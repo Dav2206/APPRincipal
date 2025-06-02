@@ -1,7 +1,6 @@
-import type { Metadata } from 'next';
 import { Geist, Geist_Mono } from 'next/font/google';
 import './globals.css';
-import { AuthProvider } from '@/contexts/auth-provider'; // Importar AuthProvider
+import { AuthProvider } from '@/contexts/auth-provider';
 import { AppStateProvider } from '@/contexts/app-state-provider';
 import { Toaster } from "@/components/ui/toaster";
 
@@ -15,29 +14,26 @@ const geistMono = Geist_Mono({
   subsets: ['latin'],
 });
 
-export const metadata: Metadata = {
+export const metadata = {
   title: 'Footprints Scheduler',
   description: 'Appointment scheduling for podology centers',
-  robots: 'noindex, nofollow', 
+  robots: 'noindex, nofollow',
 };
 
 export default function RootLayout({
   children,
-}: Readonly<{
+}: {
   children: React.ReactNode;
-}>) {
+}) {
   return (
-    <html lang="en">
-      <head>
-        {/* La meta tag 'robots' ya está en el objeto metadata */}
-      </head>
-      <body className={`${geistSans.variable} ${geistMono.variable} antialiased`}>
-        <AuthProvider> {/* Envolver con AuthProvider */}
+    <html lang="en" className={`${geistSans.variable} ${geistMono.variable}`}>
+      <body>
+        <AuthProvider>
           <AppStateProvider>
             {children}
-            <Toaster />
           </AppStateProvider>
         </AuthProvider>
+        <Toaster />
       </body>
     </html>
   );

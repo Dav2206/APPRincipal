@@ -274,7 +274,7 @@ const AppointmentCardComponent = ({ appointment, onUpdate }: AppointmentCardProp
             <div className="pt-2 mt-2 border-t border-border">
               <p className="text-xs font-medium text-muted-foreground flex items-center gap-1 mb-1"><Paperclip size={14}/> Fotos Adjuntas:</p>
               <div className="flex flex-wrap gap-2">
-                {appointment.attachedPhotos.filter(photoUri => photoUri && typeof photoUri === 'string' && photoUri.startsWith("data:image/")).map((photoUri, index) => (
+                {appointment.attachedPhotos.filter(photoUri => photoUri && typeof photoUri === 'string').map((photoUri, index) => (
                   photoUri ? (
                     <Image key={index} src={photoUri} alt={`Foto adjunta ${index + 1}`} width={40} height={40} className="rounded object-cover aspect-square" data-ai-hint="patient record" />
                   ): null

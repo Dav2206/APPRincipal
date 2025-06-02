@@ -5,7 +5,7 @@ import type { Appointment, Service, AppointmentStatus, Professional } from '@/ty
 import { APPOINTMENT_STATUS, PAYMENT_METHODS, USER_ROLES, APPOINTMENT_STATUS_DISPLAY, LOCATIONS, TIME_SLOTS } from '@/lib/constants';
 import { format, parseISO, setHours, setMinutes, formatISO } from 'date-fns';
 import { es } from 'date-fns/locale';
-import { CameraIcon, Loader2, PlusCircle, Trash2, ShoppingBag, ConciergeBell, Clock, CalendarIcon as CalendarIconLucide } from 'lucide-react';
+import { CameraIcon, Loader2, PlusCircle, Trash2, ShoppingBag, ConciergeBell, Clock, CalendarIcon as CalendarIconLucide, XCircle } from 'lucide-react';
 import { useAuth } from '@/contexts/auth-provider';
 import {
   Dialog,
@@ -31,7 +31,7 @@ import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
 import { Button, buttonVariants } from '@/components/ui/button';
-import { Calendar } from '@/components/ui/calendar';
+import { CalendarIcon } from "@radix-ui/react-icons"
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { useForm, useFieldArray } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -42,6 +42,8 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useToast } from '@/hooks/use-toast';
 import Image from 'next/image';
 import { cn } from '@/lib/utils';
+import { storage } from '@/lib/firebase-config';
+import { ref, uploadBytes, getDownloadURL, deleteObject } from 'firebase/storage';
 
 interface AppointmentEditDialogProps {
   appointment: Appointment;
@@ -54,16 +56,6 @@ type AppointmentUpdateFormData = Zod.infer<typeof AppointmentUpdateSchema>;
 
 const NO_SELECTION_PLACEHOLDER = "_no_selection_placeholder_";
 const DEFAULT_SERVICE_ID_PLACEHOLDER = "_default_service_id_placeholder_";
-
-
-const fileToDataUri = (file: File): Promise<string> => {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(reader.result as string);
-    reader.onerror = reject;
-    reader.readAsDataURL(file);
-  });
-};
 
 export function AppointmentEditDialog({ appointment, isOpen, onOpenChange, onAppointmentUpdated }: AppointmentEditDialogProps) {
   const { user } = useAuth();
@@ -86,7 +78,7 @@ export function AppointmentEditDialog({ appointment, isOpen, onOpenChange, onApp
     name: "addedServices",
   });
 
-  const { fields: attachedPhotoFields, append: appendAttachedPhoto, remove: removeAttachedPhoto } = useFieldArray({
+  const { fields: attachedPhotoFields, remove: removeAttachedPhoto } = useFieldArray({
     control: form.control,
     name: "attachedPhotos",
   });
@@ -138,12 +130,12 @@ export function AppointmentEditDialog({ appointment, isOpen, onOpenChange, onApp
         paymentMethod: appointment.paymentMethod || undefined,
         amountPaid: appointment.amountPaid ?? undefined,
         staffNotes: appointment.staffNotes || '',
-        attachedPhotos: appointment.attachedPhotos?.filter(p => typeof p === 'string' && p.startsWith("data:image/")) || [],
-        addedServices: appointment.addedServices?.map(as => ({
+        attachedPhotos: appointment.attachedPhotos?.filter(p => typeof p === 'string') || [],
+        addedServices: appointment.addedServices?.map(as => ({ 
           serviceId: as.serviceId || (allServices && allServices.length > 0 ? allServices[0].id : DEFAULT_SERVICE_ID_PLACEHOLDER),
           professionalId: as.professionalId || NO_SELECTION_PLACEHOLDER,
           amountPaid: as.amountPaid ?? undefined,
-          startTime: as.startTime, // <--- Include startTime when initializing
+          startTime: as.startTime,
         })) || [],
       });
     }
@@ -151,24 +143,61 @@ export function AppointmentEditDialog({ appointment, isOpen, onOpenChange, onApp
 
 
   const handleFileChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
-    const files = event.target.files;
-    if (files) {
+    const file = event.target.files?.[0];
+    if (file) {
       setIsUploadingImage(true);
       try {
+        if (!storage) {
+          throw new Error("Firebase Storage is not initialized.");
+        }
+
+        const storageRef = ref(storage, `appointment-photos/${appointment.id}/${file.name}_${Date.now()}`);
+        const uploadResult = await uploadBytes(storageRef, file);
+        const downloadURL = await getDownloadURL(uploadResult.ref);
+
         const currentPhotos = form.getValues("attachedPhotos") || [];
-        const newPhotoPromises = Array.from(files).map(fileToDataUri);
-        const newDataUris = await Promise.all(newPhotoPromises);
-        const validNewDataUris = newDataUris.filter(uri => typeof uri === 'string' && uri.startsWith("data:image/"));
-        const updatedPhotos = [...currentPhotos.filter(p => p && p.startsWith("data:image/")), ...validNewDataUris];
-        form.setValue("attachedPhotos", updatedPhotos, { shouldValidate: true });
+        form.setValue("attachedPhotos", [...currentPhotos, downloadURL], { shouldValidate: true });
+
+        toast({ title: "Imagen cargada", description: "La imagen ha sido subida exitosamente." });
       } catch (error) {
-        toast({ title: "Error al cargar imagen", description: "No se pudo procesar la imagen.", variant: "destructive"});
+        console.error("Error uploading image:", error);
+        toast({ title: "Error al cargar imagen", description: "No se pudo subir la imagen. Inténtalo de nuevo.", variant: "destructive"});
       } finally {
         setIsUploadingImage(false);
         if(fileInputRef.current) fileInputRef.current.value = "";
       }
     }
   };
+
+  const handleRemovePhoto = async (index: number) => {
+    const photoUrlToRemove = attachedPhotoFields[index].value;
+    if (!photoUrlToRemove || typeof photoUrlToRemove !== 'string') {
+        removeAttachedPhoto(index);
+        return;
+    }
+
+    if (photoUrlToRemove.startsWith('gs://') || photoUrlToRemove.startsWith('http')) { 
+        try {
+            if (!storage) {
+                throw new Error("Firebase Storage is not initialized.");
+            }
+            const storageRef = ref(storage, photoUrlToRemove); 
+            await deleteObject(storageRef);
+            toast({ title: "Imagen eliminada", description: "La imagen ha sido eliminada del almacenamiento." });
+            removeAttachedPhoto(index); 
+        } catch (error: any) {
+             if (error.code === 'storage/object-not-found') {
+                console.warn(`Image not found in storage, removing reference: ${photoUrlToRemove}`);
+                removeAttachedPhoto(index); 
+             } else {
+                console.error("Error deleting image from storage:", error);
+                toast({ title: "Error al eliminar imagen", description: "No se pudo eliminar la imagen del almacenamiento.", variant: "destructive"});
+             }
+        }
+      } else { // If it's a data URI (from previous system or not yet uploaded)
+        removeAttachedPhoto(index);
+      }
+    };
 
   const onSubmitUpdate = async (data: AppointmentUpdateFormData) => {
     if (allServices && !allServices.length && data.serviceId === DEFAULT_SERVICE_ID_PLACEHOLDER) {
@@ -201,12 +230,12 @@ export function AppointmentEditDialog({ appointment, isOpen, onOpenChange, onApp
         durationMinutes: data.durationMinutes,
         amountPaid: data.amountPaid,
         actualArrivalTime: data.actualArrivalTime || undefined,
-        attachedPhotos: (data.attachedPhotos || []).filter(photo => photo && typeof photo === 'string' && photo.startsWith("data:image/")),
+        attachedPhotos: (data.attachedPhotos || []).filter(photo => photo && typeof photo === 'string'),
         addedServices: data.addedServices?.map(as => ({
           ...as,
           serviceId: as.serviceId === DEFAULT_SERVICE_ID_PLACEHOLDER && allServices?.length ? allServices[0].id : as.serviceId,
-          professionalId: as.professionalId === NO_SELECTION_PLACEHOLDER ? null : as.professionalId, // Still keep original professionalId logic
-          amountPaid: as.amountPaid, // startTime should be included by ...as from form data
+          professionalId: as.professionalId === NO_SELECTION_PLACEHOLDER ? null : as.professionalId, 
+          amountPaid: as.amountPaid,
         })).filter(as => as.serviceId && as.serviceId !== DEFAULT_SERVICE_ID_PLACEHOLDER),
       };
 
@@ -232,9 +261,9 @@ export function AppointmentEditDialog({ appointment, isOpen, onOpenChange, onApp
       const success = await deleteAppointmentData(appointment.id);
       if (success) {
         toast({ title: "Cita Eliminada", description: "La cita ha sido eliminada exitosamente." });
-        onAppointmentUpdated({ id: appointment.id, _deleted: true }); // Notify parent to remove from list
+        onAppointmentUpdated({ id: appointment.id, _deleted: true }); 
         setIsConfirmDeleteOpen(false);
-        onOpenChange(false); // Close the edit dialog
+        onOpenChange(false); 
       } else {
         toast({ title: "Error", description: "No se pudo eliminar la cita.", variant: "destructive" });
       }
@@ -305,7 +334,7 @@ export function AppointmentEditDialog({ appointment, isOpen, onOpenChange, onApp
                           ) : (
                             <span>Seleccionar fecha</span>
                           )}
-                          <CalendarIconLucide className="ml-auto h-4 w-4 opacity-50" />
+                          <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
                         </Button>
                       </FormControl>
                     </PopoverTrigger>
@@ -314,7 +343,6 @@ export function AppointmentEditDialog({ appointment, isOpen, onOpenChange, onApp
                         mode="single"
                         selected={field.value}
                         onSelect={field.onChange}
-                        // disabled={(date) => date < new Date(new Date().setHours(0,0,0,0))} // Allow past dates for editing history
                         initialFocus
                       />
                     </PopoverContent>
@@ -524,26 +552,28 @@ export function AppointmentEditDialog({ appointment, isOpen, onOpenChange, onApp
             <div className="space-y-3 pt-3 mt-3 border-t">
               <h4 className="text-md font-semibold flex items-center gap-2"><CameraIcon/> Fotos Adjuntas</h4>
               <div className="grid grid-cols-3 sm:grid-cols-4 gap-2">
-                {attachedPhotoFields.map((fieldItem, index) => (
-                  fieldItem.value && typeof fieldItem.value === 'string' && fieldItem.value.startsWith("data:image/") ? (
+                {attachedPhotoFields.map((fieldItem, index) => {
+                  const photoUrl = fieldItem.value as string | undefined;
+                  return photoUrl ? (
                     <div key={fieldItem.id} className="relative group">
-                      <Image src={fieldItem.value} alt={`Foto adjunta ${index + 1}`} width={80} height={80} className="rounded object-cover aspect-square border" data-ai-hint="medical record" />
+                      <div className="relative w-20 h-20 rounded object-cover aspect-square border overflow-hidden">
+                        <Image src={photoUrl} alt={`Foto adjunta ${index + 1}`} fill style={{ objectFit: 'cover' }} data-ai-hint="medical record" />
+                      </div>
                       <Button
                         type="button"
                         variant="destructive"
                         size="icon"
                         className="absolute top-1 right-1 h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity"
-                        onClick={() => removeAttachedPhoto(index)}
+                        onClick={() => handleRemovePhoto(index)}
                       >
                         <Trash2 className="h-3 w-3" />
                       </Button>
                     </div>
-                  ) : null
-                ))}
+                  ) : null;
+                })}
               </div>
               <Input
                   type="file"
-                  multiple
                   accept="image/*"
                   onChange={handleFileChange}
                   ref={fileInputRef}
@@ -559,7 +589,7 @@ export function AppointmentEditDialog({ appointment, isOpen, onOpenChange, onApp
             <div className="space-y-3 pt-3 mt-3 border-t">
               <div className="flex justify-between items-center">
                 <h4 className="text-md font-semibold flex items-center gap-2"><ShoppingBag/> Servicios Adicionales</h4>
-                <Button type="button" size="sm" variant="outline" onClick={() => appendAddedService({ serviceId: allServices?.length ? allServices[0].id : DEFAULT_SERVICE_ID_PLACEholder, professionalId: NO_SELECTION_PLACEHOLDER, amountPaid: undefined, startTime: undefined })}>
+                <Button type="button" size="sm" variant="outline" onClick={() => appendAddedService({ serviceId: allServices?.length ? allServices[0].id : DEFAULT_SERVICE_ID_PLACEHOLDER, professionalId: NO_SELECTION_PLACEHOLDER, amountPaid: undefined, startTime: undefined })}>
                   <PlusCircle className="mr-2 h-4 w-4" /> Agregar Servicio
                 </Button>
               </div>
@@ -580,7 +610,7 @@ export function AppointmentEditDialog({ appointment, isOpen, onOpenChange, onApp
                              {allServices && !allServices.length && <SelectItem value={DEFAULT_SERVICE_ID_PLACEHOLDER} disabled>No hay servicios</SelectItem>}
                              {allServices && allServices.map(s => <SelectItem key={`added-${s.id}-${index}`} value={s.id}>{s.name}</SelectItem>)}
                           </SelectContent>
-            </Select>
+                        </Select>
                         <FormMessage />
                       </FormItem>
                     )}
@@ -602,11 +632,9 @@ export function AppointmentEditDialog({ appointment, isOpen, onOpenChange, onApp
                       </FormItem>
                     )}
                   />
-
-                  {/* Show Amount Paid field only if status is Completed */}
                   {form.watch('status') === APPOINTMENT_STATUS.COMPLETED && (
                     <>
-                      <FormField // Wrapped this FormField with the conditional check
+                      <FormField 
                         control={form.control}
                         name={`addedServices.${index}.amountPaid`}
                         render={({ field }) => (
@@ -691,4 +719,3 @@ export function AppointmentEditDialog({ appointment, isOpen, onOpenChange, onApp
     </Dialog>
   );
 }
-
