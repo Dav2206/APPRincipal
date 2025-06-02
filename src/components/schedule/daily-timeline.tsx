@@ -29,7 +29,7 @@ const stringToColor = (str: string): string => {
     hash = hash & hash; // Convert to 32bit integer
   }
   const hue = Math.abs(hash % 360);
-  return `hsl(${hue}, 60%, 90%)`; // Lighter pastel colors for grouping
+  return `hsl(${hue}, 70%, 85%)`; // Lighter pastel colors for grouping, increased saturation a bit for visibility
 };
 
 const PIXELS_PER_MINUTE = 1.5;
@@ -313,23 +313,23 @@ const DailyTimelineComponent = ({ professionals, appointments, timeSlots, onAppo
                         );
                       }
                      
-                      let blockBgClass = 'bg-slate-200 hover:bg-slate-300'; 
+                      let blockBgClass = 'bg-slate-50 hover:bg-slate-100'; 
                       let blockTextClass = 'text-slate-700';
-                      let blockBorderColorClass = 'border-slate-400';
+                      let blockBorderColorClass = 'border-slate-200';
 
                       const status = block.originalAppointmentData.status;
                       if (status === APPOINTMENT_STATUS.COMPLETED) {
-                        blockBgClass = 'bg-green-200 hover:bg-green-300';
-                        blockTextClass = 'text-green-800';
-                        blockBorderColorClass = 'border-green-400';
+                        blockBgClass = 'bg-teal-50 hover:bg-teal-100';
+                        blockTextClass = 'text-teal-800';
+                        blockBorderColorClass = 'border-teal-200';
                       } else if (status === APPOINTMENT_STATUS.BOOKED) {
-                        blockBgClass = 'bg-blue-200 hover:bg-blue-300';
-                        blockTextClass = 'text-blue-800';
-                        blockBorderColorClass = 'border-blue-400';
+                        blockBgClass = 'bg-sky-50 hover:bg-sky-100';
+                        blockTextClass = 'text-sky-800';
+                        blockBorderColorClass = 'border-sky-200';
                       } else if (status === APPOINTMENT_STATUS.CONFIRMED) {
-                        blockBgClass = 'bg-purple-200 hover:bg-purple-300';
-                        blockTextClass = 'text-purple-800';
-                        blockBorderColorClass = 'border-purple-400';
+                        blockBgClass = 'bg-violet-50 hover:bg-violet-100';
+                        blockTextClass = 'text-violet-800';
+                        blockBorderColorClass = 'border-violet-200';
                       }
                      
                       return (
