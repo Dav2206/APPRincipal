@@ -156,7 +156,7 @@ export default function SchedulePage() {
       setIsLoading(false);
       console.log("[SchedulePage] fetchData: setIsLoading(false) ejecutado.");
     }
-  }, [user, actualEffectiveLocationId, currentDate, toast]); // Added toast as dependency
+  }, [user, actualEffectiveLocationId, currentDate, toast, authIsLoading, isAdminOrContador, adminSelectedLocation]); // Added toast as dependency
 
 
   useEffect(() => {
@@ -386,3 +386,6 @@ export default function SchedulePage() {
     </div>
   );
 }
+
+
+    
