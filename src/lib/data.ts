@@ -740,175 +740,61 @@ export async function getAppointments(options: GetAppointmentsOptions = {}): Pro
   const { locationId, professionalId, patientId, date, dateRange, statuses, professionalIds } = options;
 
   try {
-     if (!firestore) {
+    if (!firestore) {
       console.warn("[data.ts] getAppointments: Firestore not available, returning empty array.");
       return { appointments: [] };
     }
 
     const appointmentsCol = collection(firestore, 'citas') as CollectionReference<DocumentData>;
+    let queryConstraints: QueryConstraint[] = [];
 
-    // Base constraints (locationId, patientId, date, dateRange, and single professionalId if provided)
-    let baseConstraints: QueryConstraint[] = [];
-    if (locationId) baseConstraints.push(where('locationId', '==', locationId));
-    if (patientId) baseConstraints.push(where('patientId', '==', patientId));
+    if (locationId) queryConstraints.push(where('locationId', '==', locationId));
+    if (patientId) queryConstraints.push(where('patientId', '==', patientId));
     if (date) {
-      baseConstraints.push(where('appointmentDateTime', '>=', toFirestoreTimestamp(startOfDay(date))!));
-      baseConstraints.push(where('appointmentDateTime', '<=', toFirestoreTimestamp(endOfDay(date))!));
+      queryConstraints.push(where('appointmentDateTime', '>=', toFirestoreTimestamp(startOfDay(date))!));
+      queryConstraints.push(where('appointmentDateTime', '<=', toFirestoreTimestamp(endOfDay(date))!));
     }
     if (dateRange) {
-      baseConstraints.push(where('appointmentDateTime', '>=', toFirestoreTimestamp(startOfDay(dateRange.start))!));
-      baseConstraints.push(where('appointmentDateTime', '<=', toFirestoreTimestamp(endOfDay(dateRange.end))!));
+      queryConstraints.push(where('appointmentDateTime', '>=', toFirestoreTimestamp(startOfDay(dateRange.start))!));
+      queryConstraints.push(where('appointmentDateTime', '<=', toFirestoreTimestamp(endOfDay(dateRange.end))!));
+    }
+    if (professionalId) {
+      queryConstraints.push(where('professionalId', '==', professionalId));
+    }
+    if (statuses && statuses.length > 0 && statuses.length <= 30) {
+      queryConstraints.push(where('status', 'in', statuses));
+    }
+    if (professionalIds && professionalIds.length > 0 && professionalIds.length <= 30) {
+      queryConstraints.push(where('professionalId', 'in', professionalIds));
     }
 
-    // If a single professionalId is provided, add it to base constraints
-    if (professionalId) baseConstraints.push(where('professionalId', '==', professionalId));
-
-    baseConstraints.push(orderBy('appointmentDateTime', 'asc'));
-
-    let combinedAppointments: Appointment[] = [];
-
-    // Determine if we need to handle statuses or professionalIds in chunks
-    const handleStatusesInChunks = statuses && statuses.length > 30;
-    const handleProfessionalIdsInChunks = professionalIds && professionalIds.length > 30;
-
-    if (handleProfessionalIdsInChunks) {
-      // Handle professionalIds filter by chunking
-      const professionalIdChunks = [];
-      for (let i = 0; i < professionalIds.length; i += 30) {
-          professionalIdChunks.push(professionalIds.slice(i, i + 30));
-      }
-
-      const queryPromises = professionalIdChunks.map(async (chunk) => {
-           const chunkQuery = query(appointmentsCol, where('professionalId', 'in', chunk)); // Query only by professionalId chunk
-           const chunkSnapshot = await getDocs(chunkQuery);
-           return chunkSnapshot.docs.map(docSnap => ({ id: docSnap.id, ...convertDocumentData(docSnap.data()) } as Appointment));
-      });
-
-      const resultsFromChunks = await Promise.all(queryPromises);
-      combinedAppointments = resultsFromChunks.flat();
-
-       // Filter the combined results based on base constraints and statuses in application logic
-      combinedAppointments = combinedAppointments.filter(appt => {
-          let meetsConstraints = true;
-          // Apply base constraints
-          if (locationId && appt.locationId !== locationId) meetsConstraints = false;
-          if (patientId && appt.patientId !== patientId) meetsConstraints = false;
-          if (date) {
-            const apptDate = parseISO(appt.appointmentDateTime);
-            if (isBefore(apptDate, startOfDay(date)) || isAfter(apptDate, endOfDay(date))) meetsConstraints = false;
-          }
-          if (dateRange) {
-              const apptDate = parseISO(appt.appointmentDateTime);
-              if (isBefore(apptDate, startOfDay(dateRange.start)) || isAfter(apptDate, endOfDay(dateRange.end))) meetsConstraints = false;
-          }
-           // Apply status constraints if handled in chunks
-          if (handleStatusesInChunks && statuses && !statuses.includes(appt.status)) meetsConstraints = false;
-
-
-          return meetsConstraints;
-      });
-
-       // Need to re-sort because results from multiple queries might not be in order after filtering
-       combinedAppointments.sort((a, b) => {
-           const dateA = parseISO(a.appointmentDateTime);
-           const dateB = parseISO(b.appointmentDateTime);
-           return dateA.getTime() - dateB.getTime();
-       });
-
-    } else if (handleStatusesInChunks) {
-        // Handle statuses filter by chunking when professionalIds are not handled in chunks
-        const statusChunks = [];
-        for (let i = 0; i < statuses!.length; i += 30) {
-            statusChunks.push(statuses!.slice(i, i + 30));
-        }
-
-        const queryPromises = statusChunks.map(async (chunk) => {
-             const chunkQuery = query(appointmentsCol, where('status', 'in', chunk)); // Query only by status chunk
-             const chunkSnapshot = await getDocs(chunkQuery);
-             return chunkSnapshot.docs.map(docSnap => ({ id: docSnap.id, ...convertDocumentData(docSnap.data()) } as Appointment));
-        });
-
-        const resultsFromChunks = await Promise.all(queryPromises);
-        combinedAppointments = resultsFromChunks.flat();
-
-         // Filter the combined results based on base constraints and professionalIds (if not handled in chunks)
-        combinedAppointments = combinedAppointments.filter(appt => {
-            let meetsConstraints = true;
-            // Apply base constraints
-            if (locationId && appt.locationId !== locationId) meetsConstraints = false;
-            if (patientId && appt.patientId !== patientId) meetsConstraints = false;
-            if (date) {
-              const apptDate = parseISO(appt.appointmentDateTime);
-              if (isBefore(apptDate, startOfDay(date)) || isAfter(apptDate, endOfDay(date))) meetsConstraints = false;
-            }
-            if (dateRange) {
-                const apptDate = parseISO(appt.appointmentDateTime);
-                if (isBefore(apptDate, startOfDay(dateRange.start)) || isAfter(apptDate, endOfDay(dateRange.end))) meetsConstraints = false;
-            }
-            // Apply professionalIds constraints if not handled in chunks
-            if (professionalIds && professionalIds.length <= 30 && !professionalIds.includes(appt.professionalId)) meetsConstraints = false;
-            // Apply single professionalId constraint
-             if (professionalId && appt.professionalId !== professionalId) meetsConstraints = false;
-
-
-            return meetsConstraints;
-        });
-
-         // Need to re-sort because results from multiple queries might not be in order after filtering
-         combinedAppointments.sort((a, b) => {
-             const dateA = parseISO(a.appointmentDateTime);
-             const dateB = parseISO(b.appointmentDateTime);
-             return dateA.getTime() - dateB.getTime();
-         });
-
+    if (handleLargeInArray(statuses) || handleLargeInArray(professionalIds)) {
+      console.warn('[data.ts] getAppointments: Filtering by more than 30 statuses or professionals is not fully supported by Firestore queries and may yield incomplete results or require client-side filtering.');
+      // The logic for chunking was complex and removed for clarity. For now, we accept Firestore's limitation.
+      // This may need to be revisited if >30 'in' items are a common use case.
     }
-    else { // No chunking needed for professionalIds or statuses
-        let finalConstraints: QueryConstraint[] = [];
- // Temporarily remove all constraints except orderBy for debugging empty options
-        // if (locationId) finalConstraints.push(where('locationId', '==', locationId));
-        // if (patientId) finalConstraints.push(where('patientId', '==', patientId));
+    
+    queryConstraints.push(orderBy('appointmentDateTime', 'asc'));
 
-        // // Handle date/dateRange filters
-        // if (date) {
-        // finalConstraints.push(where('appointmentDateTime', '>=', toFirestoreTimestamp(startOfDay(date))!));
-        // finalConstraints.push(where('appointmentDateTime', '<=', toFirestoreTimestamp(endOfDay(date))!));
-        // } else if (dateRange) {
-        // finalConstraints.push(where('appointmentDateTime', '>=', toFirestoreTimestamp(startOfDay(dateRange.start))!));
-        // finalConstraints.push(where('appointmentDateTime', '<=', toFirestoreTimestamp(endOfDay(dateRange.end))!));
-        // }
+    const finalQuery = query(appointmentsCol, ...queryConstraints);
+    const snapshot = await getDocs(finalQuery);
+    let combinedAppointments = snapshot.docs.map(docSnap => ({ id: docSnap.id, ...convertDocumentData(docSnap.data()) } as Appointment));
 
-        // // Handle single professionalId filter
-        // if (professionalId) finalConstraints.push(where('professionalId', '==', professionalId));
-
-        // // Add status constraints if 30 or less
-        // if (statuses && statuses.length > 0 && statuses.length <= 30) {
-        // finalConstraints.push(where('status', 'in', statuses));
-        // }
-        // // Add professionalIds constraints if 30 or less
-        // if (professionalIds && professionalIds.length > 0 && professionalIds.length <= 30) {
-        // finalConstraints.push(where('professionalId', 'in', professionalIds));
-        // }
-        finalConstraints.push(orderBy('appointmentDateTime', 'asc'));
-        const finalQuery = query(appointmentsCol, ...finalConstraints); // Use finalConstraints
-        const snapshot = await getDocs(finalQuery);
-        combinedAppointments = snapshot.docs.map(docSnap => ({ id: docSnap.id, ...convertDocumentData(docSnap.data()) } as Appointment));
+    // Client-side filtering for cases with > 30 items in 'in' query (if chunking logic were added)
+    // For now, this is just a safeguard.
+    if (handleLargeInArray(statuses)) {
+        combinedAppointments = combinedAppointments.filter(appt => statuses!.includes(appt.status));
     }
-
-    // Remove potential duplicates if combining from multiple queries (unlikely with 'in' on docId, but good practice)
-    const appointmentIds = new Set();
-    combinedAppointments = combinedAppointments.filter(appt => {
-        if (appointmentIds.has(appt.id)) return false;
-        appointmentIds.add(appt.id);
-        return true;
-    });
+    if (handleLargeInArray(professionalIds)) {
+        combinedAppointments = combinedAppointments.filter(appt => appt.professionalId && professionalIds!.includes(appt.professionalId));
+    }
 
     const allServicesFromDb = await getServices();
-    const allProfessionalsFromDb = await getProfessionals(); // Get all professionals to populate names
+    const allProfessionalsFromDb = await getProfessionals();
 
-    // Populate related data (patient, professional, service, addedServices) - This part remains the same
     const appointmentsWithDetails = await Promise.all(combinedAppointments.map(async apptData => {
       if(apptData.patientId) apptData.patient = await getPatientById(apptData.patientId);
-      if(apptData.professionalId) apptData.professional = allProfessionalsFromDb.find(p => p.id === apptData.professionalId); // Use cached list
+      if(apptData.professionalId) apptData.professional = allProfessionalsFromDb.find(p => p.id === apptData.professionalId);
       apptData.service = allServicesFromDb.find(s => s.id === apptData.serviceId);
 
       if (apptData.addedServices && apptData.addedServices.length > 0) {
@@ -931,7 +817,6 @@ export async function getAppointments(options: GetAppointmentsOptions = {}): Pro
       return apptData;
     }));
 
-
     return { appointments: appointmentsWithDetails };
 
   } catch (error: any) {
@@ -941,6 +826,10 @@ export async function getAppointments(options: GetAppointmentsOptions = {}): Pro
     }
     return { appointments: [] };
   }
+}
+
+function handleLargeInArray(arr?: any[]): boolean {
+    return !!arr && arr.length > 30;
 }
 
 
