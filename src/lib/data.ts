@@ -747,7 +747,6 @@ export async function getAppointments(options: GetAppointmentsOptions = {}): Pro
 
     const appointmentsCol = collection(firestore, 'citas') as CollectionReference<DocumentData>;
     let queryConstraints: QueryConstraint[] = [];
-    let isClientSideFilteringRequired = false;
 
     if (locationId) queryConstraints.push(where('locationId', '==', locationId));
     if (patientId) queryConstraints.push(where('patientId', '==', patientId));
@@ -764,21 +763,16 @@ export async function getAppointments(options: GetAppointmentsOptions = {}): Pro
     }
     if (statuses && statuses.length > 0 && statuses.length <= 30) {
       queryConstraints.push(where('status', 'in', statuses));
-    } else if (statuses && statuses.length > 30) {
-      console.warn('[data.ts] getAppointments: Filtering by more than 30 statuses requires client-side filtering.');
-      isClientSideFilteringRequired = true;
     }
     
-    // ** CRITICAL CHANGE **
-    // Avoid 'in' query for professionalIds if it's too large.
-    // The calling context in schedule/page.tsx will now handle fetching appointments by location and then by professional base,
-    // so this function can be simplified. A 'professionalIds' query will still be used by other parts of the app.
-    if (professionalIds && professionalIds.length > 0 && professionalIds.length <= 30) {
+    // This is the critical change: AVOID using 'in' with professionalIds to prevent the disjunction error.
+    // The logic in schedule/page.tsx has been simplified to fetch by location only,
+    // making this complex query unnecessary for that page.
+    // This function can still handle a small list of professionalIds for other use cases.
+    if (professionalIds && professionalIds.length > 0 && professionalIds.length <= 10) { // Keep limit low and safe
       queryConstraints.push(where('professionalId', 'in', professionalIds));
-    } else if (professionalIds && professionalIds.length > 30) {
-        console.warn(`[data.ts] getAppointments: professionalIds array has ${professionalIds.length} items (>30). This query will be omitted from Firestore and may result in incomplete data if not handled by the caller.`);
-        // We will NOT add the where clause, relying on the caller to handle this.
-        isClientSideFilteringRequired = true;
+    } else if (professionalIds && professionalIds.length > 10) {
+        console.warn(`[data.ts] getAppointments: professionalIds array has ${professionalIds.length} items (>10). This query will be omitted from Firestore to prevent errors.`);
     }
     
     queryConstraints.push(orderBy('appointmentDateTime', 'asc'));
@@ -787,13 +781,9 @@ export async function getAppointments(options: GetAppointmentsOptions = {}): Pro
     const snapshot = await getDocs(finalQuery);
     let combinedAppointments = snapshot.docs.map(docSnap => ({ id: docSnap.id, ...convertDocumentData(docSnap.data()) } as Appointment));
 
-    if (isClientSideFilteringRequired) {
-        if (statuses && statuses.length > 30) {
-            combinedAppointments = combinedAppointments.filter(appt => statuses.includes(appt.status));
-        }
-        if (professionalIds && professionalIds.length > 30) {
-             combinedAppointments = combinedAppointments.filter(appt => appt.professionalId && professionalIds.includes(appt.professionalId));
-        }
+    // Client-side filtering for cases that couldn't be handled by the query
+    if (statuses && statuses.length > 30) {
+      combinedAppointments = combinedAppointments.filter(appt => statuses.includes(appt.status));
     }
 
     const allServicesFromDb = await getServices();
@@ -833,10 +823,6 @@ export async function getAppointments(options: GetAppointmentsOptions = {}): Pro
     }
     return { appointments: [] };
   }
-}
-
-function handleLargeInArray(arr?: any[]): boolean {
-    return !!arr && arr.length > 30;
 }
 
 
@@ -1336,6 +1322,3 @@ export async function deleteImportantNote(noteId: string): Promise<boolean> {
   }
 }
 // --- End Important Notes ---
-
-    
-    

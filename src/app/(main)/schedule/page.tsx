@@ -56,12 +56,7 @@ export default function SchedulePage() {
 
   const fetchData = useCallback(async () => {
     if (!user || !actualEffectiveLocationId) {
-      console.warn("[SchedulePage] fetchData: Abortando. User o actualEffectiveLocationId no disponible.", {
-        userExists: !!user,
-        actualEffectiveLocationIdValue: actualEffectiveLocationId,
-        authIsLoading
-      });
-      setIsLoading(false); // Ensure loading is stopped
+      setIsLoading(false);
       setAppointments([]);
       setWorkingProfessionalsForTimeline([]);
       setAllSystemProfessionals([]);
@@ -69,78 +64,44 @@ export default function SchedulePage() {
     }
 
     setIsLoading(true);
-    console.log(`[SchedulePage] fetchData iniciando para fecha: ${currentDate ? formatISO(currentDate) : 'N/A'}, location: ${actualEffectiveLocationId}`);
 
     try {
-      const [allSystemProfsResponse] = await Promise.all([
+      const [allSystemProfsResponse, appointmentsResponse] = await Promise.all([
         getProfessionals(), // Fetch all professionals for filtering and the form
-      ]);
-      
-      const systemProfs = allSystemProfsResponse || [];
-      setAllSystemProfessionals(systemProfs);
-      console.log(`[SchedulePage] fetchData: Fetched ${systemProfs.length} total system professionals.`);
-
-      // Get professionals whose base location is the effective location
-      const professionalsAtEffectiveBaseLocation = systemProfs.filter(prof => prof.locationId === actualEffectiveLocationId);
-      const professionalIdsAtEffectiveBaseLocation = professionalsAtEffectiveBaseLocation.map(prof => prof.id);
-
-      const [appointmentsAtEffectiveLocationResponse, appointmentsForProfessionalsAtEffectiveBaseLocationResponse] = await Promise.all([
         getAppointments({   // Fetch appointments for the effective location and date
           locationId: actualEffectiveLocationId,
           date: currentDate,
           statuses: [APPOINTMENT_STATUS.BOOKED, APPOINTMENT_STATUS.CONFIRMED, APPOINTMENT_STATUS.COMPLETED],
         }),
-        getAppointments({ // Fetch appointments for professionals whose base location is the effective location
-          professionalIds: professionalIdsAtEffectiveBaseLocation,
-          date: currentDate,
-          statuses: [APPOINTMENT_STATUS.BOOKED, APPOINTMENT_STATUS.CONFIRMED, APPOINTMENT_STATUS.COMPLETED],
-          orderBy: 'appointmentDateTime' as 'asc', // Explicitly order by datetime for index
-        }),
       ]);
       
-      // Correctly handle the appointment responses
-      const allRelevantAppointmentsTodayResponse = appointmentsAtEffectiveLocationResponse; // Keep original naming for clarity
-      const dailyAppointmentsForLocation = allRelevantAppointmentsTodayResponse.appointments || [];
-      const appointmentsForProfessionals = appointmentsForProfessionalsAtEffectiveBaseLocationResponse.appointments || [];
-      console.log(`[SchedulePage] fetchData: Fetched ${dailyAppointmentsForLocation.length} appointments para location ${actualEffectiveLocationId} en ${currentDate ? formatISO(currentDate) : 'N/A'}.`);
-      console.log(`[SchedulePage] fetchData: Fetched ${appointmentsForProfessionals.length} appointments para profesionales con sede base en ${actualEffectiveLocationId} en ${currentDate ? formatISO(currentDate) : 'N/A'}.`);
+      const systemProfs = allSystemProfsResponse || [];
+      setAllSystemProfessionals(systemProfs);
 
-      // Combine and deduplicate appointments
-      const combinedAppointments = [...dailyAppointmentsForLocation, ...appointmentsForProfessionals];
-      const uniqueAppointments = Array.from(new Map(combinedAppointments.map(item => [item.id, item])).values());
+      const dailyAppointments = appointmentsResponse.appointments || [];
       
-      const professionalsForColumns = systemProfs.filter(prof => { // This logic correctly determines which professional columns to show
+      const professionalsForColumns = systemProfs.filter(prof => {
         if (prof.isManager) return false; 
         
-        // Mover la declaración de 'availability' aquí, antes de usarla
         const availability = getProfessionalAvailabilityForDate(prof, currentDate);
-        console.log("[SchedulePage] Availability result for professional:", prof.firstName, prof.lastName, ":", availability);
         
-        // Condition 1: Professional's base location is the effective location AND they are working there today.
-        const worksAtBaseLocationToday = prof.locationId === actualEffectiveLocationId && availability && availability.isWorking && (availability.workingLocationId === prof.locationId || availability.workingLocationId === null || availability.workingLocationId === undefined);
-
-        // Condition 2: Professional's base location is the effective location BUT they are working at a DIFFERENT location today.
-        // We still want to show them on their home location's schedule.
-        const worksElsewhereButBaseIsEffective = prof.locationId === actualEffectiveLocationId && availability && availability.isWorking && availability.workingLocationId && availability.workingLocationId !== prof.locationId;
+        const worksAtBaseLocationToday = prof.locationId === actualEffectiveLocationId && availability && availability.isWorking;
         
-        // Condition 3: Professional is an external professional with an appointment scheduled at the effective location today.
-        const isExternalWithAppointmentAtEffectiveLocation = dailyAppointmentsForLocation.some(appt => 
+        const isExternalWithAppointmentAtEffectiveLocation = dailyAppointments.some(appt => 
             appt.professionalId === prof.id && 
             appt.isExternalProfessional && 
-            appt.locationId === actualEffectiveLocationId // Ensure the appointment itself is for the current viewing location
+            appt.locationId === actualEffectiveLocationId
         );
         
-        // Keep the filtering logic for professionals the same - it determines who appears as a column
-        return worksAtBaseLocationToday || worksElsewhereButBaseIsEffective || isExternalWithAppointmentAtEffectiveLocation;
+        return worksAtBaseLocationToday || isExternalWithAppointmentAtEffectiveLocation;
       }).sort((a, b) => `${a.firstName} ${a.lastName}`.localeCompare(`${b.firstName} ${b.lastName}`));
 
       setWorkingProfessionalsForTimeline(professionalsForColumns);
       
-      const displayableAppointments = uniqueAppointments
+      const displayableAppointments = dailyAppointments
         .sort((a,b) => parseISO(a.appointmentDateTime).getTime() - parseISO(b.appointmentDateTime).getTime());
       
       setAppointments(displayableAppointments);
-      console.log(`[SchedulePage] fetchData: Displaying ${professionalsForColumns.length} professionals in timeline and ${displayableAppointments.length} appointment items for location ${actualEffectiveLocationId}.`);
 
     } catch (error) {
       console.error("[SchedulePage] Error fetching schedule data:", error);
@@ -154,16 +115,14 @@ export default function SchedulePage() {
       setAllSystemProfessionals([]);
     } finally {
       setIsLoading(false);
-      console.log("[SchedulePage] fetchData: setIsLoading(false) ejecutado.");
     }
-  }, [user, actualEffectiveLocationId, currentDate, toast, authIsLoading, isAdminOrContador, adminSelectedLocation]); // Added toast as dependency
+  }, [user, actualEffectiveLocationId, currentDate, toast, authIsLoading]);
 
 
   useEffect(() => {
     if (authIsLoading || !user) {
-        console.log("[SchedulePage] useEffect (fetch data trigger): Auth is loading or no user, waiting...", { authIsLoading, userExists: !!user });
-        setIsLoading(authIsLoading); // Reflect auth loading state
-        if (!user && !authIsLoading) { // No user and auth has finished loading
+        setIsLoading(authIsLoading);
+        if (!user && !authIsLoading) {
             setAppointments([]);
             setWorkingProfessionalsForTimeline([]);
             setAllSystemProfessionals([]);
@@ -172,22 +131,14 @@ export default function SchedulePage() {
     }
 
     if (actualEffectiveLocationId) {
-      console.log("[SchedulePage] useEffect (fetch data trigger): Auth loaded, user present, actualEffectiveLocationId available. Calling fetchData.", { actualEffectiveLocationId });
       fetchData();
     } else {
-      console.warn("[SchedulePage] useEffect (fetch data trigger): actualEffectiveLocationId es nulo después de carga de auth. No se cargarán datos de agenda.", {
-        actualEffectiveLocationIdValue: actualEffectiveLocationId,
-        isAdminOrContador,
-        adminSelectedLocation,
-        userLocationId: user?.locationId,
-        userRole: user?.role,
-      });
       setIsLoading(false);
       setAppointments([]);
       setWorkingProfessionalsForTimeline([]);
       setAllSystemProfessionals([]);
     }
-  }, [fetchData, actualEffectiveLocationId, user, authIsLoading, isAdminOrContador, adminSelectedLocation]);
+  }, [fetchData, actualEffectiveLocationId, user, authIsLoading]);
 
 
   const handleDateChange = (date: Date | undefined) => {
@@ -386,6 +337,3 @@ export default function SchedulePage() {
     </div>
   );
 }
-
-
-    
