@@ -630,6 +630,7 @@ export async function addPatient (data: Omit<Patient, 'id'>): Promise<Patient> {
     notes: data.notes || null,
   };
 
+  
   if (!firestore) throw new Error("Firestore not initialized");
   const docRef = await addDoc(collection(firestore, 'pacientes'), patientData);
   return { id: docRef.id, ...patientData };
@@ -876,8 +877,8 @@ export async function addAppointment (data: AppointmentFormData): Promise<Appoin
 
   try {
     const newAppointmentData: Omit<Appointment, 'id' | 'createdAt' | 'updatedAt'> = {
-      patientId: data.patientId,
-      professionalId: data.professionalId === '_no_selection_placeholder_' ? null : (data.professionalId || null),
+      patientId: data.existingPatientId || null,
+      professionalId: data.preferredProfessionalId === '_no_selection_placeholder_' ? null : (data.preferredProfessionalId || null),
       serviceId: data.serviceId,
       locationId: data.locationId,
       appointmentDateTime: formatISO(data.appointmentDate && data.appointmentTime
@@ -975,8 +976,9 @@ export async function updateAppointment(id: string, data: Partial<AppointmentUpd
   const appointmentToUpdate: { [key: string]: any } = { ...data };
 
   // Separate new Data URIs from existing URLs
-  const newPhotoDataUris = (data.attachedPhotos || []).filter(p => p && p.startsWith('data:image/'));
-  const existingPhotoUrls = (data.attachedPhotos || []).filter(p => p && p.startsWith('http'));
+  const newPhotoDataUris = (data.attachedPhotos || []).filter(p => p.url && p.url.startsWith('data:image/')).map(p => p.url);
+  const existingPhotoUrls = (data.attachedPhotos || []).filter(p => p.url && p.url.startsWith('http')).map(p => p.url);
+
 
   // Upload new photos and get their download URLs
   const newUploadedUrls = await Promise.all(
@@ -1015,7 +1017,14 @@ export async function updateAppointment(id: string, data: Partial<AppointmentUpd
 
   if (firestoreUpdateData.appointmentDateTime) {
     firestoreUpdateData.appointmentDateTime = toFirestoreTimestamp(firestoreUpdateData.appointmentDateTime);
+  } else if (data.appointmentDate && data.appointmentTime) {
+      const [hours, minutes] = data.appointmentTime.split(':').map(Number);
+      const finalDateObject = setMinutes(setHours(data.appointmentDate, hours), minutes);
+      firestoreUpdateData.appointmentDateTime = toFirestoreTimestamp(finalDateObject);
   }
+  
+  delete firestoreUpdateData.appointmentDate;
+  delete firestoreUpdateData.appointmentTime;
   
   await updateDoc(docRef, firestoreUpdateData);
 
