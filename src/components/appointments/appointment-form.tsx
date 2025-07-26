@@ -23,7 +23,7 @@ import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, For
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter, DialogClose } from '@/components/ui/dialog';
 import { CalendarIcon, ClockIcon, UserPlus, Building, Briefcase, ConciergeBell, Edit3, Loader2, UserRound, AlertCircle, Shuffle, ShoppingBag, PlusCircle, Trash2, ChevronsUpDown, Check, Footprints } from 'lucide-react';
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
-import { format, parse, parseISO, addMinutes, areIntervalsOverlapping, startOfDay } from 'date-fns';
+import { format, parse, parseISO, addMinutes, areIntervalsOverlapping, startOfDay, isBefore, isAfter } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { cn } from '@/lib/utils';
 import { PatientSearchField } from './patient-search-field';
@@ -205,7 +205,7 @@ export function AppointmentForm({
       
       setAvailableProfessionalsForTimeSlot(defaultProfsToShow.filter(prof => {
         const availability = getProfessionalAvailabilityForDate(prof, watchAppointmentDate);
-        return availability !== null && availability.startTime !== '' && availability.endTime !== '';
+        return availability !== null && availability.isWorking && availability.startTime !== '' && availability.endTime !== '';
       }));
       setSlotAvailabilityMessage('');
       return;
@@ -226,7 +226,7 @@ export function AppointmentForm({
     if(watchSearchExternal && Array.isArray(allSystemProfessionals)){
         professionalsToConsider = allSystemProfessionals;
     } else if (Array.isArray(professionalsForCurrentLocationProp)) {
-        professionalsToConsider = professionalsForCurrentLocationProp;
+        professionalsToConsider = professionalsForCurrentLocationProp.filter(p => p.locationId === watchLocationId);
     }
 
     const availableProfs: Professional[] = [];
@@ -236,14 +236,14 @@ export function AppointmentForm({
       }
       const dailyAvailability = getProfessionalAvailabilityForDate(prof, watchAppointmentDate);
 
-      if (!dailyAvailability || !dailyAvailability.startTime || !dailyAvailability.endTime) {
+      if (!dailyAvailability || !dailyAvailability.isWorking || !dailyAvailability.startTime || !dailyAvailability.endTime) {
         continue;
       }
 
       const profWorkStartTime = parse(`${format(watchAppointmentDate, 'yyyy-MM-dd')} ${dailyAvailability.startTime}`, 'yyyy-MM-dd HH:mm', new Date());
       const profWorkEndTime = parse(`${format(watchAppointmentDate, 'yyyy-MM-dd')} ${dailyAvailability.endTime}`, 'yyyy-MM-dd HH:mm', new Date());
 
-      if (proposedStartTime < profWorkStartTime || proposedEndTime > profWorkEndTime) {
+      if (isBefore(proposedStartTime, profWorkStartTime) || isAfter(proposedEndTime, profWorkEndTime)) {
         continue;
       }
 
@@ -815,7 +815,7 @@ export function AppointmentForm({
                       <FormItem>
                         <FormLabel>Profesional Preferido (Opcional)</FormLabel>
                         <Select
-                          onValueChange={(value) => field.onChange(value === ANY_PROFESSIONAL_VALUE ? null : value)}
+                          onValueChange={(value) => field.onChange(value)}
                           value={field.value || ANY_PROFESSIONAL_VALUE}
                           disabled={isLoadingServices || servicesList.length === 0 || isLoadingAppointments }
                         >

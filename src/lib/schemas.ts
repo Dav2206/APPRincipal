@@ -1,4 +1,5 @@
 
+
 import { z } from 'zod';
 import { LOCATIONS, TIME_SLOTS, PAYMENT_METHODS, APPOINTMENT_STATUS_DISPLAY, DAYS_OF_WEEK } from './constants';
 import type { DayOfWeekId } from './constants';

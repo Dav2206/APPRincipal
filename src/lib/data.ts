@@ -896,23 +896,79 @@ export async function addAppointment(data: AppointmentFormData): Promise<Appoint
 
   try {
     const mainService = await getServiceById(data.serviceId);
-    const mainServiceDuration = mainService?.defaultDuration ?? 30; // Fallback a 30 mins
+    if (!mainService) {
+      throw new Error(`Servicio principal con ID ${data.serviceId} no encontrado.`);
+    }
+    const mainServiceDuration = mainService.defaultDuration;
+
+    let patientId = data.existingPatientId || null;
+    if (!patientId && !data.isWalkIn) {
+      const newPatient = await addPatient({
+        firstName: data.patientFirstName,
+        lastName: data.patientLastName,
+        phone: data.patientPhone,
+        age: data.patientAge,
+        isDiabetic: data.isDiabetic,
+      });
+      patientId = newPatient.id;
+    }
+
+    const proposedStartTime = parse(`${format(data.appointmentDate, 'yyyy-MM-dd')} ${data.appointmentTime}`, 'yyyy-MM-dd HH:mm', new Date());
+    const proposedEndTime = addMinutes(proposedStartTime, mainServiceDuration);
+    
+    let professionalIdToAssign = data.preferredProfessionalId === '_any_professional_placeholder_' ? null : data.preferredProfessionalId;
+    
+    if (!professionalIdToAssign) {
+      console.log("[data.ts] addAppointment: Buscando profesional disponible...");
+      const professionalsToConsider = await getProfessionals(data.searchExternal ? undefined : data.locationId);
+      const appointmentsForDay = await getAppointments({
+        locationId: data.locationId,
+        date: data.appointmentDate,
+      });
+
+      for (const prof of professionalsToConsider) {
+        const dailyAvailability = getProfessionalAvailabilityForDate(prof, data.appointmentDate);
+        if (!dailyAvailability || !dailyAvailability.isWorking || !dailyAvailability.startTime || !dailyAvailability.endTime) continue;
+
+        const profWorkStartTime = parse(`${format(data.appointmentDate, 'yyyy-MM-dd')} ${dailyAvailability.startTime}`, 'yyyy-MM-dd HH:mm', new Date());
+        const profWorkEndTime = parse(`${format(data.appointmentDate, 'yyyy-MM-dd')} ${dailyAvailability.endTime}`, 'yyyy-MM-dd HH:mm', new Date());
+        
+        if (isBefore(proposedStartTime, profWorkStartTime) || isAfter(proposedEndTime, profWorkEndTime)) continue;
+        
+        let isBusy = false;
+        for (const existingAppt of appointmentsForDay.appointments.filter(a => a.professionalId === prof.id)) {
+          const existingApptStartTime = parseISO(existingAppt.appointmentDateTime);
+          const existingApptEndTime = addMinutes(existingApptStartTime, existingAppt.durationMinutes);
+          if (areIntervalsOverlapping({ start: proposedStartTime, end: proposedEndTime }, { start: existingApptStartTime, end: existingApptEndTime })) {
+            isBusy = true;
+            break;
+          }
+        }
+        if (!isBusy) {
+          professionalIdToAssign = prof.id;
+          console.log(`[data.ts] addAppointment: Profesional disponible encontrado y asignado: ${prof.firstName} ${prof.lastName}`);
+          break;
+        }
+      }
+      if (!professionalIdToAssign) {
+        throw new Error("No hay profesionales disponibles en el horario seleccionado. Por favor, elija otro horario o un profesional específico.");
+      }
+    }
+
 
     const newAppointmentData: Omit<Appointment, 'id' | 'createdAt' | 'updatedAt'> = {
-      patientId: data.existingPatientId || null,
-      professionalId: data.preferredProfessionalId === '_no_selection_placeholder_' ? null : (data.preferredProfessionalId || null),
+      patientId: patientId,
+      professionalId: professionalIdToAssign,
       serviceId: data.serviceId,
       locationId: data.locationId,
-      appointmentDateTime: formatISO(data.appointmentDate && data.appointmentTime
-        ? setMinutes(setHours(startOfDay(data.appointmentDate), parseInt(data.appointmentTime.split(':')[0])), parseInt(data.appointmentTime.split(':')[1]))
-        : startOfDay(data.appointmentDate)),
+      appointmentDateTime: formatISO(proposedStartTime),
       status: 'booked',
       durationMinutes: mainServiceDuration,
       actualArrivalTime: data.actualArrivalTime || null,
       paymentMethod: data.paymentMethod || null,
       amountPaid: data.amountPaid === undefined ? null : data.amountPaid,
       staffNotes: data.staffNotes || null,
-      attachedPhotos: data.attachedPhotos || [],
+      attachedPhotos: data.attachedPhotos?.map(p => p.url) || [],
       addedServices: (data.addedServices || []).map((as) => ({
         serviceId: as.serviceId!,
         professionalId: as.professionalId === '_no_selection_placeholder_' ? null : (as.professionalId || null),
@@ -943,6 +999,8 @@ export async function addAppointment(data: AppointmentFormData): Promise<Appoint
         ...as,
       })) || [],
     };
+    
+    delete firestoreData.preferredProfessionalId;
 
     const docRef = await addDoc(collection(firestore, 'citas'), firestoreData);
     console.log(`[data.ts] addAppointment (Firestore): Appointment added successfully with ID ${docRef.id}.`);
