@@ -431,7 +431,7 @@ export function AppointmentForm({
 
   if (!isOpen) return null;
 
-  const checkboxDisabledReason = (availableProfessionalsForTimeSlot.length > 0 && !watchSearchExternal) || isLoadingServices || servicesList.length === 0 || isLoadingAppointments;
+  const checkboxDisabledReason = isLoadingServices || servicesList.length === 0 || isLoadingAppointments;
 
   const filteredServices = serviceSearchTerm
     ? servicesList.filter(service =>
@@ -799,11 +799,6 @@ export function AppointmentForm({
                                   <Label htmlFor="searchExternalCheckbox" className={cn("cursor-pointer", checkboxDisabledReason && "text-muted-foreground")}>
                                       Buscar profesional en otras sedes
                                   </Label>
-                                  {checkboxDisabledReason && !isLoadingAppointments && !isLoadingServices && (
-                                      <FormDescription className="text-xs">
-                                          {availableProfessionalsForTimeSlot.length > 0 ? "Deshabilitado porque hay profesionales locales disponibles." : (servicesList.length === 0 ? "Seleccione un servicio primero." : "No hay profesionales disponibles.")}
-                                      </FormDescription>
-                                  )}
                               </div>
                           </FormItem>
                       )}
