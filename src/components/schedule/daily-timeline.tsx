@@ -89,7 +89,7 @@ const DailyTimelineComponent = ({ professionals, appointments, timeSlots, onAppo
           id: appt.id,
           originalAppointmentId: appt.id,
           assignedProfessionalId: appt.professionalId,
-          patientName: `Traslado ${appt.professional?.locationId === viewingLocationId ? 'desde esta sede' : `a ${LOCATIONS.find(l => l.id === appt.locationId)?.name || 'esta sede'}`}`,
+          patientName: `Traslado`,
           serviceName: 'Viaje',
           serviceId: 'travel',
           startTime: appointmentDate,

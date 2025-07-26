@@ -784,8 +784,9 @@ export async function getAppointments(options: GetAppointmentsOptions = {}): Pro
             queryConstraints.push(where('professionalId', '==', professionalId));
         }
         
-        // If specific statuses are provided and it's not a generic daily fetch, filter by them.
-        // This prevents travel_blocks from being filtered out in the main schedule view.
+        // This is complex. If we are fetching for a specific day, we want ALL appointments regardless of status
+        // to correctly show travel blocks. If we are fetching for other views (like history), we DO want to filter by status.
+        // A simple way to distinguish is that schedule views pass a `date`, while history might pass a `dateRange` but also `statuses`.
         if (statuses && statuses.length > 0 && !date) {
             queryConstraints.push(where('status', 'in', statuses));
         }
@@ -802,7 +803,7 @@ export async function getAppointments(options: GetAppointmentsOptions = {}): Pro
         const snapshot = await getDocs(finalQuery);
         let combinedAppointments = snapshot.docs.map(docSnap => ({ id: docSnap.id, ...convertDocumentData(docSnap.data()) } as Appointment));
 
-        // Client-side filtering for statuses if the query was for a specific day (to include travel blocks)
+        // Client-side filtering for statuses if the query was for a specific day, to allow travel_blocks to be fetched.
         if (date && statuses && statuses.length > 0) {
             combinedAppointments = combinedAppointments.filter(appt => appt.isTravelBlock || statuses.includes(appt.status));
         }
@@ -895,11 +896,21 @@ export async function addAppointment(data: AppointmentFormData): Promise<Appoint
   }
 
   try {
-    const mainService = await getServiceById(data.serviceId);
+    const allServicesList = await getServices();
+    const mainService = allServicesList.find(s => s.id === data.serviceId);
+    
     if (!mainService) {
       throw new Error(`Servicio principal con ID ${data.serviceId} no encontrado.`);
     }
     const mainServiceDuration = mainService.defaultDuration || 30;
+
+    let totalDurationForSlotCheck = mainServiceDuration;
+    if (data.addedServices) {
+      data.addedServices.forEach(as => {
+        const addedSvcInfo = allServicesList.find(s => s.id === as.serviceId);
+        if (addedSvcInfo) totalDurationForSlotCheck += addedSvcInfo.defaultDuration;
+      });
+    }
 
     let patientId: string | null = data.existingPatientId || null;
     if (!patientId && !data.isWalkIn) {
@@ -909,7 +920,7 @@ export async function addAppointment(data: AppointmentFormData): Promise<Appoint
         phone: data.patientPhone,
         age: data.patientAge,
         isDiabetic: data.isDiabetic,
-        preferredProfessionalId: null, // No preference assumed on new patient creation here
+        preferredProfessionalId: null,
         notes: null
       });
       patientId = newPatient.id;
@@ -921,7 +932,6 @@ export async function addAppointment(data: AppointmentFormData): Promise<Appoint
     let isExternalProfessional = false;
     let externalProfessionalOriginLocationId: LocationId | null = null;
     
-    // Auto-assign professional if "any" is selected
     if (!professionalIdToAssign) {
       console.log("[data.ts] addAppointment: Buscando profesional disponible...");
       const professionalsToConsider = await getProfessionals(data.searchExternal ? undefined : data.locationId);
@@ -929,14 +939,6 @@ export async function addAppointment(data: AppointmentFormData): Promise<Appoint
         locationId: data.locationId,
         date: data.appointmentDate,
       });
-      const allServicesListForDuration = await getServices();
-      let totalDurationForSlotCheck = mainServiceDuration;
-      if (data.addedServices) {
-        data.addedServices.forEach(as => {
-          const addedSvcInfo = allServicesListForDuration.find(s => s.id === as.serviceId);
-          if (addedSvcInfo) totalDurationForSlotCheck += addedSvcInfo.defaultDuration;
-        });
-      }
       const proposedEndTime = dateFnsAddMinutes(proposedStartTime, totalDurationForSlotCheck);
 
       for (const prof of professionalsToConsider) {
@@ -978,17 +980,6 @@ export async function addAppointment(data: AppointmentFormData): Promise<Appoint
         }
     }
 
-    const allServicesList = await getServices();
-    let totalDuration = mainServiceDuration;
-    if (data.addedServices) {
-      data.addedServices.forEach(as => {
-        const addedSvc = allServicesList.find(s => s.id === as.serviceId);
-        if (addedSvc) {
-          totalDuration += addedSvc.defaultDuration;
-        }
-      });
-    }
-
     const newAppointmentData: Omit<Appointment, 'id' | 'createdAt' | 'updatedAt'> = {
       patientId: patientId,
       professionalId: professionalIdToAssign,
@@ -1010,7 +1001,7 @@ export async function addAppointment(data: AppointmentFormData): Promise<Appoint
         amountPaid: (as as any).amountPaid ?? null,
         startTime: as.startTime ?? null,
       })),
-      totalCalculatedDurationMinutes: totalDuration,
+      totalCalculatedDurationMinutes: totalDurationForSlotCheck,
     };
 
     const batch = writeBatch(firestore);
@@ -1032,16 +1023,16 @@ export async function addAppointment(data: AppointmentFormData): Promise<Appoint
       const travelBlockData: Omit<Appointment, 'id' | 'createdAt' | 'updatedAt'> = {
         patientId: null,
         professionalId: professionalIdToAssign,
-        serviceId: 'travel', // Special ID
-        locationId: externalProfessionalOriginLocationId,
+        serviceId: 'travel',
+        locationId: externalProfessionalOriginLocationId, // CORRECTED: Use origin location for the block
         appointmentDateTime: formatISO(proposedStartTime),
-        durationMinutes: totalDuration,
-        totalCalculatedDurationMinutes: totalDuration,
-        status: 'booked',
+        durationMinutes: totalDurationForSlotCheck, // CORRECTED: Use total duration
+        totalCalculatedDurationMinutes: totalDurationForSlotCheck, // CORRECTED: Use total duration
+        status: 'booked', // CORRECTED: Give it a status that can be fetched
         isTravelBlock: true,
         bookingObservations: `Traslado a ${LOCATIONS.find(l => l.id === data.locationId)?.name || 'otra sede'}`,
         externalProfessionalOriginLocationId: externalProfessionalOriginLocationId,
-        isExternalProfessional: false, // It's not external TO ITS OWN location
+        isExternalProfessional: false,
         addedServices: [],
         amountPaid: null,
         paymentMethod: null,
@@ -1394,5 +1385,6 @@ export async function deleteImportantNote(noteId: string): Promise<boolean> {
   }
 }
 // --- End Important Notes ---
+
 
 
