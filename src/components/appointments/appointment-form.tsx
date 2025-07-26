@@ -21,7 +21,7 @@ import { Calendar } from '@/components/ui/calendar';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter, DialogClose } from '@/components/ui/dialog';
-import { CalendarIcon, ClockIcon, UserPlus, Building, Briefcase, ConciergeBell, Edit3, Loader2, UserRound, AlertCircle, Shuffle, ShoppingBag, PlusCircle, Trash2, ChevronsUpDown, Check } from 'lucide-react';
+import { CalendarIcon, ClockIcon, UserPlus, Building, Briefcase, ConciergeBell, Edit3, Loader2, UserRound, AlertCircle, Shuffle, ShoppingBag, PlusCircle, Trash2, ChevronsUpDown, Check, Footprints } from 'lucide-react';
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
 import { format, parse, parseISO, addMinutes, areIntervalsOverlapping, startOfDay } from 'date-fns';
 import { es } from 'date-fns/locale';
@@ -93,6 +93,7 @@ export function AppointmentForm({
       patientAge: initialData?.patientAge ?? null,
       existingPatientId: initialData?.existingPatientId || null,
       isDiabetic: initialData?.isDiabetic || false,
+      isWalkIn: initialData?.isWalkIn || false,
       locationId: initialData?.locationId || defaultLocation || LOCATIONS[0].id,
       serviceId: initialData?.serviceId || '',
       appointmentDate: initialData?.appointmentDate || defaultDate || new Date(),
@@ -116,6 +117,7 @@ export function AppointmentForm({
   const watchServiceId = form.watch('serviceId');
   const watchPreferredProfessionalId = form.watch('preferredProfessionalId');
   const watchSearchExternal = form.watch('searchExternal');
+  const watchIsWalkIn = form.watch('isWalkIn');
 
 
   useEffect(() => {
@@ -143,6 +145,26 @@ export function AppointmentForm({
         form.setValue('preferredProfessionalId', ANY_PROFESSIONAL_VALUE);
     }
   }, [watchLocationId, isOpen, form, initialData?.locationId]);
+
+  useEffect(() => {
+    if (watchIsWalkIn) {
+      // Clear patient search and personal details
+      form.setValue('existingPatientId', null);
+      form.setValue('patientFirstName', 'Cliente');
+      form.setValue('patientLastName', 'de Paso');
+      form.setValue('patientPhone', '');
+      form.setValue('patientAge', null);
+      form.setValue('isDiabetic', false);
+      setCurrentPatientForHistory(null);
+      setShowPatientHistory(false);
+    } else {
+       // If unchecking, clear the walk-in values
+       if(form.getValues('patientFirstName') === 'Cliente' && form.getValues('patientLastName') === 'de Paso'){
+          form.setValue('patientFirstName', '');
+          form.setValue('patientLastName', '');
+       }
+    }
+  }, [watchIsWalkIn, form]);
 
 
   useEffect(() => {
@@ -368,6 +390,7 @@ export function AppointmentForm({
         patientAge: null,
         isDiabetic: false,
         existingPatientId: null,
+        isWalkIn: false,
         bookingObservations: '',
         searchExternal: false,
         addedServices: [],
@@ -431,6 +454,7 @@ export function AppointmentForm({
           patientPhone: '',
           patientAge: null,
           isDiabetic: false,
+          isWalkIn: false,
           existingPatientId: null,
           bookingObservations: '',
           searchExternal: false,
@@ -460,12 +484,35 @@ export function AppointmentForm({
               
               <div className="md:col-span-1 space-y-4 p-4 border rounded-lg shadow-sm bg-card">
                 <h3 className="text-lg font-semibold flex items-center gap-2"><UserPlus /> Información del Paciente</h3>
+
+                <FormField
+                  control={form.control}
+                  name="isWalkIn"
+                  render={({ field }) => (
+                    <FormItem className="flex flex-row items-center space-x-3 space-y-0 rounded-md border p-3 shadow-sm bg-amber-50 border-amber-200">
+                      <FormControl>
+                        <Checkbox
+                          checked={field.value}
+                          onCheckedChange={field.onChange}
+                        />
+                      </FormControl>
+                      <div className="space-y-1 leading-none">
+                        <FormLabel className="flex items-center gap-1.5"><Footprints size={16} />Cliente de Paso (Sin Registro)</FormLabel>
+                        <FormDescription className="text-xs">
+                          Marcar para clientes no habituales sin registrar sus datos.
+                        </FormDescription>
+                      </div>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
                 <FormField
                   control={form.control}
                   name="existingPatientId"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Paciente</FormLabel>
+                      <FormLabel>Paciente Registrado</FormLabel>
                       <PatientSearchField
                         onPatientSelect={handlePatientSelect}
                         selectedPatientId={field.value}
@@ -479,6 +526,7 @@ export function AppointmentForm({
                           setCurrentPatientForHistory(null);
                           setShowPatientHistory(false);
                         }}
+                        disabled={watchIsWalkIn}
                       />
                       <FormMessage />
                     </FormItem>
@@ -492,7 +540,7 @@ export function AppointmentForm({
                     render={({ field }) => (
                       <FormItem>
                         <FormLabel>Nombre(s)</FormLabel>
-                        <FormControl><Input placeholder="Ej: Juan" {...field} disabled={!!form.getValues("existingPatientId")} /></FormControl>
+                        <FormControl><Input placeholder="Ej: Juan" {...field} disabled={!!form.getValues("existingPatientId") || watchIsWalkIn} /></FormControl>
                         <FormMessage />
                       </FormItem>
                     )}
@@ -503,66 +551,70 @@ export function AppointmentForm({
                     render={({ field }) => (
                       <FormItem>
                         <FormLabel>Apellido(s)</FormLabel>
-                        <FormControl><Input placeholder="Ej: Pérez" {...field} disabled={!!form.getValues("existingPatientId")} /></FormControl>
+                        <FormControl><Input placeholder="Ej: Pérez" {...field} disabled={!!form.getValues("existingPatientId") || watchIsWalkIn} /></FormControl>
                         <FormMessage />
                       </FormItem>
                     )}
                   />
                 </div>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <FormField
-                    control={form.control}
-                    name="patientPhone"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Teléfono (Opcional)</FormLabel>
-                        <FormControl><Input
-                          type="tel"
-                          placeholder={(!!form.getValues("existingPatientId") && user?.role !== USER_ROLES.ADMIN) ? "Teléfono Restringido" : "Ej: 987654321"}
-                          {...field}
-                          value={field.value || ''}
-                          disabled={!!form.getValues("existingPatientId") && user?.role !== USER_ROLES.ADMIN}
-                        /></FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                  <FormField
-                    control={form.control}
-                    name="patientAge"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel className="flex items-center gap-1"><UserRound size={16}/>Edad (Opcional)</FormLabel>
-                        <FormControl><Input type="number" placeholder="Ej: 30" {...field} onChange={e => field.onChange(e.target.value === '' ? null : parseInt(e.target.value,10) || null)} disabled={!!form.getValues("existingPatientId")} value={field.value ?? ''}/></FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                </div>
-                <FormField
-                    control={form.control}
-                    name="isDiabetic"
-                    render={({ field }) => (
-                    <FormItem className="flex flex-row items-center space-x-3 space-y-0 rounded-md border p-3 shadow-sm h-fit">
-                        <FormControl>
-                        <Checkbox
-                            checked={field.value}
-                            onCheckedChange={field.onChange}
-                            disabled={!!form.getValues("existingPatientId")}
-                        />
-                        </FormControl>
-                        <div className="space-y-1 leading-none">
-                        <FormLabel className={!!form.getValues("existingPatientId") ? "text-muted-foreground" : ""}>
-                            ¿Paciente diabético?
-                        </FormLabel>
+                 {!watchIsWalkIn && (
+                    <>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                          <FormField
+                            control={form.control}
+                            name="patientPhone"
+                            render={({ field }) => (
+                              <FormItem>
+                                <FormLabel>Teléfono (Opcional)</FormLabel>
+                                <FormControl><Input
+                                  type="tel"
+                                  placeholder={(!!form.getValues("existingPatientId") && user?.role !== USER_ROLES.ADMIN) ? "Teléfono Restringido" : "Ej: 987654321"}
+                                  {...field}
+                                  value={field.value || ''}
+                                  disabled={!!form.getValues("existingPatientId") && user?.role !== USER_ROLES.ADMIN}
+                                /></FormControl>
+                                <FormMessage />
+                              </FormItem>
+                            )}
+                          />
+                          <FormField
+                            control={form.control}
+                            name="patientAge"
+                            render={({ field }) => (
+                              <FormItem>
+                                <FormLabel className="flex items-center gap-1"><UserRound size={16}/>Edad (Opcional)</FormLabel>
+                                <FormControl><Input type="number" placeholder="Ej: 30" {...field} onChange={e => field.onChange(e.target.value === '' ? null : parseInt(e.target.value,10) || null)} disabled={!!form.getValues("existingPatientId")} value={field.value ?? ''}/></FormControl>
+                                <FormMessage />
+                              </FormItem>
+                            )}
+                          />
                         </div>
-                        <FormMessage />
-                    </FormItem>
-                    )}
-                  />
+                        <FormField
+                            control={form.control}
+                            name="isDiabetic"
+                            render={({ field }) => (
+                            <FormItem className="flex flex-row items-center space-x-3 space-y-0 rounded-md border p-3 shadow-sm h-fit">
+                                <FormControl>
+                                <Checkbox
+                                    checked={field.value}
+                                    onCheckedChange={field.onChange}
+                                    disabled={!!form.getValues("existingPatientId")}
+                                />
+                                </FormControl>
+                                <div className="space-y-1 leading-none">
+                                <FormLabel className={!!form.getValues("existingPatientId") ? "text-muted-foreground" : ""}>
+                                    ¿Paciente diabético?
+                                </FormLabel>
+                                </div>
+                                <FormMessage />
+                            </FormItem>
+                            )}
+                          />
+                    </>
+                 )}
 
 
-                {showPatientHistory && currentPatientForHistory && (
+                {showPatientHistory && currentPatientForHistory && !watchIsWalkIn && (
                   <div className="mt-4 space-y-2">
                      <PatientHistoryPanel patient={currentPatientForHistory} />
                      <AttendancePredictionTool patientId={currentPatientForHistory.id} />
@@ -923,6 +975,7 @@ export function AppointmentForm({
                 patientPhone: '',
                 patientAge: null,
                 isDiabetic: false,
+                isWalkIn: false,
                 existingPatientId: null,
                 bookingObservations: '',
                 searchExternal: false,
@@ -944,3 +997,5 @@ export function AppointmentForm({
     </Dialog>
   );
 }
+
+    

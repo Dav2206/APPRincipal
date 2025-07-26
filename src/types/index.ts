@@ -28,6 +28,8 @@ export interface Professional extends BaseEntity {
   locationId: LocationId;
   phone?: string | null;
   isManager?: boolean; 
+  birthDay?: number | null;
+  birthMonth?: number | null;
 
   biWeeklyEarnings?: number;
 
@@ -110,6 +112,7 @@ export type AppointmentFormData = {
   patientAge?: number | null;
   existingPatientId?: string | null;
   isDiabetic?: boolean;
+  isWalkIn?: boolean;
 
   locationId: LocationId;
   serviceId: string;
@@ -128,6 +131,8 @@ export type ProfessionalFormData = {
   locationId: LocationId;
   phone?: string | null;
   isManager?: boolean;
+  birthDay?: number | null;
+  birthMonth?: number | null;
 
   workSchedule: {
     [key in DayOfWeekId]?: { startTime?: string; endTime?: string; isWorking?: boolean };
@@ -197,3 +202,5 @@ export interface ImportantNoteFormData {
   title: string;
   content: string;
 }
+
+    

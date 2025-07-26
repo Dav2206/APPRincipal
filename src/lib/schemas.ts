@@ -35,6 +35,7 @@ export const AppointmentFormSchema = z.object({
   patientAge: z.coerce.number().int().min(0, "La edad del paciente no puede ser negativa.").optional().nullable(),
   existingPatientId: z.string().optional().nullable(),
   isDiabetic: z.boolean().optional(),
+  isWalkIn: z.boolean().optional(),
 
   locationId: z.string().refine(val => locationIds.includes(val as any), { message: "Sede inválida."}),
   serviceId: z.string().min(1, "Servicio es requerido."),
@@ -49,7 +50,25 @@ export const AppointmentFormSchema = z.object({
     amountPaid: z.coerce.number().positive("El monto pagado debe ser positivo.").optional().nullable(),
     startTime: z.string().regex(/^([01]\d|2[0-3]):([0-5]\d)$/, "Formato HH:MM").optional().nullable(),
   })).optional().nullable(),
-});
+}).superRefine((data, ctx) => {
+    if (!data.isWalkIn) {
+      if (data.patientFirstName.trim().length < 2) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "Nombre del paciente es requerido.",
+          path: ["patientFirstName"],
+        });
+      }
+      if (data.patientLastName.trim().length < 2) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "Apellido del paciente es requerido.",
+          path: ["patientLastName"],
+        });
+      }
+    }
+  });
+
 
 export type AppointmentFormData = z.infer<typeof AppointmentFormSchema>;
 
@@ -68,6 +87,8 @@ export const ProfessionalFormSchema = z.object({
   locationId: z.string().refine(val => locationIds.includes(val as any), { message: "Sede inválida." }),
   phone: z.string().optional().nullable(),
   isManager: z.boolean().optional(), // Nuevo campo para gerente
+  birthDay: z.coerce.number().int().min(1).max(31).optional().nullable(),
+  birthMonth: z.coerce.number().int().min(1).max(12).optional().nullable(),
 
   workSchedule: z.object(
     DAYS_OF_WEEK.reduce((acc, day) => {
@@ -122,7 +143,7 @@ export const AppointmentUpdateSchema = z.object({
   paymentMethod: z.string().refine(val => paymentMethodValues.includes(val as any), {message: "Método de pago inválido"}).optional().nullable(),
   amountPaid: z.coerce.number().min(0, "El monto pagado no puede ser negativo.").optional().nullable(), // Permitir cero
   staffNotes: z.string().optional().nullable(),
-  attachedPhotos: z.array(z.string().startsWith("data:image/", { message: "Debe ser un data URI de imagen válido." })).optional().nullable(),
+  attachedPhotos: z.array(z.string()).optional().nullable(),
   addedServices: z.array(z.object({ 
     serviceId: z.string().min(1, "Servicio adicional inválido."),
     professionalId: z.string().optional().nullable(),
@@ -182,3 +203,5 @@ export const ImportantNoteFormSchema = z.object({
   content: z.string().min(1, "El contenido es requerido."),
 });
 export type ImportantNoteFormData = z.infer<typeof ImportantNoteFormSchema>;
+
+    
