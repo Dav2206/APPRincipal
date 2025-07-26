@@ -27,11 +27,12 @@ import { Loader2, CameraIcon, PlusCircle, Trash2 } from 'lucide-react';
 interface AppointmentCardProps {
   appointment: Appointment;
   onUpdate: (updatedAppointment: Appointment) => void;
+  onImageClick?: (imageUrl: string) => void;
 }
 
 type AppointmentUpdateFormData = Zod.infer<typeof AppointmentUpdateSchema>;
 
-const AppointmentCardComponent = ({ appointment, onUpdate }: AppointmentCardProps) => {
+const AppointmentCardComponent = ({ appointment, onUpdate, onImageClick }: AppointmentCardProps) => {
   const { user } = useAuth();
   const [isUpdateModalOpen, setIsUpdateModalOpen] = useState(false);
   const [professionalsForDisplay, setProfessionalsForDisplay] = useState<Professional[]>([]);
@@ -111,7 +112,7 @@ const AppointmentCardComponent = ({ appointment, onUpdate }: AppointmentCardProp
         const newPhotoPromises = Array.from(files).map(fileToDataUri);
         const newDataUris = await Promise.all(newPhotoPromises);
         const validNewDataUris = newDataUris.filter(uri => typeof uri === 'string' && uri.startsWith("data:image/"));
-        const updatedPhotos = [...currentPhotos.filter(p => p && (p.startsWith("data:image/") || p.startsWith("http"))), ...validNewDataUris];
+        const updatedPhotos = [...currentPhotos.filter(p => p && (p.url.startsWith("data:image/") || p.url.startsWith("http"))), ...validNewDataUris.map(url => ({url}))];
         form.setValue("attachedPhotos", updatedPhotos, { shouldValidate: true });
       } catch (error) {
         toast({ title: "Error al cargar imagen", description: "No se pudo procesar la imagen.", variant: "destructive"});
@@ -289,7 +290,9 @@ const AppointmentCardComponent = ({ appointment, onUpdate }: AppointmentCardProp
               <div className="flex flex-wrap gap-2">
                 {appointment.attachedPhotos.filter(photoUri => photoUri && typeof photoUri === 'string').map((photoUri, index) => (
                   photoUri ? (
-                    <Image key={index} src={photoUri} alt={`Foto adjunta ${index + 1}`} width={40} height={40} className="rounded object-cover aspect-square" data-ai-hint="patient record" />
+                    <div key={index} className="cursor-pointer" onClick={() => onImageClick && onImageClick(photoUri)}>
+                      <Image src={photoUri} alt={`Foto adjunta ${index + 1}`} width={40} height={40} className="rounded object-cover aspect-square" data-ai-hint="patient record" />
+                    </div>
                   ): null
                 ))}
               </div>
