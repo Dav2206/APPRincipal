@@ -131,7 +131,7 @@ export function AppointmentEditDialog({ appointment, isOpen, onOpenChange, onApp
         paymentMethod: appointment.paymentMethod || undefined,
         amountPaid: appointment.amountPaid ?? undefined,
         staffNotes: appointment.staffNotes || '',
-        attachedPhotos: appointment.attachedPhotos || [],
+        attachedPhotos: (appointment.attachedPhotos || []).filter(p => p),
         addedServices: appointment.addedServices?.map(as => ({ 
           serviceId: as.serviceId || (allServices && allServices.length > 0 ? allServices[0].id : DEFAULT_SERVICE_ID_PLACEHOLDER),
           professionalId: as.professionalId || NO_SELECTION_PLACEHOLDER,
@@ -158,7 +158,7 @@ export function AppointmentEditDialog({ appointment, isOpen, onOpenChange, onApp
       setIsUploadingImage(true);
       try {
         const dataUri = await fileToDataUri(file);
-        appendAttachedPhoto(dataUri);
+        appendAttachedPhoto(dataUri as any);
         toast({ title: "Imagen preparada", description: "La imagen se adjuntará al formulario y se guardará con la cita." });
       } catch (error) {
         console.error("Error processing image:", error);
@@ -172,7 +172,7 @@ export function AppointmentEditDialog({ appointment, isOpen, onOpenChange, onApp
 
 
   const handleRemovePhoto = async (index: number) => {
-    const photoUrlToRemove = attachedPhotoFields[index] as string | undefined;
+    const photoUrlToRemove = attachedPhotoFields[index] as unknown as string | undefined;
     if (!photoUrlToRemove || typeof photoUrlToRemove !== 'string') {
         removeAttachedPhoto(index);
         return;
