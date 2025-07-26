@@ -18,7 +18,7 @@ import { cn } from '@/lib/utils';
 
 interface PatientHistoryPanelProps {
   patient: Patient;
-  onImageClick: (imageUrl: string) => void;
+  onImageClick?: (imageUrl: string) => void;
 }
 
 const PatientHistoryPanelComponent = ({ patient, onImageClick }: PatientHistoryPanelProps) => {
@@ -167,8 +167,7 @@ const PatientHistoryPanelComponent = ({ patient, onImageClick }: PatientHistoryP
                         <div
                             key={`${appt.id}-photo-${index}`}
                             className="relative group aspect-square cursor-pointer"
-                            onClick={() => onImageClick(photoUri)}
-                            onDoubleClick={() => onImageClick(photoUri)}
+                            onClick={() => onImageClick && onImageClick(photoUri)}
                         >
                           <Image
                               src={photoUri}
@@ -221,8 +220,7 @@ const PatientHistoryPanelComponent = ({ patient, onImageClick }: PatientHistoryP
                                 height={30}
                                 className="rounded object-cover aspect-square cursor-pointer"
                                 data-ai-hint="medical thumbnail"
-                                onClick={() => onImageClick(photoUri)}
-                                onDoubleClick={() => onImageClick(photoUri)}
+                                onClick={() => onImageClick && onImageClick(photoUri)}
                               />
                               ) : null
                             ))}

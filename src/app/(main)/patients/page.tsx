@@ -50,6 +50,7 @@ import { useAppState } from '@/contexts/app-state-provider';
 import { USER_ROLES } from '@/lib/constants';
 import Image from 'next/image';
 import { cn } from '@/lib/utils';
+import { ScrollArea } from '@/components/ui/scroll-area';
 
 const PATIENTS_PER_PAGE = 8; 
 
@@ -77,7 +78,6 @@ export default function PatientsPage() {
 
   // State for image modal
   const [selectedImageForModal, setSelectedImageForModal] = useState<string | null>(null);
-  const [isImageModalOpen, setIsImageModalOpen] = useState(false);
   const [zoomLevel, setZoomLevel] = useState(1);
   const [imagePosition, setImagePosition] = useState({ x: 0, y: 0 });
   const [isDragging, setIsDragging] = useState(false);
@@ -255,16 +255,15 @@ export default function PatientsPage() {
   };
 
   // Image Modal Handlers
-  const resetZoomAndPosition = () => {
+  const resetZoomAndPosition = useCallback(() => {
     setZoomLevel(1);
     setImagePosition({ x: 0, y: 0 });
-  };
+  }, []);
 
-  const handleImageClick = (imageUrl: string) => {
-    setSelectedImageForModal(imageUrl);
+  const handleImageClick = useCallback((imageUrl: string) => {
     resetZoomAndPosition();
-    setIsImageModalOpen(true);
-  };
+    setSelectedImageForModal(imageUrl);
+  }, [resetZoomAndPosition]);
 
   const handleWheel = (e: React.WheelEvent<HTMLDivElement>) => {
     e.preventDefault();
@@ -499,10 +498,12 @@ export default function PatientsPage() {
                 {viewingPatientDetails && <DialogDescription>{viewingPatientDetails.firstName} {viewingPatientDetails.lastName}</DialogDescription>}
             </DialogHeader>
             {viewingPatientDetails && (
-                <div className="py-4 max-h-[70vh] overflow-y-auto pr-2 space-y-4">
-                    <PatientHistoryPanel patient={viewingPatientDetails} onImageClick={handleImageClick} />
-                    <AttendancePredictionTool patientId={viewingPatientDetails.id} />
-                </div>
+                <ScrollArea className="max-h-[70vh] pr-4">
+                  <div className="space-y-4 py-4">
+                      <PatientHistoryPanel patient={viewingPatientDetails} onImageClick={handleImageClick} />
+                      <AttendancePredictionTool patientId={viewingPatientDetails.id} />
+                  </div>
+                </ScrollArea>
             )}
              <DialogFooter>
                 <Button variant="outline" onClick={() => setViewingPatientDetails(null)}>Cerrar</Button>
@@ -510,8 +511,8 @@ export default function PatientsPage() {
         </DialogContent>
       </Dialog>
 
-      {isImageModalOpen && selectedImageForModal && (
-        <AlertDialog open={isImageModalOpen} onOpenChange={(open) => { setIsImageModalOpen(open); if(!open) resetZoomAndPosition();}}>
+      <AlertDialog open={!!selectedImageForModal} onOpenChange={(open) => { if(!open) setSelectedImageForModal(null); }}>
+        {selectedImageForModal && (
           <AlertDialogPortal>
             <AlertDialogOverlay />
             <AlertDialogContent className="sm:max-w-3xl max-h-[90vh] flex flex-col p-2">
@@ -521,7 +522,7 @@ export default function PatientsPage() {
                   <Button variant="ghost" size="icon" onClick={() => setZoomLevel(prev => Math.min(prev * 1.2, 5))} title="Acercar"> <ZoomIn /> </Button>
                   <Button variant="ghost" size="icon" onClick={() => setZoomLevel(prev => Math.max(prev * 0.8, 0.5))} title="Alejar"> <ZoomOut /> </Button>
                   <Button variant="ghost" size="icon" onClick={resetZoomAndPosition} title="Restaurar"> <RefreshCw /> </Button>
-                  <Button variant="ghost" size="icon" onClick={() => setIsImageModalOpen(false)}><XIcon className="h-5 w-5"/></Button>
+                  <Button variant="ghost" size="icon" onClick={() => setSelectedImageForModal(null)}><XIcon className="h-5 w-5"/></Button>
                 </div>
               </AlertDialogHeader>
               <div
@@ -557,8 +558,8 @@ export default function PatientsPage() {
               </div>
             </AlertDialogContent>
           </AlertDialogPortal>
-        </AlertDialog>
-      )}
+        )}
+      </AlertDialog>
     </div>
   );
 }
