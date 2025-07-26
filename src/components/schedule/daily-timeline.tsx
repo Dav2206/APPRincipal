@@ -1,4 +1,5 @@
 
+
 "use client";
 
 import type { Appointment, Professional, LocationId, Service, AddedServiceItem } from '@/types';
@@ -270,11 +271,11 @@ const DailyTimelineComponent = ({ professionals, appointments, timeSlots, onAppo
                               </div>
                             </TooltipTrigger>
                             <TooltipContent className="bg-popover text-popover-foreground p-2 rounded-md shadow-lg max-w-xs">
- <p className="font-bold text-sm">{prof.firstName} {prof.lastName}</p>
- {block.bookingObservations && (
- <p className="text-sm mt-1 italic">{block.bookingObservations}</p>
- )}
-                              <p><Clock size={12} className="inline mr-1" /> {format(block.startTime, "HH:mm", { locale: es })} ({block.durationMinutes} min)</p>
+                                <p className="font-bold text-sm">{prof.firstName} {prof.lastName}</p>
+                                {block.bookingObservations && (
+                                <p className="text-sm mt-1 italic">{block.bookingObservations}</p>
+                                )}
+                                <p><Clock size={12} className="inline mr-1" /> {format(block.startTime, "HH:mm", { locale: es })} ({block.durationMinutes} min)</p>
                             </TooltipContent>
                           </Tooltip>
                         );
