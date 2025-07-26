@@ -770,31 +770,39 @@ export async function getAppointments(options: GetAppointmentsOptions = {}): Pro
         const appointmentsCol = collection(firestore, 'citas') as CollectionReference<DocumentData>;
         let queryConstraints: QueryConstraint[] = [];
 
-        if (locationId) queryConstraints.push(where('locationId', '==', locationId));
+        // This is a special case for the daily schedule view to correctly fetch travel blocks
+        if (date && (professionalId || (professionalIds && professionalIds.length > 0))) {
+            const profIdsToQuery = professionalId ? [professionalId] : professionalIds || [];
+            if (profIdsToQuery.length > 0) {
+                 queryConstraints.push(where('professionalId', 'in', profIdsToQuery));
+            }
+        } else {
+             if (locationId) queryConstraints.push(where('locationId', '==', locationId));
+             if (professionalIds && professionalIds.length > 0 && professionalIds.length <= 10) {
+                queryConstraints.push(where('professionalId', 'in', professionalIds));
+            } else if (professionalIds && professionalIds.length > 10) {
+                console.warn(`[data.ts] getAppointments: professionalIds array has ${professionalIds.length} items (>10). This query will be omitted.`);
+            }
+        }
+        
         if (patientId) queryConstraints.push(where('patientId', '==', patientId));
+        
         if (date) {
             queryConstraints.push(where('appointmentDateTime', '>=', toFirestoreTimestamp(startOfDay(date))!));
             queryConstraints.push(where('appointmentDateTime', '<=', toFirestoreTimestamp(endOfDay(date))!));
         }
+
         if (dateRange) {
             queryConstraints.push(where('appointmentDateTime', '>=', toFirestoreTimestamp(startOfDay(dateRange.start))!));
             queryConstraints.push(where('appointmentDateTime', '<=', toFirestoreTimestamp(endOfDay(dateRange.end))!));
         }
-        if (professionalId) {
-            queryConstraints.push(where('professionalId', '==', professionalId));
-        }
-        
-        // This is complex. If we are fetching for a specific day, we want ALL appointments regardless of status
-        // to correctly show travel blocks. If we are fetching for other views (like history), we DO want to filter by status.
-        // A simple way to distinguish is that schedule views pass a `date`, while history might pass a `dateRange` but also `statuses`.
-        if (statuses && statuses.length > 0 && !date) {
-            queryConstraints.push(where('status', 'in', statuses));
-        }
-        
-        if (professionalIds && professionalIds.length > 0 && professionalIds.length <= 10) {
-            queryConstraints.push(where('professionalId', 'in', professionalIds));
-        } else if (professionalIds && professionalIds.length > 10) {
-            console.warn(`[data.ts] getAppointments: professionalIds array has ${professionalIds.length} items (>10). This query will be omitted.`);
+       
+        if (statuses && statuses.length > 0) {
+            if (statuses.length <= 10) { // Firestore 'in' query limit
+                queryConstraints.push(where('status', 'in', statuses));
+            } else {
+                console.warn("[data.ts] getAppointments: More than 10 statuses provided. This filter will be applied client-side.");
+            }
         }
         
         queryConstraints.push(orderBy('appointmentDateTime', 'asc'));
@@ -803,10 +811,14 @@ export async function getAppointments(options: GetAppointmentsOptions = {}): Pro
         const snapshot = await getDocs(finalQuery);
         let combinedAppointments = snapshot.docs.map(docSnap => ({ id: docSnap.id, ...convertDocumentData(docSnap.data()) } as Appointment));
 
-        // Client-side filtering for statuses if the query was for a specific day, to allow travel_blocks to be fetched.
-        if (date && statuses && statuses.length > 0) {
-            combinedAppointments = combinedAppointments.filter(appt => appt.isTravelBlock || statuses.includes(appt.status));
+        // Client-side filtering if necessary
+        if (date && locationId) {
+            combinedAppointments = combinedAppointments.filter(appt => appt.locationId === locationId);
         }
+        if (statuses && statuses.length > 10) { // Client-side filter for large status arrays
+             combinedAppointments = combinedAppointments.filter(appt => statuses.includes(appt.status));
+        }
+
 
         const allServicesFromDb = await getServices();
         const allProfessionalsFromDb = await getProfessionals();
@@ -1024,11 +1036,11 @@ export async function addAppointment(data: AppointmentFormData): Promise<Appoint
         patientId: null,
         professionalId: professionalIdToAssign,
         serviceId: 'travel',
-        locationId: externalProfessionalOriginLocationId, // CORRECTED: Use origin location for the block
+        locationId: externalProfessionalOriginLocationId, 
         appointmentDateTime: formatISO(proposedStartTime),
-        durationMinutes: totalDurationForSlotCheck, // CORRECTED: Use total duration
-        totalCalculatedDurationMinutes: totalDurationForSlotCheck, // CORRECTED: Use total duration
-        status: 'booked', // CORRECTED: Give it a status that can be fetched
+        durationMinutes: totalDurationForSlotCheck,
+        totalCalculatedDurationMinutes: totalDurationForSlotCheck,
+        status: 'booked',
         isTravelBlock: true,
         bookingObservations: `Traslado a ${LOCATIONS.find(l => l.id === data.locationId)?.name || 'otra sede'}`,
         externalProfessionalOriginLocationId: externalProfessionalOriginLocationId,
@@ -1385,6 +1397,7 @@ export async function deleteImportantNote(noteId: string): Promise<boolean> {
   }
 }
 // --- End Important Notes ---
+
 
 
 
