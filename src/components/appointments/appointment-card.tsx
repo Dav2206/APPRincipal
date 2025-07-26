@@ -257,7 +257,7 @@ const AppointmentCardComponent = ({ appointment, onUpdate }: AppointmentCardProp
                 {appointment.addedServices.map((as, index) => (
                   <li key={index} className="text-xs text-muted-foreground">
                     {as.startTime && (
-                      <span className="mr-1">Inicio: {format(parseISO(as.startTime), 'p', { locale: es })} -</span>
+                      <span className="mr-1">Inicio: {as.startTime} -</span>
                     )}
  {ALL_SERVICES_CONSTANTS.find(s => s.id === as.serviceId)?.name || 'Servicio Desconocido'}
                     {as.professional && (
