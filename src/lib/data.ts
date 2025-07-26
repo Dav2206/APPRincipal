@@ -774,17 +774,38 @@ export async function getAppointments(options: GetAppointmentsOptions = {}): Pro
         if (date && (professionalId || (professionalIds && professionalIds.length > 0))) {
             const profIdsToQuery = professionalId ? [professionalId] : professionalIds || [];
             if (profIdsToQuery.length > 0) {
-                 queryConstraints.push(where('professionalId', 'in', profIdsToQuery));
-            }
-        } else {
-             if (locationId) queryConstraints.push(where('locationId', '==', locationId));
-             if (professionalIds && professionalIds.length > 0 && professionalIds.length <= 10) {
-                queryConstraints.push(where('professionalId', 'in', professionalIds));
-            } else if (professionalIds && professionalIds.length > 10) {
-                console.warn(`[data.ts] getAppointments: professionalIds array has ${professionalIds.length} items (>10). This query will be omitted.`);
+                const appointmentPromises = profIdsToQuery.map(profId => {
+                    const singleProfQuery = query(
+                        appointmentsCol,
+                        where('professionalId', '==', profId),
+                        where('appointmentDateTime', '>=', toFirestoreTimestamp(startOfDay(date))!),
+                        where('appointmentDateTime', '<=', toFirestoreTimestamp(endOfDay(date))!)
+                    );
+                    return getDocs(singleProfQuery);
+                });
+                const snapshots = await Promise.all(appointmentPromises);
+                const allDocs = snapshots.flatMap(snapshot => snapshot.docs);
+                const uniqueDocs = Array.from(new Map(allDocs.map(doc => [doc.id, doc])).values());
+
+                let combinedAppointments = uniqueDocs.map(docSnap => ({ id: docSnap.id, ...convertDocumentData(docSnap.data()) } as Appointment));
+                
+                // Now filter by location client-side, because a professional might have appointments in multiple locations in one day (travel)
+                if (locationId) {
+                    combinedAppointments = combinedAppointments.filter(appt => appt.locationId === locationId);
+                }
+
+                // Client-side status filtering if needed
+                if (statuses && statuses.length > 0) {
+                    combinedAppointments = combinedAppointments.filter(appt => statuses.includes(appt.status));
+                }
+
+                 const appointmentsWithDetails = await populateAppointmentDetails(combinedAppointments);
+                 return { appointments: appointmentsWithDetails.sort((a,b) => parseISO(a.appointmentDateTime).getTime() - parseISO(b.appointmentDateTime).getTime()) };
             }
         }
         
+        if (locationId) queryConstraints.push(where('locationId', '==', locationId));
+        if (professionalId) queryConstraints.push(where('professionalId', '==', professionalId));
         if (patientId) queryConstraints.push(where('patientId', '==', patientId));
         
         if (date) {
@@ -811,43 +832,12 @@ export async function getAppointments(options: GetAppointmentsOptions = {}): Pro
         const snapshot = await getDocs(finalQuery);
         let combinedAppointments = snapshot.docs.map(docSnap => ({ id: docSnap.id, ...convertDocumentData(docSnap.data()) } as Appointment));
 
-        // Client-side filtering if necessary
-        if (date && locationId) {
-            combinedAppointments = combinedAppointments.filter(appt => appt.locationId === locationId);
-        }
-        if (statuses && statuses.length > 10) { // Client-side filter for large status arrays
+        // Client-side filtering if necessary for large status arrays
+        if (statuses && statuses.length > 10) {
              combinedAppointments = combinedAppointments.filter(appt => statuses.includes(appt.status));
         }
 
-
-        const allServicesFromDb = await getServices();
-        const allProfessionalsFromDb = await getProfessionals();
-
-        const appointmentsWithDetails = await Promise.all(combinedAppointments.map(async apptData => {
-            if(apptData.patientId) apptData.patient = await getPatientById(apptData.patientId);
-            if(apptData.professionalId) apptData.professional = allProfessionalsFromDb.find(p => p.id === apptData.professionalId);
-            apptData.service = allServicesFromDb.find(s => s.id === apptData.serviceId);
-
-            if (apptData.addedServices && apptData.addedServices.length > 0) {
-                apptData.addedServices = apptData.addedServices.map(as => {
-                    const serviceDetail = allServicesFromDb.find(s => s.id === as.serviceId);
-                    const profDetail = as.professionalId ? allProfessionalsFromDb.find(p => p.id === as.professionalId) : undefined;
-                    return {...as, service: serviceDetail ? {...serviceDetail} : undefined, professional: profDetail ? {...profDetail} : undefined };
-                });
-            }
-
-            let totalDuration = apptData.durationMinutes || 0;
-            if (apptData.addedServices) {
-                apptData.addedServices.forEach(as => {
-                    if (as.service && as.service.defaultDuration) {
-                        totalDuration += as.service.defaultDuration;
-                    }
-                });
-            }
-            apptData.totalCalculatedDurationMinutes = totalDuration;
-            return apptData;
-        }));
-
+        const appointmentsWithDetails = await populateAppointmentDetails(combinedAppointments);
         return { appointments: appointmentsWithDetails };
 
     } catch (error: any) {
@@ -858,6 +848,39 @@ export async function getAppointments(options: GetAppointmentsOptions = {}): Pro
         return { appointments: [] };
     }
 }
+
+async function populateAppointmentDetails(appointments: Appointment[]): Promise<Appointment[]> {
+    if (appointments.length === 0) return [];
+    
+    const allServicesFromDb = await getServices();
+    const allProfessionalsFromDb = await getProfessionals(); // Fetches all professionals, may need optimization if slow
+
+    return Promise.all(appointments.map(async apptData => {
+        if(apptData.patientId) apptData.patient = await getPatientById(apptData.patientId);
+        if(apptData.professionalId) apptData.professional = allProfessionalsFromDb.find(p => p.id === apptData.professionalId);
+        apptData.service = allServicesFromDb.find(s => s.id === apptData.serviceId);
+
+        if (apptData.addedServices && apptData.addedServices.length > 0) {
+            apptData.addedServices = apptData.addedServices.map(as => {
+                const serviceDetail = allServicesFromDb.find(s => s.id === as.serviceId);
+                const profDetail = as.professionalId ? allProfessionalsFromDb.find(p => p.id === as.professionalId) : undefined;
+                return {...as, service: serviceDetail ? {...serviceDetail} : undefined, professional: profDetail ? {...profDetail} : undefined };
+            });
+        }
+
+        let totalDuration = apptData.durationMinutes || 0;
+        if (apptData.addedServices) {
+            apptData.addedServices.forEach(as => {
+                if (as.service && as.service.defaultDuration) {
+                    totalDuration += as.service.defaultDuration;
+                }
+            });
+        }
+        apptData.totalCalculatedDurationMinutes = totalDuration;
+        return apptData;
+    }));
+}
+
 
 
 export async function getAppointmentById(id: string): Promise<Appointment | undefined> {
@@ -1099,10 +1122,9 @@ export async function updateAppointment(id: string, data: Partial<AppointmentUpd
   
   const appointmentToUpdate: { [key: string]: any } = { ...data };
 
-  // Separate new Data URIs from existing URLs
-  const newPhotoDataUris = (data.attachedPhotos || []).filter(p => p.url && p.url.startsWith('data:image/')).map(p => p.url);
-  const existingPhotoUrls = (data.attachedPhotos || []).filter(p => p.url && p.url.startsWith('http')).map(p => p.url);
-
+  // This part now receives `data.attachedPhotos` which is already a `string[]` after dialog logic
+  const newPhotoDataUris = (data.attachedPhotos || []).filter(url => url && url.startsWith('data:image/'));
+  const existingPhotoUrls = (data.attachedPhotos || []).filter(url => url && url.startsWith('http'));
 
   // Upload new photos and get their download URLs
   const newUploadedUrls = await Promise.all(
@@ -1397,6 +1419,7 @@ export async function deleteImportantNote(noteId: string): Promise<boolean> {
   }
 }
 // --- End Important Notes ---
+
 
 
 

@@ -1,4 +1,5 @@
 
+
 "use client";
 
 import type { Appointment, Service, AppointmentStatus, Professional } from '@/types';
@@ -54,7 +55,7 @@ interface AppointmentEditDialogProps {
   onImageClick?: (imageUrl: string) => void;
 }
 
-type AppointmentUpdateFormData = Zod.infer<typeof AppointmentUpdateSchema>;
+type AppointmentUpdateFormData = Zod.Infer<typeof AppointmentUpdateSchema>;
 
 const NO_SELECTION_PLACEHOLDER = "_no_selection_placeholder_";
 const DEFAULT_SERVICE_ID_PLACEHOLDER = "_default_service_id_placeholder_";
@@ -724,3 +725,4 @@ export function AppointmentEditDialog({ appointment, isOpen, onOpenChange, onApp
     </Dialog>
   );
 }
+
