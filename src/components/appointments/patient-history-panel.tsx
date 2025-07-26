@@ -13,30 +13,21 @@ import { UserSquare, CalendarDays, Stethoscope, TrendingUp, MessageSquare, Alert
 import { APPOINTMENT_STATUS, APPOINTMENT_STATUS_DISPLAY } from '@/lib/constants';
 import Image from 'next/image';
 import { Separator } from '../ui/separator';
-import { AlertDialog, AlertDialogContent, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger, AlertDialogOverlay, AlertDialogPortal } from '@/components/ui/alert-dialog';
 import { Button } from '../ui/button';
 import { cn } from '@/lib/utils';
 
 interface PatientHistoryPanelProps {
   patient: Patient;
+  onImageClick: (imageUrl: string) => void;
 }
 
-const PatientHistoryPanelComponent = ({ patient }: PatientHistoryPanelProps) => {
+const PatientHistoryPanelComponent = ({ patient, onImageClick }: PatientHistoryPanelProps) => {
   const [history, setHistory] = useState<Appointment[]>([]);
   const [loading, setLoading] = useState(true);
   const [preferredProfessionalName, setPreferredProfessionalName] = useState<string | null>(null);
   const [averageDaysBetweenVisits, setAverageDaysBetweenVisits] = useState<number | null>(null);
   const [ageToDisplay, setAgeToDisplay] = useState<number | null>(null);
   const [nextRecommendedVisit, setNextRecommendedVisit] = useState<string | null>(null);
-  const [selectedImageForModal, setSelectedImageForModal] = useState<string | null>(null);
-  const [isImageModalOpen, setIsImageModalOpen] = useState(false);
-
-  const [zoomLevel, setZoomLevel] = useState(1);
-  const [imagePosition, setImagePosition] = useState({ x: 0, y: 0 });
-  const [isDragging, setIsDragging] = useState(false);
-  const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
-  const imageRef = useRef<HTMLImageElement>(null);
-
 
   useEffect(() => {
     async function fetchData() {
@@ -100,44 +91,6 @@ const PatientHistoryPanelComponent = ({ patient }: PatientHistoryPanelProps) => 
     }
     fetchData();
   }, [patient]);
-
-  const handleImageClick = (imageUrl: string) => {
-    setSelectedImageForModal(imageUrl);
-    setZoomLevel(1);
-    setImagePosition({ x: 0, y: 0 });
-    setIsImageModalOpen(true);
-  };
-
-  const handleWheel = (e: React.WheelEvent<HTMLDivElement>) => {
-    e.preventDefault();
-    const zoomFactor = e.deltaY < 0 ? 1.1 : 0.9;
-    setZoomLevel(prevZoom => Math.max(0.5, Math.min(prevZoom * zoomFactor, 5)));
-  };
-
-  const handleMouseDown = (e: React.MouseEvent<HTMLDivElement>) => {
-    if (zoomLevel <= 1) return;
-    setIsDragging(true);
-    setDragStart({ x: e.clientX - imagePosition.x, y: e.clientY - imagePosition.y });
-    e.currentTarget.style.cursor = 'grabbing';
-  };
-
-  const handleMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
-    if (!isDragging || zoomLevel <= 1) return;
-    setImagePosition({
-      x: e.clientX - dragStart.x,
-      y: e.clientY - dragStart.y,
-    });
-  };
-
-  const handleMouseUp = (e: React.MouseEvent<HTMLDivElement>) => {
-    setIsDragging(false);
-     e.currentTarget.style.cursor = zoomLevel > 1 ? 'grab' : 'default';
-  };
-
-  const resetZoomAndPosition = () => {
-    setZoomLevel(1);
-    setImagePosition({ x: 0, y: 0 });
-  }
 
 
   if (loading) {
@@ -214,8 +167,8 @@ const PatientHistoryPanelComponent = ({ patient }: PatientHistoryPanelProps) => 
                         <div
                             key={`${appt.id}-photo-${index}`}
                             className="relative group aspect-square cursor-pointer"
-                            onClick={() => handleImageClick(photoUri)}
-                            onDoubleClick={() => handleImageClick(photoUri)}
+                            onClick={() => onImageClick(photoUri)}
+                            onDoubleClick={() => onImageClick(photoUri)}
                         >
                           <Image
                               src={photoUri}
@@ -268,8 +221,8 @@ const PatientHistoryPanelComponent = ({ patient }: PatientHistoryPanelProps) => 
                                 height={30}
                                 className="rounded object-cover aspect-square cursor-pointer"
                                 data-ai-hint="medical thumbnail"
-                                onClick={() => handleImageClick(photoUri)}
-                                onDoubleClick={() => handleImageClick(photoUri)}
+                                onClick={() => onImageClick(photoUri)}
+                                onDoubleClick={() => onImageClick(photoUri)}
                               />
                               ) : null
                             ))}
@@ -289,56 +242,6 @@ const PatientHistoryPanelComponent = ({ patient }: PatientHistoryPanelProps) => 
           )}
         </CardContent>
       </Card>
-
-      {isImageModalOpen && selectedImageForModal && (
-        <AlertDialog open={isImageModalOpen} onOpenChange={(open) => { setIsImageModalOpen(open); if(!open) resetZoomAndPosition();}}>
-          <AlertDialogPortal>
-            <AlertDialogOverlay />
-            <AlertDialogContent className="sm:max-w-3xl max-h-[90vh] flex flex-col p-2">
-              <AlertDialogHeader className="flex-row justify-between items-center p-2 border-b">
-                <AlertDialogTitle>Vista Previa de Imagen</AlertDialogTitle>
-                <div className="flex items-center gap-1">
-                  <Button variant="ghost" size="icon" onClick={() => setZoomLevel(prev => Math.min(prev * 1.2, 5))} title="Acercar"> <ZoomIn /> </Button>
-                  <Button variant="ghost" size="icon" onClick={() => setZoomLevel(prev => Math.max(prev * 0.8, 0.5))} title="Alejar"> <ZoomOut /> </Button>
-                  <Button variant="ghost" size="icon" onClick={resetZoomAndPosition} title="Restaurar"> <RefreshCw /> </Button>
-                  <Button variant="ghost" size="icon" onClick={() => setIsImageModalOpen(false)}><XIcon className="h-5 w-5"/></Button>
-                </div>
-              </AlertDialogHeader>
-              <div
-                className="flex-grow overflow-hidden p-2 flex items-center justify-center relative"
-                onWheel={handleWheel}
-                onMouseDown={handleMouseDown}
-                onMouseMove={handleMouseMove}
-                onMouseUp={handleMouseUp}
-                onMouseLeave={handleMouseUp}
-                style={{ cursor: zoomLevel > 1 ? (isDragging ? 'grabbing' : 'grab') : 'default' }}
-              >
-                <div
-                  style={{
-                    transform: `scale(${zoomLevel}) translate(${imagePosition.x}px, ${imagePosition.y}px)`,
-                    transition: isDragging ? 'none' : 'transform 0.1s ease-out',
-                    maxWidth: '100%',
-                    maxHeight: '100%',
-                    willChange: 'transform',
-                  }}
-                  className="flex items-center justify-center"
-                >
-                  <Image
-                    ref={imageRef}
-                    src={selectedImageForModal}
-                    alt="Vista ampliada"
-                    width={800}
-                    height={600}
-                    className="max-w-full max-h-[calc(90vh-100px)] object-contain rounded-md select-none"
-                    draggable="false"
-                    data-ai-hint="medical chart"
-                  />
-                </div>
-              </div>
-            </AlertDialogContent>
-          </AlertDialogPortal>
-        </AlertDialog>
-      )}
     </>
   );
 }

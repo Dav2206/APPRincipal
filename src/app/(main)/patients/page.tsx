@@ -29,8 +29,16 @@ import {
   DialogFooter,
   DialogClose,
 } from '@/components/ui/dialog';
+import {
+  AlertDialog,
+  AlertDialogContent,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogPortal,
+  AlertDialogOverlay,
+} from '@/components/ui/alert-dialog';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
-import { PlusCircle, Edit2, Users, Search, Loader2, FileText, CalendarClock, ChevronsDown, AlertTriangle, CheckSquare, Square, UserRound } from 'lucide-react';
+import { PlusCircle, Edit2, Users, Search, Loader2, FileText, CalendarClock, ChevronsDown, AlertTriangle, CheckSquare, Square, UserRound, ZoomIn, ZoomOut, RefreshCw, XIcon } from 'lucide-react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { PatientFormSchema, type PatientFormData } from '@/lib/schemas';
@@ -40,6 +48,8 @@ import { AttendancePredictionTool } from '@/components/appointments/attendance-p
 import { formatISO, startOfDay, parseISO, differenceInYears } from 'date-fns';
 import { useAppState } from '@/contexts/app-state-provider';
 import { USER_ROLES } from '@/lib/constants';
+import Image from 'next/image';
+import { cn } from '@/lib/utils';
 
 const PATIENTS_PER_PAGE = 8; 
 
@@ -64,6 +74,16 @@ export default function PatientsPage() {
   const [filterPatientsWithAppointmentsToday, setFilterPatientsWithAppointmentsToday] = useState(false);
   const [patientsWithAppointmentsTodayIds, setPatientsWithAppointmentsTodayIds] = useState<Set<string>>(new Set());
   const [isLoadingTodayAppointments, setIsLoadingTodayAppointments] = useState(false);
+
+  // State for image modal
+  const [selectedImageForModal, setSelectedImageForModal] = useState<string | null>(null);
+  const [isImageModalOpen, setIsImageModalOpen] = useState(false);
+  const [zoomLevel, setZoomLevel] = useState(1);
+  const [imagePosition, setImagePosition] = useState({ x: 0, y: 0 });
+  const [isDragging, setIsDragging] = useState(false);
+  const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
+  const imageRef = React.useRef<HTMLImageElement>(null);
+
 
   const form = useForm<PatientFormData>({
     resolver: zodResolver(PatientFormSchema),
@@ -233,6 +253,45 @@ export default function PatientsPage() {
   const handleLoadMore = () => {
     fetchPatientsData(currentPage + 1, searchTerm, filterPatientsWithAppointmentsToday, lastVisiblePatientId);
   };
+
+  // Image Modal Handlers
+  const resetZoomAndPosition = () => {
+    setZoomLevel(1);
+    setImagePosition({ x: 0, y: 0 });
+  };
+
+  const handleImageClick = (imageUrl: string) => {
+    setSelectedImageForModal(imageUrl);
+    resetZoomAndPosition();
+    setIsImageModalOpen(true);
+  };
+
+  const handleWheel = (e: React.WheelEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    const zoomFactor = e.deltaY < 0 ? 1.1 : 0.9;
+    setZoomLevel(prevZoom => Math.max(0.5, Math.min(prevZoom * zoomFactor, 5)));
+  };
+
+  const handleMouseDown = (e: React.MouseEvent<HTMLDivElement>) => {
+    if (zoomLevel <= 1) return;
+    setIsDragging(true);
+    setDragStart({ x: e.clientX - imagePosition.x, y: e.clientY - imagePosition.y });
+    e.currentTarget.style.cursor = 'grabbing';
+  };
+
+  const handleMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
+    if (!isDragging || zoomLevel <= 1) return;
+    setImagePosition({
+      x: e.clientX - dragStart.x,
+      y: e.clientY - dragStart.y,
+    });
+  };
+
+  const handleMouseUp = (e: React.MouseEvent<HTMLDivElement>) => {
+    setIsDragging(false);
+     e.currentTarget.style.cursor = zoomLevel > 1 ? 'grab' : 'default';
+  };
+
 
   const LoadingState = () => (
      <div className="flex flex-col items-center justify-center h-64 col-span-full">
@@ -441,7 +500,7 @@ export default function PatientsPage() {
             </DialogHeader>
             {viewingPatientDetails && (
                 <div className="py-4 max-h-[70vh] overflow-y-auto pr-2 space-y-4">
-                    <PatientHistoryPanel patient={viewingPatientDetails} />
+                    <PatientHistoryPanel patient={viewingPatientDetails} onImageClick={handleImageClick} />
                     <AttendancePredictionTool patientId={viewingPatientDetails.id} />
                 </div>
             )}
@@ -450,7 +509,56 @@ export default function PatientsPage() {
             </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {isImageModalOpen && selectedImageForModal && (
+        <AlertDialog open={isImageModalOpen} onOpenChange={(open) => { setIsImageModalOpen(open); if(!open) resetZoomAndPosition();}}>
+          <AlertDialogPortal>
+            <AlertDialogOverlay />
+            <AlertDialogContent className="sm:max-w-3xl max-h-[90vh] flex flex-col p-2">
+              <AlertDialogHeader className="flex-row justify-between items-center p-2 border-b">
+                <AlertDialogTitle>Vista Previa de Imagen</AlertDialogTitle>
+                <div className="flex items-center gap-1">
+                  <Button variant="ghost" size="icon" onClick={() => setZoomLevel(prev => Math.min(prev * 1.2, 5))} title="Acercar"> <ZoomIn /> </Button>
+                  <Button variant="ghost" size="icon" onClick={() => setZoomLevel(prev => Math.max(prev * 0.8, 0.5))} title="Alejar"> <ZoomOut /> </Button>
+                  <Button variant="ghost" size="icon" onClick={resetZoomAndPosition} title="Restaurar"> <RefreshCw /> </Button>
+                  <Button variant="ghost" size="icon" onClick={() => setIsImageModalOpen(false)}><XIcon className="h-5 w-5"/></Button>
+                </div>
+              </AlertDialogHeader>
+              <div
+                className="flex-grow overflow-hidden p-2 flex items-center justify-center relative"
+                onWheel={handleWheel}
+                onMouseDown={handleMouseDown}
+                onMouseMove={handleMouseMove}
+                onMouseUp={handleMouseUp}
+                onMouseLeave={handleMouseUp}
+                style={{ cursor: zoomLevel > 1 ? (isDragging ? 'grabbing' : 'grab') : 'default' }}
+              >
+                <div
+                  style={{
+                    transform: `scale(${zoomLevel}) translate(${imagePosition.x}px, ${imagePosition.y}px)`,
+                    transition: isDragging ? 'none' : 'transform 0.1s ease-out',
+                    maxWidth: '100%',
+                    maxHeight: '100%',
+                    willChange: 'transform',
+                  }}
+                  className="flex items-center justify-center"
+                >
+                  <Image
+                    ref={imageRef}
+                    src={selectedImageForModal}
+                    alt="Vista ampliada"
+                    width={800}
+                    height={600}
+                    className="max-w-full max-h-[calc(90vh-100px)] object-contain rounded-md select-none"
+                    draggable="false"
+                    data-ai-hint="medical chart"
+                  />
+                </div>
+              </div>
+            </AlertDialogContent>
+          </AlertDialogPortal>
+        </AlertDialog>
+      )}
     </div>
   );
 }
-
