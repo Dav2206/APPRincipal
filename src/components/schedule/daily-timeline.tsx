@@ -95,6 +95,7 @@ const DailyTimelineComponent = ({ professionals, appointments, timeSlots, onAppo
           durationMinutes: appt.durationMinutes,
           isMainService: false,
           isTravelBlock: true,
+          bookingObservations: appt.bookingObservations,
           externalProfessionalOriginLocationId: appt.externalProfessionalOriginLocationId,
           groupColor: apptGroupColor,
           originalAppointmentData: appt,
@@ -118,6 +119,7 @@ const DailyTimelineComponent = ({ professionals, appointments, timeSlots, onAppo
             groupColor: apptGroupColor,
             bookingObservations: appt.bookingObservations,
             originalAppointmentData: appt,
+            externalProfessionalOriginLocationId: appt.externalProfessionalOriginLocationId,
             });
             previousBlockEndTimeForSequence = addMinutes(appointmentDate, appt.durationMinutes);
         }
@@ -210,8 +212,7 @@ const DailyTimelineComponent = ({ professionals, appointments, timeSlots, onAppo
           <div className="flex flex-nowrap">
             {professionalsToDisplay.map(prof => {
               const blocksForThisProfessional = allServiceBlocks.filter(
-                block => block.assignedProfessionalId === prof.id &&
-                         (block.isTravelBlock ? true : block.originalAppointmentData.locationId === viewingLocationId)
+                block => block.assignedProfessionalId === prof.id
               );
 
               const overlappingServiceBlockIds = new Set<string>();
@@ -263,7 +264,7 @@ const DailyTimelineComponent = ({ professionals, appointments, timeSlots, onAppo
                               >
                                 <Navigation size={14} className="mb-0.5" />
                                 <p className="font-semibold truncate leading-tight text-[10px]">
-                                   {block.patientName}
+                                   {block.bookingObservations || 'Traslado'}
                                 </p>
                                 <p className="text-[9px] leading-tight opacity-80 mt-0.5">({block.durationMinutes} min)</p>
                               </div>

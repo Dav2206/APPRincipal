@@ -915,9 +915,8 @@ export async function addAppointment(data: AppointmentFormData): Promise<Appoint
     }
 
     const proposedStartTime = parse(`${format(data.appointmentDate, 'yyyy-MM-dd')} ${data.appointmentTime}`, 'yyyy-MM-dd HH:mm', new Date());
-    const proposedEndTime = dateFnsAddMinutes(proposedStartTime, mainServiceDuration);
     
-    let professionalIdToAssign = data.preferredProfessionalId === '_any_professional_placeholder_' ? null : data.preferredProfessionalId;
+    let professionalIdToAssign: string | null = data.preferredProfessionalId === '_any_professional_placeholder_' ? null : data.preferredProfessionalId;
     let isExternalProfessional = false;
     let externalProfessionalOriginLocationId: LocationId | null = null;
     
@@ -929,6 +928,15 @@ export async function addAppointment(data: AppointmentFormData): Promise<Appoint
         locationId: data.locationId,
         date: data.appointmentDate,
       });
+      const allServicesList = await getServices();
+      let totalDurationForSlotCheck = mainServiceDuration;
+      if (data.addedServices) {
+        data.addedServices.forEach(as => {
+          const addedSvcInfo = allServicesList.find(s => s.id === as.serviceId);
+          if (addedSvcInfo) totalDurationForSlotCheck += addedSvcInfo.defaultDuration;
+        });
+      }
+      const proposedEndTime = dateFnsAddMinutes(proposedStartTime, totalDurationForSlotCheck);
 
       for (const prof of professionalsToConsider) {
         const dailyAvailability = getProfessionalAvailabilityForDate(prof, data.appointmentDate);
@@ -942,7 +950,7 @@ export async function addAppointment(data: AppointmentFormData): Promise<Appoint
         let isBusy = false;
         for (const existingAppt of appointmentsForDay.appointments.filter(a => a.professionalId === prof.id)) {
           const existingApptStartTime = parseISO(existingAppt.appointmentDateTime);
-          const existingApptEndTime = dateFnsAddMinutes(existingApptStartTime, existingAppt.durationMinutes);
+          const existingApptEndTime = dateFnsAddMinutes(existingApptStartTime, existingAppt.totalCalculatedDurationMinutes || existingAppt.durationMinutes);
           if (areIntervalsOverlapping({ start: proposedStartTime, end: proposedEndTime }, { start: existingApptStartTime, end: existingApptEndTime })) {
             isBusy = true;
             break;
@@ -959,14 +967,25 @@ export async function addAppointment(data: AppointmentFormData): Promise<Appoint
       }
     }
     
-    // Check if the assigned professional is external
+    let assignedProf: Professional | undefined;
     if (professionalIdToAssign) {
-        const assignedProf = await getProfessionalById(professionalIdToAssign);
+        assignedProf = await getProfessionalById(professionalIdToAssign);
         if (assignedProf && assignedProf.locationId !== data.locationId) {
             isExternalProfessional = true;
             externalProfessionalOriginLocationId = assignedProf.locationId;
             console.log(`[data.ts] addAppointment: Profesional ${assignedProf.firstName} es externo. Origen: ${externalProfessionalOriginLocationId}, Destino: ${data.locationId}`);
         }
+    }
+
+    const allServicesList = await getServices();
+    let totalDuration = mainServiceDuration;
+    if (data.addedServices) {
+      data.addedServices.forEach(as => {
+        const addedSvc = allServicesList.find(s => s.id === as.serviceId);
+        if (addedSvc) {
+          totalDuration += addedSvc.defaultDuration;
+        }
+      });
     }
 
     const newAppointmentData: Omit<Appointment, 'id' | 'createdAt' | 'updatedAt'> = {
@@ -990,55 +1009,70 @@ export async function addAppointment(data: AppointmentFormData): Promise<Appoint
         amountPaid: (as as any).amountPaid ?? null,
         startTime: as.startTime ?? null,
       })),
-      totalCalculatedDurationMinutes: 0, // Will be calculated before saving
+      totalCalculatedDurationMinutes: totalDuration,
     };
 
-    let totalDuration = newAppointmentData.durationMinutes;
-    const allServicesList = await getServices();
-    if (newAppointmentData.addedServices) {
-      newAppointmentData.addedServices.forEach(as => {
-        const addedSvc = allServicesList.find(s => s.id === as.serviceId);
-        if (addedSvc) {
-          totalDuration += addedSvc.defaultDuration;
-        }
-      });
-    }
-    newAppointmentData.totalCalculatedDurationMinutes = totalDuration;
+    const batch = writeBatch(firestore);
 
-    const firestoreData: any = {
+    const mainAppointmentRef = doc(collection(firestore, 'citas'));
+    const mainAppointmentFirestoreData: any = {
       ...newAppointmentData,
       appointmentDateTime: toFirestoreTimestamp(newAppointmentData.appointmentDateTime),
       createdAt: serverTimestamp(),
       updatedAt: serverTimestamp(),
-      addedServices: newAppointmentData.addedServices?.map(as => ({
-        ...as,
-      })) || [],
+      addedServices: newAppointmentData.addedServices?.map(as => ({ ...as })) || [],
     };
-    
-    delete firestoreData.preferredProfessionalId;
+    delete mainAppointmentFirestoreData.preferredProfessionalId;
+    batch.set(mainAppointmentRef, mainAppointmentFirestoreData);
+    console.log(`[data.ts] addAppointment (batch): Main appointment queued for creation with ID ${mainAppointmentRef.id}.`);
 
-    const docRef = await addDoc(collection(firestore, 'citas'), firestoreData);
-    console.log(`[data.ts] addAppointment (Firestore): Appointment added successfully with ID ${docRef.id}.`);
+    if (isExternalProfessional && externalProfessionalOriginLocationId && professionalIdToAssign) {
+      const travelBlockRef = doc(collection(firestore, 'citas'));
+      const travelBlockData: Omit<Appointment, 'id'> = {
+        patientId: '', // No patient for travel block
+        professionalId: professionalIdToAssign,
+        serviceId: 'travel', // Special ID
+        locationId: externalProfessionalOriginLocationId,
+        appointmentDateTime: formatISO(proposedStartTime),
+        durationMinutes: totalDuration,
+        totalCalculatedDurationMinutes: totalDuration,
+        status: 'booked',
+        isTravelBlock: true,
+        bookingObservations: `Traslado a ${LOCATIONS.find(l => l.id === data.locationId)?.name || 'otra sede'}`,
+        externalProfessionalOriginLocationId: externalProfessionalOriginLocationId,
+        isExternalProfessional: false, // It's not external TO ITS OWN location
+      };
+      const travelBlockFirestoreData = {
+        ...travelBlockData,
+        appointmentDateTime: toFirestoreTimestamp(travelBlockData.appointmentDateTime),
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      };
+      batch.set(travelBlockRef, travelBlockFirestoreData);
+      console.log(`[data.ts] addAppointment (batch): Travel block queued for creation in origin location ${externalProfessionalOriginLocationId} with ID ${travelBlockRef.id}.`);
+    }
 
-    const newDocSnap = await getDoc(docRef);
+    await batch.commit();
+    console.log("[data.ts] addAppointment (batch): Batch committed successfully.");
+
+    const newDocSnap = await getDoc(mainAppointmentRef);
     if (newDocSnap.exists()) {
       let addedAppt = { id: newDocSnap.id, ...convertDocumentData(newDocSnap.data()) } as Appointment;
-      const allServices = await getServices();
       const allProfessionals = await getProfessionals();
       if (addedAppt.patientId) addedAppt.patient = await getPatientById(addedAppt.patientId);
       if (addedAppt.professionalId) addedAppt.professional = allProfessionals.find(p => p.id === addedAppt.professionalId);
-      addedAppt.service = allServices.find(s => s.id === addedAppt.serviceId);
+      addedAppt.service = allServicesList.find(s => s.id === addedAppt.serviceId);
       if (addedAppt.addedServices && addedAppt.addedServices.length > 0) {
         addedAppt.addedServices = addedAppt.addedServices.map(as => {
-          const serviceDetail = allServices.find(s => s.id === as.serviceId);
+          const serviceDetail = allServicesList.find(s => s.id === as.serviceId);
           const profDetail = as.professionalId ? allProfessionals.find(p => p.id === as.professionalId) : undefined;
           return { ...as, service: serviceDetail, professional: profDetail };
         });
       }
       return addedAppt;
     } else {
-      console.error("[data.ts] addAppointment: Failed to fetch newly created appointment document.");
-      return { id: docRef.id, ...newAppointmentData, createdAt: formatISO(new Date()), updatedAt: formatISO(new Date()) } as Appointment;
+      console.error("[data.ts] addAppointment: Failed to fetch newly created appointment document after batch commit.");
+      return { id: mainAppointmentRef.id, ...newAppointmentData, createdAt: formatISO(new Date()), updatedAt: formatISO(new Date()) } as Appointment;
     }
   } catch (error) {
     console.error("[data.ts] Error adding appointment:", error);

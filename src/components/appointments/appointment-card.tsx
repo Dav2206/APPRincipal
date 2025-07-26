@@ -30,7 +30,7 @@ interface AppointmentCardProps {
   onImageClick?: (imageUrl: string) => void;
 }
 
-type AppointmentUpdateFormData = Zod.infer<typeof AppointmentUpdateSchema>;
+type AppointmentUpdateFormData = Zod.Infer<typeof AppointmentUpdateSchema>;
 
 const AppointmentCardComponent = ({ appointment, onUpdate, onImageClick }: AppointmentCardProps) => {
   const { user } = useAuth();
@@ -300,7 +300,7 @@ const AppointmentCardComponent = ({ appointment, onUpdate, onImageClick }: Appoi
           )}
 
         </CardContent>
-        {user && (user.role === USER_ROLES.LOCATION_STAFF && user.locationId === appointment.locationId) || user.role === USER_ROLES.ADMIN || user.role === USER_ROLES.CONTADOR ? (
+        {user && !appointment.isTravelBlock && ((user.role === USER_ROLES.LOCATION_STAFF && user.locationId === appointment.locationId) || user.role === USER_ROLES.ADMIN || user.role === USER_ROLES.CONTADOR) ? (
           <CardFooter>
             <Button variant="outline" size="sm" onClick={handleOpenUpdateModal} className="w-full">
               <EditIcon className="mr-2 h-4 w-4" /> Actualizar Cita
@@ -315,6 +315,7 @@ const AppointmentCardComponent = ({ appointment, onUpdate, onImageClick }: Appoi
           isOpen={isUpdateModalOpen}
           onOpenChange={setIsUpdateModalOpen}
           onAppointmentUpdated={handleAppointmentUpdated}
+          onImageClick={onImageClick}
         />
       )}
     </>
