@@ -96,7 +96,7 @@ export interface Appointment extends BaseEntity {
   paymentMethod?: PaymentMethod | null;
   amountPaid?: number | null;
   staffNotes?: string | null;
-  attachedPhotos?: { value: string }[];
+  attachedPhotos?: string[];
   createdAt?: string;
   updatedAt?: string;
   isExternalProfessional?: boolean;
@@ -163,7 +163,7 @@ export type AppointmentUpdateFormData = {
   paymentMethod?: PaymentMethod | null;
   amountPaid?: number | null;
   staffNotes?: string | null;
-  attachedPhotos?: { value: string }[];
+  attachedPhotos?: string[];
   addedServices?: Partial<AddedServiceItem>[];
 };
 
