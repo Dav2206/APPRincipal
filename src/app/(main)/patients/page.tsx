@@ -511,55 +511,56 @@ export default function PatientsPage() {
         </DialogContent>
       </Dialog>
 
-      <AlertDialog open={!!selectedImageForModal} onOpenChange={(open) => { if(!open) setSelectedImageForModal(null); }}>
-        {selectedImageForModal && (
-          <AlertDialogPortal>
-            <AlertDialogOverlay />
-            <AlertDialogContent className="sm:max-w-3xl max-h-[90vh] flex flex-col p-2">
-              <AlertDialogHeader className="flex-row justify-between items-center p-2 border-b">
-                <AlertDialogTitle>Vista Previa de Imagen</AlertDialogTitle>
-                <div className="flex items-center gap-1">
-                  <Button variant="ghost" size="icon" onClick={() => setZoomLevel(prev => Math.min(prev * 1.2, 5))} title="Acercar"> <ZoomIn /> </Button>
-                  <Button variant="ghost" size="icon" onClick={() => setZoomLevel(prev => Math.max(prev * 0.8, 0.5))} title="Alejar"> <ZoomOut /> </Button>
-                  <Button variant="ghost" size="icon" onClick={resetZoomAndPosition} title="Restaurar"> <RefreshCw /> </Button>
-                  <Button variant="ghost" size="icon" onClick={() => setSelectedImageForModal(null)}><XIcon className="h-5 w-5"/></Button>
-                </div>
-              </AlertDialogHeader>
-              <div
-                className="flex-grow overflow-hidden p-2 flex items-center justify-center relative"
-                onWheel={handleWheel}
-                onMouseDown={handleMouseDown}
-                onMouseMove={handleMouseMove}
-                onMouseUp={handleMouseUp}
-                onMouseLeave={handleMouseUp}
-                style={{ cursor: zoomLevel > 1 ? (isDragging ? 'grabbing' : 'grab') : 'default' }}
-              >
-                <div
-                  style={{
-                    transform: `scale(${zoomLevel}) translate(${imagePosition.x}px, ${imagePosition.y}px)`,
-                    transition: isDragging ? 'none' : 'transform 0.1s ease-out',
-                    maxWidth: '100%',
-                    maxHeight: '100%',
-                    willChange: 'transform',
-                  }}
-                  className="flex items-center justify-center"
-                >
-                  <Image
-                    ref={imageRef}
-                    src={selectedImageForModal}
-                    alt="Vista ampliada"
-                    width={800}
-                    height={600}
-                    className="max-w-full max-h-[calc(90vh-100px)] object-contain rounded-md select-none"
-                    draggable="false"
-                    data-ai-hint="medical chart"
-                  />
-                </div>
-              </div>
-            </AlertDialogContent>
-          </AlertDialogPortal>
-        )}
-      </AlertDialog>
+      <Dialog open={!!selectedImageForModal} onOpenChange={(open) => { if (!open) setSelectedImageForModal(null); }}>
+        <DialogContent className="sm:max-w-4xl max-h-[90vh] flex flex-col p-0">
+          <DialogHeader className="flex-row justify-between items-center p-2 border-b bg-muted/50">
+            <DialogTitle className="text-base">Vista Previa de Imagen</DialogTitle>
+            <div className="flex items-center gap-1">
+              <Button variant="ghost" size="icon" onClick={() => setZoomLevel(prev => Math.min(prev * 1.2, 5))} title="Acercar"><ZoomIn /></Button>
+              <Button variant="ghost" size="icon" onClick={() => setZoomLevel(prev => Math.max(prev * 0.8, 0.5))} title="Alejar"><ZoomOut /></Button>
+              <Button variant="ghost" size="icon" onClick={resetZoomAndPosition} title="Restaurar"><RefreshCw /></Button>
+              <DialogClose asChild>
+                <Button variant="ghost" size="icon"><XIcon className="h-5 w-5"/></Button>
+              </DialogClose>
+            </div>
+          </DialogHeader>
+          <div
+            className="flex-grow overflow-hidden p-2 flex items-center justify-center relative bg-secondary/20"
+            onWheel={handleWheel}
+            onMouseDown={handleMouseDown}
+            onMouseMove={handleMouseMove}
+            onMouseUp={handleMouseUp}
+            onMouseLeave={handleMouseUp}
+            style={{ cursor: zoomLevel > 1 ? (isDragging ? 'grabbing' : 'grab') : 'default' }}
+          >
+            <div
+              style={{
+                transform: `scale(${zoomLevel}) translate(${imagePosition.x}px, ${imagePosition.y}px)`,
+                transition: isDragging ? 'none' : 'transform 0.1s ease-out',
+                maxWidth: '100%',
+                maxHeight: '100%',
+                willChange: 'transform',
+              }}
+              className="flex items-center justify-center"
+            >
+              {selectedImageForModal && (
+                <Image
+                  ref={imageRef}
+                  src={selectedImageForModal}
+                  alt="Vista ampliada"
+                  width={1200}
+                  height={900}
+                  className="max-w-full max-h-[calc(90vh-120px)] object-contain rounded-md select-none shadow-lg"
+                  draggable="false"
+                  data-ai-hint="medical chart"
+                />
+              )}
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
     </div>
   );
 }
+
