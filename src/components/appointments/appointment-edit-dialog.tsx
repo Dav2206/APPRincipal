@@ -79,7 +79,7 @@ export function AppointmentEditDialog({ appointment, isOpen, onOpenChange, onApp
     name: "addedServices",
   });
 
-  const { fields: attachedPhotoFields, remove: removeAttachedPhoto } = useFieldArray({
+  const { fields: attachedPhotoFields, remove: removeAttachedPhoto, append: appendAttachedPhoto } = useFieldArray({
     control: form.control,
     name: "attachedPhotos",
   });
@@ -143,32 +143,33 @@ export function AppointmentEditDialog({ appointment, isOpen, onOpenChange, onApp
   }, [isOpen, appointment, allServices, form]);
 
 
+  const fileToDataUri = (file: File): Promise<string> => {
+    return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result as string);
+        reader.onerror = reject;
+        reader.readAsDataURL(file);
+    });
+  };
+
   const handleFileChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (file) {
       setIsUploadingImage(true);
       try {
-        if (!storage) {
-          throw new Error("Firebase Storage is not initialized.");
-        }
-
-        const storageRef = ref(storage, `appointment-photos/${appointment.id}/${file.name}_${Date.now()}`);
-        const uploadResult = await uploadBytes(storageRef, file);
-        const downloadURL = await getDownloadURL(uploadResult.ref);
-
-        const currentPhotos = form.getValues("attachedPhotos") || [];
-        form.setValue("attachedPhotos", [...currentPhotos, downloadURL], { shouldValidate: true });
-
-        toast({ title: "Imagen cargada", description: "La imagen ha sido subida exitosamente." });
+        const dataUri = await fileToDataUri(file);
+        appendAttachedPhoto(dataUri);
+        toast({ title: "Imagen preparada", description: "La imagen se adjuntó al formulario y se guardará con la cita." });
       } catch (error) {
-        console.error("Error uploading image:", error);
-        toast({ title: "Error al cargar imagen", description: "No se pudo subir la imagen. Inténtalo de nuevo.", variant: "destructive"});
+        console.error("Error processing image:", error);
+        toast({ title: "Error al procesar imagen", description: "No se pudo leer el archivo de imagen.", variant: "destructive"});
       } finally {
         setIsUploadingImage(false);
         if(fileInputRef.current) fileInputRef.current.value = "";
       }
     }
   };
+
 
   const handleRemovePhoto = async (index: number) => {
     const photoUrlToRemove = attachedPhotoFields[index].value;
@@ -195,7 +196,7 @@ export function AppointmentEditDialog({ appointment, isOpen, onOpenChange, onApp
                 toast({ title: "Error al eliminar imagen", description: "No se pudo eliminar la imagen del almacenamiento.", variant: "destructive"});
              }
         }
-      } else { // If it's a data URI (from previous system or not yet uploaded)
+      } else { 
         removeAttachedPhoto(index);
       }
     };
@@ -240,7 +241,7 @@ export function AppointmentEditDialog({ appointment, isOpen, onOpenChange, onApp
         })).filter(as => as.serviceId && as.serviceId !== DEFAULT_SERVICE_ID_PLACEHOLDER),
       };
 
-      const result = await updateAppointmentData(appointment.id, updatedData);
+      const result = await updateAppointmentData(appointment.id, updatedData, appointment.attachedPhotos || []);
       if (result) {
         onAppointmentUpdated(result);
         toast({ title: "Cita Actualizada", description: "Los detalles de la cita han sido actualizados." });

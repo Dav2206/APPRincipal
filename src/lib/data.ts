@@ -5,8 +5,9 @@ import { LOCATIONS, USER_ROLES, SERVICES as SERVICES_CONSTANTS, APPOINTMENT_STAT
 import type { DayOfWeekId } from './constants';
 import { formatISO, parseISO, addDays, setHours, setMinutes, startOfDay, endOfDay, isSameDay as dateFnsIsSameDay, startOfMonth, endOfMonth, subDays, isEqual, isBefore, isAfter, getDate, getYear, getMonth, setMonth, setYear, getHours, addMinutes as dateFnsAddMinutes, isWithinInterval, getDay, format, differenceInCalendarDays, areIntervalsOverlapping, parse } from 'date-fns';
 import { es } from 'date-fns/locale';
-import { firestore, useMockDatabase as globalUseMockDatabase } from './firebase-config'; // Centralized mock flag
+import { firestore, useMockDatabase as globalUseMockDatabase, storage } from './firebase-config'; // Centralized mock flag
 import { collection, addDoc, getDocs, doc, getDoc, updateDoc, query, where, deleteDoc, writeBatch, serverTimestamp, Timestamp, runTransaction, setDoc, QueryConstraint, orderBy, limit, startAfter,getCountFromServer, CollectionReference, DocumentData, documentId } from 'firebase/firestore';
+import { ref as storageRef, uploadString, getDownloadURL, deleteObject } from 'firebase/storage';
 
 console.log(`[data.ts] Valor de globalUseMockDatabase importado de firebase-config.ts: ${globalUseMockDatabase}`);
 
@@ -963,137 +964,68 @@ export async function addAppointment (data: AppointmentFormData): Promise<Appoin
   }
 }
 
-export async function updateAppointment (id: string, data: Partial<AppointmentUpdateFormData>): Promise<Appointment | undefined> {
-  console.log(`[data.ts] updateAppointment: Datos de entrada recibidos para ID ${id}:`, data); // Log de datos de entrada
+export async function updateAppointment(id: string, data: Partial<AppointmentUpdateFormData>, originalPhotos: string[] = []): Promise<Appointment | undefined> {
+  console.log(`[data.ts] updateAppointment: Datos de entrada recibidos para ID ${id}:`, data);
 
-  let appointmentToUpdate: Partial<Omit<Appointment, 'id' | 'createdAt'>> = {};
-  let originalAppointment: Appointment | undefined;
-
-   if (firestore) {
-    const docSnap = await getDoc(doc(firestore, 'citas', id));
-    if (docSnap.exists()) {
-      originalAppointment = {id: docSnap.id, ...convertDocumentData(docSnap.data())} as Appointment;
-    }
-  }
-  if (!originalAppointment) {
-    console.warn(`[data.ts] updateAppointment: Appointment with ID ${id} not found.`);
-    return undefined;
+  if (!firestore || !storage) {
+    console.error("[data.ts] updateAppointment: Firestore or Storage is not initialized.");
+    throw new Error("Firestore or Storage not initialized.");
   }
 
+  const appointmentToUpdate: Partial<Omit<Appointment, 'id' | 'createdAt'>> = { ...data };
 
-  if (data.status) appointmentToUpdate.status = data.status;
-  if (data.serviceId) appointmentToUpdate.serviceId = data.serviceId;
+  // Separate new Data URIs from existing URLs
+  const newPhotoDataUris = (data.attachedPhotos || []).filter(p => p.startsWith('data:image/'));
+  const existingPhotoUrls = (data.attachedPhotos || []).filter(p => p.startsWith('http'));
 
-  const serviceForDuration =
+  // Upload new photos and get their download URLs
+  const newUploadedUrls = await Promise.all(
+    newPhotoDataUris.map(async (dataUri) => {
+      const photoRef = storageRef(storage, `appointment-photos/${id}/${generateId()}`);
+      const snapshot = await uploadString(photoRef, dataUri, 'data_url');
+      return getDownloadURL(snapshot.ref);
+    })
+  );
+  
+  // Combine existing URLs with newly uploaded URLs
+  appointmentToUpdate.attachedPhotos = [...existingPhotoUrls, ...newUploadedUrls];
 
- (await getServices()).find(s => s.id === (data.serviceId || originalAppointment.serviceId));
-
-  const mainServiceDuration = data.durationMinutes ?? serviceForDuration?.defaultDuration ?? originalAppointment.durationMinutes ?? 60;
-  appointmentToUpdate.durationMinutes = mainServiceDuration;
-
-
-  if (data.appointmentDate && data.appointmentTime) {
-    const [hours, minutes] = data.appointmentTime.split(':').map(Number);
-    const newDateTime = setMinutes(setHours(startOfDay(data.appointmentDate), hours), minutes);
-    appointmentToUpdate.appointmentDateTime = formatISO(newDateTime);
-  } else if (data.appointmentDate) {
-    const existingTime = getHours(parseISO(originalAppointment.appointmentDateTime)) + ":" + getMinutes(parseISO(originalAppointment.appointmentDateTime));
-    const [hours, minutes] = existingTime.split(':').map(Number);
-    const newDateTime = setMinutes(setHours(startOfDay(data.appointmentDate), hours), minutes);
-    appointmentToUpdate.appointmentDateTime = formatISO(newDateTime);
-  } else if (data.appointmentTime) {
-    const existingDate = parseISO(originalAppointment.appointmentDateTime);
-    const [hours, minutes] = data.appointmentTime.split(':').map(Number);
-    const newDateTime = setMinutes(setHours(existingDate, hours), minutes);
-    appointmentToUpdate.appointmentDateTime = formatISO(setMinutes(setHours(existingDate, hours), minutes));
-  }
-
-
-  if (data.hasOwnProperty('actualArrivalTime')) appointmentToUpdate.actualArrivalTime = data.actualArrivalTime || null;
-  if (data.hasOwnProperty('professionalId')) appointmentToUpdate.professionalId = data.professionalId === '_no_selection_placeholder_' ? null : (data.professionalId || null);
-
-  if (data.hasOwnProperty('paymentMethod')) appointmentToUpdate.paymentMethod = data.paymentMethod || null;
-  if (data.hasOwnProperty('amountPaid')) appointmentToUpdate.amountPaid = data.amountPaid === undefined ? null : data.amountPaid;
-  if (data.hasOwnProperty('staffNotes')) appointmentToUpdate.staffNotes = data.staffNotes || null;
-  if (data.hasOwnProperty('attachedPhotos')) appointmentToUpdate.attachedPhotos = data.attachedPhotos || [];
-
- if (data.hasOwnProperty('addedServices')) {
-    appointmentToUpdate.addedServices = (data.addedServices || []).map((as) => ({
-      serviceId: as.serviceId!,
-      professionalId: as.professionalId === '_no_selection_placeholder_' ? null : (as.professionalId || null),
- amountPaid: (as as any).amountPaid ?? null,
- startTime: as.startTime ?? null, // Add startTime here
-    }));
- if (appointmentToUpdate.addedServices) {
-
- console.log("[data.ts] updateAppointment: addedServices data in appointmentToUpdate:", JSON.parse(JSON.stringify(appointmentToUpdate.addedServices))); // Log después del mapeo
-   }
-  }
-
-  if (data.serviceId || data.hasOwnProperty('addedServices') || data.hasOwnProperty('durationMinutes')) {
-    let totalDuration = appointmentToUpdate.durationMinutes || mainServiceDuration;
-    const allServicesList = await getServices();
-
-    const servicesToSum = appointmentToUpdate.addedServices || originalAppointment.addedServices || [];
-
-    servicesToSum.forEach(as => {
-      const addedSvc = allServicesList.find(s => s.id === as.serviceId);
-      if (addedSvc) {
-        totalDuration += addedSvc.defaultDuration;
+  // Delete photos that were removed from the form
+  const photosToDelete = originalPhotos.filter(url => !(appointmentToUpdate.attachedPhotos || []).includes(url));
+  await Promise.all(photosToDelete.map(async (url) => {
+    try {
+      const photoRef = storageRef(storage, url);
+      await deleteObject(photoRef);
+    } catch (error: any) {
+      if (error.code !== 'storage/object-not-found') {
+        console.error(`Error deleting photo ${url}:`, error);
       }
-    });
-    appointmentToUpdate.totalCalculatedDurationMinutes = totalDuration;
-  }
-
-
-  appointmentToUpdate.updatedAt = formatISO(new Date());
-
-
-  if (!firestore) throw new Error("Firestore not initialized");
+    }
+  }));
 
   const docRef = doc(firestore, 'citas', id);
-  const firestoreUpdateData = { ...appointmentToUpdate } as any;
+  const firestoreUpdateData: any = { ...appointmentToUpdate, updatedAt: serverTimestamp() };
   if (firestoreUpdateData.appointmentDateTime) firestoreUpdateData.appointmentDateTime = toFirestoreTimestamp(firestoreUpdateData.appointmentDateTime);
-  if (firestoreUpdateData.updatedAt) firestoreUpdateData.updatedAt = toFirestoreTimestamp(firestoreUpdateData.updatedAt);
-
-  Object.keys(firestoreUpdateData).forEach(key => {
-    if (firestoreUpdateData[key] === undefined) {
-      firestoreUpdateData[key] = null;
- // Consider if you truly want to nullify undefined fields or just omit them
-    }
-  });
-  console.log("[data.ts] updateAppointment: Objeto final enviado a Firestore para ID", id, ":", JSON.parse(JSON.stringify(firestoreUpdateData)));
-
-   if (firestoreUpdateData.addedServices) {
-
- console.log("[data.ts] updateAppointment: addedServices data being sent to Firestore:", JSON.parse(JSON.stringify(firestoreUpdateData.addedServices))); // Log de servicios adicionales enviados a Firestore
-   }
-
+  
   await updateDoc(docRef, firestoreUpdateData);
-  console.log(`[data.ts] updateAppointment (Firestore): Appointment updated successfully for ID ${id}. Reading updated document...`); // Log después del update
 
   const updatedDoc = await getDoc(docRef);
-  if(updatedDoc.exists()){
-      let populatedUpdatedAppt = {id: updatedDoc.id, ...convertDocumentData(updatedDoc.data())} as Appointment;
-      // Repopulate service, patient, professional etc. for the return value
-      const allServices = await getServices();
-      const allProfessionals = await getProfessionals();
-      if (populatedUpdatedAppt.patientId) populatedUpdatedAppt.patient = await getPatientById(populatedUpdatedAppt.patientId);
-      if (populatedUpdatedAppt.professionalId) populatedUpdatedAppt.professional = allProfessionals.find(p => p.id === populatedUpdatedAppt.professionalId);
-      populatedUpdatedAppt.service = allServices.find(s => s.id === populatedUpdatedAppt.serviceId);
-      if (populatedUpdatedAppt.addedServices && populatedUpdatedAppt.addedServices.length > 0) {
-          populatedUpdatedAppt.addedServices = populatedUpdatedAppt.addedServices.map(as => {
-              const serviceDetail = allServices.find(s => s.id === as.serviceId);
-              const profDetail = as.professionalId ? allProfessionals.find(p => p.id === as.professionalId) : undefined;
-              return {...as, service: serviceDetail ? {...serviceDetail}: undefined, professional: profDetail ? {...profDetail} : undefined };
-          });
-      }
-       console.log(`[data.ts] updateAppointment: Datos guardados en Firestore para ID ${id}:`, convertDocumentData(updatedDoc.data())); // Log de datos guardados
-       if (populatedUpdatedAppt.addedServices) {
-            console.log(`[data.ts] updateAppointment: Deserialized addedServices from Firestore for ID ${id}:`, JSON.parse(JSON.stringify(populatedUpdatedAppt.addedServices))); // Log de servicios adicionales deserializados
-       }
-
-      return populatedUpdatedAppt;
+  if (updatedDoc.exists()) {
+    let populatedUpdatedAppt = {id: updatedDoc.id, ...convertDocumentData(updatedDoc.data())} as Appointment;
+    // Repopulate related data
+    const allServices = await getServices();
+    const allProfessionals = await getProfessionals();
+    if (populatedUpdatedAppt.patientId) populatedUpdatedAppt.patient = await getPatientById(populatedUpdatedAppt.patientId);
+    if (populatedUpdatedAppt.professionalId) populatedUpdatedAppt.professional = allProfessionals.find(p => p.id === populatedUpdatedAppt.professionalId);
+    populatedUpdatedAppt.service = allServices.find(s => s.id === populatedUpdatedAppt.serviceId);
+    if (populatedUpdatedAppt.addedServices?.length) {
+      populatedUpdatedAppt.addedServices = populatedUpdatedAppt.addedServices.map(as => {
+        const serviceDetail = allServices.find(s => s.id === as.serviceId);
+        const profDetail = as.professionalId ? allProfessionals.find(p => p.id === as.professionalId) : undefined;
+        return {...as, service: serviceDetail, professional: profDetail };
+      });
+    }
+    return populatedUpdatedAppt;
   }
   return undefined;
 }

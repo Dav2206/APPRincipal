@@ -111,7 +111,7 @@ const AppointmentCardComponent = ({ appointment, onUpdate }: AppointmentCardProp
         const newPhotoPromises = Array.from(files).map(fileToDataUri);
         const newDataUris = await Promise.all(newPhotoPromises);
         const validNewDataUris = newDataUris.filter(uri => typeof uri === 'string' && uri.startsWith("data:image/"));
-        const updatedPhotos = [...currentPhotos.filter(p => p && p.startsWith("data:image/")), ...validNewDataUris];
+        const updatedPhotos = [...currentPhotos.filter(p => p && (p.startsWith("data:image/") || p.startsWith("http"))), ...validNewDataUris];
         form.setValue("attachedPhotos", updatedPhotos, { shouldValidate: true });
       } catch (error) {
         toast({ title: "Error al cargar imagen", description: "No se pudo procesar la imagen.", variant: "destructive"});
