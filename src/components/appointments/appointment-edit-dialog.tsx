@@ -51,6 +51,7 @@ interface AppointmentEditDialogProps {
   isOpen: boolean;
   onOpenChange: (isOpen: boolean) => void;
   onAppointmentUpdated: (updatedAppointment: Appointment | null | { id: string; _deleted: true }) => void;
+  onImageClick?: (imageUrl: string) => void;
 }
 
 type AppointmentUpdateFormData = Zod.infer<typeof AppointmentUpdateSchema>;
@@ -58,7 +59,7 @@ type AppointmentUpdateFormData = Zod.infer<typeof AppointmentUpdateSchema>;
 const NO_SELECTION_PLACEHOLDER = "_no_selection_placeholder_";
 const DEFAULT_SERVICE_ID_PLACEHOLDER = "_default_service_id_placeholder_";
 
-export function AppointmentEditDialog({ appointment, isOpen, onOpenChange, onAppointmentUpdated }: AppointmentEditDialogProps) {
+export function AppointmentEditDialog({ appointment, isOpen, onOpenChange, onAppointmentUpdated, onImageClick }: AppointmentEditDialogProps) {
   const { user } = useAuth();
   const { toast } = useToast();
   const [professionals, setProfessionals] = useState<Professional[]>([]);
@@ -559,7 +560,7 @@ export function AppointmentEditDialog({ appointment, isOpen, onOpenChange, onApp
                 {attachedPhotoFields.map((fieldItem, index) => {
                   const photoUrl = (fieldItem as { url: string }).url;
                   return (photoUrl && typeof photoUrl === 'string') ? (
-                    <div key={fieldItem.id} className="relative group">
+                    <div key={fieldItem.id} className="relative group cursor-pointer" onClick={() => onImageClick && onImageClick(photoUrl)}>
                       <div className="relative w-20 h-20 rounded object-cover aspect-square border overflow-hidden">
                         <Image src={photoUrl} alt={`Foto adjunta ${index + 1}`} fill style={{ objectFit: 'cover' }} data-ai-hint="medical record" />
                       </div>
@@ -568,7 +569,7 @@ export function AppointmentEditDialog({ appointment, isOpen, onOpenChange, onApp
                         variant="destructive"
                         size="icon"
                         className="absolute top-1 right-1 h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity"
-                        onClick={() => handleRemovePhoto(index)}
+                        onClick={(e) => { e.stopPropagation(); handleRemovePhoto(index);}}
                       >
                         <Trash2 className="h-3 w-3" />
                       </Button>
