@@ -163,7 +163,7 @@ export type AppointmentUpdateFormData = {
   paymentMethod?: PaymentMethod | null;
   amountPaid?: number | null;
   staffNotes?: string | null;
-  attachedPhotos?: string[];
+  attachedPhotos?: { url: string }[];
   addedServices?: Partial<AddedServiceItem>[];
 };
 

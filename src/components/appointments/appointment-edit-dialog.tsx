@@ -131,7 +131,7 @@ export function AppointmentEditDialog({ appointment, isOpen, onOpenChange, onApp
         paymentMethod: appointment.paymentMethod || undefined,
         amountPaid: appointment.amountPaid ?? undefined,
         staffNotes: appointment.staffNotes || '',
-        attachedPhotos: (appointment.attachedPhotos || []).filter(p => p),
+        attachedPhotos: (appointment.attachedPhotos || []).filter(p => p).map(p => ({ url: p })),
         addedServices: appointment.addedServices?.map(as => ({ 
           serviceId: as.serviceId || (allServices && allServices.length > 0 ? allServices[0].id : DEFAULT_SERVICE_ID_PLACEHOLDER),
           professionalId: as.professionalId || NO_SELECTION_PLACEHOLDER,
@@ -158,7 +158,7 @@ export function AppointmentEditDialog({ appointment, isOpen, onOpenChange, onApp
       setIsUploadingImage(true);
       try {
         const dataUri = await fileToDataUri(file);
-        appendAttachedPhoto(dataUri as any);
+        appendAttachedPhoto({ url: dataUri });
         toast({ title: "Imagen preparada", description: "La imagen se adjuntará al formulario y se guardará con la cita." });
       } catch (error) {
         console.error("Error processing image:", error);
@@ -172,7 +172,9 @@ export function AppointmentEditDialog({ appointment, isOpen, onOpenChange, onApp
 
 
   const handleRemovePhoto = async (index: number) => {
-    const photoUrlToRemove = attachedPhotoFields[index] as unknown as string | undefined;
+    const photoField = attachedPhotoFields[index] as { id: string; url?: string };
+    const photoUrlToRemove = photoField?.url;
+
     if (!photoUrlToRemove || typeof photoUrlToRemove !== 'string') {
         removeAttachedPhoto(index);
         return;
@@ -232,7 +234,7 @@ export function AppointmentEditDialog({ appointment, isOpen, onOpenChange, onApp
         durationMinutes: data.durationMinutes,
         amountPaid: data.amountPaid,
         actualArrivalTime: data.actualArrivalTime || null,
-        attachedPhotos: (data.attachedPhotos || []).filter(p => typeof p === 'string'),
+        attachedPhotos: (data.attachedPhotos || []).map(p => p.url).filter((url): url is string => !!url),
         addedServices: data.addedServices?.map(as => ({
           ...as,
           serviceId: as.serviceId === DEFAULT_SERVICE_ID_PLACEHOLDER && allServices?.length ? allServices[0].id : as.serviceId,
@@ -555,8 +557,8 @@ export function AppointmentEditDialog({ appointment, isOpen, onOpenChange, onApp
               <h4 className="text-md font-semibold flex items-center gap-2"><CameraIcon/> Fotos Adjuntas</h4>
               <div className="grid grid-cols-3 sm:grid-cols-4 gap-2">
                 {attachedPhotoFields.map((fieldItem, index) => {
-                  const photoUrl = fieldItem as unknown as string | undefined;
-                  return photoUrl ? (
+                  const photoUrl = (fieldItem as { url: string }).url;
+                  return (photoUrl && typeof photoUrl === 'string') ? (
                     <div key={fieldItem.id} className="relative group">
                       <div className="relative w-20 h-20 rounded object-cover aspect-square border overflow-hidden">
                         <Image src={photoUrl} alt={`Foto adjunta ${index + 1}`} fill style={{ objectFit: 'cover' }} data-ai-hint="medical record" />
