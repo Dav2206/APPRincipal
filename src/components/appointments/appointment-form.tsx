@@ -94,7 +94,7 @@ export function AppointmentForm({
       existingPatientId: initialData?.existingPatientId || null,
       isDiabetic: initialData?.isDiabetic || false,
       locationId: initialData?.locationId || defaultLocation || LOCATIONS[0].id,
-      serviceId: initialData?.serviceId || '', // Ahora vacío por defecto para combobox
+      serviceId: initialData?.serviceId || '',
       appointmentDate: initialData?.appointmentDate || defaultDate || new Date(),
       appointmentTime: initialData?.appointmentTime || TIME_SLOTS.find(slot => slot === "10:00") || TIME_SLOTS[0],
       preferredProfessionalId: initialData?.preferredProfessionalId || ANY_PROFESSIONAL_VALUE,
@@ -124,10 +124,6 @@ export function AppointmentForm({
       try {
         const fetchedServices = await getServices();
         setServicesList(fetchedServices || []);
-        // Si no hay un servicio inicial y hay servicios, no establecemos uno por defecto para el combobox
-        // if (!form.getValues('serviceId') && fetchedServices && fetchedServices.length > 0) {
-        //   form.setValue('serviceId', fetchedServices[0].id);
-        // }
       } catch (error) {
         console.error("Failed to load services for form:", error);
         setServicesList([]);
@@ -157,14 +153,12 @@ export function AppointmentForm({
       }
       setIsLoadingAppointments(true);
       try {
-        // console.log(`[AppointmentForm] Fetching appointments for slot check. Date: ${format(watchAppointmentDate, 'yyyy-MM-dd')}, Location: ${watchLocationId}`);
         const result = await getAppointments({
           locationId: watchLocationId as LocationId,
           date: watchAppointmentDate,
           statuses: [APPOINTMENT_STATUS.BOOKED, APPOINTMENT_STATUS.CONFIRMED, APPOINTMENT_STATUS.COMPLETED] 
         });
         setAppointmentsForSelectedDate(result.appointments || []);
-        // console.log(`[AppointmentForm] Fetched ${result.appointments?.length || 0} appointments for slot check.`);
       } catch (error) {
         console.error("[AppointmentForm] Error fetching appointments for slot check:", error);
         setAppointmentsForSelectedDate([]);
@@ -179,19 +173,7 @@ export function AppointmentForm({
 
 
   useEffect(() => {
-    // console.log("[AppointmentForm] Recalculating available professionals. Watched values:", {
-    //   isOpen,
-    //   date: watchAppointmentDate ? format(watchAppointmentDate, 'yyyy-MM-dd') : 'N/A',
-    //   time: watchAppointmentTime,
-    //   serviceId: watchServiceId,
-    //   servicesListLength: servicesList.length,
-    //   isLoadingAppointments,
-    //   searchExternal: watchSearchExternal,
-    //   formLocationId: watchLocationId,
-    // });
-
     if (!isOpen || !watchAppointmentDate || !watchAppointmentTime || !watchServiceId || servicesList.length === 0 || isLoadingAppointments ) {
-      // console.log("[AppointmentForm] Skipping available professionals calculation: Missing data or loading state.");
       let defaultProfsToShow: Professional[] = [];
       if(watchSearchExternal && Array.isArray(allSystemProfessionals)) {
         defaultProfsToShow = allSystemProfessionals;
@@ -211,14 +193,12 @@ export function AppointmentForm({
     if (!selectedService) {
       setAvailableProfessionalsForTimeSlot([]);
       setSlotAvailabilityMessage('Por favor, seleccione un servicio principal válido.');
-      // console.log("[AppointmentForm] No valid main service selected.");
       return;
     }
 
     const appointmentDuration = selectedService.defaultDuration;
     const proposedStartTime = parse(`${format(watchAppointmentDate, 'yyyy-MM-dd')} ${watchAppointmentTime}`, 'yyyy-MM-dd HH:mm', new Date());
     const proposedEndTime = addMinutes(proposedStartTime, appointmentDuration);
-    // console.log(`[AppointmentForm] Proposed slot: ${format(proposedStartTime, 'HH:mm')}-${format(proposedEndTime, 'HH:mm')} (Duration: ${appointmentDuration}m)`);
 
     let professionalsToConsider: Professional[] = [];
     if(watchSearchExternal && Array.isArray(allSystemProfessionals)){
@@ -226,19 +206,15 @@ export function AppointmentForm({
     } else if (Array.isArray(professionalsForCurrentLocationProp)) {
         professionalsToConsider = professionalsForCurrentLocationProp;
     }
-    // console.log(`[AppointmentForm] Professionals to consider (searchExternal: ${watchSearchExternal}, formLocationId: ${watchLocationId}): ${professionalsToConsider.length} professionals.`);
 
     const availableProfs: Professional[] = [];
     for (const prof of professionalsToConsider) {
        if (!watchSearchExternal && prof.locationId !== watchLocationId) {
-        // console.log(`[AppointmentForm] SKIPPING Prof ${prof.firstName} ${prof.lastName} (ID: ${prof.id}): Not in selected form location '${watchLocationId}'. Prof loc: '${prof.locationId}'.`);
         continue;
       }
       const dailyAvailability = getProfessionalAvailabilityForDate(prof, watchAppointmentDate);
-      // console.log(`[AppointmentForm] Checking Prof: ${prof.firstName} ${prof.lastName} (ID: ${prof.id}, Loc: ${prof.locationId}). Daily Availability for ${format(watchAppointmentDate, 'yyyy-MM-dd')}:`, dailyAvailability ? JSON.parse(JSON.stringify(dailyAvailability)) : null);
 
       if (!dailyAvailability || !dailyAvailability.startTime || !dailyAvailability.endTime) {
-        // console.log(`[AppointmentForm] SKIPPED ${prof.firstName} ${prof.lastName}: No daily availability or missing start/end times. Reason: ${dailyAvailability?.reason || 'N/A'}`);
         continue;
       }
 
@@ -246,7 +222,6 @@ export function AppointmentForm({
       const profWorkEndTime = parse(`${format(watchAppointmentDate, 'yyyy-MM-dd')} ${dailyAvailability.endTime}`, 'yyyy-MM-dd HH:mm', new Date());
 
       if (proposedStartTime < profWorkStartTime || proposedEndTime > profWorkEndTime) {
-        // console.log(`[AppointmentForm] SKIPPED ${prof.firstName} ${prof.lastName}: Appointment time (${format(proposedStartTime, 'HH:mm')}-${format(proposedEndTime, 'HH:mm')}) is outside their work hours (${dailyAvailability.startTime}-${dailyAvailability.endTime}).`);
         continue;
       }
 
@@ -263,13 +238,11 @@ export function AppointmentForm({
           { start: existingApptStartTime, end: existingApptEndTime }
         )) {
           isBusy = true;
-          // console.log(`[AppointmentForm] SKIPPED ${prof.firstName} ${prof.lastName}: Busy due to overlap with existing appointment ${existingAppt.id} (${format(existingApptStartTime, 'HH:mm')}-${format(existingApptEndTime, 'HH:mm')}).`);
           break;
         }
       }
       if (!isBusy) {
         availableProfs.push(prof);
-        // console.log(`[AppointmentForm] ADDED ${prof.firstName} ${prof.lastName} (ID: ${prof.id}, Loc: ${prof.locationId}) to available list for this slot.`);
       }
     }
     
@@ -288,10 +261,8 @@ export function AppointmentForm({
               }
             </>
         );
-        // console.log("[AppointmentForm] No professionals available for the selected slot after all checks.");
     } else {
       setSlotAvailabilityMessage('');
-      // console.log(`[AppointmentForm] Calculation complete. ${availableProfs.length} professionals available for this slot.`);
     }
   }, [
       isOpen, 
@@ -352,7 +323,6 @@ export function AppointmentForm({
 
   async function onSubmit(data: FormSchemaType) {
     setIsLoading(true);
-    // console.log("[AppointmentForm] onSubmit: Datos crudos del formulario:", JSON.stringify(data, null, 2));
 
     if (!data.serviceId || servicesList.length === 0) {
         toast({ title: "Error de Validación", description: "Servicio principal es requerido o inválido.", variant: "destructive" });
@@ -376,7 +346,6 @@ export function AppointmentForm({
         bookingObservations: data.bookingObservations?.trim() || undefined,
         addedServices: validAddedServices,
       };
-      // console.log("[AppointmentForm] onSubmit: Datos procesados para enviar a addAppointment:", JSON.stringify(submitData, null, 2));
 
       await addAppointment(submitData);
       toast({
@@ -428,11 +397,9 @@ export function AppointmentForm({
     if (preferredProfId && preferredProfId !== ANY_PROFESSIONAL_VALUE) {
       const isChosenProfAvailable = availableProfessionalsForTimeSlot.find(p => p.id === preferredProfId);
       if (!isChosenProfAvailable) {
-          // console.log(`[AppointmentForm] Submit DISABLED: Preferred professional ${preferredProfId} is not in the available list for the slot.`);
           return true;
       }
     } else if (preferredProfId === ANY_PROFESSIONAL_VALUE && availableProfessionalsForTimeSlot.length === 0) {
-        // console.log(`[AppointmentForm] Submit DISABLED: "Any professional" selected, but no professionals are available for this slot.`);
         return true;
     }
     return false;
@@ -863,7 +830,7 @@ export function AppointmentForm({
                       </Button>
                     </div>
                     {addedServiceFields.map((item, index) => (
-                      <div key={item.id} className="p-3 border rounded-md space-y-3 bg-muted/50 relative">
+                      <div key={item.id} className="p-3 border rounded-md space-y-3 bg-muted/50 relative grid grid-cols-1 sm:grid-cols-2 gap-3">
                          <Button type="button" variant="ghost" size="icon" className="absolute top-1 right-1 h-6 w-6" onClick={() => removeAddedService(index)}>
                             <Trash2 className="h-4 w-4 text-destructive" />
                           </Button>
@@ -941,7 +908,7 @@ export function AppointmentForm({
           </Form>
         </div>
 
-        <DialogFooter className="pt-4 border-t">
+        <DialogFooter className="pt-4 border-t flex-col-reverse sm:flex-row sm:justify-end sm:gap-2">
           <DialogClose asChild>
             <Button variant="outline" onClick={() => {
                form.reset({

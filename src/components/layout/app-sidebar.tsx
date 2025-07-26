@@ -23,7 +23,7 @@ import {
   FileText,
   FileSpreadsheet,
   Bell,
-  Terminal, // Icono para Test Function
+  Terminal,
 } from 'lucide-react';
 import { USER_ROLES } from '@/lib/constants';
 
@@ -39,7 +39,7 @@ const navItems = [
   { href: '/services', label: 'Servicios', icon: ClipboardList, roles: [USER_ROLES.ADMIN] }, 
   { href: '/reminders', label: 'Recordatorios', icon: Bell, roles: [USER_ROLES.ADMIN, USER_ROLES.CONTADOR] },
   { href: '/finances', label: 'Finanzas', icon: Landmark, roles: [USER_ROLES.CONTADOR] },
-  { href: '/test-function', label: 'Test Function', icon: Terminal, roles: [USER_ROLES.ADMIN] }, // <-- AÑADIDO
+  { href: '/test-function', label: 'Test Function', icon: Terminal, roles: [USER_ROLES.ADMIN] },
 ];
 
 export function AppSidebar() {
@@ -51,7 +51,7 @@ export function AppSidebar() {
 
   const filteredNavItems = navItems.filter(item => item.roles.includes(user.role));
   
-  const commonSidebarClass = "fixed left-0 bottom-0 top-16 z-40 flex h-[calc(100vh-4rem)] w-64 flex-col border-r bg-sidebar text-sidebar-foreground transition-transform duration-300 ease-in-out md:static md:h-[calc(100vh-4rem)] md:translate-x-0";
+  const commonSidebarClass = "fixed left-0 bottom-0 top-16 z-40 flex h-[calc(100vh-4rem)] w-64 flex-col border-r bg-sidebar text-sidebar-foreground transition-transform duration-300 ease-in-out md:static md:h-auto md:translate-x-0";
   const openSidebarClass = "translate-x-0";
   const closedSidebarClass = "-translate-x-full";
 
@@ -67,7 +67,7 @@ export function AppSidebar() {
         />
       )}
       <aside className={cn(commonSidebarClass, sidebarOpen ? openSidebarClass : closedSidebarClass)}>
-        <div className="flex h-16 items-center justify-between border-b px-4">
+        <div className="flex h-16 items-center justify-between border-b px-4 md:hidden">
           <Link href="/dashboard" className="flex items-center gap-2 font-semibold text-sidebar-primary">
             <Footprints className="h-6 w-6" />
             <span>Footprints</span>
@@ -80,15 +80,13 @@ export function AppSidebar() {
         <ScrollArea className="flex-1">
           <nav className="grid items-start gap-1 px-2 py-4 text-sm font-medium">
             {filteredNavItems.map(({ href, label, icon: Icon }) => {
-              // Base active check: exact match or starts with for parent routes
-              let finalIsActive = pathname === href || (pathname.startsWith(href) && href !== '/dashboard' && href !== '/');
+              let finalIsActive = pathname === href || (pathname.startsWith(href + '/') && href !== '/');
 
-              // Ensure dashboard is only active for exact match
               if (href === '/dashboard' && pathname !== '/dashboard') {
                 finalIsActive = false;
               }
               
-              const specificExactMatchRoutes = ['/appointments', '/schedule', '/finanzas', '/services', '/registry', '/contracts', '/reminders', '/test-function']; // <-- AÑADIDO /test-function
+              const specificExactMatchRoutes = ['/appointments', '/schedule', '/finanzas', '/services', '/registry', '/contracts', '/reminders', '/test-function'];
               if (specificExactMatchRoutes.includes(href)) {
                 finalIsActive = pathname === href || pathname.startsWith(`${href}/`);
               }
@@ -118,5 +116,3 @@ export function AppSidebar() {
     </>
   );
 }
-
-    
