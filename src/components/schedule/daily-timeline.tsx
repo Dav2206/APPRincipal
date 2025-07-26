@@ -358,7 +358,7 @@ const DailyTimelineComponent = ({ professionals, appointments, timeSlots, onAppo
                             )}
                             {block.isExternalProfessional && block.isMainService && (
                               <p className="text-orange-600 text-xs mt-1 flex items-center gap-1">
-                                <Shuffle size={12} className="inline" /> Profesional de: {LOCATIONS.find(l => l.id === block.externalProfessionalOriginLocationId)?.name}
+                                <Shuffle size={12} className="inline" /> Profesional de Sede Origen: {LOCATIONS.find(l => l.id === block.externalProfessionalOriginLocationId)?.name}
                               </p>
                             )}
                             {block.isMainService && block.bookingObservations && <p className="text-xs mt-1 italic">Obs. Reserva: {block.bookingObservations}</p>}
