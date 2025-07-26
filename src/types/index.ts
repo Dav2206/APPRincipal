@@ -96,7 +96,7 @@ export interface Appointment extends BaseEntity {
   paymentMethod?: PaymentMethod | null;
   amountPaid?: number | null;
   staffNotes?: string | null;
-  attachedPhotos?: string[]; // Now storing URLs
+  attachedPhotos?: { value: string }[];
   createdAt?: string;
   updatedAt?: string;
   isExternalProfessional?: boolean;
@@ -152,6 +152,22 @@ export type ProfessionalFormData = {
   currentContract_empresa?: string | null;
 };
 
+export type AppointmentUpdateFormData = {
+  status: AppointmentStatus;
+  serviceId?: string;
+  appointmentDate?: Date;
+  appointmentTime?: string;
+  actualArrivalTime?: string | null;
+  professionalId?: string | null;
+  durationMinutes?: number | null;
+  paymentMethod?: PaymentMethod | null;
+  amountPaid?: number | null;
+  staffNotes?: string | null;
+  attachedPhotos?: { value: string }[];
+  addedServices?: Partial<AddedServiceItem>[];
+};
+
+
 export type { AppointmentStatus };
 
 export type ServiceFormData = {
@@ -202,5 +218,3 @@ export interface ImportantNoteFormData {
   title: string;
   content: string;
 }
-
-    

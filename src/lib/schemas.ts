@@ -143,7 +143,7 @@ export const AppointmentUpdateSchema = z.object({
   paymentMethod: z.string().refine(val => paymentMethodValues.includes(val as any), {message: "Método de pago inválido"}).optional().nullable(),
   amountPaid: z.coerce.number().min(0, "El monto pagado no puede ser negativo.").optional().nullable(), // Permitir cero
   staffNotes: z.string().optional().nullable(),
-  attachedPhotos: z.array(z.string()).optional().nullable(),
+  attachedPhotos: z.array(z.object({ value: z.string() })).optional().nullable(),
   addedServices: z.array(z.object({ 
     serviceId: z.string().min(1, "Servicio adicional inválido."),
     professionalId: z.string().optional().nullable(),
@@ -203,5 +203,3 @@ export const ImportantNoteFormSchema = z.object({
   content: z.string().min(1, "El contenido es requerido."),
 });
 export type ImportantNoteFormData = z.infer<typeof ImportantNoteFormSchema>;
-
-    

@@ -971,12 +971,12 @@ export async function updateAppointment(id: string, data: Partial<AppointmentUpd
     console.error("[data.ts] updateAppointment: Firestore or Storage is not initialized.");
     throw new Error("Firestore or Storage not initialized.");
   }
-
-  const appointmentToUpdate: Partial<Omit<Appointment, 'id' | 'createdAt'>> = { ...data };
+  
+  const appointmentToUpdate: { [key: string]: any } = { ...data };
 
   // Separate new Data URIs from existing URLs
-  const newPhotoDataUris = (data.attachedPhotos || []).filter(p => p.startsWith('data:image/'));
-  const existingPhotoUrls = (data.attachedPhotos || []).filter(p => p.startsWith('http'));
+  const newPhotoDataUris = (data.attachedPhotos || []).filter(p => p && p.startsWith('data:image/'));
+  const existingPhotoUrls = (data.attachedPhotos || []).filter(p => p && p.startsWith('http'));
 
   // Upload new photos and get their download URLs
   const newUploadedUrls = await Promise.all(
@@ -991,7 +991,7 @@ export async function updateAppointment(id: string, data: Partial<AppointmentUpd
   appointmentToUpdate.attachedPhotos = [...existingPhotoUrls, ...newUploadedUrls];
 
   // Delete photos that were removed from the form
-  const photosToDelete = originalPhotos.filter(url => !(appointmentToUpdate.attachedPhotos || []).includes(url));
+  const photosToDelete = originalPhotos.filter(url => !((appointmentToUpdate.attachedPhotos || []) as string[]).includes(url));
   await Promise.all(photosToDelete.map(async (url) => {
     try {
       const photoRef = storageRef(storage, url);
@@ -1005,7 +1005,17 @@ export async function updateAppointment(id: string, data: Partial<AppointmentUpd
 
   const docRef = doc(firestore, 'citas', id);
   const firestoreUpdateData: any = { ...appointmentToUpdate, updatedAt: serverTimestamp() };
-  if (firestoreUpdateData.appointmentDateTime) firestoreUpdateData.appointmentDateTime = toFirestoreTimestamp(firestoreUpdateData.appointmentDateTime);
+  
+  // Convert undefined to null before sending to Firestore
+  for (const key in firestoreUpdateData) {
+    if (firestoreUpdateData[key] === undefined) {
+      firestoreUpdateData[key] = null;
+    }
+  }
+
+  if (firestoreUpdateData.appointmentDateTime) {
+    firestoreUpdateData.appointmentDateTime = toFirestoreTimestamp(firestoreUpdateData.appointmentDateTime);
+  }
   
   await updateDoc(docRef, firestoreUpdateData);
 

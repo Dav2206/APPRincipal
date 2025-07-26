@@ -158,8 +158,8 @@ export function AppointmentEditDialog({ appointment, isOpen, onOpenChange, onApp
       setIsUploadingImage(true);
       try {
         const dataUri = await fileToDataUri(file);
-        appendAttachedPhoto(dataUri);
-        toast({ title: "Imagen preparada", description: "La imagen se adjuntó al formulario y se guardará con la cita." });
+        appendAttachedPhoto({ value: dataUri }); // Ensure it's an object with a 'value' property if needed by useFieldArray
+        toast({ title: "Imagen preparada", description: "La imagen se adjuntará al formulario y se guardará con la cita." });
       } catch (error) {
         console.error("Error processing image:", error);
         toast({ title: "Error al procesar imagen", description: "No se pudo leer el archivo de imagen.", variant: "destructive"});
@@ -172,7 +172,7 @@ export function AppointmentEditDialog({ appointment, isOpen, onOpenChange, onApp
 
 
   const handleRemovePhoto = async (index: number) => {
-    const photoUrlToRemove = attachedPhotoFields[index].value;
+    const photoUrlToRemove = (attachedPhotoFields[index] as any).value as string | undefined;
     if (!photoUrlToRemove || typeof photoUrlToRemove !== 'string') {
         removeAttachedPhoto(index);
         return;
@@ -231,8 +231,8 @@ export function AppointmentEditDialog({ appointment, isOpen, onOpenChange, onApp
         professionalId: data.professionalId === NO_SELECTION_PLACEHOLDER ? null : data.professionalId,
         durationMinutes: data.durationMinutes,
         amountPaid: data.amountPaid,
-        actualArrivalTime: data.actualArrivalTime || undefined,
-        attachedPhotos: (data.attachedPhotos || []).filter(photo => photo && typeof photo === 'string'),
+        actualArrivalTime: data.actualArrivalTime || null,
+        attachedPhotos: (data.attachedPhotos || []).map(p => (typeof p === 'object' ? p.value : p)).filter(p => typeof p === 'string'),
         addedServices: data.addedServices?.map(as => ({
           ...as,
           serviceId: as.serviceId === DEFAULT_SERVICE_ID_PLACEHOLDER && allServices?.length ? allServices[0].id : as.serviceId,
@@ -555,7 +555,7 @@ export function AppointmentEditDialog({ appointment, isOpen, onOpenChange, onApp
               <h4 className="text-md font-semibold flex items-center gap-2"><CameraIcon/> Fotos Adjuntas</h4>
               <div className="grid grid-cols-3 sm:grid-cols-4 gap-2">
                 {attachedPhotoFields.map((fieldItem, index) => {
-                  const photoUrl = fieldItem.value as string | undefined;
+                  const photoUrl = (fieldItem as any).value as string | undefined;
                   return photoUrl ? (
                     <div key={fieldItem.id} className="relative group">
                       <div className="relative w-20 h-20 rounded object-cover aspect-square border overflow-hidden">
