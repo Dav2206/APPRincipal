@@ -91,14 +91,19 @@ export default function DashboardPage() {
           }
         }
 
-        // Fetch Pending Confirmations (Booked appointments across all dates)
+        // Fetch Pending Confirmations (Booked appointments from today onwards)
         if (isAdminOrContador || user.role === USER_ROLES.LOCATION_STAFF) { 
+          const pendingConfirmationOptions = {
+              statuses: [APPOINTMENT_STATUS.BOOKED],
+              dateRange: { start: today, end: addDays(today, 365*2) } // Search from today up to 2 years in the future
+          };
+          
           if (selectedLocationId === 'all' && (isAdminOrContador)) {
-             const allLocationsPendingPromises = LOCATIONS.map(loc => getAppointments({ statuses: [APPOINTMENT_STATUS.BOOKED], locationId: loc.id }));
+             const allLocationsPendingPromises = LOCATIONS.map(loc => getAppointments({ ...pendingConfirmationOptions, locationId: loc.id }));
              const allLocationsPendingResults = await Promise.all(allLocationsPendingPromises);
              pendingConfirmationsCount = allLocationsPendingResults.reduce((sum, result) => sum + (result.appointments ? result.appointments.length : 0), 0);
           } else if (effectiveLocationId) { // Covers Admin/Contador with specific sede AND Staff
-            const { appointments } = await getAppointments({ statuses: [APPOINTMENT_STATUS.BOOKED], locationId: effectiveLocationId });
+            const { appointments } = await getAppointments({ ...pendingConfirmationOptions, locationId: effectiveLocationId });
             pendingConfirmationsCount = appointments ? appointments.length : 0;
           }
         }
@@ -389,4 +394,3 @@ export default function DashboardPage() {
     </div>
   );
 }
-
