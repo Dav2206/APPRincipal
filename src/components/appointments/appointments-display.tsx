@@ -15,8 +15,10 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { format, addDays, subDays, startOfDay, isEqual, parseISO } from 'date-fns';
 import { es } from 'date-fns/locale';
-import { CalendarIcon, ChevronLeftIcon, ChevronRightIcon, PlusCircleIcon, AlertTriangle, Loader2 } from 'lucide-react';
+import { CalendarIcon, ChevronLeftIcon, ChevronRightIcon, PlusCircleIcon, AlertTriangle, Loader2, ZoomIn, ZoomOut, RefreshCw, XIcon } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogClose } from '@/components/ui/dialog';
+import Image from 'next/image';
 
 export function AppointmentsDisplay() {
   const { user } = useAuth();
@@ -27,6 +29,15 @@ export function AppointmentsDisplay() {
   const [isLoading, setIsLoading] = useState(true);
   const [isLoadingProfessionals, setIsLoadingProfessionals] = useState(true);
   const [isFormOpen, setIsFormOpen] = useState(false);
+
+  // State for image modal
+  const [selectedImageForModal, setSelectedImageForModal] = useState<string | null>(null);
+  const [zoomLevel, setZoomLevel] = useState(1);
+  const [imagePosition, setImagePosition] = useState({ x: 0, y: 0 });
+  const [isDragging, setIsDragging] = useState(false);
+  const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
+  const imageRef = React.useRef<HTMLImageElement>(null);
+
 
   const isAdminOrContador = user?.role === USER_ROLES.ADMIN || user?.role === USER_ROLES.CONTADOR;
   const effectiveLocationId = useMemo(() => {
@@ -118,6 +129,44 @@ export function AppointmentsDisplay() {
     setIsFormOpen(false);
   }, [fetchAppointmentData]);
 
+  // Image Modal Handlers
+  const resetZoomAndPosition = useCallback(() => {
+    setZoomLevel(1);
+    setImagePosition({ x: 0, y: 0 });
+  }, []);
+
+  const handleImageClick = useCallback((imageUrl: string) => {
+    resetZoomAndPosition();
+    setSelectedImageForModal(imageUrl);
+  }, [resetZoomAndPosition]);
+
+  const handleWheel = (e: React.WheelEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    const zoomFactor = e.deltaY < 0 ? 1.1 : 0.9;
+    setZoomLevel(prevZoom => Math.max(0.5, Math.min(prevZoom * zoomFactor, 5)));
+  };
+
+  const handleMouseDown = (e: React.MouseEvent<HTMLDivElement>) => {
+    if (zoomLevel <= 1) return;
+    setIsDragging(true);
+    setDragStart({ x: e.clientX - imagePosition.x, y: e.clientY - imagePosition.y });
+    e.currentTarget.style.cursor = 'grabbing';
+  };
+
+  const handleMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
+    if (!isDragging || zoomLevel <= 1) return;
+    setImagePosition({
+      x: e.clientX - dragStart.x,
+      y: e.clientY - dragStart.y,
+    });
+  };
+
+  const handleMouseUp = (e: React.MouseEvent<HTMLDivElement>) => {
+    setIsDragging(false);
+     e.currentTarget.style.cursor = zoomLevel > 1 ? 'grab' : 'default';
+  };
+
+
   const NoAppointmentsCard = () => (
     <Card className="col-span-full mt-8 border-dashed border-2">
       <CardContent className="py-10 text-center">
@@ -144,7 +193,7 @@ export function AppointmentsDisplay() {
   );
 
   return (
-    <div className="space-y-6">
+    <>
       <Card className="shadow-md">
         <CardHeader>
           <div className="flex flex-col md:flex-row justify-between items-center gap-4">
@@ -198,7 +247,7 @@ export function AppointmentsDisplay() {
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
               {appointments.map(appt => (
-                <AppointmentCard key={appt.id} appointment={appt} onUpdate={handleAppointmentUpdate} />
+                <AppointmentCard key={appt.id} appointment={appt} onUpdate={handleAppointmentUpdate} onImageClick={handleImageClick} />
               ))}
             </div>
           )}
@@ -223,7 +272,55 @@ export function AppointmentsDisplay() {
             </div>
         </div>
       )}
-    </div>
+
+      <Dialog open={!!selectedImageForModal} onOpenChange={(open) => { if (!open) setSelectedImageForModal(null); }}>
+        <DialogContent className="sm:max-w-4xl max-h-[90vh] flex flex-col p-0">
+          <DialogHeader className="flex-row justify-between items-center p-2 border-b bg-muted/50">
+            <DialogTitle className="text-base">Vista Previa de Imagen</DialogTitle>
+            <div className="flex items-center gap-1">
+              <Button variant="ghost" size="icon" onClick={() => setZoomLevel(prev => Math.min(prev * 1.2, 5))} title="Acercar"><ZoomIn /></Button>
+              <Button variant="ghost" size="icon" onClick={() => setZoomLevel(prev => Math.max(prev * 0.8, 0.5))} title="Alejar"><ZoomOut /></Button>
+              <Button variant="ghost" size="icon" onClick={resetZoomAndPosition} title="Restaurar"><RefreshCw /></Button>
+              <DialogClose asChild>
+                <Button variant="ghost" size="icon"><XIcon className="h-5 w-5"/></Button>
+              </DialogClose>
+            </div>
+          </DialogHeader>
+          <div
+            className="flex-grow overflow-hidden p-2 flex items-center justify-center relative bg-secondary/20"
+            onWheel={handleWheel}
+            onMouseDown={handleMouseDown}
+            onMouseMove={handleMouseMove}
+            onMouseUp={handleMouseUp}
+            onMouseLeave={handleMouseUp}
+            style={{ cursor: zoomLevel > 1 ? (isDragging ? 'grabbing' : 'grab') : 'default' }}
+          >
+            <div
+              style={{
+                transform: `scale(${zoomLevel}) translate(${imagePosition.x}px, ${imagePosition.y}px)`,
+                transition: isDragging ? 'none' : 'transform 0.1s ease-out',
+                maxWidth: '100%',
+                maxHeight: '100%',
+                willChange: 'transform',
+              }}
+              className="flex items-center justify-center"
+            >
+              {selectedImageForModal && (
+                <Image
+                  ref={imageRef}
+                  src={selectedImageForModal}
+                  alt="Vista ampliada"
+                  width={1200}
+                  height={900}
+                  className="max-w-full max-h-[calc(90vh-120px)] object-contain rounded-md select-none shadow-lg"
+                  draggable="false"
+                  data-ai-hint="medical chart"
+                />
+              )}
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+    </>
   );
 }
-
