@@ -75,16 +75,14 @@ const DailyTimelineComponent = ({ professionals, appointments, timeSlots, onAppo
   relevantAppointments
     .sort((a, b) => parseISO(a.appointmentDateTime).getTime() - parseISO(b.appointmentDateTime).getTime())
     .forEach(appt => {
-      let previousBlockEndTimeForSequence: Date | null = null;
       if (typeof appt.appointmentDateTime !== 'string') {
         return;
       }
 
       const apptGroupColor = stringToColor(appt.id || '');
       const appointmentDate = parseISO(appt.appointmentDateTime);
-      let lastBlockProfessionalId: string | null | undefined = appt.professionalId;
+      let previousBlockEndTimeForSequence: Date = appointmentDate;
 
-      
       if (appt.isTravelBlock) {
         allServiceBlocks.push({
           id: appt.id,
@@ -102,66 +100,60 @@ const DailyTimelineComponent = ({ professionals, appointments, timeSlots, onAppo
           originalAppointmentData: appt,
         });
         previousBlockEndTimeForSequence = addMinutes(appointmentDate, appt.durationMinutes);
-        lastBlockProfessionalId = appt.professionalId;
-      }
-
-
-      if (appt.service) {
-        allServiceBlocks.push({
-          id: `${appt.id}-main-${appt.serviceId}`,
-          originalAppointmentId: appt.id,
-          assignedProfessionalId: appt.professionalId,
-          patientName: `${appt.patient?.firstName || ''} ${appt.patient?.lastName || ''}`.trim() || "Cita Reservada",
-          serviceName: appt.service?.name || 'Servicio Principal',
-          serviceId: appt.serviceId,
-          startTime: appointmentDate,
-          durationMinutes: appt.durationMinutes,
-          isMainService: true,
-          isTravelBlock: false,
-          isExternalProfessional: appt.isExternalProfessional,
-          groupColor: apptGroupColor,
-          bookingObservations: appt.bookingObservations,
-          originalAppointmentData: appt,
-        });
-        previousBlockEndTimeForSequence = addMinutes(appointmentDate, appt.durationMinutes);
       } else {
-         previousBlockEndTimeForSequence = appointmentDate;
-      }
-
-      (appt.addedServices || []).forEach((addedSvc, index) => {
-        if (addedSvc.service && typeof addedSvc.service.defaultDuration === 'number' && addedSvc.service.defaultDuration > 0) {
-          let addedServiceStartTime: Date;
-          if (addedSvc.startTime) {
-            try {
-              const [hours, minutes] = addedSvc.startTime.split(':').map(Number);
-              addedServiceStartTime = setMinutes(setHours(startOfDay(appointmentDate), hours), minutes);
-            } catch (error) {
-               addedServiceStartTime = parseISO(appt.appointmentDateTime);
-            }
-          } else {
-            if (previousBlockEndTimeForSequence !== null) {
-              addedServiceStartTime = previousBlockEndTimeForSequence;
-            } else {
-               addedServiceStartTime = appointmentDate;
-            }
-          }
-           allServiceBlocks.push({
-            id: `${appt.id}-added-${addedSvc.serviceId}-${index}`,
+        // Handle main service even if appt.service is null/undefined, as long as there's a duration.
+        if (appt.durationMinutes > 0) {
+            allServiceBlocks.push({
+            id: `${appt.id}-main-${appt.serviceId}`,
             originalAppointmentId: appt.id,
-            assignedProfessionalId: addedSvc.professionalId || appt.professionalId,
+            assignedProfessionalId: appt.professionalId,
             patientName: `${appt.patient?.firstName || ''} ${appt.patient?.lastName || ''}`.trim() || "Cita Reservada",
-            serviceName: addedSvc.service?.name || 'Servicio Adicional',
-            serviceId: addedSvc.serviceId,
-            startTime: addedServiceStartTime,
-            durationMinutes: addedSvc.service.defaultDuration,
-            isMainService: false,
+            serviceName: appt.service?.name || 'Servicio Principal Desconocido',
+            serviceId: appt.serviceId,
+            startTime: appointmentDate,
+            durationMinutes: appt.durationMinutes,
+            isMainService: true,
             isTravelBlock: false,
+            isExternalProfessional: appt.isExternalProfessional,
             groupColor: apptGroupColor,
+            bookingObservations: appt.bookingObservations,
             originalAppointmentData: appt,
-          });
-          previousBlockEndTimeForSequence = addMinutes(addedServiceStartTime, addedSvc.service.defaultDuration);
+            });
+            previousBlockEndTimeForSequence = addMinutes(appointmentDate, appt.durationMinutes);
         }
-      });
+
+        (appt.addedServices || []).forEach((addedSvc, index) => {
+            const addedSvcDuration = addedSvc.service?.defaultDuration;
+            if (addedSvc.service && typeof addedSvcDuration === 'number' && addedSvcDuration > 0) {
+                let addedServiceStartTime: Date;
+                if (addedSvc.startTime) {
+                    try {
+                    const [hours, minutes] = addedSvc.startTime.split(':').map(Number);
+                    addedServiceStartTime = setMinutes(setHours(startOfDay(appointmentDate), hours), minutes);
+                    } catch (error) {
+                    addedServiceStartTime = previousBlockEndTimeForSequence;
+                    }
+                } else {
+                    addedServiceStartTime = previousBlockEndTimeForSequence;
+                }
+                allServiceBlocks.push({
+                    id: `${appt.id}-added-${addedSvc.serviceId}-${index}`,
+                    originalAppointmentId: appt.id,
+                    assignedProfessionalId: addedSvc.professionalId || appt.professionalId,
+                    patientName: `${appt.patient?.firstName || ''} ${appt.patient?.lastName || ''}`.trim() || "Cita Reservada",
+                    serviceName: addedSvc.service?.name || 'Servicio Adicional',
+                    serviceId: addedSvc.serviceId,
+                    startTime: addedServiceStartTime,
+                    durationMinutes: addedSvcDuration,
+                    isMainService: false,
+                    isTravelBlock: false,
+                    groupColor: apptGroupColor,
+                    originalAppointmentData: appt,
+                });
+                previousBlockEndTimeForSequence = addMinutes(addedServiceStartTime, addedSvcDuration);
+            }
+        });
+      }
     });
 
   const professionalsToDisplay = professionals.filter(prof => !prof.isManager);
