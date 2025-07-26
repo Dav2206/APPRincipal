@@ -13,7 +13,7 @@ import { UserSquare, CalendarDays, Stethoscope, TrendingUp, MessageSquare, Alert
 import { APPOINTMENT_STATUS, APPOINTMENT_STATUS_DISPLAY } from '@/lib/constants';
 import Image from 'next/image';
 import { Separator } from '../ui/separator';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogClose } from '@/components/ui/dialog';
+import { AlertDialog, AlertDialogContent, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger, AlertDialogOverlay, AlertDialogPortal } from '@/components/ui/alert-dialog';
 import { Button } from '../ui/button';
 import { cn } from '@/lib/utils';
 
@@ -209,7 +209,7 @@ const PatientHistoryPanelComponent = ({ patient }: PatientHistoryPanelProps) => 
               <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2">
                 {lastFourAppointmentsWithPhotos.map(appt =>
                   appt.attachedPhotos?.map((photoUri, index) => (
-                    (photoUri && typeof photoUri === 'string' && photoUri.startsWith("data:image/"))
+                    (photoUri && typeof photoUri === 'string')
                       ? (
                         <div
                             key={`${appt.id}-photo-${index}`}
@@ -291,56 +291,56 @@ const PatientHistoryPanelComponent = ({ patient }: PatientHistoryPanelProps) => 
       </Card>
 
       {isImageModalOpen && selectedImageForModal && (
-        <Dialog open={isImageModalOpen} onOpenChange={(open) => { setIsImageModalOpen(open); if(!open) resetZoomAndPosition();}}>
-          <DialogContent className="sm:max-w-3xl max-h-[90vh] flex flex-col p-2">
-            <DialogHeader className="flex-row justify-between items-center p-2 border-b">
-              <DialogTitle>Vista Previa de Imagen</DialogTitle>
-              <div className="flex items-center gap-1">
-                <Button variant="ghost" size="icon" onClick={() => setZoomLevel(prev => Math.min(prev * 1.2, 5))} title="Acercar"> <ZoomIn /> </Button>
-                <Button variant="ghost" size="icon" onClick={() => setZoomLevel(prev => Math.max(prev * 0.8, 0.5))} title="Alejar"> <ZoomOut /> </Button>
-                <Button variant="ghost" size="icon" onClick={resetZoomAndPosition} title="Restaurar"> <RefreshCw /> </Button>
-                <DialogClose asChild>
-                  <Button variant="ghost" size="icon"><XIcon className="h-5 w-5"/></Button>
-                </DialogClose>
-              </div>
-            </DialogHeader>
-            <div
-              className="flex-grow overflow-hidden p-2 flex items-center justify-center relative"
-              onWheel={handleWheel}
-              onMouseDown={handleMouseDown}
-              onMouseMove={handleMouseMove}
-              onMouseUp={handleMouseUp}
-              onMouseLeave={handleMouseUp}
-              style={{ cursor: zoomLevel > 1 ? (isDragging ? 'grabbing' : 'grab') : 'default' }}
-            >
+        <AlertDialog open={isImageModalOpen} onOpenChange={(open) => { setIsImageModalOpen(open); if(!open) resetZoomAndPosition();}}>
+          <AlertDialogPortal>
+            <AlertDialogOverlay />
+            <AlertDialogContent className="sm:max-w-3xl max-h-[90vh] flex flex-col p-2">
+              <AlertDialogHeader className="flex-row justify-between items-center p-2 border-b">
+                <AlertDialogTitle>Vista Previa de Imagen</AlertDialogTitle>
+                <div className="flex items-center gap-1">
+                  <Button variant="ghost" size="icon" onClick={() => setZoomLevel(prev => Math.min(prev * 1.2, 5))} title="Acercar"> <ZoomIn /> </Button>
+                  <Button variant="ghost" size="icon" onClick={() => setZoomLevel(prev => Math.max(prev * 0.8, 0.5))} title="Alejar"> <ZoomOut /> </Button>
+                  <Button variant="ghost" size="icon" onClick={resetZoomAndPosition} title="Restaurar"> <RefreshCw /> </Button>
+                  <Button variant="ghost" size="icon" onClick={() => setIsImageModalOpen(false)}><XIcon className="h-5 w-5"/></Button>
+                </div>
+              </AlertDialogHeader>
               <div
-                style={{
-                  transform: `scale(${zoomLevel}) translate(${imagePosition.x}px, ${imagePosition.y}px)`,
-                  transition: isDragging ? 'none' : 'transform 0.1s ease-out',
-                  maxWidth: '100%',
-                  maxHeight: '100%',
-                  willChange: 'transform',
-                }}
-                className="flex items-center justify-center"
+                className="flex-grow overflow-hidden p-2 flex items-center justify-center relative"
+                onWheel={handleWheel}
+                onMouseDown={handleMouseDown}
+                onMouseMove={handleMouseMove}
+                onMouseUp={handleMouseUp}
+                onMouseLeave={handleMouseUp}
+                style={{ cursor: zoomLevel > 1 ? (isDragging ? 'grabbing' : 'grab') : 'default' }}
               >
-                <Image
-                  ref={imageRef}
-                  src={selectedImageForModal}
-                  alt="Vista ampliada"
-                  width={800}
-                  height={600}
-                  className="max-w-full max-h-[calc(90vh-100px)] object-contain rounded-md select-none"
-                  draggable="false"
-                  data-ai-hint="medical chart"
-                />
+                <div
+                  style={{
+                    transform: `scale(${zoomLevel}) translate(${imagePosition.x}px, ${imagePosition.y}px)`,
+                    transition: isDragging ? 'none' : 'transform 0.1s ease-out',
+                    maxWidth: '100%',
+                    maxHeight: '100%',
+                    willChange: 'transform',
+                  }}
+                  className="flex items-center justify-center"
+                >
+                  <Image
+                    ref={imageRef}
+                    src={selectedImageForModal}
+                    alt="Vista ampliada"
+                    width={800}
+                    height={600}
+                    className="max-w-full max-h-[calc(90vh-100px)] object-contain rounded-md select-none"
+                    draggable="false"
+                    data-ai-hint="medical chart"
+                  />
+                </div>
               </div>
-            </div>
-          </DialogContent>
-        </Dialog>
+            </AlertDialogContent>
+          </AlertDialogPortal>
+        </AlertDialog>
       )}
     </>
   );
 }
 
 export const PatientHistoryPanel = React.memo(PatientHistoryPanelComponent);
-
