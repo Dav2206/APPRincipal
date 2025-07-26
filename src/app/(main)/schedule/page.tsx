@@ -94,11 +94,15 @@ export default function SchedulePage() {
       const professionalsForColumns = systemProfs.filter(prof => {
         if (prof.isManager) return false; 
         
+        // Is the professional's base location the one we are viewing?
+        const isBasedHere = prof.locationId === actualEffectiveLocationId;
+        
+        // Do they have availability today at their base location?
         const availability = getProfessionalAvailabilityForDate(prof, currentDate);
+        const worksAtBaseLocationToday = isBasedHere && availability && availability.isWorking;
         
-        const worksAtBaseLocationToday = prof.locationId === actualEffectiveLocationId && availability && availability.isWorking;
-        
-        const isExternalWithAppointmentAtEffectiveLocation = dailyAppointments.some(appt => 
+        // Or, is this professional external but has an appointment scheduled at the location we are viewing?
+        const isExternalWithAppointmentAtEffectiveLocation = !isBasedHere && dailyAppointments.some(appt => 
             appt.professionalId === prof.id && 
             appt.isExternalProfessional && 
             appt.locationId === actualEffectiveLocationId
@@ -435,3 +439,4 @@ export default function SchedulePage() {
     </div>
   );
 }
+

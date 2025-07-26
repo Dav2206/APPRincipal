@@ -1,4 +1,5 @@
 
+
 // src/lib/data.ts
 import type { User, Professional, Patient, Service, Appointment, AppointmentFormData, ProfessionalFormData, AppointmentStatus, ServiceFormData, Contract, PeriodicReminder, ImportantNote, PeriodicReminderFormData, ImportantNoteFormData, AddedServiceItem } from '@/types';
 import { LOCATIONS, USER_ROLES, SERVICES as SERVICES_CONSTANTS, APPOINTMENT_STATUS, LocationId, ServiceId as ConstantServiceId, APPOINTMENT_STATUS_DISPLAY, PAYMENT_METHODS, TIME_SLOTS, DAYS_OF_WEEK } from './constants';
@@ -901,7 +902,7 @@ export async function addAppointment(data: AppointmentFormData): Promise<Appoint
     }
     const mainServiceDuration = mainService.defaultDuration || 30;
 
-    let patientId = data.existingPatientId || null;
+    let patientId: string | null = data.existingPatientId || null;
     if (!patientId && !data.isWalkIn) {
       const newPatient = await addPatient({
         firstName: data.patientFirstName,
@@ -917,7 +918,10 @@ export async function addAppointment(data: AppointmentFormData): Promise<Appoint
     const proposedEndTime = dateFnsAddMinutes(proposedStartTime, mainServiceDuration);
     
     let professionalIdToAssign = data.preferredProfessionalId === '_any_professional_placeholder_' ? null : data.preferredProfessionalId;
+    let isExternalProfessional = false;
+    let externalProfessionalOriginLocationId: LocationId | null = null;
     
+    // Auto-assign professional if "any" is selected
     if (!professionalIdToAssign) {
       console.log("[data.ts] addAppointment: Buscando profesional disponible...");
       const professionalsToConsider = await getProfessionals(data.searchExternal ? undefined : data.locationId);
@@ -954,7 +958,16 @@ export async function addAppointment(data: AppointmentFormData): Promise<Appoint
         throw new Error("No hay profesionales disponibles en el horario seleccionado. Por favor, elija otro horario o un profesional específico.");
       }
     }
-
+    
+    // Check if the assigned professional is external
+    if (professionalIdToAssign) {
+        const assignedProf = await getProfessionalById(professionalIdToAssign);
+        if (assignedProf && assignedProf.locationId !== data.locationId) {
+            isExternalProfessional = true;
+            externalProfessionalOriginLocationId = assignedProf.locationId;
+            console.log(`[data.ts] addAppointment: Profesional ${assignedProf.firstName} es externo. Origen: ${externalProfessionalOriginLocationId}, Destino: ${data.locationId}`);
+        }
+    }
 
     const newAppointmentData: Omit<Appointment, 'id' | 'createdAt' | 'updatedAt'> = {
       patientId: patientId,
@@ -964,6 +977,8 @@ export async function addAppointment(data: AppointmentFormData): Promise<Appoint
       appointmentDateTime: formatISO(proposedStartTime),
       status: 'booked',
       durationMinutes: mainServiceDuration,
+      isExternalProfessional,
+      externalProfessionalOriginLocationId,
       actualArrivalTime: data.actualArrivalTime || null,
       paymentMethod: data.paymentMethod || null,
       amountPaid: data.amountPaid === undefined ? null : data.amountPaid,
@@ -1339,3 +1354,4 @@ export async function deleteImportantNote(noteId: string): Promise<boolean> {
   }
 }
 // --- End Important Notes ---
+
