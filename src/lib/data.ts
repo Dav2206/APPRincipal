@@ -899,7 +899,7 @@ export async function addAppointment(data: AppointmentFormData): Promise<Appoint
     if (!mainService) {
       throw new Error(`Servicio principal con ID ${data.serviceId} no encontrado.`);
     }
-    const mainServiceDuration = mainService.defaultDuration;
+    const mainServiceDuration = mainService.defaultDuration || 30;
 
     let patientId = data.existingPatientId || null;
     if (!patientId && !data.isWalkIn) {
@@ -914,7 +914,7 @@ export async function addAppointment(data: AppointmentFormData): Promise<Appoint
     }
 
     const proposedStartTime = parse(`${format(data.appointmentDate, 'yyyy-MM-dd')} ${data.appointmentTime}`, 'yyyy-MM-dd HH:mm', new Date());
-    const proposedEndTime = addMinutes(proposedStartTime, mainServiceDuration);
+    const proposedEndTime = dateFnsAddMinutes(proposedStartTime, mainServiceDuration);
     
     let professionalIdToAssign = data.preferredProfessionalId === '_any_professional_placeholder_' ? null : data.preferredProfessionalId;
     
@@ -938,7 +938,7 @@ export async function addAppointment(data: AppointmentFormData): Promise<Appoint
         let isBusy = false;
         for (const existingAppt of appointmentsForDay.appointments.filter(a => a.professionalId === prof.id)) {
           const existingApptStartTime = parseISO(existingAppt.appointmentDateTime);
-          const existingApptEndTime = addMinutes(existingApptStartTime, existingAppt.durationMinutes);
+          const existingApptEndTime = dateFnsAddMinutes(existingApptStartTime, existingAppt.durationMinutes);
           if (areIntervalsOverlapping({ start: proposedStartTime, end: proposedEndTime }, { start: existingApptStartTime, end: existingApptEndTime })) {
             isBusy = true;
             break;
