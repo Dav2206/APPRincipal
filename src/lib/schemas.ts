@@ -50,6 +50,15 @@ export const AppointmentFormSchema = z.object({
     amountPaid: z.coerce.number().positive("El monto pagado debe ser positivo.").optional().nullable(),
     startTime: z.string().regex(/^([01]\d|2[0-3]):([0-5]\d)$/, "Formato HH:MM").optional().nullable(),
   })).optional().nullable(),
+   // Campos de AppointmentUpdateFormData que no están aquí
+   status: z.string().optional(),
+   actualArrivalTime: z.string().optional().nullable(),
+   durationMinutes: z.number().optional(),
+   paymentMethod: z.string().optional().nullable(),
+   amountPaid: z.number().optional().nullable(),
+   staffNotes: z.string().optional().nullable(),
+   attachedPhotos: z.array(z.object({ url: z.string() })).optional().nullable(),
+
 }).superRefine((data, ctx) => {
     if (!data.isWalkIn) {
       if (data.patientFirstName.trim().length < 2) {

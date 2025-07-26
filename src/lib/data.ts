@@ -696,6 +696,25 @@ export async function getServices(): Promise<Service[]> {
   }
 }
 
+export async function getServiceById(id: string): Promise<Service | undefined> {
+    if (!firestore) {
+        console.warn("[data.ts] getServiceById: Firestore not available, returning undefined.");
+        return undefined;
+    }
+    try {
+        const docRef = doc(firestore, 'servicios', id);
+        const docSnap = await getDoc(docRef);
+        if (docSnap.exists()) {
+            return { id: docSnap.id, ...convertDocumentData(docSnap.data()) } as Service;
+        }
+        return undefined;
+    } catch (error) {
+        console.error(`[data.ts] Error fetching service by ID "${id}":`, error);
+        return undefined;
+    }
+}
+
+
 export async function addService (data: ServiceFormData): Promise<Service> {
   const totalDurationMinutes = (data.defaultDuration.hours * 60) + data.defaultDuration.minutes;
   const newServiceData = {
@@ -867,8 +886,8 @@ export async function getAppointmentById(id: string): Promise<Appointment | unde
  return undefined;
 }
 
-export async function addAppointment (data: AppointmentFormData): Promise<Appointment> {
-  console.log("[data.ts] addAppointment: Datos de entrada recibidos:", data); // Log de datos de entrada
+export async function addAppointment(data: AppointmentFormData): Promise<Appointment> {
+  console.log("[data.ts] addAppointment: Datos de entrada recibidos:", data);
 
   if (!firestore) {
     console.error("[data.ts] addAppointment: Firestore not initialized.");
@@ -876,6 +895,9 @@ export async function addAppointment (data: AppointmentFormData): Promise<Appoin
   }
 
   try {
+    const mainService = await getServiceById(data.serviceId);
+    const mainServiceDuration = mainService?.defaultDuration ?? 30; // Fallback a 30 mins
+
     const newAppointmentData: Omit<Appointment, 'id' | 'createdAt' | 'updatedAt'> = {
       patientId: data.existingPatientId || null,
       professionalId: data.preferredProfessionalId === '_no_selection_placeholder_' ? null : (data.preferredProfessionalId || null),
@@ -883,85 +905,71 @@ export async function addAppointment (data: AppointmentFormData): Promise<Appoin
       locationId: data.locationId,
       appointmentDateTime: formatISO(data.appointmentDate && data.appointmentTime
         ? setMinutes(setHours(startOfDay(data.appointmentDate), parseInt(data.appointmentTime.split(':')[0])), parseInt(data.appointmentTime.split(':')[1]))
-        : startOfDay(data.appointmentDate)), // Handle case with only date provided
-      status: data.status || 'Pendiente', // Default status
-      durationMinutes: data.durationMinutes,
+        : startOfDay(data.appointmentDate)),
+      status: 'booked',
+      durationMinutes: mainServiceDuration,
       actualArrivalTime: data.actualArrivalTime || null,
       paymentMethod: data.paymentMethod || null,
       amountPaid: data.amountPaid === undefined ? null : data.amountPaid,
       staffNotes: data.staffNotes || null,
       attachedPhotos: data.attachedPhotos || [],
-       addedServices: (data.addedServices || []).map((as) => ({
+      addedServices: (data.addedServices || []).map((as) => ({
         serviceId: as.serviceId!,
         professionalId: as.professionalId === '_no_selection_placeholder_' ? null : (as.professionalId || null),
         amountPaid: (as as any).amountPaid ?? null,
         startTime: as.startTime ?? null,
       })),
-       totalCalculatedDurationMinutes: 0, // Will be calculated before saving
-
+      totalCalculatedDurationMinutes: 0, // Will be calculated before saving
     };
 
-     // Calculate total duration including added services
-    let totalDuration = newAppointmentData.durationMinutes || 0;
-    const allServicesList = await getServices(); // Assuming getServices is available
-
+    let totalDuration = newAppointmentData.durationMinutes;
+    const allServicesList = await getServices();
     if (newAppointmentData.addedServices) {
-        newAppointmentData.addedServices.forEach(as => {
-            const addedSvc = allServicesList.find(s => s.id === as.serviceId);
-            if (addedSvc) {
-                totalDuration += addedSvc.defaultDuration;
-            }
-        });
+      newAppointmentData.addedServices.forEach(as => {
+        const addedSvc = allServicesList.find(s => s.id === as.serviceId);
+        if (addedSvc) {
+          totalDuration += addedSvc.defaultDuration;
+        }
+      });
     }
     newAppointmentData.totalCalculatedDurationMinutes = totalDuration;
-
 
     const firestoreData: any = {
       ...newAppointmentData,
       appointmentDateTime: toFirestoreTimestamp(newAppointmentData.appointmentDateTime),
-      createdAt: serverTimestamp(), // Use server timestamp for creation
-      updatedAt: serverTimestamp(), // Use server timestamp for update
-       addedServices: newAppointmentData.addedServices?.map(as => ({
+      createdAt: serverTimestamp(),
+      updatedAt: serverTimestamp(),
+      addedServices: newAppointmentData.addedServices?.map(as => ({
         ...as,
-        // Convert startTime to timestamp if needed, or ensure it's stored correctly
-        // startTime: as.startTime ? toFirestoreTimestamp(as.startTime) : null, // Example if startTime is a date string
       })) || [],
     };
 
     const docRef = await addDoc(collection(firestore, 'citas'), firestoreData);
-    console.log(`[data.ts] addAppointment (Firestore): Appointment added successfully with ID ${docRef.id}.`); // Log de éxito
+    console.log(`[data.ts] addAppointment (Firestore): Appointment added successfully with ID ${docRef.id}.`);
 
-    // Fetch the newly created document to return the full Appointment object with Firestore generated fields and populated data
     const newDocSnap = await getDoc(docRef);
-    if(newDocSnap.exists()){
-        let addedAppt = { id: newDocSnap.id, ...convertDocumentData(newDocSnap.data()) } as Appointment;
-
-         // Populate related data for the return value
-        const allServices = await getServices();
-        const allProfessionals = await getProfessionals();
-        if (addedAppt.patientId) addedAppt.patient = await getPatientById(addedAppt.patientId);
-        if (addedAppt.professionalId) addedAppt.professional = allProfessionals.find(p => p.id === addedAppt.professionalId);
-        addedAppt.service = allServices.find(s => s.id === addedAppt.serviceId);
-         if (addedAppt.addedServices && addedAppt.addedServices.length > 0) {
-            addedAppt.addedServices = addedAppt.addedServices.map(as => {
-                const serviceDetail = allServices.find(s => s.id === as.serviceId);
-                const profDetail = as.professionalId ? allProfessionals.find(p => p.id === as.professionalId) : undefined;
-                return {...as, service: serviceDetail ? {...serviceDetail} : undefined, professional: profDetail ? {...profDetail} : undefined };
-            });
-         }
-
-
-        return addedAppt;
+    if (newDocSnap.exists()) {
+      let addedAppt = { id: newDocSnap.id, ...convertDocumentData(newDocSnap.data()) } as Appointment;
+      const allServices = await getServices();
+      const allProfessionals = await getProfessionals();
+      if (addedAppt.patientId) addedAppt.patient = await getPatientById(addedAppt.patientId);
+      if (addedAppt.professionalId) addedAppt.professional = allProfessionals.find(p => p.id === addedAppt.professionalId);
+      addedAppt.service = allServices.find(s => s.id === addedAppt.serviceId);
+      if (addedAppt.addedServices && addedAppt.addedServices.length > 0) {
+        addedAppt.addedServices = addedAppt.addedServices.map(as => {
+          const serviceDetail = allServices.find(s => s.id === as.serviceId);
+          const profDetail = as.professionalId ? allProfessionals.find(p => p.id === as.professionalId) : undefined;
+          return { ...as, service: serviceDetail, professional: profDetail };
+        });
+      }
+      return addedAppt;
     } else {
-        console.error("[data.ts] addAppointment: Failed to fetch newly created appointment document.");
-        // Return a partial appointment object if fetching failed, or throw an error
-         return { id: docRef.id, ...newAppointmentData, createdAt: formatISO(new Date()), updatedAt: formatISO(new Date()) } as Appointment; // Fallback return
+      console.error("[data.ts] addAppointment: Failed to fetch newly created appointment document.");
+      return { id: docRef.id, ...newAppointmentData, createdAt: formatISO(new Date()), updatedAt: formatISO(new Date()) } as Appointment;
     }
-
-
   } catch (error) {
     console.error("[data.ts] Error adding appointment:", error);
-    throw error; // Re-throw the error after logging
+    throw error;
   }
 }
 
