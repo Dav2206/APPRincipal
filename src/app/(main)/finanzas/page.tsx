@@ -1,4 +1,3 @@
-
 "use client";
 
 import React, { useEffect, useState, useMemo } from 'react';
@@ -216,7 +215,7 @@ export default function FinancesPage() {
                     <p className="text-muted-foreground">No se encontraron ingresos para el periodo y sede seleccionada.</p>
                 </div>
             ) : (
-                <div className="border rounded-lg">
+                <div className="border rounded-lg overflow-x-auto">
                 <Table>
                   <TableHeader>
                     <TableRow>
