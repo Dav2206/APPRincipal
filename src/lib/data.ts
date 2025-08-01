@@ -1106,8 +1106,8 @@ export async function addAppointment(data: AppointmentFormData): Promise<Appoint
 }
 
 export async function updateAppointment(
-  id: string, 
-  data: Partial<AppointmentUpdateFormData>, 
+  id: string,
+  data: Partial<AppointmentUpdateFormData>,
   originalPhotos: string[] = []
 ): Promise<Appointment | undefined> {
   console.log(`[data.ts] updateAppointment: Iniciando actualización para cita ID ${id}`, data);
@@ -1115,13 +1115,14 @@ export async function updateAppointment(
   if (!firestore || !storage) {
     throw new Error("Firestore o Storage no están inicializados.");
   }
-  
+
+  const docRef = doc(firestore, 'citas', id);
   const appointmentToUpdate: { [key: string]: any } = {};
 
   // Mapear los campos del formulario a la estructura del documento
   Object.keys(data).forEach(key => {
     if (key !== 'attachedPhotos') {
-        appointmentToUpdate[key] = (data as any)[key];
+      appointmentToUpdate[key] = (data as any)[key];
     }
   });
 
@@ -1144,25 +1145,26 @@ export async function updateAppointment(
     console.log(`[data.ts] URLs de fotos finales para Firestore:`, appointmentToUpdate.attachedPhotos);
 
     const photosToDelete = originalPhotos.filter(url => !existingPhotoUrls.includes(url));
-    console.log(`[data.ts] Fotos marcadas para eliminar de Storage:`, photosToDelete);
-    await Promise.all(photosToDelete.map(async (url) => {
-      try {
-        if (url.startsWith('http')) {
-          const photoRef = storageRef(storage, url);
-          await deleteObject(photoRef);
-          console.log(`[data.ts] Imagen eliminada de Storage: ${url}`);
+    if (photosToDelete.length > 0) {
+      console.log(`[data.ts] Fotos marcadas para eliminar de Storage:`, photosToDelete);
+      await Promise.all(photosToDelete.map(async (url) => {
+        try {
+          if (url.startsWith('http')) {
+            const photoRef = storageRef(storage, url);
+            await deleteObject(photoRef);
+            console.log(`[data.ts] Imagen eliminada de Storage: ${url}`);
+          }
+        } catch (error: any) {
+          if (error.code !== 'storage/object-not-found') {
+            console.error(`[data.ts] Error eliminando foto ${url}:`, error);
+          } else {
+            console.warn(`[data.ts] Imagen no encontrada en Storage al intentar eliminar, se omite: ${url}`);
+          }
         }
-      } catch (error: any) {
-        if (error.code !== 'storage/object-not-found') {
-          console.error(`[data.ts] Error eliminando foto ${url}:`, error);
-        } else {
-          console.warn(`[data.ts] Imagen no encontrada en Storage al intentar eliminar, se omite: ${url}`);
-        }
-      }
-    }));
+      }));
+    }
   }
 
-  const docRef = doc(firestore, 'citas', id);
   const firestoreUpdateData: { [key: string]: any } = { ...appointmentToUpdate, updatedAt: serverTimestamp() };
   
   // Limpieza de datos antes de enviar a Firestore
