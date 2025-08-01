@@ -1,7 +1,7 @@
 
 
 import { z } from 'zod';
-import { LOCATIONS, TIME_SLOTS, PAYMENT_METHODS, APPOINTMENT_STATUS_DISPLAY, DAYS_OF_WEEK } from './constants';
+import { LOCATIONS, TIME_SLOTS, APPOINTMENT_STATUS_DISPLAY, DAYS_OF_WEEK } from './constants';
 import type { DayOfWeekId } from './constants';
 import { getDay, differenceInCalendarDays, parseISO } from 'date-fns';
 
@@ -12,7 +12,7 @@ export const LoginSchema = z.object({
 export type LoginFormData = z.infer<typeof LoginSchema>;
 
 const locationIds = LOCATIONS.map(loc => loc.id);
-const paymentMethodValues = PAYMENT_METHODS.map(pm => pm);
+// const paymentMethodValues = PAYMENT_METHODS.map(pm => pm); // No longer a strict enum
 const appointmentStatusKeys = Object.keys(APPOINTMENT_STATUS_DISPLAY) as (keyof typeof APPOINTMENT_STATUS_DISPLAY)[];
 const dayOfWeekIds = DAYS_OF_WEEK.map(day => day.id);
 
@@ -150,7 +150,7 @@ export const AppointmentUpdateSchema = z.object({
   actualArrivalTime: z.string().optional().nullable(),
   professionalId: z.string().optional().nullable(),
   durationMinutes: z.coerce.number().int().min(0, "La duración debe ser un número positivo o cero.").optional().nullable(), // Permitir cero
-  paymentMethod: z.string().refine(val => paymentMethodValues.includes(val as any), {message: "Método de pago inválido"}).optional().nullable(),
+  paymentMethod: z.string().min(1, { message: "El método de pago es requerido si se completa." }).optional().nullable(),
   amountPaid: z.coerce.number().min(0, "El monto pagado no puede ser negativo.").optional().nullable(), // Permitir cero
   staffNotes: z.string().optional().nullable(),
   attachedPhotos: z.array(z.object({ url: z.string() })).optional().nullable(),

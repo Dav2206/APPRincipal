@@ -1,15 +1,16 @@
 
 
-export const PAYMENT_METHODS = ['Efectivo', 'Tarjeta de Débito', 'Yape/Plin'] as const;
-export type PaymentMethod = typeof PAYMENT_METHODS[number];
+// Removing the global constant as payment methods are now managed per location.
+// export const PAYMENT_METHODS = ['Efectivo', 'Tarjeta de Débito', 'Yape/Plin'] as const;
+export type PaymentMethod = string; // Now it's just a string, fully dynamic.
 
 export const LOCATIONS = [
-  { id: 'higuereta', name: 'Higuereta', paymentMethods: [...PAYMENT_METHODS] },
-  { id: 'eden_benavides', name: 'Edén Benavides', paymentMethods: [...PAYMENT_METHODS] },
-  { id: 'crucetas', name: 'Crucetas', paymentMethods: [...PAYMENT_METHODS] },
-  { id: 'carpaccio', name: 'Carpaccio', paymentMethods: [...PAYMENT_METHODS] },
-  { id: 'vista_alegre', name: 'Vista Alegre', paymentMethods: [...PAYMENT_METHODS] },
-  { id: 'san_antonio', name: 'San Antonio', paymentMethods: [...PAYMENT_METHODS] },
+  { id: 'higuereta', name: 'Higuereta', paymentMethods: ['Efectivo', 'Yape/Plin Higuereta', 'Tarjeta Débito Higuereta'] as PaymentMethod[] },
+  { id: 'eden_benavides', name: 'Edén Benavides', paymentMethods: ['Efectivo', 'Yape/Plin Edén', 'Tarjeta Débito Edén'] as PaymentMethod[] },
+  { id: 'crucetas', name: 'Crucetas', paymentMethods: ['Efectivo', 'Yape/Plin Crucetas', 'Tarjeta Débito Crucetas'] as PaymentMethod[] },
+  { id: 'carpaccio', name: 'Carpaccio', paymentMethods: ['Efectivo', 'Yape/Plin Carpaccio', 'Tarjeta Débito Carpaccio'] as PaymentMethod[] },
+  { id: 'vista_alegre', name: 'Vista Alegre', paymentMethods: ['Efectivo', 'Yape/Plin Vista Alegre', 'Tarjeta Débito Vista Alegre'] as PaymentMethod[] },
+  { id: 'san_antonio', name: 'San Antonio', paymentMethods: ['Efectivo', 'Yape/Plin San Antonio', 'Tarjeta Débito San Antonio'] as PaymentMethod[] },
 ] as const;
 
 export type LocationId = typeof LOCATIONS[number]['id'];

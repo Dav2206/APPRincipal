@@ -3,7 +3,7 @@
 "use client";
 
 import type { Appointment, Service, AppointmentStatus, Professional } from '@/types';
-import { APPOINTMENT_STATUS, PAYMENT_METHODS, USER_ROLES, APPOINTMENT_STATUS_DISPLAY, LOCATIONS, TIME_SLOTS } from '@/lib/constants';
+import { PAYMENT_METHODS, USER_ROLES, APPOINTMENT_STATUS_DISPLAY, LOCATIONS, TIME_SLOTS, APPOINTMENT_STATUS } from '@/lib/constants';
 import { format, parseISO, setHours, setMinutes, formatISO } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { CameraIcon, Loader2, PlusCircle, Trash2, ShoppingBag, ConciergeBell, Clock, CalendarIcon as CalendarIconLucide, XCircle, RefreshCcw } from 'lucide-react';
@@ -82,6 +82,16 @@ export function AppointmentEditDialog({ appointment, isOpen, onOpenChange, onApp
   const streamRef = useRef<MediaStream | null>(null);
   const [videoDevices, setVideoDevices] = useState<MediaDeviceInfo[]>([]);
   const [currentDeviceIndex, setCurrentDeviceIndex] = useState(0);
+
+  // Payment methods are now location-specific, so we need to fetch/determine them
+  // For simplicity, we'll mimic the structure used in finances page.
+  // In a real app, this might come from a shared context or a direct fetch.
+  const paymentMethodsForLocation = useMemo(() => {
+    const locConfig = LOCATIONS.find(l => l.id === appointment.locationId);
+    // This is a simplification. A real app would have a DB source for this.
+    // We assume the default list if nothing specific is configured.
+    return locConfig?.paymentMethods || ['Efectivo', 'Tarjeta de Débito', 'Yape/Plin'];
+  }, [appointment.locationId]);
 
 
   const form = useForm<AppointmentUpdateFormData>({
@@ -282,22 +292,25 @@ export function AppointmentEditDialog({ appointment, isOpen, onOpenChange, onApp
 
 
   const handleRemovePhoto = async (index: number) => {
-    const photoField = attachedPhotoFields[index] as { id: string; url?: string };
+    const photoField = attachedPhotoFields[index] as { id?: string; url?: string };
     const photoUrlToRemove = photoField?.url;
-
+  
     if (!photoUrlToRemove || typeof photoUrlToRemove !== 'string') {
-        removeAttachedPhoto(index);
-        return;
+      removeAttachedPhoto(index);
+      return;
     }
-
+  
     if (photoUrlToRemove.startsWith('data:image/')) {
-        removeAttachedPhoto(index);
-        return;
+      removeAttachedPhoto(index);
+      return;
     }
-    
+      
+    // For already uploaded photos, we just remove it from the form state.
+    // The actual deletion from storage happens in the onSubmit function by comparing the original and final lists.
     removeAttachedPhoto(index);
-    toast({ title: "Imagen marcada para eliminación", description: "La imagen se eliminará al guardar los cambios."});
+    toast({ title: "Imagen marcada para eliminación", description: "La imagen se eliminará de Firebase Storage al guardar los cambios."});
   };
+  
 
   const onSubmitUpdate = async (data: AppointmentUpdateFormData) => {
     if (allServices && !allServices.length && data.serviceId === DEFAULT_SERVICE_ID_PLACEHOLDER) {
@@ -615,7 +628,7 @@ export function AppointmentEditDialog({ appointment, isOpen, onOpenChange, onApp
                         </SelectTrigger>
                       </FormControl>
                       <SelectContent>
-                        {PAYMENT_METHODS.map(method => (
+                        {paymentMethodsForLocation.map(method => (
                           <SelectItem key={method} value={method}>{method}</SelectItem>
                         ))}
                       </SelectContent>
