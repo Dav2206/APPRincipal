@@ -1,3 +1,4 @@
+
 "use client";
 
 import React, { useEffect, useState, useMemo } from 'react';
@@ -61,7 +62,7 @@ export default function FinancesPage() {
   const [selectedYear, setSelectedYear] = useState<number>(getYear(new Date()));
   const [selectedMonth, setSelectedMonth] = useState<number>(getMonth(new Date()));
 
-  const isAdminOrContador = user?.role === USER_ROLES.ADMIN || user?.role === USER_ROLES.CONTADOR;
+  const isAdminOrContador = useMemo(() => user?.role === USER_ROLES.ADMIN || user?.role === USER_ROLES.CONTADOR, [user]);
 
   useEffect(() => {
     if (!isLoading && !isAdminOrContador) {
@@ -91,14 +92,14 @@ export default function FinancesPage() {
             appointments = results.flatMap(res => res.appointments || []);
         } else if(adminSelectedLocation) {
             const result = await getAppointments({
-                locationId: adminSelectedLocation,
+                locationId: adminSelectedLocation as LocationId,
                 statuses: ['completed'],
                 dateRange: { start: startDate, end: endDate }
             });
             appointments = result.appointments || [];
         }
 
-        const newReportData: Record<LocationId, MonthlyReportItem> = {};
+        const newReportData: Record<string, MonthlyReportItem> = {};
 
         LOCATIONS.forEach(loc => {
            if(adminSelectedLocation === 'all' || adminSelectedLocation === loc.id) {
@@ -244,7 +245,7 @@ export default function FinancesPage() {
                             <TableRow className="bg-primary/10">
                                 <TableHead>Total General</TableHead>
                                 <TableHead colSpan={PAYMENT_METHODS.length}></TableHead>
-                                <TableHead className="text-right text-lg">S/ {grandTotal.toFixed(2)}</TableHead>
+                                <TableHead className="text-right text-lg font-semibold">S/ {grandTotal.toFixed(2)}</TableHead>
                             </TableRow>
                         </TableFooter>
                     )}
