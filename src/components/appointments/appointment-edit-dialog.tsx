@@ -6,7 +6,7 @@ import type { Appointment, Service, AppointmentStatus, Professional } from '@/ty
 import { APPOINTMENT_STATUS, PAYMENT_METHODS, USER_ROLES, APPOINTMENT_STATUS_DISPLAY, LOCATIONS, TIME_SLOTS } from '@/lib/constants';
 import { format, parseISO, setHours, setMinutes, formatISO } from 'date-fns';
 import { es } from 'date-fns/locale';
-import { CameraIcon, Loader2, PlusCircle, Trash2, ShoppingBag, ConciergeBell, Clock, CalendarIcon as CalendarIconLucide, XCircle } from 'lucide-react';
+import { CameraIcon, Loader2, PlusCircle, Trash2, ShoppingBag, ConciergeBell, Clock, CalendarIcon as CalendarIconLucide, XCircle, RefreshCcw } from 'lucide-react';
 import { useAuth } from '@/contexts/auth-provider';
 import {
   Dialog,
@@ -80,6 +80,8 @@ export function AppointmentEditDialog({ appointment, isOpen, onOpenChange, onApp
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
+  const [videoDevices, setVideoDevices] = useState<MediaDeviceInfo[]>([]);
+  const [currentDeviceIndex, setCurrentDeviceIndex] = useState(0);
 
 
   const form = useForm<AppointmentUpdateFormData>({
@@ -103,26 +105,67 @@ export function AppointmentEditDialog({ appointment, isOpen, onOpenChange, onApp
     }
   }, []);
 
-  const openCamera = async () => {
-    setIsCameraModalOpen(true);
-    setHasCameraPermission(null); 
+  const startCameraStream = useCallback(async (deviceId?: string) => {
+    stopCameraStream();
     try {
-        const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+        const constraints: MediaStreamConstraints = {
+            video: deviceId ? { deviceId: { exact: deviceId } } : true,
+        };
+        const stream = await navigator.mediaDevices.getUserMedia(constraints);
         streamRef.current = stream;
         if (videoRef.current) {
             videoRef.current.srcObject = stream;
         }
         setHasCameraPermission(true);
     } catch (error) {
-        console.error('Error accessing camera:', error);
+        console.error('Error starting camera stream:', error);
         setHasCameraPermission(false);
         toast({
             variant: 'destructive',
-            title: 'Acceso a la Cámara Denegado',
-            description: 'Por favor, habilite los permisos de cámara en su navegador.',
+            title: 'Error de Cámara',
+            description: 'No se pudo iniciar la cámara seleccionada.',
         });
     }
+  }, [stopCameraStream, toast]);
+
+  const openCamera = async () => {
+    setIsCameraModalOpen(true);
+    setHasCameraPermission(null);
+    try {
+      // First, get permissions to be able to enumerate devices
+      const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+      streamRef.current = stream; // Keep the initial stream
+      
+      const devices = await navigator.mediaDevices.enumerateDevices();
+      const availableVideoDevices = devices.filter(device => device.kind === 'videoinput');
+      setVideoDevices(availableVideoDevices);
+      
+      if (availableVideoDevices.length > 0) {
+        setCurrentDeviceIndex(0);
+        await startCameraStream(availableVideoDevices[0].deviceId);
+      } else {
+        // This case should be rare if getUserMedia succeeded
+        setHasCameraPermission(false);
+         toast({ variant: 'destructive', title: 'Cámara no encontrada', description: 'No se encontraron dispositivos de cámara.' });
+      }
+    } catch (error) {
+      console.error('Error accessing camera:', error);
+      setHasCameraPermission(false);
+      toast({
+          variant: 'destructive',
+          title: 'Acceso a la Cámara Denegado',
+          description: 'Por favor, habilite los permisos de cámara en su navegador.',
+      });
+    }
 };
+
+ const handleSwitchCamera = () => {
+    if (videoDevices.length > 1) {
+        const nextIndex = (currentDeviceIndex + 1) % videoDevices.length;
+        setCurrentDeviceIndex(nextIndex);
+        startCameraStream(videoDevices[nextIndex].deviceId);
+    }
+  };
 
   const handleTakePicture = () => {
     if (videoRef.current && canvasRef.current) {
@@ -832,9 +875,14 @@ export function AppointmentEditDialog({ appointment, isOpen, onOpenChange, onApp
                         </div>
                     )}
                 </div>
-                <Button onClick={handleTakePicture} disabled={!hasCameraPermission}>
-                    <CameraIcon className="mr-2 h-4 w-4"/> Tomar Foto
-                </Button>
+                <div className="flex gap-2">
+                    <Button onClick={handleTakePicture} disabled={!hasCameraPermission}>
+                        <CameraIcon className="mr-2 h-4 w-4"/> Tomar Foto
+                    </Button>
+                     <Button onClick={handleSwitchCamera} variant="outline" disabled={!hasCameraPermission || videoDevices.length < 2}>
+                        <RefreshCcw className="mr-2 h-4 w-4"/> Cambiar Cámara
+                    </Button>
+                </div>
             </div>
              <DialogFooter>
                 <DialogClose asChild>
