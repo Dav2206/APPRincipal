@@ -1,11 +1,12 @@
+
 "use client";
 
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import type { Appointment, LocationId, PaymentMethod } from '@/types';
 import { useAuth } from '@/contexts/auth-provider';
 import { useAppState } from '@/contexts/app-state-provider';
 import { getAppointments } from '@/lib/data';
-import { LOCATIONS, USER_ROLES, PAYMENT_METHODS, APPOINTMENT_STATUS } from '@/lib/constants';
+import { LOCATIONS, USER_ROLES, PAYMENT_METHODS as DEFAULT_PAYMENT_METHODS, APPOINTMENT_STATUS } from '@/lib/constants';
 
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -13,13 +14,16 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow, TableFoo
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { format, startOfMonth, endOfMonth, getYear, getMonth, setYear, setMonth } from 'date-fns';
 import { es } from 'date-fns/locale';
-import { Landmark, Loader2, AlertTriangle } from 'lucide-react';
+import { Landmark, Loader2, AlertTriangle, ListPlus, Trash2, Filter } from 'lucide-react';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { useRouter } from 'next/navigation';
-
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter, DialogClose } from '@/components/ui/dialog';
+import { Input } from '@/components/ui/input';
+import { ScrollArea } from '@/components/ui/scroll-area';
+import { Separator } from '@/components/ui/separator';
 
 type ReportRow = {
   locationId: LocationId;
@@ -56,6 +60,17 @@ export default function FinancesPage() {
   });
   const [isSaving, setIsSaving] = useState(false);
   const [hasChanges, setHasChanges] = useState(false);
+  const [completedAppointments, setCompletedAppointments] = useState<Appointment[]>([]);
+
+  // State for custom payment methods
+  const [manuallyAddedMethods, setManuallyAddedMethods] = useState<PaymentMethod[]>([]);
+  const [isManageMethodsModalOpen, setIsManageMethodsModalOpen] = useState(false);
+  const [newMethodNameInput, setNewMethodNameInput] = useState('');
+
+  const allAvailablePaymentMethods = useMemo(() => {
+    const combined = new Set([...DEFAULT_PAYMENT_METHODS, ...manuallyAddedMethods]);
+    return Array.from(combined).sort((a,b) => a.localeCompare(b));
+  }, [manuallyAddedMethods]);
 
 
   useEffect(() => {
@@ -63,7 +78,6 @@ export default function FinancesPage() {
       router.replace('/dashboard'); 
     }
   }, [user, authIsLoading, router]);
-
 
   useEffect(() => {
     async function generateReport() {
@@ -95,6 +109,8 @@ export default function FinancesPage() {
             const results = await Promise.all(allLocationPromises);
             appointments = results.flatMap(r => r.appointments || []);
         }
+        
+        setCompletedAppointments(appointments);
 
         const reportMap = new Map<LocationId, ReportRow>();
 
@@ -170,6 +186,35 @@ export default function FinancesPage() {
     setHasChanges(false);
   };
 
+  const handleAddNewMethod = () => {
+    const trimmedName = newMethodNameInput.trim();
+    if (!trimmedName) {
+      toast({ title: "Nombre inválido", description: "El nombre del método de pago no puede estar vacío.", variant: "destructive"});
+      return;
+    }
+    if (allAvailablePaymentMethods.some(m => m.toLowerCase() === trimmedName.toLowerCase())) {
+      toast({ title: "Método Duplicado", description: `"${trimmedName}" ya existe.`, variant: "default"});
+      return;
+    }
+    setManuallyAddedMethods(prev => [...prev, trimmedName as PaymentMethod]);
+    toast({ title: "Método Añadido", description: `"${trimmedName}" ha sido añadido a la lista.`});
+    setNewMethodNameInput('');
+  }
+
+  const isMethodInUse = useCallback((methodName: PaymentMethod): boolean => {
+    return completedAppointments.some(appt => appt.paymentMethod === methodName);
+  }, [completedAppointments]);
+
+  const handleRemoveManuallyAddedMethod = (methodNameToRemove: PaymentMethod) => {
+    if (isMethodInUse(methodNameToRemove)) {
+       toast({ title: "No se puede eliminar", description: `"${methodNameToRemove}" está en uso en citas completadas y no puede ser eliminado.`, variant: "destructive"});
+       return;
+    }
+    setManuallyAddedMethods(prev => prev.filter(m => m !== methodNameToRemove));
+    toast({ title: "Método Eliminado", description: `"${methodNameToRemove}" ha sido eliminado de la lista.`});
+  }
+
+
   if (authIsLoading || !user || (user.role !== USER_ROLES.CONTADOR && user.role !== USER_ROLES.ADMIN)) {
     return (
       <div className="flex h-screen items-center justify-center">
@@ -225,7 +270,7 @@ export default function FinancesPage() {
               <TableHeader>
                 <TableRow>
                   <TableHead>Sede</TableHead>
-                  {PAYMENT_METHODS.map(method => <TableHead key={method} className="text-right">{method}</TableHead>)}
+                  {allAvailablePaymentMethods.map(method => <TableHead key={method} className="text-right">{method}</TableHead>)}
                   <TableHead className="text-right font-bold">Total Sede</TableHead>
                 </TableRow>
               </TableHeader>
@@ -233,9 +278,9 @@ export default function FinancesPage() {
                 {reportData.map(row => (
                   <TableRow key={row.locationId}>
                     <TableCell className="font-medium">{row.locationName}</TableCell>
-                    {PAYMENT_METHODS.map(method => (
+                    {allAvailablePaymentMethods.map(method => (
                       <TableCell key={method} className="text-right">
-                        {(row.totalsByMethod[method] || 0).toFixed(2)}
+                        {(row.totalsByMethod[method as PaymentMethod] || 0).toFixed(2)}
                       </TableCell>
                     ))}
                     <TableCell className="text-right font-bold">
@@ -247,9 +292,9 @@ export default function FinancesPage() {
               <TableFooter>
                 <TableRow className="bg-muted/80 font-bold">
                   <TableCell>Total General</TableCell>
-                  {PAYMENT_METHODS.map(method => (
+                  {allAvailablePaymentMethods.map(method => (
                     <TableCell key={method} className="text-right">
-                      {(totalsByAllMethods[method] || 0).toFixed(2)}
+                      {(totalsByAllMethods[method as PaymentMethod] || 0).toFixed(2)}
                     </TableCell>
                   ))}
                   <TableCell className="text-right text-lg">
@@ -264,22 +309,29 @@ export default function FinancesPage() {
 
       <Card className="shadow-lg">
         <CardHeader>
-            <CardTitle>Gestión de Métodos de Pago por Sede</CardTitle>
-            <CardDescription>
-                Habilite o deshabilite los métodos de pago disponibles para cada una de sus sedes.
-            </CardDescription>
+            <div className="flex justify-between items-start">
+              <div>
+                <CardTitle>Gestión de Métodos de Pago por Sede</CardTitle>
+                <CardDescription>
+                    Habilite o deshabilite los métodos de pago disponibles para cada una de sus sedes.
+                </CardDescription>
+              </div>
+              <Button variant="outline" onClick={() => setIsManageMethodsModalOpen(true)}>
+                <ListPlus className="mr-2 h-4 w-4"/> Gestionar Métodos
+              </Button>
+            </div>
         </CardHeader>
         <CardContent className="space-y-6">
             {LOCATIONS.map(location => (
                 <div key={location.id} className="p-4 border rounded-lg">
                     <h4 className="font-semibold mb-4 text-lg">{location.name}</h4>
                     <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
-                        {PAYMENT_METHODS.map(method => (
+                        {allAvailablePaymentMethods.map(method => (
                             <div key={method} className="flex items-center space-x-2">
                                 <Switch
                                     id={`${location.id}-${method}`}
                                     checked={(paymentMethodsConfig[location.id] || []).includes(method)}
-                                    onCheckedChange={(checked) => handlePaymentMethodToggle(location.id, method, checked)}
+                                    onCheckedChange={(checked) => handlePaymentMethodToggle(location.id, method as PaymentMethod, checked)}
                                 />
                                 <Label htmlFor={`${location.id}-${method}`} className="text-sm">
                                     {method}
@@ -304,6 +356,63 @@ export default function FinancesPage() {
             </Alert>
         </CardContent>
       </Card>
+
+      {/* Manage Payment Methods Modal */}
+      <Dialog open={isManageMethodsModalOpen} onOpenChange={setIsManageMethodsModalOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Gestionar Métodos de Pago</DialogTitle>
+            <DialogDescription>
+              Añada o elimine métodos de pago personalizados. Los métodos en uso no se pueden eliminar.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-4 space-y-4">
+            <div>
+              <Label htmlFor="new-method-input" className="text-sm font-medium">Añadir Nuevo Método</Label>
+              <div className="flex gap-2 mt-1">
+                <Input 
+                  id="new-method-input"
+                  placeholder="Ej: Billetera Digital"
+                  value={newMethodNameInput}
+                  onChange={(e) => setNewMethodNameInput(e.target.value)}
+                />
+                <Button onClick={handleAddNewMethod}>Añadir</Button>
+              </div>
+            </div>
+            <Separator />
+            <div>
+              <h4 className="text-md font-semibold mb-2">Métodos Actuales</h4>
+              <ScrollArea className="h-48 border rounded-md p-2">
+                <ul className="space-y-1">
+                  {allAvailablePaymentMethods.map(method => (
+                    <li key={method} className="flex justify-between items-center p-1.5 hover:bg-muted/50 rounded-md">
+                      <span className="text-sm">{method}</span>
+                      {!DEFAULT_PAYMENT_METHODS.includes(method as any) && (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="text-xs h-auto px-2 py-1 text-destructive hover:text-destructive/80"
+                          onClick={() => handleRemoveManuallyAddedMethod(method as PaymentMethod)}
+                          disabled={isMethodInUse(method as PaymentMethod)}
+                          title={isMethodInUse(method as PaymentMethod) ? "Este método está en uso y no puede ser eliminado." : "Eliminar método"}
+                        >
+                          <Trash2 size={14}/>
+                        </Button>
+                      )}
+                    </li>
+                  ))}
+                </ul>
+              </ScrollArea>
+            </div>
+          </div>
+          <DialogFooter>
+            <DialogClose asChild><Button type="button" variant="outline">Cerrar</Button></DialogClose>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
+
+
+    
