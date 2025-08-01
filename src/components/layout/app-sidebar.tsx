@@ -1,4 +1,3 @@
-
 "use client";
 
 import Link from 'next/link';
@@ -38,7 +37,6 @@ const navItems = [
   { href: '/contracts', label: 'Contratos', icon: FileSpreadsheet, roles: [USER_ROLES.ADMIN, USER_ROLES.CONTADOR] },
   { href: '/services', label: 'Servicios', icon: ClipboardList, roles: [USER_ROLES.ADMIN] }, 
   { href: '/reminders', label: 'Recordatorios', icon: Bell, roles: [USER_ROLES.ADMIN, USER_ROLES.CONTADOR] },
-  { href: '/finances', label: 'Finanzas', icon: Landmark, roles: [USER_ROLES.ADMIN, USER_ROLES.CONTADOR] },
   { href: '/test-function', label: 'Test Function', icon: Terminal, roles: [USER_ROLES.ADMIN] },
 ];
 
