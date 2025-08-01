@@ -182,28 +182,18 @@ export function AppointmentEditDialog({ appointment, isOpen, onOpenChange, onApp
         return;
     }
 
-    if (photoUrlToRemove.startsWith('gs://') || photoUrlToRemove.startsWith('http')) { 
-        try {
-            if (!storage) {
-                throw new Error("Firebase Storage is not initialized.");
-            }
-            const storageRef = ref(storage, photoUrlToRemove); 
-            await deleteObject(storageRef);
-            toast({ title: "Imagen eliminada", description: "La imagen ha sido eliminada del almacenamiento." });
-            removeAttachedPhoto(index); 
-        } catch (error: any) {
-             if (error.code === 'storage/object-not-found') {
-                console.warn(`Image not found in storage, removing reference: ${photoUrlToRemove}`);
-                removeAttachedPhoto(index); 
-             } else {
-                console.error("Error deleting image from storage:", error);
-                toast({ title: "Error al eliminar imagen", description: "No se pudo eliminar la imagen del almacenamiento.", variant: "destructive"});
-             }
-        }
-      } else { 
+    if (photoUrlToRemove.startsWith('data:image/')) {
+        // Just remove from form state if it's a new, unsaved photo
         removeAttachedPhoto(index);
-      }
-    };
+        return;
+    }
+
+    // For saved photos, we will handle deletion in the main update logic
+    // to prevent accidental deletion if the user cancels.
+    // For now, we just remove it from the UI.
+    removeAttachedPhoto(index);
+    toast({ title: "Imagen marcada para eliminación", description: "La imagen se eliminará al guardar los cambios."});
+  };
 
   const onSubmitUpdate = async (data: AppointmentUpdateFormData) => {
     if (allServices && !allServices.length && data.serviceId === DEFAULT_SERVICE_ID_PLACEHOLDER) {

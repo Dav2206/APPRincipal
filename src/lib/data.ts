@@ -1,4 +1,5 @@
 
+
 // src/lib/data.ts
 import type { User, Professional, Patient, Service, Appointment, AppointmentFormData, ProfessionalFormData, AppointmentStatus, ServiceFormData, Contract, PeriodicReminder, ImportantNote, PeriodicReminderFormData, ImportantNoteFormData, AddedServiceItem } from '@/types';
 import { LOCATIONS, USER_ROLES, SERVICES as SERVICES_CONSTANTS, APPOINTMENT_STATUS, LocationId, ServiceId as ConstantServiceId, APPOINTMENT_STATUS_DISPLAY, PAYMENT_METHODS, TIME_SLOTS, DAYS_OF_WEEK } from './constants';
@@ -1104,41 +1105,58 @@ export async function addAppointment(data: AppointmentFormData): Promise<Appoint
   }
 }
 
-export async function updateAppointment(id: string, data: Partial<AppointmentUpdateFormData>, originalPhotos: string[] = []): Promise<Appointment | undefined> {
-  console.log(`[data.ts] updateAppointment: Datos de entrada recibidos para ID ${id}:`, data);
+export async function updateAppointment(
+  id: string, 
+  data: Partial<AppointmentUpdateFormData>, 
+  originalPhotos: string[] = []
+): Promise<Appointment | undefined> {
+  console.log(`[data.ts] updateAppointment: Iniciando actualización para cita ID ${id}`, data);
 
   if (!firestore || !storage) {
-    console.error("[data.ts] updateAppointment: Firestore or Storage is not initialized.");
-    throw new Error("Firestore or Storage not initialized.");
+    throw new Error("Firestore o Storage no están inicializados.");
   }
   
-  const appointmentToUpdate: { [key: string]: any } = { ...data };
+  const appointmentToUpdate: { [key: string]: any } = {};
 
+  // Mapear los campos del formulario a la estructura del documento
+  Object.keys(data).forEach(key => {
+    if (key !== 'attachedPhotos') {
+        appointmentToUpdate[key] = (data as any)[key];
+    }
+  });
+
+  // Gestionar fotos
   if (data.attachedPhotos) {
-    const newPhotoDataUris = (data.attachedPhotos || []).map(p => p.url).filter(url => url && url.startsWith('data:image/'));
-    const existingPhotoUrls = (data.attachedPhotos || []).map(p => p.url).filter(url => url && url.startsWith('http'));
+    const newPhotoDataUris = data.attachedPhotos.map(p => p.url).filter(url => url && url.startsWith('data:image/'));
+    const existingPhotoUrls = data.attachedPhotos.map(p => p.url).filter(url => url && (url.startsWith('http') || url.startsWith('gs://')));
 
-    // Upload new photos and get their download URLs
     const newUploadedUrls = await Promise.all(
       newPhotoDataUris.map(async (dataUri) => {
-        const photoRef = storageRef(storage, `appointment-photos/${id}/${generateId()}`);
+        const photoName = generateId();
+        const photoRef = storageRef(storage, `appointment-photos/${id}/${photoName}`);
+        console.log(`[data.ts] Subiendo nueva imagen a: ${photoRef.fullPath}`);
         const snapshot = await uploadString(photoRef, dataUri, 'data_url');
         return getDownloadURL(snapshot.ref);
       })
     );
     
-    // Combine existing URLs with newly uploaded URLs
     appointmentToUpdate.attachedPhotos = [...existingPhotoUrls, ...newUploadedUrls];
+    console.log(`[data.ts] URLs de fotos finales para Firestore:`, appointmentToUpdate.attachedPhotos);
 
-    // Delete photos that were removed from the form
-    const photosToDelete = originalPhotos.filter(url => !((appointmentToUpdate.attachedPhotos || []) as string[]).includes(url));
+    const photosToDelete = originalPhotos.filter(url => !existingPhotoUrls.includes(url));
+    console.log(`[data.ts] Fotos marcadas para eliminar de Storage:`, photosToDelete);
     await Promise.all(photosToDelete.map(async (url) => {
       try {
-        const photoRef = storageRef(storage, url);
-        await deleteObject(photoRef);
+        if (url.startsWith('http')) {
+          const photoRef = storageRef(storage, url);
+          await deleteObject(photoRef);
+          console.log(`[data.ts] Imagen eliminada de Storage: ${url}`);
+        }
       } catch (error: any) {
         if (error.code !== 'storage/object-not-found') {
-          console.error(`Error deleting photo ${url}:`, error);
+          console.error(`[data.ts] Error eliminando foto ${url}:`, error);
+        } else {
+          console.warn(`[data.ts] Imagen no encontrada en Storage al intentar eliminar, se omite: ${url}`);
         }
       }
     }));
@@ -1147,7 +1165,7 @@ export async function updateAppointment(id: string, data: Partial<AppointmentUpd
   const docRef = doc(firestore, 'citas', id);
   const firestoreUpdateData: { [key: string]: any } = { ...appointmentToUpdate, updatedAt: serverTimestamp() };
   
-  // Convert undefined to null before sending to Firestore
+  // Limpieza de datos antes de enviar a Firestore
   for (const key in firestoreUpdateData) {
     if (firestoreUpdateData[key] === undefined) {
       firestoreUpdateData[key] = null;
@@ -1158,33 +1176,32 @@ export async function updateAppointment(id: string, data: Partial<AppointmentUpd
     firestoreUpdateData.addedServices = firestoreUpdateData.addedServices.map((as: any) => {
         const cleanedService: any = {};
         for (const key in as) {
-            if (as[key] !== undefined) {
-                cleanedService[key] = as[key];
-            } else {
-                cleanedService[key] = null;
-            }
+            if (as[key] !== undefined) cleanedService[key] = as[key];
+             else cleanedService[key] = null;
         }
+        delete cleanedService.service; // Eliminar datos populados
+        delete cleanedService.professional; // Eliminar datos populados
         return cleanedService;
     });
   }
   
-  if (firestoreUpdateData.appointmentDateTime) {
-    firestoreUpdateData.appointmentDateTime = toFirestoreTimestamp(firestoreUpdateData.appointmentDateTime);
-  } else if (data.appointmentDate && data.appointmentTime) {
+  if (data.appointmentDate && data.appointmentTime) {
       const [hours, minutes] = data.appointmentTime.split(':').map(Number);
       const finalDateObject = setMinutes(setHours(data.appointmentDate, hours), minutes);
       firestoreUpdateData.appointmentDateTime = toFirestoreTimestamp(finalDateObject);
+  } else if (firestoreUpdateData.appointmentDateTime) {
+    firestoreUpdateData.appointmentDateTime = toFirestoreTimestamp(firestoreUpdateData.appointmentDateTime);
   }
   
   delete firestoreUpdateData.appointmentDate;
   delete firestoreUpdateData.appointmentTime;
   
+  console.log(`[data.ts] Objeto final enviado para actualización en Firestore (ID: ${id}):`, firestoreUpdateData);
   await updateDoc(docRef, firestoreUpdateData);
 
   const updatedDoc = await getDoc(docRef);
   if (updatedDoc.exists()) {
     let populatedUpdatedAppt = {id: updatedDoc.id, ...convertDocumentData(updatedDoc.data())} as Appointment;
-    // Repopulate related data
     const allServices = await getServices();
     const allProfessionals = await getProfessionals();
     if (populatedUpdatedAppt.patientId) populatedUpdatedAppt.patient = await getPatientById(populatedUpdatedAppt.patientId);
@@ -1201,6 +1218,7 @@ export async function updateAppointment(id: string, data: Partial<AppointmentUpd
   }
   return undefined;
 }
+
 
 
 export async function deleteAppointment(appointmentId: string): Promise<boolean> {
