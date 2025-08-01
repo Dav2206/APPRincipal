@@ -1,6 +1,6 @@
 
 "use client";
-
+import React from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { useAuth } from '@/contexts/auth-provider';
 import { USER_ROLES, LOCATIONS, PAYMENT_METHODS, APPOINTMENT_STATUS } from '@/lib/constants';
@@ -15,7 +15,7 @@ import type { LocationId, PaymentMethod } from '@/lib/constants';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { getAppointments } from '@/lib/data';
 import type { Appointment } from '@/types';
-import { startOfMonth, endOfMonth, subMonths, addMonths, getYear, getMonth, format, setMonth, setYear } from 'date-fns';
+import { startOfMonth, endOfMonth, subMonths, addMonths, getYear, getMonth, format, setMonth, setYear, isAfter } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow, TableFooter } from '@/components/ui/table';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -83,10 +83,11 @@ export default function FinancesPage() {
       const endDate = endOfMonth(reportDate);
       
       try {
-        let completedAppointments: Appointment[] = [];
-        const locationsToFetch = effectiveLocationIdForFilter ? [LOCATIONS.find(l=> l.id === effectiveLocationIdForFilter)] : LOCATIONS;
+        const locationsToFetch = effectiveLocationIdForFilter 
+          ? [LOCATIONS.find(l=> l.id === effectiveLocationIdForFilter)].filter((l): l is typeof LOCATIONS[0] => !!l) 
+          : LOCATIONS;
 
-        const appointmentPromises = (locationsToFetch.filter(l => l) as typeof LOCATIONS).map(loc =>
+        const appointmentPromises = locationsToFetch.map(loc =>
           getAppointments({
             locationId: loc.id,
             statuses: [APPOINTMENT_STATUS.COMPLETED],
@@ -94,11 +95,11 @@ export default function FinancesPage() {
           })
         );
         const results = await Promise.all(appointmentPromises);
-        completedAppointments = results.map(r => r.appointments || []).flat();
+        const completedAppointments = results.map(r => r.appointments || []).flat();
 
         const reportByLocation: Record<LocationId, MonthlyReportData> = {} as any;
 
-        (locationsToFetch.filter(l => l) as typeof LOCATIONS).forEach(loc => {
+        locationsToFetch.forEach(loc => {
             reportByLocation[loc.id] = {
                 locationId: loc.id,
                 locationName: loc.name,
@@ -106,7 +107,6 @@ export default function FinancesPage() {
                 breakdown: Object.fromEntries(PAYMENT_METHODS.map(pm => [pm, 0])) as Record<PaymentMethod, number>,
             }
         });
-
 
         completedAppointments.forEach(appt => {
           if (appt.paymentMethod && reportByLocation[appt.locationId]) {
