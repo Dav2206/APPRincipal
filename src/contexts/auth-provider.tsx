@@ -185,42 +185,32 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             return { success: false, message: "Servicio de autenticación no disponible." };
         }
         
-        let emailToUse = usernameAttempt;
+        // Paso 1: Buscar el perfil del usuario por el input (puede ser username o email)
+        console.log(`[AuthProvider] Buscando perfil para el input: '${usernameAttempt}'.`);
+        const userProfile = await getUserByUsername(usernameAttempt);
 
-        // Si la entrada no es un email, intenta buscar el usuario por su username para obtener el email.
-        if (!usernameAttempt.includes('@')) {
-            console.log(`[AuthProvider] La entrada '${usernameAttempt}' no es un email. Buscando usuario por username.`);
-            const userProfile = await getUserByUsername(usernameAttempt);
-            if (userProfile && userProfile.email) {
-                console.log(`[AuthProvider] Usuario encontrado. Se usará el email: ${userProfile.email}`);
-                emailToUse = userProfile.email;
-            } else {
-                console.log(`[AuthProvider] No se encontró perfil para el username '${usernameAttempt}'. El intento de login probablemente fallará.`);
-                // Continuamos con el usernameAttempt original, lo que probablemente resultará en 'auth/invalid-credential' que es lo que queremos.
-            }
+        if (!userProfile || !userProfile.email) {
+            console.log(`[AuthProvider] No se encontró perfil o el perfil no tiene un email asociado para el input '${usernameAttempt}'.`);
+            setIsLoading(false);
+            return { success: false, message: "Correo electrónico o contraseña incorrectos." };
         }
         
-        console.log(`[AuthProvider] login (Firebase Auth) para: ${emailToUse}`);
+        // Paso 2: Usar siempre el email del perfil encontrado para autenticar
+        const emailToUse = userProfile.email;
+        console.log(`[AuthProvider] Perfil encontrado. Intentando login con el email de la base de datos: ${emailToUse}`);
+        
         const userCredential = await signInWithEmailAndPassword(auth, emailToUse, passwordAttempt);
         const firebaseUser = userCredential.user;
         console.log("[AuthProvider] login: signInWithEmailAndPassword EXITOSO para email:", firebaseUser?.email, "UID:", firebaseUser?.uid);
 
-        if (firebaseUser && firebaseUser.email) {
-          const appUserProfile = await fetchAppUserProfile(firebaseUser.email, firebaseUser.uid);
-          if (appUserProfile) {
-            setUser(appUserProfile); // Actualiza el estado del usuario en la app
-            localStorage.setItem('currentUser', JSON.stringify(appUserProfile));
-            if (pathname === '/') router.replace('/dashboard');
-            setIsLoading(false);
-            return { success: true };
-          } else {
-            await signOut(auth);
-            setIsLoading(false);
-            return { success: false, message: "Usuario autenticado pero no se encontró perfil de aplicación. Contacte al administrador." };
-          }
-        }
+        // El listener onAuthStateChanged se encargará de llamar a loadUser,
+        // que a su vez llamará a fetchAppUserProfile y establecerá el usuario.
+        // No es necesario llamar a setUser aquí.
+        // Esperamos un momento para que el listener actúe.
+        await new Promise(resolve => setTimeout(resolve, 100)); // Pequeña espera para el listener
+        
         setIsLoading(false);
-        return { success: false, message: "Error al obtener información del usuario de Firebase tras el login." };
+        return { success: true };
 
     } catch (error: any) {
       console.error("[AuthProvider] login: Error durante el inicio de sesión:", error);
