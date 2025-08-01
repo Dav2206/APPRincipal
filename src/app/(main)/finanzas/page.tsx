@@ -309,5 +309,3 @@ export default function FinancesPage() {
     </div>
   );
 }
-
-    
