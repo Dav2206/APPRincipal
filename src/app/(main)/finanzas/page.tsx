@@ -186,9 +186,13 @@ export default function FinancesPage() {
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <p className="text-muted-foreground">
-            Esta sección está dedicada a las herramientas y reportes financieros.
-          </p>
+             <div className="mt-6 p-6 border rounded-lg bg-secondary/30">
+                <h3 className="text-xl font-semibold mb-3">Próximas Funcionalidades:</h3>
+                <ul className="list-disc list-inside space-y-1 text-muted-foreground">
+                  <li>Reporte de Ingresos Detallado por Sede y Profesional.</li>
+                  <li>Generación de Balances Mensuales.</li>
+                </ul>
+              </div>
         </CardContent>
       </Card>
 
@@ -305,3 +309,5 @@ export default function FinancesPage() {
     </div>
   );
 }
+
+    
