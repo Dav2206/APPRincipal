@@ -1,5 +1,4 @@
 
-
 // src/lib/data.ts
 import type { User, Professional, Patient, Service, Appointment, AppointmentFormData, ProfessionalFormData, AppointmentStatus, ServiceFormData, Contract, PeriodicReminder, ImportantNote, PeriodicReminderFormData, ImportantNoteFormData, AddedServiceItem } from '@/types';
 import { LOCATIONS, USER_ROLES, SERVICES as SERVICES_CONSTANTS, APPOINTMENT_STATUS, LocationId, ServiceId as ConstantServiceId, APPOINTMENT_STATUS_DISPLAY, PAYMENT_METHODS, TIME_SLOTS, DAYS_OF_WEEK } from './constants';
@@ -97,41 +96,29 @@ export function getContractDisplayStatus(contract: Contract | null | undefined, 
       try {
         referenceDate = startOfDay(parseISO(referenceDateParam));
         if (isNaN(referenceDate.getTime())) {
-          // console.warn(`[data.ts] getContractDisplayStatus: Invalid referenceDateParam string after parsing. Falling back to currentSystemDate. Original:`, referenceDateParam);
           referenceDate = startOfDay(currentSystemDate);
         }
       } catch (e) {
-        // console.warn(`[data.ts] getContractDisplayStatus: Error parsing referenceDateParam string. Falling back to currentSystemDate. Original:`, referenceDateParam, "Error:", e);
         referenceDate = startOfDay(currentSystemDate);
       }
     } else if (referenceDateParam instanceof Date && !isNaN(referenceDateParam.getTime())) {
       referenceDate = startOfDay(referenceDateParam);
     } else {
-      // console.warn("[data.ts] getContractDisplayStatus: Invalid referenceDateParam type or NaN date. Falling back to currentSystemDate. Original:", referenceDateParam);
       referenceDate = startOfDay(currentSystemDate);
     }
   } else {
     referenceDate = startOfDay(currentSystemDate);
   }
 
-  // AÑADIR CONSOLE.LOGS AL PRINCIPIO
-  console.log(`[getContractDisplayStatus] Checking contract (ID: ${contract?.id || 'N/A'}) for Reference Date: ${formatISO(referenceDate)}`);
-
-  // console.log(`[data.ts] getContractDisplayStatus - Reference Date: ${formatISO(referenceDate)}`);
-
   if (!contract || !contract.startDate || !contract.endDate) {
-    // console.log("[data.ts] getContractDisplayStatus - No contract or no start/end date. Status: Sin Contrato");
     return 'Sin Contrato';
   }
 
   const { startDate: startDateStr, endDate: endDateStr } = contract;
 
   if (typeof startDateStr !== 'string' || typeof endDateStr !== 'string' || startDateStr.length === 0 || endDateStr.length === 0) {
-    // console.log("[data.ts] getContractDisplayStatus - Contract start/end date strings are invalid. Status: Sin Contrato. Contract:", contract);
     return 'Sin Contrato';
   }
-
-   console.log(`[getContractDisplayStatus] Contract Dates - Start: ${startDateStr}, End: ${endDateStr}`);
 
   let startDate: Date;
   let endDate: Date;
@@ -140,32 +127,25 @@ export function getContractDisplayStatus(contract: Contract | null | undefined, 
     startDate = parseISO(startDateStr);
     endDate = parseISO(endDateStr);
   } catch (e) {
-    // console.error("[data.ts] getContractDisplayStatus: Error parsing contract date strings. Contract:", contract, "Error:", e);
     return 'Sin Contrato'; 
   }
 
   if (isNaN(startDate.getTime()) || isNaN(endDate.getTime())) {
-    // console.log("[data.ts] getContractDisplayStatus - Parsed contract start/end dates are NaN. Status: Sin Contrato. Parsed Start:", startDate, "Parsed End:", endDate);
     return 'Sin Contrato';
   }
   
-  // console.log(`[data.ts] getContractDisplayStatus - Contract Start: ${formatISO(startOfDay(startDate))}, Contract End: ${formatISO(endOfDay(endDate))}`);
-
   if (isBefore(referenceDate, startOfDay(startDate))) {
-    // console.log(`[data.ts] getContractDisplayStatus - Reference date is before contract start. Status: No Vigente Aún`);
     return 'No Vigente Aún';
   }
   if (isAfter(referenceDate, endOfDay(endDate))) { 
-    // console.log(`[data.ts] getContractDisplayStatus - Reference date is after contract end. Status: Vencido`);
     return 'Vencido';
   }
 
   const daysUntilExpiry = differenceInCalendarDays(endOfDay(endDate), referenceDate);
   if (daysUntilExpiry <= 15 && daysUntilExpiry >= 0) {
-    console.log(`[data.ts] getContractDisplayStatus - Days until expiry: ${daysUntilExpiry} for contract ending ${endDateStr}. Status: Próximo a Vencer`);
     return 'Próximo a Vencer';
   }
-  // console.log(`[data.ts] getContractDisplayStatus - Contract is active. Status: Activo`);
+
   return 'Activo';
 }
 // --- End Contract Status Helper ---
@@ -959,6 +939,7 @@ export async function addAppointment(data: AppointmentFormData): Promise<Appoint
     }
 
     let patientId: string | null = data.existingPatientId || null;
+    let newPatient: Patient | null = null;
     if (!patientId && !data.isWalkIn) {
       newPatient = await addPatient({
         firstName: data.patientFirstName,
@@ -1445,10 +1426,3 @@ export async function deleteImportantNote(noteId: string): Promise<boolean> {
   }
 }
 // --- End Important Notes ---
-
-
-
-
-
-
-

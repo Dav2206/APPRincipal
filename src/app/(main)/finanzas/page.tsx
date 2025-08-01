@@ -21,7 +21,6 @@ import { es } from 'date-fns/locale';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow, TableFooter } from '@/components/ui/table';
 
-
 type PaymentMethodsConfig = Record<LocationId, PaymentMethod[]>;
 
 interface MonthlyReportItem {
@@ -38,9 +37,8 @@ const months = Array.from({ length: 12 }, (_, i) => ({
   label: format(new Date(currentSystemYear, i), 'MMMM', { locale: es }),
 }));
 
-
 export default function FinancesPage() {
-  const { user, isLoading } = useAuth();
+  const { user, isLoading: authIsLoading } = useAuth();
   const router = useRouter();
   const { toast } = useToast();
   const { selectedLocationId: adminSelectedLocation } = useAppState();
@@ -65,11 +63,10 @@ export default function FinancesPage() {
   const isAdminOrContador = useMemo(() => user?.role === USER_ROLES.ADMIN || user?.role === USER_ROLES.CONTADOR, [user]);
 
   useEffect(() => {
-    if (!isLoading && !isAdminOrContador) {
+    if (!authIsLoading && !isAdminOrContador) {
       router.replace('/dashboard');
     }
-  }, [user, isLoading, router, isAdminOrContador]);
-
+  }, [user, authIsLoading, router, isAdminOrContador]);
 
   useEffect(() => {
     const fetchReportData = async () => {
@@ -81,35 +78,28 @@ export default function FinancesPage() {
       const endDate = endOfMonth(dateForReport);
 
       try {
-        let appointments: Appointment[] = [];
-        if (adminSelectedLocation === 'all') {
-            const allLocationsPromises = LOCATIONS.map(loc => getAppointments({
-                locationId: loc.id,
-                statuses: ['completed'],
-                dateRange: { start: startDate, end: endDate }
-            }));
-            const results = await Promise.all(allLocationsPromises);
-            appointments = results.flatMap(res => res.appointments || []);
-        } else if(adminSelectedLocation) {
-            const result = await getAppointments({
-                locationId: adminSelectedLocation as LocationId,
-                statuses: ['completed'],
-                dateRange: { start: startDate, end: endDate }
-            });
-            appointments = result.appointments || [];
-        }
+        const locationsToFetch = adminSelectedLocation === 'all' 
+          ? LOCATIONS 
+          : LOCATIONS.filter(l => l.id === adminSelectedLocation);
+
+        const appointmentsPromises = locationsToFetch.map(loc => getAppointments({
+            locationId: loc.id,
+            statuses: ['completed'],
+            dateRange: { start: startDate, end: endDate }
+        }));
+        
+        const results = await Promise.all(appointmentsPromises);
+        const appointments = results.flatMap(res => res.appointments || []);
 
         const newReportData: Record<string, MonthlyReportItem> = {};
 
-        LOCATIONS.forEach(loc => {
-           if(adminSelectedLocation === 'all' || adminSelectedLocation === loc.id) {
-               newReportData[loc.id] = {
-                   locationId: loc.id,
-                   locationName: loc.name,
-                   totalRevenue: 0,
-                   breakdown: {}
-               };
-           }
+        locationsToFetch.forEach(loc => {
+           newReportData[loc.id] = {
+               locationId: loc.id,
+               locationName: loc.name,
+               totalRevenue: 0,
+               breakdown: {}
+           };
         });
         
         appointments.forEach(appt => {
@@ -120,7 +110,7 @@ export default function FinancesPage() {
             }
         });
 
-        setReportData(Object.values(newReportData).filter(item => item.totalRevenue > 0 || (adminSelectedLocation !== 'all' && adminSelectedLocation === item.locationId)));
+        setReportData(Object.values(newReportData));
 
       } catch (error) {
         console.error("Error fetching report data:", error);
@@ -135,7 +125,6 @@ export default function FinancesPage() {
         fetchReportData();
     }
   }, [selectedYear, selectedMonth, adminSelectedLocation, isAdminOrContador, toast]);
-
 
   const handlePaymentMethodToggle = (locationId: LocationId, method: PaymentMethod, checked: boolean) => {
     setPaymentMethodsConfig(prevConfig => {
@@ -164,7 +153,7 @@ export default function FinancesPage() {
     return reportData.reduce((sum, item) => sum + item.totalRevenue, 0);
   }, [reportData]);
 
-  if (isLoading || !isAdminOrContador) {
+  if (authIsLoading || !isAdminOrContador) {
     return (
       <div className="flex h-screen items-center justify-center">
         <Loader2 className="h-12 w-12 animate-spin text-primary" />
@@ -210,7 +199,7 @@ export default function FinancesPage() {
                     <Loader2 className="h-12 w-12 animate-spin text-primary" />
                     <p className="mt-4 text-muted-foreground">Calculando reporte...</p>
                   </div>
-            ) : reportData.length === 0 ? (
+            ) : reportData.every(item => item.totalRevenue === 0) ? (
                  <div className="p-6 border rounded-lg bg-secondary/30 text-center">
                     <DollarSign className="h-10 w-10 text-muted-foreground mx-auto mb-2" />
                     <p className="text-muted-foreground">No se encontraron ingresos para el periodo y sede seleccionada.</p>
