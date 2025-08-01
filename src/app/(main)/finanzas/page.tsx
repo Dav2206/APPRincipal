@@ -6,7 +6,7 @@ import { useAuth } from '@/contexts/auth-provider';
 import { useAppState } from '@/contexts/app-state-provider';
 import { USER_ROLES, LOCATIONS, PAYMENT_METHODS } from '@/lib/constants';
 import type { LocationId, PaymentMethod } from '@/lib/constants';
-import { Landmark, AlertTriangle, Loader2, CalendarIcon, DollarSign } from 'lucide-react';
+import { Landmark, AlertTriangle, Loader2, DollarSign } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
@@ -88,14 +88,14 @@ export default function FinancesPage() {
                 dateRange: { start: startDate, end: endDate }
             }));
             const results = await Promise.all(allLocationsPromises);
-            appointments = results.flatMap(res => res.appointments);
+            appointments = results.flatMap(res => res.appointments || []);
         } else if(adminSelectedLocation) {
             const result = await getAppointments({
                 locationId: adminSelectedLocation,
                 statuses: ['completed'],
                 dateRange: { start: startDate, end: endDate }
             });
-            appointments = result.appointments;
+            appointments = result.appointments || [];
         }
 
         const newReportData: Record<LocationId, MonthlyReportItem> = {};
