@@ -218,7 +218,7 @@ export function AppointmentEditDialog({ appointment, isOpen, onOpenChange, onApp
       }
 
 
-      const updatedData: Partial<Appointment> = {
+      const updatedData: Partial<Appointment> & { attachedPhotos?: { url: string }[] } = {
         ...data,
         appointmentDateTime: formatISO(finalDateObject),
         serviceId: finalServiceId,
@@ -226,7 +226,7 @@ export function AppointmentEditDialog({ appointment, isOpen, onOpenChange, onApp
         durationMinutes: data.durationMinutes,
         amountPaid: data.amountPaid,
         actualArrivalTime: data.actualArrivalTime || null,
-        attachedPhotos: (data.attachedPhotos || []).map(p => p.url).filter((url): url is string => !!url),
+        attachedPhotos: (data.attachedPhotos || []).filter(p => p && p.url),
         addedServices: data.addedServices?.map(as => ({
           ...as,
           serviceId: as.serviceId === DEFAULT_SERVICE_ID_PLACEHOLDER && allServices?.length ? allServices[0].id : as.serviceId,
@@ -715,4 +715,3 @@ export function AppointmentEditDialog({ appointment, isOpen, onOpenChange, onApp
     </Dialog>
   );
 }
-

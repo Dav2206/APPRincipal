@@ -1,7 +1,5 @@
-
-
 // src/lib/data.ts
-import type { User, Professional, Patient, Service, Appointment, AppointmentFormData, ProfessionalFormData, AppointmentStatus, ServiceFormData, Contract, PeriodicReminder, ImportantNote, PeriodicReminderFormData, ImportantNoteFormData, AddedServiceItem } from '@/types';
+import type { User, Professional, Patient, Service, Appointment, AppointmentFormData, ProfessionalFormData, AppointmentStatus, ServiceFormData, Contract, PeriodicReminder, ImportantNote, PeriodicReminderFormData, ImportantNoteFormData, AddedServiceItem, AppointmentUpdateFormData } from '@/types';
 import { LOCATIONS, USER_ROLES, SERVICES as SERVICES_CONSTANTS, APPOINTMENT_STATUS, LocationId, ServiceId as ConstantServiceId, APPOINTMENT_STATUS_DISPLAY, PAYMENT_METHODS, TIME_SLOTS, DAYS_OF_WEEK } from './constants';
 import type { DayOfWeekId } from './constants';
 import { formatISO, parseISO, addDays, setHours, setMinutes, startOfDay, endOfDay, isSameDay as dateFnsIsSameDay, startOfMonth, endOfMonth, subDays, isEqual, isBefore, isAfter, getDate, getYear, getMonth, setMonth, setYear, getHours, addMinutes as dateFnsAddMinutes, isWithinInterval, getDay, format, differenceInCalendarDays, areIntervalsOverlapping, parse } from 'date-fns';
@@ -1119,17 +1117,15 @@ export async function updateAppointment(
   const docRef = doc(firestore, 'citas', id);
   const appointmentToUpdate: { [key: string]: any } = {};
 
-  // Mapear los campos del formulario a la estructura del documento
   Object.keys(data).forEach(key => {
     if (key !== 'attachedPhotos') {
       appointmentToUpdate[key] = (data as any)[key];
     }
   });
 
-  // Gestionar fotos
   if (data.attachedPhotos) {
-    const newPhotoDataUris = data.attachedPhotos.map(p => p.url).filter(url => url && url.startsWith('data:image/'));
-    const existingPhotoUrls = data.attachedPhotos.map(p => p.url).filter(url => url && (url.startsWith('http') || url.startsWith('gs://')));
+    const newPhotoDataUris = (data.attachedPhotos || []).map(p => p.url).filter(url => url && url.startsWith('data:image/'));
+    const existingPhotoUrlsFromForm = (data.attachedPhotos || []).map(p => p.url).filter(url => url && (url.startsWith('http') || url.startsWith('gs://')));
 
     const newUploadedUrls = await Promise.all(
       newPhotoDataUris.map(async (dataUri) => {
@@ -1141,10 +1137,11 @@ export async function updateAppointment(
       })
     );
     
-    appointmentToUpdate.attachedPhotos = [...existingPhotoUrls, ...newUploadedUrls];
+    appointmentToUpdate.attachedPhotos = [...existingPhotoUrlsFromForm, ...newUploadedUrls];
     console.log(`[data.ts] URLs de fotos finales para Firestore:`, appointmentToUpdate.attachedPhotos);
 
-    const photosToDelete = originalPhotos.filter(url => !existingPhotoUrls.includes(url));
+    const photosToDelete = originalPhotos.filter(originalUrl => !existingPhotoUrlsFromForm.includes(originalUrl));
+    
     if (photosToDelete.length > 0) {
       console.log(`[data.ts] Fotos marcadas para eliminar de Storage:`, photosToDelete);
       await Promise.all(photosToDelete.map(async (url) => {
@@ -1167,7 +1164,6 @@ export async function updateAppointment(
 
   const firestoreUpdateData: { [key: string]: any } = { ...appointmentToUpdate, updatedAt: serverTimestamp() };
   
-  // Limpieza de datos antes de enviar a Firestore
   for (const key in firestoreUpdateData) {
     if (firestoreUpdateData[key] === undefined) {
       firestoreUpdateData[key] = null;
@@ -1181,8 +1177,8 @@ export async function updateAppointment(
             if (as[key] !== undefined) cleanedService[key] = as[key];
              else cleanedService[key] = null;
         }
-        delete cleanedService.service; // Eliminar datos populados
-        delete cleanedService.professional; // Eliminar datos populados
+        delete cleanedService.service;
+        delete cleanedService.professional;
         return cleanedService;
     });
   }
