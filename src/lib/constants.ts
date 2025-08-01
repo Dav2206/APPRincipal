@@ -1,6 +1,6 @@
 
 
-export const PAYMENT_METHODS = ['Efectivo', 'Tarjeta de Crédito', 'Tarjeta de Débito', 'Transferencia', 'Yape/Plin'] as const;
+export const PAYMENT_METHODS = ['Efectivo', 'Tarjeta de Débito', 'Transferencia', 'Yape/Plin'] as const;
 export type PaymentMethod = typeof PAYMENT_METHODS[number];
 
 export const LOCATIONS = [
@@ -70,4 +70,3 @@ export const DAYS_OF_WEEK = [
 ] as const;
 
 export type DayOfWeekId = typeof DAYS_OF_WEEK[number]['id'];
-
