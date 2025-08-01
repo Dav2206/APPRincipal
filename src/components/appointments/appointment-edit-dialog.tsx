@@ -39,7 +39,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { AppointmentUpdateSchema } from '@/lib/schemas';
 import { Form, FormControl, FormItem, FormLabel, FormMessage, FormField } from "@/components/ui/form";
 import { getProfessionals, updateAppointment as updateAppointmentData, getServices, deleteAppointment as deleteAppointmentData } from '@/lib/data';
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useToast } from '@/hooks/use-toast';
 import Image from 'next/image';
 import { cn } from '@/lib/utils';
