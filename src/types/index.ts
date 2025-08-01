@@ -1,4 +1,5 @@
 
+
 import type { LocationId, UserRole, PaymentMethod, AppointmentStatus, DayOfWeekId } from '@/lib/constants';
 
 export interface BaseEntity {
@@ -13,6 +14,13 @@ export interface User extends BaseEntity {
   name: string;
   useruid?: string; // Firebase Auth UID
 }
+
+export interface Location {
+    id: LocationId;
+    name: string;
+    paymentMethods: PaymentMethod[];
+}
+
 
 export interface Contract {
   id: string;

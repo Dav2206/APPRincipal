@@ -1,11 +1,15 @@
 
+
+export const PAYMENT_METHODS = ['Efectivo', 'Tarjeta de Crédito', 'Tarjeta de Débito', 'Transferencia', 'Yape/Plin'] as const;
+export type PaymentMethod = typeof PAYMENT_METHODS[number];
+
 export const LOCATIONS = [
-  { id: 'higuereta', name: 'Higuereta' },
-  { id: 'eden_benavides', name: 'Edén Benavides' },
-  { id: 'crucetas', name: 'Crucetas' },
-  { id: 'carpaccio', name: 'Carpaccio' },
-  { id: 'vista_alegre', name: 'Vista Alegre' },
-  { id: 'san_antonio', name: 'San Antonio' },
+  { id: 'higuereta', name: 'Higuereta', paymentMethods: [...PAYMENT_METHODS] },
+  { id: 'eden_benavides', name: 'Edén Benavides', paymentMethods: [...PAYMENT_METHODS] },
+  { id: 'crucetas', name: 'Crucetas', paymentMethods: [...PAYMENT_METHODS] },
+  { id: 'carpaccio', name: 'Carpaccio', paymentMethods: [...PAYMENT_METHODS] },
+  { id: 'vista_alegre', name: 'Vista Alegre', paymentMethods: [...PAYMENT_METHODS] },
+  { id: 'san_antonio', name: 'San Antonio', paymentMethods: [...PAYMENT_METHODS] },
 ] as const;
 
 export type LocationId = typeof LOCATIONS[number]['id'];
@@ -27,9 +31,6 @@ export const SERVICES = [
 ] as const;
 
 export type ServiceId = typeof SERVICES[number]['id'];
-
-export const PAYMENT_METHODS = ['Efectivo', 'Tarjeta de Crédito', 'Tarjeta de Débito', 'Transferencia', 'Yape/Plin'] as const;
-export type PaymentMethod = typeof PAYMENT_METHODS[number];
 
 export const APPOINTMENT_STATUS = {
   BOOKED: 'booked',
@@ -69,3 +70,4 @@ export const DAYS_OF_WEEK = [
 ] as const;
 
 export type DayOfWeekId = typeof DAYS_OF_WEEK[number]['id'];
+
