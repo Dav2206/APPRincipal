@@ -177,22 +177,31 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const login = async (usernameAttempt: string, passwordAttempt: string): Promise<{ success: boolean; message?: string; errorCode?: string }> => {
     console.log(`[AuthProvider] login: Intentando login para: ${usernameAttempt}`);
     setIsLoading(true);
+
     try {
-      if (globalUseMockDatabase) {
-        console.log("[AuthProvider] login (mockDB) para:", usernameAttempt);
-        const fetchedUser = await getUserByUsername(usernameAttempt);
-        if (fetchedUser && fetchedUser.password === passwordAttempt) {
-          setUser(fetchedUser);
-          localStorage.setItem('currentUser', JSON.stringify(fetchedUser));
-          if (pathname === '/') router.replace('/dashboard');
-          setIsLoading(false);
-          return { success: true };
+        if (!auth) {
+            setIsLoading(false);
+            console.error("[AuthProvider] login: Servicio de autenticación no disponible.");
+            return { success: false, message: "Servicio de autenticación no disponible." };
         }
-        setIsLoading(false);
-        return { success: false, message: "Credenciales inválidas para mockDB." };
-      } else if (auth) {
-        console.log("[AuthProvider] login (Firebase Auth) para:", usernameAttempt);
-        const userCredential = await signInWithEmailAndPassword(auth, usernameAttempt, passwordAttempt);
+        
+        let emailToUse = usernameAttempt;
+
+        // Si la entrada no es un email, intenta buscar el usuario por su username para obtener el email.
+        if (!usernameAttempt.includes('@')) {
+            console.log(`[AuthProvider] La entrada '${usernameAttempt}' no es un email. Buscando usuario por username.`);
+            const userProfile = await getUserByUsername(usernameAttempt);
+            if (userProfile && userProfile.email) {
+                console.log(`[AuthProvider] Usuario encontrado. Se usará el email: ${userProfile.email}`);
+                emailToUse = userProfile.email;
+            } else {
+                console.log(`[AuthProvider] No se encontró perfil para el username '${usernameAttempt}'. El intento de login probablemente fallará.`);
+                // Continuamos con el usernameAttempt original, lo que probablemente resultará en 'auth/invalid-credential' que es lo que queremos.
+            }
+        }
+        
+        console.log(`[AuthProvider] login (Firebase Auth) para: ${emailToUse}`);
+        const userCredential = await signInWithEmailAndPassword(auth, emailToUse, passwordAttempt);
         const firebaseUser = userCredential.user;
         console.log("[AuthProvider] login: signInWithEmailAndPassword EXITOSO para email:", firebaseUser?.email, "UID:", firebaseUser?.uid);
 
@@ -212,11 +221,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         }
         setIsLoading(false);
         return { success: false, message: "Error al obtener información del usuario de Firebase tras el login." };
-      } else {
-        setIsLoading(false);
-        console.error("[AuthProvider] login: Ni mockDB ni Firebase Auth disponibles.");
-        return { success: false, message: "Servicio de autenticación no disponible." };
-      }
+
     } catch (error: any) {
       console.error("[AuthProvider] login: Error durante el inicio de sesión:", error);
       let message = "Error desconocido durante el inicio de sesión.";
@@ -226,10 +231,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           case 'auth/invalid-credential':
           case 'auth/user-not-found':
           case 'auth/wrong-password':
-            message = "Correo electrónico o contraseña incorrectos.";
-            break;
           case 'auth/invalid-email':
-            message = "El formato del correo electrónico es inválido.";
+            message = "Correo electrónico o contraseña incorrectos.";
             break;
           case 'auth/user-disabled':
             message = "Este usuario ha sido deshabilitado.";
@@ -281,5 +284,3 @@ export const useAuth = (): AuthContextType => {
   }
   return context;
 };
-
-    
