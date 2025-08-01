@@ -1122,37 +1122,38 @@ export async function updateAppointment(id: string, data: Partial<AppointmentUpd
   
   const appointmentToUpdate: { [key: string]: any } = { ...data };
 
-  // This part now receives `data.attachedPhotos` which is already a `string[]` after dialog logic
-  const newPhotoDataUris = (data.attachedPhotos || []).filter(url => url && url.startsWith('data:image/'));
-  const existingPhotoUrls = (data.attachedPhotos || []).filter(url => url && url.startsWith('http'));
+  if (data.attachedPhotos) {
+    const newPhotoDataUris = (data.attachedPhotos || []).map(p => p.url).filter(url => url && url.startsWith('data:image/'));
+    const existingPhotoUrls = (data.attachedPhotos || []).map(p => p.url).filter(url => url && url.startsWith('http'));
 
-  // Upload new photos and get their download URLs
-  const newUploadedUrls = await Promise.all(
-    newPhotoDataUris.map(async (dataUri) => {
-      const photoRef = storageRef(storage, `appointment-photos/${id}/${generateId()}`);
-      const snapshot = await uploadString(photoRef, dataUri, 'data_url');
-      return getDownloadURL(snapshot.ref);
-    })
-  );
-  
-  // Combine existing URLs with newly uploaded URLs
-  appointmentToUpdate.attachedPhotos = [...existingPhotoUrls, ...newUploadedUrls];
+    // Upload new photos and get their download URLs
+    const newUploadedUrls = await Promise.all(
+      newPhotoDataUris.map(async (dataUri) => {
+        const photoRef = storageRef(storage, `appointment-photos/${id}/${generateId()}`);
+        const snapshot = await uploadString(photoRef, dataUri, 'data_url');
+        return getDownloadURL(snapshot.ref);
+      })
+    );
+    
+    // Combine existing URLs with newly uploaded URLs
+    appointmentToUpdate.attachedPhotos = [...existingPhotoUrls, ...newUploadedUrls];
 
-  // Delete photos that were removed from the form
-  const photosToDelete = originalPhotos.filter(url => !((appointmentToUpdate.attachedPhotos || []) as string[]).includes(url));
-  await Promise.all(photosToDelete.map(async (url) => {
-    try {
-      const photoRef = storageRef(storage, url);
-      await deleteObject(photoRef);
-    } catch (error: any) {
-      if (error.code !== 'storage/object-not-found') {
-        console.error(`Error deleting photo ${url}:`, error);
+    // Delete photos that were removed from the form
+    const photosToDelete = originalPhotos.filter(url => !((appointmentToUpdate.attachedPhotos || []) as string[]).includes(url));
+    await Promise.all(photosToDelete.map(async (url) => {
+      try {
+        const photoRef = storageRef(storage, url);
+        await deleteObject(photoRef);
+      } catch (error: any) {
+        if (error.code !== 'storage/object-not-found') {
+          console.error(`Error deleting photo ${url}:`, error);
+        }
       }
-    }
-  }));
+    }));
+  }
 
   const docRef = doc(firestore, 'citas', id);
-  const firestoreUpdateData: any = { ...appointmentToUpdate, updatedAt: serverTimestamp() };
+  const firestoreUpdateData: { [key: string]: any } = { ...appointmentToUpdate, updatedAt: serverTimestamp() };
   
   // Convert undefined to null before sending to Firestore
   for (const key in firestoreUpdateData) {
@@ -1161,6 +1162,20 @@ export async function updateAppointment(id: string, data: Partial<AppointmentUpd
     }
   }
 
+  if (firestoreUpdateData.addedServices) {
+    firestoreUpdateData.addedServices = firestoreUpdateData.addedServices.map((as: any) => {
+        const cleanedService: any = {};
+        for (const key in as) {
+            if (as[key] !== undefined) {
+                cleanedService[key] = as[key];
+            } else {
+                cleanedService[key] = null;
+            }
+        }
+        return cleanedService;
+    });
+  }
+  
   if (firestoreUpdateData.appointmentDateTime) {
     firestoreUpdateData.appointmentDateTime = toFirestoreTimestamp(firestoreUpdateData.appointmentDateTime);
   } else if (data.appointmentDate && data.appointmentTime) {
@@ -1419,6 +1434,7 @@ export async function deleteImportantNote(noteId: string): Promise<boolean> {
   }
 }
 // --- End Important Notes ---
+
 
 
 
