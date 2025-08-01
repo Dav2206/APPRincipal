@@ -46,6 +46,8 @@ import { cn } from '@/lib/utils';
 import { storage } from '@/lib/firebase-config';
 import { ref, uploadBytes, getDownloadURL, deleteObject } from 'firebase/storage';
 import { Calendar } from '@/components/ui/calendar';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
+
 
 interface AppointmentEditDialogProps {
   appointment: Appointment;
@@ -71,6 +73,14 @@ export function AppointmentEditDialog({ appointment, isOpen, onOpenChange, onApp
   const [isConfirmDeleteOpen, setIsConfirmDeleteOpen] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  
+  // Camera Modal State
+  const [isCameraModalOpen, setIsCameraModalOpen] = useState(false);
+  const [hasCameraPermission, setHasCameraPermission] = useState<boolean | null>(null);
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const streamRef = useRef<MediaStream | null>(null);
+
 
   const form = useForm<AppointmentUpdateFormData>({
     resolver: zodResolver(AppointmentUpdateSchema),
@@ -85,6 +95,59 @@ export function AppointmentEditDialog({ appointment, isOpen, onOpenChange, onApp
     control: form.control,
     name: "attachedPhotos",
   });
+  
+  const stopCameraStream = useCallback(() => {
+    if (streamRef.current) {
+        streamRef.current.getTracks().forEach(track => track.stop());
+        streamRef.current = null;
+    }
+  }, []);
+
+  const openCamera = async () => {
+    setIsCameraModalOpen(true);
+    setHasCameraPermission(null); 
+    try {
+        const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+        streamRef.current = stream;
+        if (videoRef.current) {
+            videoRef.current.srcObject = stream;
+        }
+        setHasCameraPermission(true);
+    } catch (error) {
+        console.error('Error accessing camera:', error);
+        setHasCameraPermission(false);
+        toast({
+            variant: 'destructive',
+            title: 'Acceso a la Cámara Denegado',
+            description: 'Por favor, habilite los permisos de cámara en su navegador.',
+        });
+    }
+};
+
+  const handleTakePicture = () => {
+    if (videoRef.current && canvasRef.current) {
+      const video = videoRef.current;
+      const canvas = canvasRef.current;
+      canvas.width = video.videoWidth;
+      canvas.height = video.videoHeight;
+      const context = canvas.getContext('2d');
+      if (context) {
+        context.drawImage(video, 0, 0, video.videoWidth, video.videoHeight);
+        const dataUri = canvas.toDataURL('image/jpeg');
+        appendAttachedPhoto({ url: dataUri });
+        toast({ title: "Foto Capturada", description: "La foto se adjuntará al guardar la cita." });
+      }
+      stopCameraStream();
+      setIsCameraModalOpen(false);
+    }
+  };
+  
+  useEffect(() => {
+    return () => {
+        stopCameraStream();
+    };
+}, [stopCameraStream]);
+
 
   useEffect(() => {
     if (isOpen) {
@@ -109,8 +172,10 @@ export function AppointmentEditDialog({ appointment, isOpen, onOpenChange, onApp
         }
       }
       loadData();
+    } else {
+        stopCameraStream();
     }
-  }, [isOpen, appointment.locationId, user, toast]);
+  }, [isOpen, appointment.locationId, user, toast, stopCameraStream]);
 
    useEffect(() => {
     if (isOpen && appointment && allServices !== null) {
@@ -133,7 +198,7 @@ export function AppointmentEditDialog({ appointment, isOpen, onOpenChange, onApp
         paymentMethod: appointment.paymentMethod || undefined,
         amountPaid: appointment.amountPaid ?? undefined,
         staffNotes: appointment.staffNotes || '',
-        attachedPhotos: (appointment.attachedPhotos || []).filter(p => p).map(p => ({ url: p })),
+        attachedPhotos: (appointment.attachedPhotos || []).filter(p => p && typeof p === 'string').map(p => ({ url: p })),
         addedServices: appointment.addedServices?.map(as => ({ 
           serviceId: as.serviceId || (allServices && allServices.length > 0 ? allServices[0].id : DEFAULT_SERVICE_ID_PLACEHOLDER),
           professionalId: as.professionalId || NO_SELECTION_PLACEHOLDER,
@@ -183,14 +248,10 @@ export function AppointmentEditDialog({ appointment, isOpen, onOpenChange, onApp
     }
 
     if (photoUrlToRemove.startsWith('data:image/')) {
-        // Just remove from form state if it's a new, unsaved photo
         removeAttachedPhoto(index);
         return;
     }
-
-    // For saved photos, we will handle deletion in the main update logic
-    // to prevent accidental deletion if the user cancels.
-    // For now, we just remove it from the UI.
+    
     removeAttachedPhoto(index);
     toast({ title: "Imagen marcada para eliminación", description: "La imagen se eliminará al guardar los cambios."});
   };
@@ -275,6 +336,7 @@ export function AppointmentEditDialog({ appointment, isOpen, onOpenChange, onApp
   if (!isOpen) return null;
 
   return (
+    <>
     <Dialog open={isOpen} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-lg">
         <DialogHeader>
@@ -568,12 +630,31 @@ export function AppointmentEditDialog({ appointment, isOpen, onOpenChange, onApp
                   ) : null;
                 })}
               </div>
-              <Input
+              <div className="flex gap-2">
+                <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => fileInputRef.current?.click()}
+                    disabled={isUploadingImage || form.formState.isSubmitting}
+                >
+                    Subir Archivo
+                </Button>
+                 <Button
+                    type="button"
+                    variant="outline"
+                    onClick={openCamera}
+                    disabled={form.formState.isSubmitting}
+                >
+                    <CameraIcon className="mr-2 h-4 w-4"/> Tomar Foto
+                </Button>
+              </div>
+
+               <Input
                   type="file"
                   accept="image/*"
                   onChange={handleFileChange}
                   ref={fileInputRef}
-                  className="text-sm"
+                  className="hidden"
                   disabled={isUploadingImage || form.formState.isSubmitting}
                />
                {isUploadingImage && <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />}
@@ -713,5 +794,55 @@ export function AppointmentEditDialog({ appointment, isOpen, onOpenChange, onApp
         </Form>
       </DialogContent>
     </Dialog>
+
+    <Dialog open={isCameraModalOpen} onOpenChange={(isOpen) => {
+        if (!isOpen) {
+            stopCameraStream();
+        }
+        setIsCameraModalOpen(isOpen);
+    }}>
+        <DialogContent>
+            <DialogHeader>
+                <DialogTitle>Tomar Foto</DialogTitle>
+                <DialogDescription>Apunta con la cámara y captura una imagen para adjuntarla a la cita.</DialogDescription>
+            </DialogHeader>
+            <div className="flex flex-col items-center gap-4">
+                <div className="w-full bg-secondary rounded-md overflow-hidden aspect-video relative">
+                    <video
+                        ref={videoRef}
+                        className="w-full h-full object-cover"
+                        autoPlay
+                        muted
+                        playsInline
+                    />
+                    <canvas ref={canvasRef} className="hidden" />
+                    {hasCameraPermission === false && (
+                         <div className="absolute inset-0 flex items-center justify-center">
+                            <Alert variant="destructive" className="m-4">
+                                <AlertTitle>Acceso a Cámara Requerido</AlertTitle>
+                                <AlertDescription>
+                                    Por favor, habilita el acceso a la cámara en tu navegador para usar esta función.
+                                </AlertDescription>
+                            </Alert>
+                         </div>
+                    )}
+                    {hasCameraPermission === null && (
+                        <div className="absolute inset-0 flex items-center justify-center">
+                            <Loader2 className="h-8 w-8 animate-spin" />
+                        </div>
+                    )}
+                </div>
+                <Button onClick={handleTakePicture} disabled={!hasCameraPermission}>
+                    <CameraIcon className="mr-2 h-4 w-4"/> Tomar Foto
+                </Button>
+            </div>
+             <DialogFooter>
+                <DialogClose asChild>
+                    <Button type="button" variant="outline">Cancelar</Button>
+                </DialogClose>
+            </DialogFooter>
+        </DialogContent>
+    </Dialog>
+    </>
   );
 }
