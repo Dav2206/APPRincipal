@@ -1,4 +1,5 @@
 
+
 "use client";
 
 import { useForm } from 'react-hook-form';
@@ -58,7 +59,7 @@ export function LoginForm() {
               name="username"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Correo Electrónico (Usuario)</FormLabel>
+                  <FormLabel>Correo Electrónico o Usuario</FormLabel>
                   <FormControl>
                     <Input placeholder="Ej: admin@footprints.com o HigueretaStaff" {...field} />
                   </FormControl>

@@ -1,4 +1,5 @@
 
+
 "use client";
 
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
@@ -175,66 +176,72 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
 
   const login = async (usernameAttempt: string, passwordAttempt: string): Promise<{ success: boolean; message?: string; errorCode?: string }> => {
-    console.log(`[AuthProvider] login: Intentando login para: ${usernameAttempt}`);
+    console.log(`[AuthProvider] login: Iniciando intento para: ${usernameAttempt}`);
     setIsLoading(true);
+    let emailToUse: string | undefined;
+
+    if (!auth) {
+        setIsLoading(false);
+        console.error("[AuthProvider] login: Servicio de autenticación no disponible.");
+        return { success: false, message: "Servicio de autenticación no disponible." };
+    }
 
     try {
-        if (!auth) {
-            setIsLoading(false);
-            console.error("[AuthProvider] login: Servicio de autenticación no disponible.");
-            return { success: false, message: "Servicio de autenticación no disponible." };
+        // First, try to sign in directly, assuming the input might be an email
+        try {
+            console.log(`[AuthProvider] login: Intento 1: Autenticar directamente con '${usernameAttempt}' como email.`);
+            const userCredential = await signInWithEmailAndPassword(auth, usernameAttempt, passwordAttempt);
+            // If successful, onAuthStateChanged will handle the rest.
+            console.log("[AuthProvider] login: Éxito en Intento 1. onAuthStateChanged se encargará del resto.");
+            // No need to setIsLoading(false) here, as onAuthStateChanged -> loadUser will do it.
+            return { success: true };
+        } catch (error: any) {
+            // This is expected if the username is not an email or credentials are wrong.
+            // We only care about the 'invalid-credential' error here to proceed.
+            if (error.code !== 'auth/invalid-credential' && error.code !== 'auth/invalid-email') {
+                console.error("[AuthProvider] login: Error no recuperable en Intento 1:", error);
+                 let message = "Error desconocido durante el inicio de sesión.";
+                if (error.code === 'auth/user-disabled') {
+                    message = "Este usuario ha sido deshabilitado.";
+                }
+                setIsLoading(false);
+                return { success: false, message: message, errorCode: error.code };
+            }
+            console.log(`[AuthProvider] login: Intento 1 falló (esperado si se usa username). Procediendo al Intento 2.`);
         }
-        
-        // Paso 1: Buscar el perfil del usuario por el input (puede ser username o email)
-        console.log(`[AuthProvider] Buscando perfil para el input: '${usernameAttempt}'.`);
+
+        // Second attempt: Look up user profile by the input (which could be a username)
+        console.log(`[AuthProvider] login: Intento 2: Buscar perfil de usuario para '${usernameAttempt}'.`);
         const userProfile = await getUserByUsername(usernameAttempt);
 
         if (!userProfile || !userProfile.email) {
-            console.log(`[AuthProvider] No se encontró perfil o el perfil no tiene un email asociado para el input '${usernameAttempt}'.`);
+            console.log(`[AuthProvider] login: No se encontró perfil o el perfil no tiene email. El login falla.`);
             setIsLoading(false);
-            return { success: false, message: "Correo electrónico o contraseña incorrectos." };
+            return { success: false, message: "Nombre de usuario o contraseña incorrectos." };
         }
         
-        // Paso 2: Usar siempre el email del perfil encontrado para autenticar
-        const emailToUse = userProfile.email;
-        console.log(`[AuthProvider] Perfil encontrado. Intentando login con el email de la base de datos: ${emailToUse}`);
+        emailToUse = userProfile.email;
+        console.log(`[AuthProvider] login: Perfil encontrado. Reintentando autenticación con el email del perfil: '${emailToUse}'.`);
         
-        const userCredential = await signInWithEmailAndPassword(auth, emailToUse, passwordAttempt);
-        const firebaseUser = userCredential.user;
-        console.log("[AuthProvider] login: signInWithEmailAndPassword EXITOSO para email:", firebaseUser?.email, "UID:", firebaseUser?.uid);
-
-        // El listener onAuthStateChanged se encargará de llamar a loadUser,
-        // que a su vez llamará a fetchAppUserProfile y establecerá el usuario.
-        // No es necesario llamar a setUser aquí.
-        // Esperamos un momento para que el listener actúe.
-        await new Promise(resolve => setTimeout(resolve, 100)); // Pequeña espera para el listener
-        
-        setIsLoading(false);
+        await signInWithEmailAndPassword(auth, emailToUse, passwordAttempt);
+        // If successful, onAuthStateChanged will handle setting the user state.
+        console.log("[AuthProvider] login: Éxito en Intento 2. onAuthStateChanged se encargará del resto.");
         return { success: true };
 
     } catch (error: any) {
-      console.error("[AuthProvider] login: Error durante el inicio de sesión:", error);
-      let message = "Error desconocido durante el inicio de sesión.";
-      const errorCode = error.code;
-      if (errorCode) {
-        switch (errorCode) {
-          case 'auth/invalid-credential':
-          case 'auth/user-not-found':
-          case 'auth/wrong-password':
-          case 'auth/invalid-email':
-            message = "Correo electrónico o contraseña incorrectos.";
-            break;
-          case 'auth/user-disabled':
-            message = "Este usuario ha sido deshabilitado.";
-            break;
-          default:
-            message = `Error de autenticación (${errorCode}): ${error.message}`;
+        console.error(`[AuthProvider] login: Fallo final en el proceso de login. Error:`, error);
+        let message = "Error desconocido.";
+        const errorCode = error.code;
+        if (errorCode === 'auth/invalid-credential' || errorCode === 'auth/wrong-password') {
+            message = "Nombre de usuario o contraseña incorrectos.";
+        } else {
+            message = `Error de autenticación: ${error.message}`;
         }
-      }
-      setIsLoading(false);
-      return { success: false, message, errorCode };
+        setIsLoading(false);
+        return { success: false, message, errorCode };
     }
   };
+
 
   const logout = async (): Promise<void> => {
     console.log("[AuthProvider] logout: Iniciando cierre de sesión.");

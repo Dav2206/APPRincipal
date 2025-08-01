@@ -172,17 +172,28 @@ export function getContractDisplayStatus(contract: Contract | null | undefined, 
 
 
 // --- Auth ---
-export const getUserByUsername = async (username: string): Promise<User | undefined> => {
-  
+export const getUserByUsername = async (identity: string): Promise<User | undefined> => {
     if (!firestore) {
-      console.warn("Firestore not initialized in getUserByUsername. Using mock as fallback.");
-      return mockDB.users.find(u => u.username === username);
+      console.warn("Firestore not initialized in getUserByUsername.");
+      return undefined;
     }
     const usersCol = collection(firestore, 'usuarios');
-    const q = query(usersCol, where('username', '==', username));
-    const snapshot = await getDocs(q);
-    if (snapshot.empty) return undefined;
-    return { id: snapshot.docs[0].id, ...convertDocumentData(snapshot.docs[0].data()) } as User;
+    
+    // Attempt to find by username first
+    const usernameQuery = query(usersCol, where('username', '==', identity));
+    const usernameSnapshot = await getDocs(usernameQuery);
+    if (!usernameSnapshot.empty) {
+      return { id: usernameSnapshot.docs[0].id, ...convertDocumentData(usernameSnapshot.docs[0].data()) } as User;
+    }
+
+    // If not found, attempt to find by email
+    const emailQuery = query(usersCol, where('email', '==', identity));
+    const emailSnapshot = await getDocs(emailQuery);
+    if (!emailSnapshot.empty) {
+      return { id: emailSnapshot.docs[0].id, ...convertDocumentData(emailSnapshot.docs[0].data()) } as User;
+    }
+
+    return undefined;
 };
 
 
@@ -949,7 +960,7 @@ export async function addAppointment(data: AppointmentFormData): Promise<Appoint
 
     let patientId: string | null = data.existingPatientId || null;
     if (!patientId && !data.isWalkIn) {
-      const newPatient = await addPatient({
+      newPatient = await addPatient({
         firstName: data.patientFirstName,
         lastName: data.patientLastName,
         phone: data.patientPhone,
@@ -1434,6 +1445,7 @@ export async function deleteImportantNote(noteId: string): Promise<boolean> {
   }
 }
 // --- End Important Notes ---
+
 
 
 
