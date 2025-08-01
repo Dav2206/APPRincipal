@@ -1,6 +1,6 @@
 
 
-export const PAYMENT_METHODS = ['Efectivo', 'Tarjeta de Débito', 'Transferencia', 'Yape/Plin'] as const;
+export const PAYMENT_METHODS = ['Efectivo', 'Tarjeta de Débito', 'Yape/Plin'] as const;
 export type PaymentMethod = typeof PAYMENT_METHODS[number];
 
 export const LOCATIONS = [
