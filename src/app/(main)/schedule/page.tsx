@@ -391,7 +391,7 @@ export default function SchedulePage() {
           onAppointmentCreated={handleNewAppointmentCreated}
           defaultDate={currentDate}
           allProfessionals={allSystemProfessionals} 
-          currentLocationProfessionals={allSystemProfessionals.filter(p => p.locationId === actualEffectiveLocationId && !p.isManager)}
+          currentLocationProfessionals={allSystemProfessionals}
         />
       )}
 
