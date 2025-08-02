@@ -116,7 +116,6 @@ export default function ProfessionalsPage() {
 
   const isAdminOrContador = user?.role === USER_ROLES.ADMIN || user?.role === USER_ROLES.CONTADOR;
   const isContadorOnly = user?.role === USER_ROLES.CONTADOR;
-  const isAdminOnly = user?.role === USER_ROLES.ADMIN;
 
   const effectiveLocationIdForFetch = useMemo(() => {
     if (isAdminOrContador) {
@@ -174,8 +173,8 @@ export default function ProfessionalsPage() {
 
 
   const handleAddProfessional = () => {
-    if (!isAdminOnly) { 
-        toast({ title: "Acción no permitida", description: "Solo Administradores pueden agregar profesionales.", variant: "destructive" });
+    if (!isAdminOrContador) { 
+        toast({ title: "Acción no permitida", description: "Solo Administradores o Contadores pueden agregar profesionales.", variant: "destructive" });
         return;
     }
     setEditingProfessional(null);
@@ -428,7 +427,7 @@ export default function ProfessionalsPage() {
               </div>
             )}
           </div>
-          {(isAdminOnly) && ( 
+          {(isAdminOrContador) && ( 
           <Button onClick={handleAddProfessional} className="w-full mt-4 md:mt-0 md:w-auto">
             <PlusCircle className="mr-2 h-4 w-4" /> Agregar Profesional
           </Button>
@@ -549,7 +548,7 @@ export default function ProfessionalsPage() {
                     </div>
                     <FormField control={form.control} name="locationId" render={({ field }) => (
                         <FormItem className="mt-4"><FormLabel>Sede</FormLabel>
-                          <Select onValueChange={field.onChange} value={field.value} disabled={!isAdminOnly && !!editingProfessional}>
+                          <Select onValueChange={field.onChange} value={field.value} disabled={isContadorOnly && !!editingProfessional}>
                             <FormControl><SelectTrigger><SelectValue placeholder="Seleccionar sede" /></SelectTrigger></FormControl>
                             <SelectContent>{locations.map(loc => (<SelectItem key={loc.id} value={loc.id}>{loc.name}</SelectItem>))}</SelectContent>
                           </Select><FormMessage />
@@ -800,4 +799,3 @@ export default function ProfessionalsPage() {
     </div>
   );
 }
-
