@@ -325,7 +325,7 @@ export async function addProfessional (data: Omit<ProfessionalFormData, 'id'>): 
       customScheduleOverrides: (data.customScheduleOverrides || []).map(ov => ({
         ...ov,
         id: ov.id || generateId(),
-        date: typeof ov.date === 'string' ? ov.date : formatISO(ov.date, { representation: 'date' }), // Already a string
+        date: typeof ov.date === 'string' ? ov.date : formatISO(ov.date, { representation: 'date' }),
         startTime: ov.isWorking ? ov.startTime : undefined,
         endTime: ov.isWorking ? ov.endTime : undefined,
         notes: ov.notes || null,
@@ -379,10 +379,11 @@ export async function addProfessional (data: Omit<ProfessionalFormData, 'id'>): 
     } else {
       firestoreData.currentContract = null;
     }
+
     if (firestoreData.customScheduleOverrides) {
       firestoreData.customScheduleOverrides = firestoreData.customScheduleOverrides.map((ov: any) => ({
         ...ov,
-        date: toFirestoreTimestamp(ov.date),
+        date: toFirestoreTimestamp(ov.date), // Correct conversion for new professionals
         startTime: ov.startTime ?? null,
         endTime: ov.endTime ?? null,
         notes: ov.notes ?? null,
@@ -391,6 +392,7 @@ export async function addProfessional (data: Omit<ProfessionalFormData, 'id'>): 
     } else {
       firestoreData.customScheduleOverrides = [];
     }
+    
      firestoreData.contractHistory = firestoreData.contractHistory ? firestoreData.contractHistory.map((ch:any) => ({
       ...ch,
       id: ch.id || generateId(),
