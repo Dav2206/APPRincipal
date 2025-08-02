@@ -190,20 +190,22 @@ export default function FinancesPage() {
       toast({ title: "Nombre inválido", description: "El nombre del método de pago no puede estar vacío.", variant: "destructive" });
       return;
     }
-    
+
     const currentMethods = paymentMethodsByLocation[locationId] || [];
     if (currentMethods.some(m => m.toLowerCase() === newMethodName.toLowerCase())) {
         toast({ title: "Método Duplicado", description: `"${newMethodName}" ya existe para esta sede.`, variant: "default" });
         return;
     }
 
-    setPaymentMethodsByLocation(prev => ({
-        ...prev,
-        [locationId]: [...currentMethods, newMethodName as PaymentMethod]
-    }));
-
-    toast({ title: "Método Añadido", description: `"${newMethodName}" se añadió. Recuerde guardar los cambios.` });
+    setPaymentMethodsByLocation(prev => {
+        const updatedMethods = [...(prev[locationId] || []), newMethodName as PaymentMethod];
+        return {
+            ...prev,
+            [locationId]: updatedMethods
+        };
+    });
     setHasChanges(true);
+    toast({ title: "Método Añadido", description: `"${newMethodName}" se añadió. Recuerde guardar los cambios.` });
     inputElement.value = '';
   };
   
@@ -228,7 +230,6 @@ export default function FinancesPage() {
   const handleSaveAllChanges = async () => {
     setIsSaving(true);
     try {
-        // Direct access to the most recent state is implicitly handled here by not being a useCallback with dependencies.
         const updatePromises = Object.entries(paymentMethodsByLocation).map(([locationId, methods]) =>
             updateLocationPaymentMethods(locationId as LocationId, methods)
         );
@@ -431,3 +432,5 @@ export default function FinancesPage() {
     </div>
   );
 }
+
+    
