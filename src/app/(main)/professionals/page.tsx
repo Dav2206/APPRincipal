@@ -119,7 +119,7 @@ export default function ProfessionalsPage() {
 
 
  const fetchProfessionals = useCallback(async () => {
-    if (!user || !isAdminOrContador) {
+    if (!isAdminOrContador) {
       setIsLoading(false);
       setAllProfessionals([]);
       return;
@@ -142,9 +142,7 @@ export default function ProfessionalsPage() {
             setIsLoading(true);
             const fetchedLocations = await getLocations();
             setLocations(fetchedLocations);
-        } else {
-             setIsLoading(false);
-             setAllProfessionals([]);
+            setIsLoading(false);
         }
     }
     loadInitialData();
@@ -345,6 +343,45 @@ export default function ProfessionalsPage() {
   const handleLoadMore = () => {
     setCurrentPage(prev => prev + 1);
   };
+  
+  const calculateNextGeneralDayOff = useCallback((prof: Professional, referenceDate: Date): Date | null => {
+    for (let i = 0; i <= 30; i++) {
+      const checkDate = dateFnsAddDays(referenceDate, i);
+      const availability = getProfessionalAvailabilityForDate(prof, checkDate);
+      if (!availability || (availability && !availability.isWorking && !availability.startTime && !availability.endTime)) {
+        return checkDate;
+      }
+    }
+    return null;
+  }, []);
+  
+  const formatWorkScheduleDisplay = useCallback((prof: Professional) => {
+    const today = startOfDay(new Date());
+    const availabilityToday = getProfessionalAvailabilityForDate(prof, today);
+  
+    let todayStr = "Hoy: ";
+    if (availabilityToday && availabilityToday.isWorking && availabilityToday.startTime && availabilityToday.endTime) {
+      todayStr += `${availabilityToday.startTime}-${availabilityToday.endTime}`;
+      if (availabilityToday.notes && availabilityToday.notes.trim() !== "") {
+        todayStr += ` (${availabilityToday.notes.substring(0,30)}${availabilityToday.notes.length > 30 ? '...' : ''})`;
+      } else if (availabilityToday.reason && availabilityToday.reason.trim() !== "" && availabilityToday.reason !== "Horario base") {
+        todayStr += ` (${availabilityToday.reason})`;
+      }
+    } else {
+      todayStr += availabilityToday?.reason || "Descansando";
+    }
+  
+    const nextDayOffDate = calculateNextGeneralDayOff(prof, today);
+    let nextDayOffDisplayStr = "";
+    if (nextDayOffDate) {
+      const formattedDate = format(nextDayOffDate, "EEEE, d 'de' MMMM", { locale: es });
+      nextDayOffDisplayStr = ` | Próx. Desc.: ${formattedDate.charAt(0).toUpperCase() + formattedDate.slice(1)}`;
+    } else {
+      nextDayOffDisplayStr = " | Próx. Desc.: No definido próximamente";
+    }
+    
+    return `${todayStr}${nextDayOffDisplayStr}`;
+  }, [calculateNextGeneralDayOff]);
 
   if (!user) {
     return (
@@ -367,46 +404,6 @@ export default function ProfessionalsPage() {
         </Card>
     )
   }
-
- const calculateNextGeneralDayOff = (prof: Professional, referenceDate: Date): Date | null => {
-    for (let i = 0; i <= 30; i++) { 
-      const checkDate = dateFnsAddDays(referenceDate, i);
-      const availability = getProfessionalAvailabilityForDate(prof, checkDate);
-      if (!availability || (availability && !availability.isWorking && !availability.startTime && !availability.endTime)) { 
-        return checkDate;
-      }
-    }
-    return null; 
-  };
-
- const formatWorkScheduleDisplay = (prof: Professional) => {
-    const today = startOfDay(new Date());
-    const availabilityToday = getProfessionalAvailabilityForDate(prof, today);
-
-    let todayStr = "Hoy: ";
-    if (availabilityToday && availabilityToday.isWorking && availabilityToday.startTime && availabilityToday.endTime) {
-      todayStr += `${availabilityToday.startTime}-${availabilityToday.endTime}`;
-      if (availabilityToday.notes && availabilityToday.notes.trim() !== "") {
-         todayStr += ` (${availabilityToday.notes.substring(0,30)}${availabilityToday.notes.length > 30 ? '...' : ''})`;
-      } else if (availabilityToday.reason && availabilityToday.reason.trim() !== "" && availabilityToday.reason !== "Horario base") {
-         
-         todayStr += ` (${availabilityToday.reason})`;
-      }
-    } else {
-      todayStr += availabilityToday?.reason || "Descansando";
-    }
-
-    const nextDayOffDate = calculateNextGeneralDayOff(prof, today); 
-    let nextDayOffDisplayStr = "";
-    if (nextDayOffDate) {
-      const formattedDate = format(nextDayOffDate, "EEEE, d 'de' MMMM", { locale: es });
-      nextDayOffDisplayStr = ` | Próx. Desc.: ${formattedDate.charAt(0).toUpperCase() + formattedDate.slice(1)}`;
-    } else {
-      nextDayOffDisplayStr = " | Próx. Desc.: No definido próximamente";
-    }
-    
-    return `${todayStr}${nextDayOffDisplayStr}`;
-  };
 
   return (
     <div className="space-y-6">
@@ -715,7 +712,7 @@ export default function ProfessionalsPage() {
                         )}/>
                       </div>
                     ))}
-                    <Button type="button" variant="outline" size="sm" className="mt-4" onClick={()={() => appendCustomSchedule({ id: generateId(), date: new Date(), isWorking: false, startTime: undefined, endTime: undefined, notes: 'Descanso' })}>
+                    <Button type="button" variant="outline" size="sm" className="mt-4" onClick={() => appendCustomSchedule({ id: generateId(), date: new Date(), isWorking: false, startTime: undefined, endTime: undefined, notes: 'Descanso' })}>
                       <PlusCircle className="mr-2 h-4 w-4" /> Agregar Anulación de Horario
                     </Button>
                   </AccordionContent>
