@@ -85,16 +85,6 @@ export default function ProfessionalsPage() {
   const isAdminOrContador = useMemo(() => user?.role === USER_ROLES.ADMIN || user?.role === USER_ROLES.CONTADOR, [user]);
   const isContadorOnly = useMemo(() => user?.role === USER_ROLES.CONTADOR, [user]);
 
-  useEffect(() => {
-    async function loadLocations() {
-      if (isAdminOrContador) {
-        const fetchedLocations = await getLocations();
-        setLocations(fetchedLocations);
-      }
-    }
-    loadLocations();
-  }, [isAdminOrContador]);
-
   const form = useForm<ProfessionalFormData>({
     resolver: zodResolver(ProfessionalFormSchema),
     defaultValues: {
@@ -128,42 +118,44 @@ export default function ProfessionalsPage() {
   }, [user, isAdminOrContador, adminSelectedLocation]);
 
 
-  const fetchProfessionals = useCallback(async () => {
-    if (!user || !isAdminOrContador) { 
+ const fetchProfessionals = useCallback(async () => {
+    if (!user || !isAdminOrContador) {
       setIsLoading(false);
       setAllProfessionals([]);
       return;
     }
     setIsLoading(true);
     try {
-      let profsToSet: (Professional & { contractDisplayStatus: ContractDisplayStatus })[] = [];
-      if (effectiveLocationIdForFetch) {
-        profsToSet = await getProfessionals(effectiveLocationIdForFetch);
-      } else { 
-        const allProfsPromises = locations.map(loc => getProfessionals(loc.id));
-        const results = await Promise.all(allProfsPromises);
-        profsToSet = results.flat();
-      }
-      
+      const profsToSet = await getProfessionals(effectiveLocationIdForFetch);
       setAllProfessionals(profsToSet || []);
     } catch (error) {
-      console.error("Failed to fetch professionals:", error);
+      console.error("Failed to fetch professionals for location", effectiveLocationIdForFetch, ":", error);
       setAllProfessionals([]);
       toast({ title: "Error", description: "No se pudieron cargar los profesionales.", variant: "destructive" });
     }
     setIsLoading(false);
-  }, [effectiveLocationIdForFetch, user, toast, isAdminOrContador, locations]);
+  }, [effectiveLocationIdForFetch, user, toast, isAdminOrContador]);
 
   useEffect(() => {
-    if (isAdminOrContador && locations.length > 0) {
-        fetchProfessionals();
-    } else if (isAdminOrContador && !effectiveLocationIdForFetch) { // Handle "All" locations case when locations might be loading
-        fetchProfessionals();
-    } else if (!isAdminOrContador) {
-        setIsLoading(false);
-        setAllProfessionals([]);
+    async function loadInitialData() {
+        if(isAdminOrContador){
+            setIsLoading(true);
+            const fetchedLocations = await getLocations();
+            setLocations(fetchedLocations);
+        } else {
+             setIsLoading(false);
+             setAllProfessionals([]);
+        }
     }
-  }, [fetchProfessionals, isAdminOrContador, locations, effectiveLocationIdForFetch]);
+    loadInitialData();
+  }, [isAdminOrContador, user]);
+  
+  useEffect(() => {
+      if(isAdminOrContador && locations.length > 0) {
+        fetchProfessionals();
+      }
+  }, [fetchProfessionals, isAdminOrContador, locations]);
+
 
   const filteredProfessionals = useMemo(() => {
     return allProfessionals.filter(p =>
@@ -361,7 +353,6 @@ export default function ProfessionalsPage() {
       </div>
     );
   }
-
   
   if (!isAdminOrContador) {
     return (
@@ -387,7 +378,6 @@ export default function ProfessionalsPage() {
     }
     return null; 
   };
-
 
  const formatWorkScheduleDisplay = (prof: Professional) => {
     const today = startOfDay(new Date());
@@ -417,7 +407,6 @@ export default function ProfessionalsPage() {
     
     return `${todayStr}${nextDayOffDisplayStr}`;
   };
-
 
   return (
     <div className="space-y-6">
@@ -726,7 +715,7 @@ export default function ProfessionalsPage() {
                         )}/>
                       </div>
                     ))}
-                    <Button type="button" variant="outline" size="sm" className="mt-4" onClick={() => appendCustomSchedule({ id: generateId(), date: new Date(), isWorking: false, startTime: undefined, endTime: undefined, notes: 'Descanso' })}>
+                    <Button type="button" variant="outline" size="sm" className="mt-4" onClick={()={() => appendCustomSchedule({ id: generateId(), date: new Date(), isWorking: false, startTime: undefined, endTime: undefined, notes: 'Descanso' })}>
                       <PlusCircle className="mr-2 h-4 w-4" /> Agregar Anulación de Horario
                     </Button>
                   </AccordionContent>
