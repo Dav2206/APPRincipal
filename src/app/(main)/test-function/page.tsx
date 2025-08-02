@@ -20,12 +20,12 @@ export default function TestFunctionPage() {
 
   const handleCallFunction = async () => {
     if (!functions) {
-      setError("Firebase Functions no está inicializado. Revisa la configuración.");
+      setError("Error de Configuración: La instancia de Firebase Functions no está inicializada. Revisa `src/lib/firebase-config.ts` y los logs de la consola del navegador para más detalles.");
       console.error("Firebase Functions instance is undefined in TestFunctionPage.");
       return;
     }
     if (!name.trim()) {
-      setError("Por favor, ingresa un nombre.");
+      setError("Por favor, ingresa un nombre para enviar a la función.");
       return;
     }
 
@@ -41,11 +41,19 @@ export default function TestFunctionPage() {
       setResponse(result.data);
     } catch (err: any) {
       console.error("Error llamando a la función:", err);
-      setError(err.message || "Ocurrió un error al llamar a la función.");
-      // Si usas HttpsError, puedes acceder a err.code y err.details
-      if (err.code) {
-        setError(`Error (${err.code}): ${err.message}`);
+      let errorMessage = "Ocurrió un error desconocido al llamar a la función.";
+       if (err.code === 'unavailable') {
+        errorMessage = "Error de Conexión: No se pudo contactar con el servidor de Firebase Functions. Verifica tu conexión a internet o el estado del servicio de Firebase.";
+      } else if (err.code === 'not-found') {
+        errorMessage = "Error 404: La función 'miPrimeraFuncionCallable' no se encontró en tu proyecto de Firebase. Asegúrate de que se haya desplegado correctamente.";
+      } else if (err.code === 'permission-denied') {
+          errorMessage = "Error de Permisos: No tienes permiso para ejecutar esta función. Asegúrate de que el usuario esté autenticado si la función lo requiere.";
+      } else if (err.code) {
+        errorMessage = `Error (${err.code}): ${err.message}`;
+      } else {
+        errorMessage = err.message || errorMessage;
       }
+      setError(errorMessage);
     } finally {
       setIsLoading(false);
     }
@@ -57,10 +65,10 @@ export default function TestFunctionPage() {
         <CardHeader>
           <CardTitle className="text-2xl flex items-center gap-2">
             <Terminal className="text-primary" />
-            Probar Firebase Function (Callable)
+            Probar Conexión con Firebase
           </CardTitle>
           <CardDescription>
-            Ingresa datos para enviar a la función &quot;miPrimeraFuncionCallable&quot; y ver la respuesta.
+            Usa esta herramienta para verificar que tu aplicación se está comunicando correctamente con tu backend de Firebase Functions.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -96,20 +104,21 @@ export default function TestFunctionPage() {
             ) : (
               <Send className="mr-2 h-4 w-4" />
             )}
-            Llamar a la Función
+            Probar Conexión
           </Button>
 
           {error && (
             <div className="mt-4 p-3 bg-destructive/10 border border-destructive text-destructive rounded-md">
-              <p className="font-semibold">Error:</p>
+              <p className="font-semibold">Resultado: Fallido</p>
               <p className="text-sm">{error}</p>
             </div>
           )}
 
           {response && (
-            <div className="mt-4 p-3 bg-primary/10 border border-primary text-primary-foreground rounded-md">
-              <p className="font-semibold text-primary">Respuesta de la Función:</p>
-              <pre className="text-sm whitespace-pre-wrap text-foreground/80">{JSON.stringify(response, null, 2)}</pre>
+            <div className="mt-4 p-3 bg-green-100 border border-green-600 text-green-900 rounded-md">
+              <p className="font-semibold">Resultado: ¡Éxito!</p>
+              <p className="text-sm mb-2">La aplicación se comunicó correctamente con Firebase. Respuesta recibida:</p>
+              <pre className="text-sm whitespace-pre-wrap bg-white/50 p-2 rounded text-foreground/80">{JSON.stringify(response, null, 2)}</pre>
             </div>
           )}
         </CardContent>
@@ -131,13 +140,11 @@ export default function TestFunctionPage() {
             <p>
                 4. Despliega tus funciones usando el comando: `firebase deploy --only functions` desde la raíz de tu proyecto Firebase.
             </p>
-            <p>
-                5. (Opcional para desarrollo local) Inicia los emuladores de Firebase con `firebase emulators:start` (asegúrate de que el emulador de Functions esté en el puerto 5001). Esta página ya está configurada para intentar conectarse al emulador de Functions si se detecta un entorno de desarrollo.
+             <p>
+                5. Si esta prueba falla, revisa los mensajes de error y la consola del navegador para más pistas.
             </p>
         </CardContent>
       </Card>
     </div>
   );
 }
-
-    
