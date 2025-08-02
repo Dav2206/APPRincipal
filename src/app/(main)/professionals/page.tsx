@@ -606,16 +606,18 @@ export default function ProfessionalsPage() {
 
                 <AccordionItem value="custom-overrides">
                   <AccordionTrigger className="text-lg font-semibold">
-                      <div className="flex flex-col items-start gap-1">
-                          <span>Registrar Días de Descanso / Horarios Especiales</span>
-                           <div className="flex items-center gap-2">
-                                <Button type="button" variant="ghost" size="icon" className="h-6 w-6" onClick={(e) => { e.stopPropagation(); setOverrideDisplayDate(prev => subMonths(prev, 1));}}><ChevronLeft className="h-4 w-4" /></Button>
-                                <span className="text-sm font-normal text-muted-foreground capitalize">{format(overrideDisplayDate, 'MMMM yyyy', { locale: es })}</span>
-                                <Button type="button" variant="ghost" size="icon" className="h-6 w-6" onClick={(e) => { e.stopPropagation(); setOverrideDisplayDate(prev => addMonths(prev, 1));}}><ChevronRight className="h-4 w-4" /></Button>
-                           </div>
-                      </div>
+                    Registrar Días de Descanso / Horarios Especiales
                   </AccordionTrigger>
                   <AccordionContent className="space-y-4 pt-2">
+                    <div className="flex items-center justify-center gap-2">
+                      <Button type="button" variant="ghost" size="icon" className="h-6 w-6" onClick={() => setOverrideDisplayDate(prev => subMonths(prev, 1))}>
+                          <ChevronLeft className="h-4 w-4" />
+                      </Button>
+                      <span className="text-sm font-medium text-muted-foreground capitalize">{format(overrideDisplayDate, 'MMMM yyyy', { locale: es })}</span>
+                      <Button type="button" variant="ghost" size="icon" className="h-6 w-6" onClick={() => setOverrideDisplayDate(prev => addMonths(prev, 1))}>
+                          <ChevronRight className="h-4 w-4" />
+                      </Button>
+                    </div>
                     <FormDescription className="text-xs px-1">
                       Utilice esta sección para marcar días específicos en los que el profesional no trabajará o si tendrá un horario diferente al de su base semanal.
                     </FormDescription>
@@ -752,3 +754,4 @@ export default function ProfessionalsPage() {
     </div>
   );
 }
+
