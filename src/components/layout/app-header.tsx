@@ -15,13 +15,25 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { LogOut, UserCircle, Settings, Footprints, PanelLeft } from 'lucide-react';
 import Link from 'next/link';
-import { LOCATIONS, USER_ROLES, LocationId } from '@/lib/constants';
+import { USER_ROLES } from '@/lib/constants';
+import type { LocationId, Location } from '@/types';
+import { useState, useEffect } from 'react';
+import { getLocations } from '@/lib/data';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { cn } from '@/lib/utils';
 
 export function AppHeader() {
   const { user, logout } = useAuth();
   const { selectedLocationId, setSelectedLocationId, setSidebarOpen, sidebarOpen } = useAppState();
+  const [locations, setLocations] = useState<Location[]>([]);
+
+  useEffect(() => {
+    async function loadLocations() {
+      const fetchedLocations = await getLocations();
+      setLocations(fetchedLocations);
+    }
+    loadLocations();
+  }, []);
 
   const getInitials = (name: string = "") => {
     return name.split(' ').map(n => n[0]).join('').toUpperCase() || 'U';
@@ -55,7 +67,7 @@ export function AppHeader() {
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">Todas las Sedes</SelectItem>
-                {LOCATIONS.map(loc => (
+                {locations.map(loc => (
                   <SelectItem key={loc.id} value={loc.id}>{loc.name}</SelectItem>
                 ))}
               </SelectContent>
@@ -78,7 +90,7 @@ export function AppHeader() {
                 <p className="text-xs leading-none text-muted-foreground">
                   {user?.role === USER_ROLES.ADMIN ? 'Administrador' :
                    user?.role === USER_ROLES.CONTADOR ? 'Contador Principal' :
-                   `Staff ${LOCATIONS.find(l => l.id === user?.locationId)?.name || ''}`}
+                   `Staff ${locations.find(l => l.id === user?.locationId)?.name || ''}`}
                 </p>
               </div>
             </DropdownMenuLabel>
@@ -102,4 +114,3 @@ export function AppHeader() {
     </header>
   );
 }
-

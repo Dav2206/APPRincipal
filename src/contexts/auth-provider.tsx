@@ -7,8 +7,8 @@ import { useRouter, usePathname } from 'next/navigation';
 import { auth, useMockDatabase as globalUseMockDatabase, firestore } from '@/lib/firebase-config';
 import { signInWithEmailAndPassword, signOut, onAuthStateChanged, User as FirebaseUser } from 'firebase/auth';
 import type { User as AppUser, LocationId } from '@/types';
-import { getUserByUsername } from '@/lib/data';
-import { LOCATIONS, USER_ROLES } from '@/lib/constants';
+import { getUserByUsername, getLocations } from '@/lib/data';
+import { USER_ROLES } from '@/lib/constants';
 
 interface AuthContextType {
   user: AppUser | null;
@@ -34,6 +34,7 @@ const fetchAppUserProfile = async (identity: string, firebaseUserUid?: string): 
       }
 
       // Lógica para derivar locationId si falta para staff users
+      const LOCATIONS = await getLocations();
       if (appUserProfile.role === USER_ROLES.LOCATION_STAFF && (!appUserProfile.locationId || !LOCATIONS.find(l => l.id === appUserProfile.locationId))) {
         console.warn(`[AuthProvider] Staff user '${identity}' (doc ID: ${appUserProfile.id}, username: ${appUserProfile.username}) no tiene un campo 'locationId' válido en Firestore o está ausente. Intentando derivar...`);
         
@@ -45,7 +46,7 @@ const fetchAppUserProfile = async (identity: string, firebaseUserUid?: string): 
         // Intento 1: Derivar del ID del documento
         for (const locId of knownLocationIds) {
           if (docIdLower.startsWith(locId)) {
-            derivedLocationId = locId;
+            derivedLocationId = locId as LocationId;
             console.log(`[AuthProvider] Derivando locationId '${derivedLocationId}' para staff user '${identity}' basado en el ID del documento '${appUserProfile.id}'.`);
             break;
           }
@@ -55,7 +56,7 @@ const fetchAppUserProfile = async (identity: string, firebaseUserUid?: string): 
         if (!derivedLocationId) {
           for (const locId of knownLocationIds) {
             if (usernameLower.startsWith(locId)) {
-              derivedLocationId = locId;
+              derivedLocationId = locId as LocationId;
               console.log(`[AuthProvider] Derivando locationId '${derivedLocationId}' para staff user '${identity}' basado en el username (email) '${appUserProfile.username}'.`);
               break;
             }
