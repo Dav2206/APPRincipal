@@ -1,12 +1,12 @@
 
 "use client";
 
-import type { Appointment, Professional } from '@/types';
+import type { Appointment, Professional, Location } from '@/types';
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useAuth } from '@/contexts/auth-provider';
 import { useAppState } from '@/contexts/app-state-provider';
-import { getAppointments, getProfessionals } from '@/lib/data';
-import { LOCATIONS, USER_ROLES, LocationId } from '@/lib/constants';
+import { getAppointments, getProfessionals, getLocations } from '@/lib/data';
+import { USER_ROLES, LocationId } from '@/lib/constants';
 import { AppointmentCard } from './appointment-card';
 import { AppointmentForm } from './appointment-form';
 import { Button } from '@/components/ui/button';
@@ -25,6 +25,7 @@ export function AppointmentsDisplay() {
   const { selectedLocationId: adminSelectedLocation } = useAppState();
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [allSystemProfessionals, setAllSystemProfessionals] = useState<Professional[]>([]);
+  const [locations, setLocations] = useState<Location[]>([]);
   const [currentDate, setCurrentDate] = useState<Date>(startOfDay(new Date()));
   const [isLoading, setIsLoading] = useState(true);
   const [isLoadingProfessionals, setIsLoadingProfessionals] = useState(true);
@@ -45,6 +46,14 @@ export function AppointmentsDisplay() {
       ? (adminSelectedLocation === 'all' ? undefined : adminSelectedLocation as LocationId)
       : user?.locationId;
   }, [isAdminOrContador, adminSelectedLocation, user?.locationId]);
+
+  useEffect(() => {
+    async function loadLocations() {
+        const fetchedLocations = await getLocations();
+        setLocations(fetchedLocations);
+    }
+    loadLocations();
+  }, []);
 
   const fetchAppointmentData = useCallback(async () => {
     if (!user) return;
@@ -173,7 +182,7 @@ export function AppointmentsDisplay() {
         <AlertTriangle className="mx-auto h-12 w-12 text-muted-foreground mb-4" />
         <h3 className="text-xl font-semibold mb-2">No hay citas programadas</h3>
         <p className="text-muted-foreground mb-4">
-          No se encontraron citas para {effectiveLocationId ? LOCATIONS.find(l=>l.id === effectiveLocationId)?.name : 'todas las sedes'} en la fecha seleccionada.
+          No se encontraron citas para {effectiveLocationId ? locations.find(l=>l.id === effectiveLocationId)?.name : 'todas las sedes'} en la fecha seleccionada.
         </p>
         {(user?.role === USER_ROLES.ADMIN || user?.role === USER_ROLES.LOCATION_STAFF || user?.role === USER_ROLES.CONTADOR) && (
           <Button onClick={() => setIsFormOpen(true)} disabled={isLoadingProfessionals && isFormOpen}>
@@ -229,7 +238,7 @@ export function AppointmentsDisplay() {
           </div>
            {isAdminOrContador && (
             <div className="mt-2 text-sm text-muted-foreground">
-              Viendo: {adminSelectedLocation === 'all' ? 'Todas las sedes' : LOCATIONS.find(l => l.id === adminSelectedLocation)?.name || ''}
+              Viendo: {adminSelectedLocation === 'all' ? 'Todas las sedes' : locations.find(l => l.id === adminSelectedLocation)?.name || ''}
             </div>
           )}
         </CardHeader>

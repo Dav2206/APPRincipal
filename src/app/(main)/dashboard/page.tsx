@@ -357,6 +357,7 @@ export default function DashboardPage() {
             isLoading={isLoadingUpcomingBirthdays}
             icon={<Gift className="h-6 w-6 text-primary" />}
             emptyMessage="No hay cumpleaños en los próximos 15 días."
+            locations={locations}
         />
          {isAdminOrContador && (
           <UpcomingRemindersCard

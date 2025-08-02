@@ -1,12 +1,10 @@
-
 "use client";
 
-import type { Professional } from '@/types';
+import type { Professional, Location } from '@/types';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Loader2, Gift } from 'lucide-react';
-import { LOCATIONS } from '@/lib/constants';
 import { format, parse } from 'date-fns';
 import { es } from 'date-fns/locale';
 
@@ -16,6 +14,7 @@ interface UpcomingBirthdaysCardProps {
   isLoading: boolean;
   icon: React.ReactNode;
   emptyMessage?: string;
+  locations: Location[];
 }
 
 const getInitials = (name: string = "") => {
@@ -24,7 +23,7 @@ const getInitials = (name: string = "") => {
 
 const MONTH_NAMES_SHORT = ["Ene", "Feb", "Mar", "Abr", "May", "Jun", "Jul", "Ago", "Sep", "Oct", "Nov", "Dic"];
 
-export function UpcomingBirthdaysCard({ title, professionals, isLoading, icon, emptyMessage = "No hay cumpleaños próximos." }: UpcomingBirthdaysCardProps) {
+export function UpcomingBirthdaysCard({ title, professionals, isLoading, icon, emptyMessage = "No hay cumpleaños próximos.", locations }: UpcomingBirthdaysCardProps) {
   return (
     <Card className="col-span-1 md:col-span-2 lg:col-span-2 shadow-md"> {/* Ajusta el col-span según sea necesario */}
       <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
@@ -50,7 +49,7 @@ export function UpcomingBirthdaysCard({ title, professionals, isLoading, icon, e
                     </Avatar>
                     <div>
                       <p className="text-xs font-medium leading-none">{prof.firstName} {prof.lastName}</p>
-                      <p className="text-xs text-muted-foreground">{LOCATIONS.find(l => l.id === prof.locationId)?.name || 'Sede Desconocida'}</p>
+                      <p className="text-xs text-muted-foreground">{locations.find(l => l.id === prof.locationId)?.name || 'Sede Desconocida'}</p>
                     </div>
                   </div>
                   {prof.birthDay && prof.birthMonth && (
