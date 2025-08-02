@@ -246,79 +246,18 @@ export default function ProfessionalsPage() {
         return;
     }
     try {
-
-      let currentContract: Contract | null = null;
-      if (data.currentContract_startDate && data.currentContract_endDate) {
-        const oldContractId = editingProfessional?.currentContract?.id;
-        const newContractDataHasChanged =
-          !oldContractId ||
-          (data.currentContract_startDate && dateFnsFormatISO(data.currentContract_startDate, { representation: 'date' }) !== editingProfessional?.currentContract?.startDate) ||
-          (data.currentContract_endDate && dateFnsFormatISO(data.currentContract_endDate, { representation: 'date' }) !== editingProfessional?.currentContract?.endDate) ||
-          ((data.currentContract_notes ?? null) !== (editingProfessional?.currentContract?.notes ?? null)) ||
-          ((data.currentContract_empresa ?? null) !== (editingProfessional?.currentContract?.empresa ?? null));
-
-
-        currentContract = {
-          id: newContractDataHasChanged ? generateId() : oldContractId!,
-          startDate: dateFnsFormatISO(data.currentContract_startDate, { representation: 'date' }),
-          endDate: dateFnsFormatISO(data.currentContract_endDate, { representation: 'date' }),
-          notes: data.currentContract_notes || null,
-          empresa: data.currentContract_empresa || null,
-        };
-      }
-
-      const professionalToSave: Omit<Professional, 'id' | 'biWeeklyEarnings'> & {id?: string; contractHistory: Contract[]} = {
-        id: data.id,
-        firstName: data.firstName,
-        lastName: data.lastName,
-        locationId: data.locationId,
-        phone: data.phone || null,
-        birthDay: data.birthDay === undefined || data.birthDay === 0 ? null : data.birthDay,
-        birthMonth: data.birthMonth === undefined || data.birthMonth === 0 ? null : data.birthMonth,
-        isManager: data.isManager || false,
-        workSchedule: {},
+      // Correctly format override dates to ISO strings before submission
+      const formattedData = {
+        ...data,
         customScheduleOverrides: data.customScheduleOverrides?.map(ov => ({
-            id: ov.id || generateId(),
-            date: dateFnsFormatISO(ov.date, { representation: 'date' }),
-            isWorking: ov.isWorking,
-            startTime: ov.isWorking ? ov.startTime : undefined,
-            endTime: ov.isWorking ? ov.endTime : undefined,
-            notes: ov.notes || null,
-            locationId: ov.locationId || null
-        })) || [],
-        currentContract: currentContract,
-        contractHistory: editingProfessional?.contractHistory || [],
+          ...ov,
+          date: dateFnsFormatISO(ov.date, { representation: 'date' }),
+        }))
       };
 
-      if (editingProfessional?.currentContract && currentContract && editingProfessional.currentContract.id !== currentContract.id) {
-         if (!professionalToSave.contractHistory.find(ch => ch.id === editingProfessional.currentContract!.id)) {
-            professionalToSave.contractHistory.push(editingProfessional.currentContract);
-         }
-      } else if (editingProfessional?.currentContract && !currentContract) { 
-          if (!professionalToSave.contractHistory.find(ch => ch.id === editingProfessional.currentContract!.id)) {
-            professionalToSave.contractHistory.push(editingProfessional.currentContract);
-         }
-      }
-
-
-      if (data.workSchedule) {
-        (Object.keys(data.workSchedule) as Array<DayOfWeekIdConst>).forEach(dayId => {
-          const dayData = data.workSchedule![dayId];
-          if (dayData) {
-            professionalToSave.workSchedule[dayId] = {
-              startTime: dayData.startTime || '00:00',
-              endTime: dayData.endTime || '00:00',
-              isWorking: dayData.isWorking === undefined ? true : dayData.isWorking
-            };
-          } else {
-            professionalToSave.workSchedule[dayId] = {startTime: '00:00', endTime: '00:00', isWorking: false};
-          }
-        });
-      }
-
       const result = editingProfessional && editingProfessional.id
-        ? await updateProfessional(editingProfessional.id, professionalToSave as Partial<ProfessionalFormData>)
-        : await addProfessional(professionalToSave as Omit<ProfessionalFormData, 'id'>);
+        ? await updateProfessional(editingProfessional.id, formattedData as any)
+        : await addProfessional(formattedData as any);
 
       if (result) {
          toast({ title: editingProfessional ? "Profesional Actualizado" : "Profesional Agregado", description: `${result.firstName} ${result.lastName} ${editingProfessional ? 'actualizado' : 'agregado'}.` });

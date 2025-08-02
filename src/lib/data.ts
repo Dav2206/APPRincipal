@@ -322,15 +322,15 @@ export async function addProfessional (data: Omit<ProfessionalFormData, 'id'>): 
       birthDay: data.birthDay ?? null,
       birthMonth: data.birthMonth ?? null,
       workSchedule: {}, 
-      customScheduleOverrides: data.customScheduleOverrides?.map(ov => ({
+      customScheduleOverrides: (data.customScheduleOverrides || []).map(ov => ({
         ...ov,
         id: ov.id || generateId(),
-        date: formatISO(ov.date, { representation: 'date' }),
+        date: typeof ov.date === 'string' ? ov.date : formatISO(ov.date, { representation: 'date' }), // Already a string
         startTime: ov.isWorking ? ov.startTime : undefined,
         endTime: ov.isWorking ? ov.endTime : undefined,
         notes: ov.notes || null,
-        locationId: ov.locationId || null, // Include locationId from form data
-      })) || [],
+        locationId: ov.locationId || null,
+      })),
       currentContract: (data.currentContract_startDate && data.currentContract_endDate) ? {
         id: generateId(),
         startDate: formatISO(data.currentContract_startDate, { representation: 'date' }),
@@ -386,7 +386,7 @@ export async function addProfessional (data: Omit<ProfessionalFormData, 'id'>): 
         startTime: ov.startTime ?? null,
         endTime: ov.endTime ?? null,
         notes: ov.notes ?? null,
-        locationId: ov.locationId ?? null, // Ensure locationId is saved or null
+        locationId: ov.locationId ?? null,
       }));
     } else {
       firestoreData.customScheduleOverrides = [];
@@ -439,15 +439,15 @@ export async function updateProfessional (id: string, data: Partial<Professional
     }
 
     if (data.customScheduleOverrides !== undefined) {
-      professionalToUpdate.customScheduleOverrides = data.customScheduleOverrides?.map(ov => ({
+      professionalToUpdate.customScheduleOverrides = (data.customScheduleOverrides || []).map(ov => ({
         ...ov,
         id: ov.id || generateId(),
-        date: formatISO(ov.date, { representation: 'date' }),
+        date: typeof ov.date === 'string' ? ov.date : formatISO(ov.date, { representation: 'date' }), // Ensure it is a string
         startTime: ov.isWorking ? ov.startTime : undefined,
         endTime: ov.isWorking ? ov.endTime : undefined,
         notes: ov.notes || null,
-        locationId: ov.locationId || null, // Include locationId from form data
-      })) || [];
+        locationId: ov.locationId || null,
+      }));
     }
     
     let newCurrentContractData: Contract | null | undefined = undefined; 
@@ -521,7 +521,7 @@ export async function updateProfessional (id: string, data: Partial<Professional
         startTime: ov.startTime ?? null,
         endTime: ov.endTime ?? null,
         notes: ov.notes ?? null,
-        locationId: ov.locationId ?? null, // Include locationId from form data
+        locationId: ov.locationId ?? null,
       }));
     }
    
