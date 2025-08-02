@@ -1,3 +1,4 @@
+
 // src/lib/data.ts
 import type { User, Professional, Patient, Service, Appointment, AppointmentFormData, ProfessionalFormData, AppointmentStatus, ServiceFormData, Contract, PeriodicReminder, ImportantNote, PeriodicReminderFormData, ImportantNoteFormData, AddedServiceItem, AppointmentUpdateFormData, Location } from '@/types';
 import { USER_ROLES, APPOINTMENT_STATUS, APPOINTMENT_STATUS_DISPLAY, TIME_SLOTS, DAYS_OF_WEEK, LOCATIONS_FALLBACK } from '@/lib/constants';
@@ -177,22 +178,10 @@ export const getUserByUsername = async (identity: string): Promise<User | undefi
 
 // --- Locations ---
 export const getLocations = async (): Promise<Location[]> => {
-    if (!firestore) {
-        console.warn("[data.ts] getLocations: Firestore not available, returning fallback array.");
-        return [...LOCATIONS_FALLBACK];
-    }
-    try {
-        const locationsCol = collection(firestore, 'sedes');
-        const snapshot = await getDocs(query(locationsCol, orderBy("name")));
-        if (snapshot.empty) {
-            console.warn("[data.ts] Firestore 'sedes' collection is empty. Returning fallback constant.");
-            return [...LOCATIONS_FALLBACK];
-        }
-        return snapshot.docs.map(docSnap => ({ id: docSnap.id, ...convertDocumentData(docSnap.data()) } as Location));
-    } catch (error) {
-        console.error("[data.ts] Error fetching locations from Firestore, returning fallback:", error);
-        return [...LOCATIONS_FALLBACK];
-    }
+    // This function will now consistently return the static list
+    // to ensure stability and prevent missing locations.
+    console.log("[data.ts] getLocations: Devolviendo la lista de sedes estática de `constants.ts` para asegurar consistencia.");
+    return [...LOCATIONS_FALLBACK];
 };
 
 export const updateLocationPaymentMethods = async (locationId: LocationId, paymentMethods: string[]): Promise<boolean> => {
@@ -1477,3 +1466,4 @@ export async function deleteImportantNote(noteId: string): Promise<boolean> {
   }
 }
 // --- End Important Notes ---
+
