@@ -116,23 +116,24 @@ export default function ProfessionalsPage() {
   }, [user, isAdminOrContador, adminSelectedLocation]);
 
 
- const fetchProfessionals = useCallback(async () => {
-    if (!isAdminOrContador || locations.length === 0) {
-      setIsLoading(false);
-      setAllProfessionals([]);
-      return;
+  const fetchProfessionals = useCallback(async () => {
+    if (!isAdminOrContador) {
+        setIsLoading(false);
+        return;
     }
     setIsLoading(true);
     try {
-      const profsToSet = await getProfessionals(effectiveLocationIdForFetch);
-      setAllProfessionals(profsToSet || []);
+        const profsToSet = await getProfessionals(effectiveLocationIdForFetch);
+        setAllProfessionals(profsToSet || []);
     } catch (error) {
-      console.error("Failed to fetch professionals for location", effectiveLocationIdForFetch, ":", error);
-      setAllProfessionals([]);
-      toast({ title: "Error", description: "No se pudieron cargar los profesionales.", variant: "destructive" });
+        console.error("Failed to fetch professionals:", error);
+        toast({ title: "Error", description: "No se pudieron cargar los profesionales.", variant: "destructive" });
+        setAllProfessionals([]);
+    } finally {
+        setIsLoading(false);
     }
-    setIsLoading(false);
-  }, [effectiveLocationIdForFetch, user, toast, isAdminOrContador, locations]);
+  }, [effectiveLocationIdForFetch, isAdminOrContador, toast]);
+  
 
   useEffect(() => {
     async function loadInitialData() {
@@ -140,17 +141,15 @@ export default function ProfessionalsPage() {
             setIsLoading(true);
             const fetchedLocations = await getLocations();
             setLocations(fetchedLocations);
+            // Now fetch professionals since locations are loaded
+            await fetchProfessionals();
+            setIsLoading(false);
+        } else {
             setIsLoading(false);
         }
     }
     loadInitialData();
-  }, [isAdminOrContador]);
-  
-  useEffect(() => {
-      if(isAdminOrContador && locations.length > 0) {
-        fetchProfessionals();
-      }
-  }, [fetchProfessionals, isAdminOrContador, locations]);
+  }, [isAdminOrContador, fetchProfessionals]);
 
 
   const filteredProfessionals = useMemo(() => {
