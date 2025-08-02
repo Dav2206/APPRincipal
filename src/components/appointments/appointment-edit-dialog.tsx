@@ -38,7 +38,7 @@ import { useForm, useFieldArray } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { AppointmentUpdateSchema } from '@/lib/schemas';
 import { Form, FormControl, FormItem, FormLabel, FormMessage, FormField } from "@/components/ui/form";
-import { getProfessionals, updateAppointment as updateAppointmentData, getServices, deleteAppointment as deleteAppointmentData, getLocations } from '@/lib/data';
+import { getProfessionals, updateAppointment as updateAppointmentData, getServices, deleteAppointment as deleteAppointmentData, getLocations, getProfessionalAvailabilityForDate } from '@/lib/data';
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useToast } from '@/hooks/use-toast';
 import Image from 'next/image';
@@ -65,7 +65,8 @@ const DEFAULT_SERVICE_ID_PLACEHOLDER = "_default_service_id_placeholder_";
 export function AppointmentEditDialog({ appointment, isOpen, onOpenChange, onAppointmentUpdated, onImageClick }: AppointmentEditDialogProps) {
   const { user } = useAuth();
   const { toast } = useToast();
-  const [professionals, setProfessionals] = useState<Professional[]>([]);
+  const [allLocationProfessionals, setAllLocationProfessionals] = useState<Professional[]>([]);
+  const [availableProfessionals, setAvailableProfessionals] = useState<Professional[]>([]);
   const [allServices, setAllServices] = useState<Service[] | null>(null);
   const [locations, setLocations] = useState<Location[]>([]);
   const [isLoadingServices, setIsLoadingServices] = useState(true);
@@ -210,12 +211,21 @@ export function AppointmentEditDialog({ appointment, isOpen, onOpenChange, onApp
             getServices(),
             getLocations()
           ]);
-          setProfessionals(profsData || []);
+          setAllLocationProfessionals(profsData || []);
           setAllServices(servicesDataFromApi || []);
           setLocations(locationsData || []);
+
+          // Filter professionals who are available for the appointment's date
+          const apptDate = parseISO(appointment.appointmentDateTime);
+          const workingProfs = (profsData || []).filter(prof => {
+            const availability = getProfessionalAvailabilityForDate(prof, apptDate);
+            return availability?.isWorking && availability.workingLocationId === appointment.locationId;
+          });
+          setAvailableProfessionals(workingProfs);
         } catch (error) {
             console.error("Failed to load data for edit dialog:", error);
-            setProfessionals([]);
+            setAllLocationProfessionals([]);
+            setAvailableProfessionals([]);
             setAllServices([]);
             setLocations([]);
             toast({ title: "Error", description: "No se pudieron cargar los datos necesarios para editar.", variant: "destructive"});
@@ -227,7 +237,7 @@ export function AppointmentEditDialog({ appointment, isOpen, onOpenChange, onApp
     } else {
         stopCameraStream();
     }
-  }, [isOpen, appointment.locationId, user, toast, stopCameraStream]);
+  }, [isOpen, appointment.locationId, appointment.appointmentDateTime, user, toast, stopCameraStream]);
 
    useEffect(() => {
     if (isOpen && appointment && allServices !== null) {
@@ -543,7 +553,7 @@ export function AppointmentEditDialog({ appointment, isOpen, onOpenChange, onApp
                     </FormControl>
                     <SelectContent>
                       <SelectItem value={NO_SELECTION_PLACEHOLDER}>Sin asignar / Como estaba</SelectItem>
-                      {professionals.map(p => (
+                      {availableProfessionals.map(p => (
                         <SelectItem key={p.id} value={p.id}>{p.firstName} {p.lastName}</SelectItem>
                       ))}
                     </SelectContent>
@@ -757,7 +767,7 @@ export function AppointmentEditDialog({ appointment, isOpen, onOpenChange, onApp
                          <FormControl><SelectTrigger><SelectValue placeholder="Mismo prof. / Cualquiera" /></SelectTrigger></FormControl>
                           <SelectContent>
                             <SelectItem value={NO_SELECTION_PLACEHOLDER}>Mismo prof. / Cualquiera</SelectItem>
-                            {professionals.map(p => <SelectItem key={`added-prof-${p.id}-${index}`} value={p.id}>{p.firstName} {p.lastName}</SelectItem>)}
+                            {availableProfessionals.map(p => <SelectItem key={`added-prof-${p.id}-${index}`} value={p.id}>{p.firstName} {p.lastName}</SelectItem>)}
                           </SelectContent>
                         </Select>
                         <FormMessage />
@@ -906,5 +916,3 @@ export function AppointmentEditDialog({ appointment, isOpen, onOpenChange, onApp
     </>
   );
 }
-
-    
