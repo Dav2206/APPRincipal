@@ -2,11 +2,11 @@
 "use client";
 
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
-import type { Appointment, Professional, LocationId, Service } from '@/types';
+import type { Appointment, Professional, LocationId, Service, Location } from '@/types';
 import { useAuth } from '@/contexts/auth-provider';
 import { useAppState } from '@/contexts/app-state-provider';
-import { getAppointments, getProfessionals, getServices, getProfessionalAvailabilityForDate, getContractDisplayStatus } from '@/lib/data';
-import { LOCATIONS, USER_ROLES, APPOINTMENT_STATUS, SERVICES as ALL_SERVICES_CONSTANTS } from '@/lib/constants';
+import { getAppointments, getProfessionals, getServices, getProfessionalAvailabilityForDate, getContractDisplayStatus, getLocations } from '@/lib/data';
+import { USER_ROLES, APPOINTMENT_STATUS, SERVICES as ALL_SERVICES_CONSTANTS } from '@/lib/constants';
 
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -72,6 +72,8 @@ export default function RegistryPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [reportType, setReportType] = useState<ReportType>('daily');
   const [allServices, setAllServices] = useState<Service[] | null>(null);
+  const [locations, setLocations] = useState<Location[]>([]);
+
 
   const [selectedYear, setSelectedYear] = useState<number>(getYear(new Date()));
   const [selectedMonth, setSelectedMonth] = useState<number>(getMonth(new Date()));
@@ -89,11 +91,15 @@ export default function RegistryPage() {
   }, [user, isAdminOrContador, adminSelectedLocation]);
 
   useEffect(() => {
-    async function loadServices() {
-        const servicesArray = await getServices();
+    async function loadInitialData() {
+        const [servicesArray, locationsArray] = await Promise.all([
+          getServices(),
+          getLocations()
+        ]);
         setAllServices(servicesArray || []);
+        setLocations(locationsArray || []);
     }
-    loadServices();
+    loadInitialData();
   }, []);
 
 
@@ -107,7 +113,7 @@ export default function RegistryPage() {
       if (targetLocation) {
         profs = await getProfessionals(targetLocation);
       } else {
-        const allProfsPromises = LOCATIONS.map(loc => getProfessionals(loc.id));
+        const allProfsPromises = locations.map(loc => getProfessionals(loc.id));
         const results = await Promise.all(allProfsPromises);
         profs = results.flat();
       }
@@ -115,12 +121,12 @@ export default function RegistryPage() {
       profs = await getProfessionals(user.locationId);
     }
     return profs;
-  }, [user, isAdminOrContador]);
+  }, [user, isAdminOrContador, locations]);
 
 
   useEffect(() => {
     const generateDailyReport = async () => {
-      if (!user || !allServices || allServices.length === 0) { 
+      if (!user || !allServices || allServices.length === 0 || locations.length === 0) { 
         setIsLoading(false);
         return;
       }
@@ -136,7 +142,7 @@ export default function RegistryPage() {
 
       let appointmentsForDateResponse: { appointments: Appointment[] };
       if (isAdminOrContador && adminSelectedLocation === 'all') {
-        const promises = LOCATIONS.map(loc =>
+        const promises = locations.map(loc =>
           getAppointments({ date: selectedDate, locationId: loc.id, statuses: [APPOINTMENT_STATUS.COMPLETED] })
         );
         const results = await Promise.all(promises);
@@ -229,7 +235,7 @@ export default function RegistryPage() {
       console.log("[RegistryPage] dailyReportMap before final report:", dailyReportMap); // <-- ADDED LOG
       const finalReport: DailyActivityReportItem[] = Array.from(dailyReportMap.values()).map(item => {
         const professional = currentProfessionals.find(p => p.id === item.professionalId);
-        const location = LOCATIONS.find(l => l.id === item.locationId);
+        const location = locations.find(l => l.id === item.locationId);
         const servicesBreakdownArray = Array.from(item.services.values()).sort((a,b) => b.count - a.count);
         const totalServicesCount = servicesBreakdownArray.reduce((sum, s) => sum + s.count, 0);
         
@@ -256,7 +262,7 @@ export default function RegistryPage() {
     };
 
     const generateBiWeeklyReport = async () => {
-      if (!user || !allServices || allServices.length === 0) { 
+      if (!user || !allServices || allServices.length === 0 || locations.length === 0) { 
          setIsLoading(false);
          return;
       }
@@ -276,7 +282,7 @@ export default function RegistryPage() {
 
       let appointmentsForPeriodResponse: { appointments: Appointment[] };
       if (isAdminOrContador && adminSelectedLocation === 'all') {
-         const promises = LOCATIONS.map(loc =>
+         const promises = locations.map(loc =>
           getAppointments({
             locationId: loc.id,
             statuses: [APPOINTMENT_STATUS.COMPLETED],
@@ -324,7 +330,7 @@ export default function RegistryPage() {
 
         Array.from(biWeeklyReportMap.values()).forEach(item => {
           const professional = professionalsList.find(p => p.id === item.professionalId); // Ensure using the filtered list
-          const location = LOCATIONS.find(l => l.id === item.locationId);
+          const location = locations.find(l => l.id === item.locationId);
           if (!professional || !location) return;
 
           const reportItem: BiWeeklyEarningsReportItem = {
@@ -344,7 +350,7 @@ export default function RegistryPage() {
           locationTotals.set(item.locationId, (locationTotals.get(item.locationId) || 0) + item.biWeeklyEarnings);
         });
 
-        LOCATIONS.forEach(loc => {
+        locations.forEach(loc => {
           if (professionalsByLocation.has(loc.id) || locationTotals.has(loc.id)) {
             const profsForLocation = professionalsByLocation.get(loc.id);
             groupedResult.push({
@@ -362,7 +368,7 @@ export default function RegistryPage() {
       } else {
         const finalReport: BiWeeklyEarningsReportItem[] = Array.from(biWeeklyReportMap.values()).map(item => {
             const professional = professionalsList.find(p => p.id === item.professionalId); // Ensure using the filtered list
-            const location = LOCATIONS.find(l => l.id === item.locationId);
+            const location = locations.find(l => l.id === item.locationId);
             return {
             type: 'biWeekly',
             professionalId: item.professionalId,
@@ -384,7 +390,7 @@ export default function RegistryPage() {
       generateBiWeeklyReport();
     }
 
-  }, [user, selectedDate, effectiveLocationId, adminSelectedLocation, fetchProfessionalsForReportContext, isAdminOrContador, reportType, selectedYear, selectedMonth, selectedQuincena, allServices]);
+  }, [user, selectedDate, effectiveLocationId, adminSelectedLocation, fetchProfessionalsForReportContext, isAdminOrContador, reportType, selectedYear, selectedMonth, selectedQuincena, allServices, locations]);
 
   const handleDateChange = (date: Date | undefined) => {
     if (date && reportType === 'daily') {
@@ -635,7 +641,7 @@ export default function RegistryPage() {
           </div>
           {isAdminOrContador && (
             <div className="mt-2 text-sm text-muted-foreground">
-              Viendo para: {adminSelectedLocation === 'all' ? 'Todas las sedes' : LOCATIONS.find(l => l.id === adminSelectedLocation)?.name || 'Sede no especificada'}
+              Viendo para: {adminSelectedLocation === 'all' ? 'Todas las sedes' : locations.find(l => l.id === adminSelectedLocation)?.name || 'Sede no especificada'}
             </div>
           )}
         </CardHeader>
