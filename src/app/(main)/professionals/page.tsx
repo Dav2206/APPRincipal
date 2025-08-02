@@ -33,7 +33,7 @@ import {
   DialogDescription,
 } from '@/components/ui/dialog';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage, FormDescription } from "@/components/ui/form";
-import { PlusCircle, Edit2, Users, Search, Loader2, CalendarDays, Clock, Trash2, Calendar as CalendarIconLucide, AlertTriangle, Moon, ChevronsDown, FileText, Building, Gift, Briefcase as BriefcaseIcon } from 'lucide-react';
+import { PlusCircle, Edit2, Users, Search, Loader2, CalendarDays, Clock, Trash2, Calendar as CalendarIconLucide, AlertTriangle, Moon, ChevronsDown, FileText, Building, Gift, Briefcase as BriefcaseIcon, ChevronLeft, ChevronRight } from 'lucide-react';
 import { useForm, useFieldArray, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { ProfessionalFormSchema } from '@/lib/schemas';
@@ -42,7 +42,7 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { Calendar } from '@/components/ui/calendar';
 import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
-import { format, parseISO, getDay, isSameDay, differenceInDays, startOfDay, addDays as dateFnsAddDays, formatISO as dateFnsFormatISO } from 'date-fns';
+import { format, parseISO, getDay, isSameDay, differenceInDays, startOfDay, addDays as dateFnsAddDays, formatISO as dateFnsFormatISO, getMonth, getYear, isSameMonth, addMonths, subMonths, startOfMonth } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { Badge } from '@/components/ui/badge';
@@ -61,6 +61,9 @@ export default function ProfessionalsPage() {
   const [allProfessionals, setAllProfessionals] = useState<(Professional & { contractDisplayStatus: ContractDisplayStatus })[]>([]);
   const [displayedProfessionals, setDisplayedProfessionals] = useState<(Professional & { contractDisplayStatus: ContractDisplayStatus })[]>([]);
   const [currentPage, setCurrentPage] = useState(1);
+  
+  const [overrideDisplayDate, setOverrideDisplayDate] = useState(new Date());
+
 
   const [isLoading, setIsLoading] = useState(true);
   const [isFormOpen, setIsFormOpen] = useState(false);
@@ -172,6 +175,7 @@ export default function ProfessionalsPage() {
         return;
     }
     setEditingProfessional(null);
+    setOverrideDisplayDate(new Date()); // Reset override view to current month
     const defaultLoc = isAdminOrContador
       ? (adminSelectedLocation && adminSelectedLocation !== 'all' ? adminSelectedLocation : (locations.length > 0 ? locations[0].id : ''))
       : user?.locationId; 
@@ -200,6 +204,7 @@ export default function ProfessionalsPage() {
         return;
     }
     setEditingProfessional(professional);
+    setOverrideDisplayDate(new Date()); // Reset override view to current month
 
     const formWorkSchedule: ProfessionalFormData['workSchedule'] = {};
     DAYS_OF_WEEK.forEach(day => {
@@ -219,13 +224,8 @@ export default function ProfessionalsPage() {
         isManager: professional.isManager || false,
         workSchedule: formWorkSchedule,
         customScheduleOverrides: professional.customScheduleOverrides?.map(ov => ({
-            id: ov.id || generateId(),
+            ...ov,
             date: parseISO(ov.date),
-            isWorking: ov.isWorking,
-            startTime: ov.startTime || undefined,
-            endTime: ov.endTime || undefined,
-            notes: ov.notes || undefined,
-            locationId: ov.locationId || undefined,
         })) || [],
         currentContract_startDate: professional.currentContract?.startDate ? parseISO(professional.currentContract.startDate) : null,
         currentContract_endDate: professional.currentContract?.endDate ? parseISO(professional.currentContract.endDate) : null,
@@ -605,13 +605,21 @@ export default function ProfessionalsPage() {
                 </AccordionItem>
 
                 <AccordionItem value="custom-overrides">
-                  <AccordionTrigger className="text-lg font-semibold">Registrar Días de Descanso / Horarios Especiales / Vacaciones</AccordionTrigger>
+                  <AccordionTrigger className="text-lg font-semibold">
+                      <div className="flex flex-col items-start gap-1">
+                          <span>Registrar Días de Descanso / Horarios Especiales</span>
+                           <div className="flex items-center gap-2">
+                                <Button type="button" variant="ghost" size="icon" className="h-6 w-6" onClick={(e) => { e.stopPropagation(); setOverrideDisplayDate(prev => subMonths(prev, 1));}}><ChevronLeft className="h-4 w-4" /></Button>
+                                <span className="text-sm font-normal text-muted-foreground capitalize">{format(overrideDisplayDate, 'MMMM yyyy', { locale: es })}</span>
+                                <Button type="button" variant="ghost" size="icon" className="h-6 w-6" onClick={(e) => { e.stopPropagation(); setOverrideDisplayDate(prev => addMonths(prev, 1));}}><ChevronRight className="h-4 w-4" /></Button>
+                           </div>
+                      </div>
+                  </AccordionTrigger>
                   <AccordionContent className="space-y-4 pt-2">
                     <FormDescription className="text-xs px-1">
-                      Utilice esta sección para marcar días específicos en los que el profesional no trabajará (ej. vacaciones, días libres, citas médicas)
-                      o si tendrá un horario diferente al de su base semanal para una fecha particular.
+                      Utilice esta sección para marcar días específicos en los que el profesional no trabajará o si tendrá un horario diferente al de su base semanal.
                     </FormDescription>
-                    {customScheduleFields.map((field, index) => (
+                    {customScheduleFields.filter(field => isSameMonth(field.date, overrideDisplayDate)).map((field, index) => (
                       <div key={field.id} className="p-4 border rounded-lg space-y-3 relative bg-muted/30">
                           <Button type="button" variant="ghost" size="icon" className="absolute top-2 right-2 h-7 w-7" onClick={() => removeCustomSchedule(index)}>
                             <Trash2 className="h-4 w-4 text-destructive" /> <span className="sr-only">Eliminar Anulación</span>
@@ -622,7 +630,7 @@ export default function ProfessionalsPage() {
                                 <Button variant={"outline"} className={cn("w-full pl-3 text-left font-normal", !dateField.value && "text-muted-foreground")}>
                                   {dateField.value ? format(dateField.value, "PPP", {locale: es}) : <span>Seleccionar fecha</span>} <CalendarIconLucide className="ml-auto h-4 w-4 opacity-50" />
                                 </Button></FormControl></PopoverTrigger>
-                              <PopoverContent className="w-auto p-0" align="start"><Calendar mode="single" selected={dateField.value} onSelect={dateField.onChange} initialFocus /></PopoverContent>
+                              <PopoverContent className="w-auto p-0" align="start"><Calendar mode="single" selected={dateField.value} onSelect={dateField.onChange} initialFocus month={overrideDisplayDate} /></PopoverContent>
                             </Popover><FormMessage /></FormItem>
                         )}/>
                         <FormField control={form.control} name={`customScheduleOverrides.${index}.isWorking`} render={({ field: isWorkingField }) => (
@@ -663,7 +671,10 @@ export default function ProfessionalsPage() {
                         )}/>
                       </div>
                     ))}
-                    <Button type="button" variant="outline" size="sm" className="mt-4" onClick={() => appendCustomSchedule({ id: generateId(), date: new Date(), isWorking: false, startTime: undefined, endTime: undefined, notes: 'Descanso', locationId: undefined })}>
+                    {customScheduleFields.filter(field => isSameMonth(field.date, overrideDisplayDate)).length === 0 && (
+                        <p className="text-sm text-muted-foreground text-center py-4">No hay horarios especiales para {format(overrideDisplayDate, 'MMMM yyyy', { locale: es })}.</p>
+                    )}
+                    <Button type="button" variant="outline" size="sm" className="mt-4" onClick={() => appendCustomSchedule({ id: generateId(), date: startOfMonth(overrideDisplayDate), isWorking: false, startTime: undefined, endTime: undefined, notes: 'Descanso', locationId: undefined })}>
                       <PlusCircle className="mr-2 h-4 w-4" /> Agregar Anulación de Horario
                     </Button>
                   </AccordionContent>
