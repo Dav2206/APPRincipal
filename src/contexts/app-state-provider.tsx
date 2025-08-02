@@ -1,3 +1,4 @@
+
 "use client";
 
 import type { LocationId } from '@/lib/constants';
@@ -6,7 +7,7 @@ import { getLocations } from '@/lib/data';
 
 
 interface AppStateContextType {
-  selectedLocationId: LocationId | 'all' | null; // 'all' for admin overview
+  selectedLocationId: LocationId | 'all' | null; 
   setSelectedLocationId: (locationId: LocationId | 'all' | null) => void;
   sidebarOpen: boolean;
   setSidebarOpen: (open: boolean) => void;
@@ -19,7 +20,7 @@ export const AppStateProvider: React.FC<{ children: ReactNode }> = ({ children }
   const [sidebarOpen, setSidebarOpen] = useState(true);
   
   useEffect(() => {
-    // Set a default location once locations are fetched, to avoid null state on first load
+    
     async function setDefaultLocation() {
         if(selectedLocationId === null) {
             try {
@@ -27,16 +28,16 @@ export const AppStateProvider: React.FC<{ children: ReactNode }> = ({ children }
                 if (locations && locations.length > 0) {
                     setSelectedLocationId(locations[0].id);
                 } else {
-                    setSelectedLocationId('all'); // Fallback if no locations found
+                    setSelectedLocationId('all'); 
                 }
             } catch (error) {
                 console.error("Failed to fetch locations to set default:", error);
-                setSelectedLocationId('all'); // Fallback on error
+                setSelectedLocationId('all'); 
             }
         }
     }
     setDefaultLocation();
-  }, [selectedLocationId]);
+  }, []); 
 
 
   return (

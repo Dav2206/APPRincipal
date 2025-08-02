@@ -56,7 +56,11 @@ export default function HistoryPage() {
 
   useEffect(() => {
     async function loadBaseData() {
-      if (!user) return;
+      if (!user || !effectiveLocationId) {
+        setIsLoading(false);
+        return;
+      };
+      
       setIsLoading(true);
       setCurrentPage(1); 
       setDisplayedAppointments([]); 

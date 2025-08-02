@@ -127,7 +127,7 @@ export default function ProfessionalsPage() {
 
 
   const fetchProfessionals = useCallback(async () => {
-    if(!user || (!isAdminOrContador && user.role !== USER_ROLES.LOCATION_STAFF) ) { // LOCATION_STAFF can't see this page at all
+    if(!user || (!isAdminOrContador && user.role !== USER_ROLES.LOCATION_STAFF) || !effectiveLocationIdForFetch ) { 
       setIsLoading(false);
       setAllProfessionals([]);
       return;
@@ -135,16 +135,16 @@ export default function ProfessionalsPage() {
     setIsLoading(true);
     try {
       let profsToSet: (Professional & { contractDisplayStatus: ContractDisplayStatus })[] = [];
-      if (isAdminOrContador) { // Admin or Contador can see based on their selection
+      if (isAdminOrContador) { 
         if (effectiveLocationIdForFetch) {
           profsToSet = await getProfessionals(effectiveLocationIdForFetch);
-        } else { // 'all' selected by Admin/Contador
+        } else { 
           const allProfsPromises = locations.map(loc => getProfessionals(loc.id));
           const results = await Promise.all(allProfsPromises);
           profsToSet = results.flat();
         }
       }
-      // Non-admin/contador users should not reach here due to page access restriction
+      
       setAllProfessionals(profsToSet || []);
     } catch (error) {
       console.error("Failed to fetch professionals:", error);
@@ -155,7 +155,7 @@ export default function ProfessionalsPage() {
   }, [effectiveLocationIdForFetch, user, toast, isAdminOrContador, locations]);
 
   useEffect(() => {
-    if (isAdminOrContador) { // Only Admin or Contador can fetch professionals
+    if (isAdminOrContador) { 
         fetchProfessionals();
     } else {
         setIsLoading(false);
@@ -176,14 +176,14 @@ export default function ProfessionalsPage() {
 
 
   const handleAddProfessional = () => {
-    if (!isAdminOnly) { // Stricter: Only Admin can add. Contador can edit but not add.
+    if (!isAdminOnly) { 
         toast({ title: "Acción no permitida", description: "Solo Administradores pueden agregar profesionales.", variant: "destructive" });
         return;
     }
     setEditingProfessional(null);
     const defaultLoc = isAdminOrContador
       ? (adminSelectedLocation && adminSelectedLocation !== 'all' ? adminSelectedLocation : (locations.length > 0 ? locations[0].id : ''))
-      : user?.locationId; // This case should ideally not be reached if page is restricted
+      : user?.locationId; 
 
     form.reset({
       firstName: '',
@@ -204,7 +204,7 @@ export default function ProfessionalsPage() {
   };
 
   const handleEditProfessional = (professional: Professional & { contractDisplayStatus: ContractDisplayStatus }) => {
-     if (!isAdminOrContador) { // Admin or Contador can edit
+     if (!isAdminOrContador) { 
         toast({ title: "Acción no permitida", description: "No tiene permisos para editar profesionales.", variant: "destructive" });
         return;
     }
@@ -224,7 +224,7 @@ export default function ProfessionalsPage() {
         firstName: professional.firstName,
         lastName: professional.lastName,
         locationId: professional.locationId as LocationId,
-        phone: professional.phone || undefined, // Use undefined for empty optional string
+        phone: professional.phone || undefined, 
         isManager: professional.isManager || false,
         workSchedule: formWorkSchedule,
         customScheduleOverrides: professional.customScheduleOverrides?.map(ov => ({
@@ -301,7 +301,7 @@ export default function ProfessionalsPage() {
          if (!professionalToSave.contractHistory.find(ch => ch.id === editingProfessional.currentContract!.id)) {
             professionalToSave.contractHistory.push(editingProfessional.currentContract);
          }
-      } else if (editingProfessional?.currentContract && !currentContract) { // Current contract is being removed
+      } else if (editingProfessional?.currentContract && !currentContract) { 
           if (!professionalToSave.contractHistory.find(ch => ch.id === editingProfessional.currentContract!.id)) {
             professionalToSave.contractHistory.push(editingProfessional.currentContract);
          }
@@ -360,7 +360,7 @@ export default function ProfessionalsPage() {
     );
   }
 
-  // Page access restriction
+  
   if (!isAdminOrContador) {
     return (
         <Card className="shadow-md">
@@ -376,7 +376,7 @@ export default function ProfessionalsPage() {
   }
 
  const calculateNextGeneralDayOff = (prof: Professional, referenceDate: Date): Date | null => {
-    for (let i = 0; i <= 30; i++) { // Check next 30 days
+    for (let i = 0; i <= 30; i++) { 
       const checkDate = dateFnsAddDays(referenceDate, i);
       const availability = getProfessionalAvailabilityForDate(prof, checkDate);
       if (!availability || (availability && !availability.isWorking && !availability.startTime && !availability.endTime)) { 
@@ -397,15 +397,14 @@ export default function ProfessionalsPage() {
       if (availabilityToday.notes && availabilityToday.notes.trim() !== "") {
          todayStr += ` (${availabilityToday.notes.substring(0,30)}${availabilityToday.notes.length > 30 ? '...' : ''})`;
       } else if (availabilityToday.reason && availabilityToday.reason.trim() !== "" && availabilityToday.reason !== "Horario base") {
-         // Don't show "Horario base" as it's implied if working.
-         // Show other reasons like "Horario Especial..."
+         
          todayStr += ` (${availabilityToday.reason})`;
       }
     } else {
       todayStr += availabilityToday?.reason || "Descansando";
     }
 
-    const nextDayOffDate = calculateNextGeneralDayOff(prof, today); // Start search from today
+    const nextDayOffDate = calculateNextGeneralDayOff(prof, today); 
     let nextDayOffDisplayStr = "";
     if (nextDayOffDate) {
       const formattedDate = format(nextDayOffDate, "EEEE, d 'de' MMMM", { locale: es });
@@ -431,7 +430,7 @@ export default function ProfessionalsPage() {
               </div>
             )}
           </div>
-          {(isAdminOnly) && ( // Only Admin can add new professionals
+          {(isAdminOnly) && ( 
           <Button onClick={handleAddProfessional} className="w-full mt-4 md:mt-0 md:w-auto">
             <PlusCircle className="mr-2 h-4 w-4" /> Agregar Profesional
           </Button>
@@ -497,7 +496,7 @@ export default function ProfessionalsPage() {
                         </TableCell>
                         {isContadorOnly && <TableCell className="hidden xl:table-cell text-right">{(prof.biWeeklyEarnings ?? 0).toFixed(2)}</TableCell> }
                         <TableCell className="text-right">
-                        {(isAdminOrContador) && ( // Admin or Contador can edit
+                        {(isAdminOrContador) && ( 
                           <Button variant="ghost" size="sm" onClick={() => handleEditProfessional(prof)}>
                             <Edit2 className="h-4 w-4" /> <span className="sr-only">Editar</span>
                           </Button>
