@@ -50,6 +50,7 @@ import { Badge } from '@/components/ui/badge';
 
 const PROFESSIONALS_PER_PAGE = 5;
 const NO_SPECIFY_BIRTHDAY_ITEM_VALUE = "_no_specify_birthday_";
+const USE_BASE_LOCATION_PLACEHOLDER = "_use_base_location_";
 
 
 export default function ProfessionalsPage() {
@@ -707,10 +708,10 @@ export default function ProfessionalsPage() {
                             )}/>
                              <FormField control={form.control} name={`customScheduleOverrides.${index}.locationId`} render={({ field: locField }) => (
                                 <FormItem className="col-span-2"><FormLabel className="text-xs">Sede de Trabajo (Opcional)</FormLabel>
-                                  <Select onValueChange={locField.onChange} value={locField.value || ''} >
+                                  <Select onValueChange={(value) => locField.onChange(value === USE_BASE_LOCATION_PLACEHOLDER ? null : value)} value={locField.value || USE_BASE_LOCATION_PLACEHOLDER}>
                                     <FormControl><SelectTrigger><SelectValue placeholder="Usar sede base del profesional" /></SelectTrigger></FormControl>
                                     <SelectContent>
-                                        <SelectItem value="">Usar sede base del profesional</SelectItem>
+                                        <SelectItem value={USE_BASE_LOCATION_PLACEHOLDER}>Usar sede base del profesional</SelectItem>
                                         {locations.map(loc => (<SelectItem key={`ov-loc-${loc.id}-${index}`} value={loc.id}>{loc.name}</SelectItem>))}
                                     </SelectContent>
                                   </Select>
