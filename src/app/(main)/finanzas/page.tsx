@@ -191,27 +191,31 @@ export default function FinancesPage() {
   }, [reportData, allAvailablePaymentTypes]);
 
 
-  const handleAddNewMethod = (locationId: LocationId) => {
+  const handleAddNewMethod = useCallback((locationId: LocationId) => {
     const newMethodName = (newMethodInputs[locationId] || '').trim();
     if (!newMethodName) {
       toast({ title: "Nombre inválido", description: "El nombre del método de pago no puede estar vacío.", variant: "destructive" });
       return;
     }
-    const currentMethods = paymentMethodsByLocation[locationId] || [];
-    if (currentMethods.some(m => m.toLowerCase() === newMethodName.toLowerCase())) {
-      toast({ title: "Método Duplicado", description: `"${newMethodName}" ya existe para esta sede.`, variant: "default" });
-      return;
-    }
-    setPaymentMethodsByLocation(prev => ({
-      ...prev,
-      [locationId]: [...currentMethods, newMethodName as PaymentMethod]
-    }));
+    
+    setPaymentMethodsByLocation(prev => {
+      const currentMethods = prev[locationId] || [];
+      if (currentMethods.some(m => m.toLowerCase() === newMethodName.toLowerCase())) {
+        toast({ title: "Método Duplicado", description: `"${newMethodName}" ya existe para esta sede.`, variant: "default" });
+        return prev; 
+      }
+      toast({ title: "Método Añadido", description: `"${newMethodName}" se añadió. Recuerde guardar los cambios.` });
+      setHasChanges(true);
+      return {
+        ...prev,
+        [locationId]: [...currentMethods, newMethodName as PaymentMethod]
+      };
+    });
+    
     setNewMethodInputs(prev => ({ ...prev, [locationId]: '' }));
-    setHasChanges(true);
-    toast({ title: "Método Añadido", description: `"${newMethodName}" ha sido añadido a la sede. Recuerde guardar los cambios.` });
-  };
+  }, [newMethodInputs, toast]);
   
-  const handleRemoveMethod = (locationId: LocationId, methodToRemove: PaymentMethod) => {
+  const handleRemoveMethod = useCallback((locationId: LocationId, methodToRemove: PaymentMethod) => {
     const isMethodInUseInLocation = completedAppointments.some(
       appt => appt.locationId === locationId && appt.paymentMethod === methodToRemove
     );
@@ -219,13 +223,15 @@ export default function FinancesPage() {
       toast({ title: "No se puede eliminar", description: `"${methodToRemove}" está en uso en citas completadas para esta sede y no puede ser eliminado.`, variant: "destructive", duration: 6000 });
       return;
     }
-    setPaymentMethodsByLocation(prev => ({
-      ...prev,
-      [locationId]: (prev[locationId] || []).filter(m => m !== methodToRemove)
-    }));
+    
+    setPaymentMethodsByLocation(prev => {
+      const newMethods = (prev[locationId] || []).filter(m => m !== methodToRemove);
+      return { ...prev, [locationId]: newMethods };
+    });
+    
     setHasChanges(true);
     toast({ title: "Método Eliminado", description: `"${methodToRemove}" ha sido eliminado de la sede. Recuerde guardar los cambios.` });
-  };
+  }, [completedAppointments, toast]);
 
   const handleSaveAllChanges = async () => {
     setIsSaving(true);
@@ -431,5 +437,3 @@ export default function FinancesPage() {
     </div>
   );
 }
-
-    
