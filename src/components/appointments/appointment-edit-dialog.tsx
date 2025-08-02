@@ -65,7 +65,7 @@ const DEFAULT_SERVICE_ID_PLACEHOLDER = "_default_service_id_placeholder_";
 export function AppointmentEditDialog({ appointment, isOpen, onOpenChange, onAppointmentUpdated, onImageClick }: AppointmentEditDialogProps) {
   const { user } = useAuth();
   const { toast } = useToast();
-  const [allLocationProfessionals, setAllLocationProfessionals] = useState<Professional[]>([]);
+  const [allSystemProfessionals, setAllSystemProfessionals] = useState<Professional[]>([]);
   const [availableProfessionals, setAvailableProfessionals] = useState<Professional[]>([]);
   const [allServices, setAllServices] = useState<Service[] | null>(null);
   const [locations, setLocations] = useState<Location[]>([]);
@@ -203,28 +203,29 @@ export function AppointmentEditDialog({ appointment, isOpen, onOpenChange, onApp
     if (isOpen) {
       setIsLoadingServices(true);
       async function loadData() {
-        const locationForProfs = appointment.locationId || ( (user?.role === USER_ROLES.ADMIN || user?.role === USER_ROLES.CONTADOR) ? undefined : user?.locationId);
-        
         try {
-          const [profsData, servicesDataFromApi, locationsData] = await Promise.all([
-            getProfessionals(locationForProfs),
+          // Fetch ALL professionals, not just from the appointment's location, to handle transfers.
+          const [allProfsData, servicesDataFromApi, locationsData] = await Promise.all([
+            getProfessionals(), 
             getServices(),
             getLocations()
           ]);
-          setAllLocationProfessionals(profsData || []);
+          setAllSystemProfessionals(allProfsData || []);
           setAllServices(servicesDataFromApi || []);
           setLocations(locationsData || []);
 
-          // Filter professionals who are available for the appointment's date
           const apptDate = parseISO(appointment.appointmentDateTime);
-          const workingProfs = (profsData || []).filter(prof => {
+          
+          // Now, filter the complete list of professionals to see who is *actually* working at this specific location on this specific day.
+          const workingProfs = (allProfsData || []).filter(prof => {
             const availability = getProfessionalAvailabilityForDate(prof, apptDate);
+            // The key change: check if the professional's *working location for the day* matches the appointment's location.
             return availability?.isWorking && availability.workingLocationId === appointment.locationId;
           });
           setAvailableProfessionals(workingProfs);
         } catch (error) {
             console.error("Failed to load data for edit dialog:", error);
-            setAllLocationProfessionals([]);
+            setAllSystemProfessionals([]);
             setAvailableProfessionals([]);
             setAllServices([]);
             setLocations([]);
@@ -237,7 +238,8 @@ export function AppointmentEditDialog({ appointment, isOpen, onOpenChange, onApp
     } else {
         stopCameraStream();
     }
-  }, [isOpen, appointment.locationId, appointment.appointmentDateTime, user, toast, stopCameraStream]);
+  }, [isOpen, appointment.locationId, appointment.appointmentDateTime, toast, stopCameraStream]);
+
 
    useEffect(() => {
     if (isOpen && appointment && allServices !== null) {
@@ -886,7 +888,7 @@ export function AppointmentEditDialog({ appointment, isOpen, onOpenChange, onApp
                             <Alert variant="destructive" className="m-4">
                                 <AlertTitle>Acceso a Cámara Requerido</AlertTitle>
                                 <AlertDescription>
-                                    Por favor, habilita el acceso a la cámara en tu navegador para usar esta función.
+                                    Por favor, habilite el acceso a la cámara en su navegador para usar esta función.
                                 </AlertDescription>
                             </Alert>
                          </div>
