@@ -1,3 +1,4 @@
+
 // src/lib/data.ts
 import type { User, Professional, Patient, Service, Appointment, AppointmentFormData, ProfessionalFormData, AppointmentStatus, ServiceFormData, Contract, PeriodicReminder, ImportantNote, PeriodicReminderFormData, ImportantNoteFormData, AddedServiceItem, AppointmentUpdateFormData, Location } from '@/types';
 import { USER_ROLES, APPOINTMENT_STATUS, APPOINTMENT_STATUS_DISPLAY, TIME_SLOTS, DAYS_OF_WEEK, LOCATIONS_FALLBACK } from '@/lib/constants';
@@ -191,20 +192,20 @@ export const getLocations = async (): Promise<Location[]> => {
       ...doc.data()
     })) as Location[];
 
-    // Create a map of locations from DB for quick lookup
-    const dbLocationsMap = new Map(dbLocations.map(loc => [loc.id, loc]));
-
-    // Merge DB locations with fallback locations to ensure all are present
+    // This ensures that even if Firestore has extra locations, only the ones defined in constants are used.
+    // And if a location from constants is missing in DB, it's still available in the app.
     const mergedLocations = LOCATIONS_FALLBACK.map(fallbackLoc => {
-      const dbLoc = dbLocationsMap.get(fallbackLoc.id);
-      if (dbLoc) {
-        // If location exists in DB, use its payment methods, otherwise fallback's
-        return {
-          ...fallbackLoc,
-          paymentMethods: dbLoc.paymentMethods || fallbackLoc.paymentMethods || [],
-        };
-      }
-      return fallbackLoc; // Fallback if not in DB
+        const dbLoc = dbLocations.find(l => l.id === fallbackLoc.id);
+        if (dbLoc) {
+            // If location exists in DB, use its payment methods if they exist, otherwise fallback's
+            return {
+                ...fallbackLoc,
+                paymentMethods: (Array.isArray(dbLoc.paymentMethods) && dbLoc.paymentMethods.length > 0) 
+                                ? dbLoc.paymentMethods 
+                                : (fallbackLoc.paymentMethods || []),
+            };
+        }
+        return fallbackLoc; // Fallback if not in DB
     });
 
     return mergedLocations;
@@ -738,7 +739,8 @@ export async function getServices(): Promise<Service[]> {
   }
   try {
     const servicesCol = collection(firestore, 'servicios');
-    const snapshot = await getDocs(query(servicesCol, orderBy("name")));
+    const q = query(servicesCol, orderBy("name"));
+    const snapshot = await getDocs(q);
     if (snapshot.empty ) {
         console.warn("[data.ts] Firestore 'servicios' collection is empty. add services manually if this is not expected.");
     }
@@ -1292,9 +1294,46 @@ export async function deleteAppointment(appointmentId: string): Promise<boolean>
     throw new Error("Firestore not initialized. Appointment not deleted.");
   }
   try {
-    const docRef = doc(firestore, 'citas', appointmentId);
-    await deleteDoc(docRef);
-    console.log(`[data.ts] deleteAppointment (Firestore): Appointment ${appointmentId} deleted successfully.`);
+    const mainAppointmentRef = doc(firestore, 'citas', appointmentId);
+    const mainAppointmentSnap = await getDoc(mainAppointmentRef);
+
+    if (!mainAppointmentSnap.exists()) {
+      console.warn(`[data.ts] deleteAppointment: Appointment with ID ${appointmentId} not found.`);
+      return true; // Already gone, so success.
+    }
+
+    const mainAppointmentData = convertDocumentData(mainAppointmentSnap.data()) as Appointment;
+    const batch = writeBatch(firestore);
+
+    // Delete the main appointment
+    batch.delete(mainAppointmentRef);
+    console.log(`[data.ts] deleteAppointment (batch): Queued main appointment ${appointmentId} for deletion.`);
+
+    // If it was an external professional's appointment, find and delete the corresponding travel block
+    if (mainAppointmentData.isExternalProfessional && mainAppointmentData.externalProfessionalOriginLocationId && mainAppointmentData.professionalId) {
+      console.log(`[data.ts] This is an external professional's appointment. Searching for travel block to delete.`);
+      const appointmentsCol = collection(firestore, 'citas');
+      const travelBlockQuery = query(
+        appointmentsCol,
+        where('isTravelBlock', '==', true),
+        where('professionalId', '==', mainAppointmentData.professionalId),
+        where('locationId', '==', mainAppointmentData.externalProfessionalOriginLocationId),
+        where('appointmentDateTime', '==', toFirestoreTimestamp(mainAppointmentData.appointmentDateTime))
+      );
+
+      const travelBlockSnapshot = await getDocs(travelBlockQuery);
+      if (!travelBlockSnapshot.empty) {
+        travelBlockSnapshot.forEach(travelDoc => {
+          console.log(`[data.ts] deleteAppointment (batch): Found and queued travel block ${travelDoc.id} for deletion.`);
+          batch.delete(travelDoc.ref);
+        });
+      } else {
+        console.warn(`[data.ts] Could not find a matching travel block to delete for appointment ${appointmentId}. It may have been deleted manually.`);
+      }
+    }
+
+    await batch.commit();
+    console.log(`[data.ts] deleteAppointment (batch): Batch committed successfully.`);
     return true;
   } catch (error) {
     console.error(`[data.ts] deleteAppointment (Firestore): Error deleting appointment ${appointmentId}:`, error);
