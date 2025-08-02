@@ -62,7 +62,7 @@ export default function FinancesPage() {
     async function loadLocations() {
         const fetchedLocations = await getLocations();
         setLocations(fetchedLocations);
-        const initialPaymentMethods: Record<LocationId, PaymentMethod[]> = {} as Record<LocationId, PaymentMethod[]>;
+        const initialPaymentMethods: Record<LocationId, PaymentMethod[]> = {} as Record<LocationId, PaymentMethod[]>
         fetchedLocations.forEach(loc => {
             initialPaymentMethods[loc.id] = loc.paymentMethods || [];
         });
@@ -190,7 +190,7 @@ export default function FinancesPage() {
       toast({ title: "Nombre inválido", description: "El nombre del método de pago no puede estar vacío.", variant: "destructive" });
       return;
     }
-
+    
     const currentMethods = paymentMethodsByLocation[locationId] || [];
     if (currentMethods.some(m => m.toLowerCase() === newMethodName.toLowerCase())) {
         toast({ title: "Método Duplicado", description: `"${newMethodName}" ya existe para esta sede.`, variant: "default" });
@@ -228,6 +228,7 @@ export default function FinancesPage() {
   const handleSaveAllChanges = async () => {
     setIsSaving(true);
     try {
+        // Direct access to the most recent state is implicitly handled here by not being a useCallback with dependencies.
         const updatePromises = Object.entries(paymentMethodsByLocation).map(([locationId, methods]) =>
             updateLocationPaymentMethods(locationId as LocationId, methods)
         );
