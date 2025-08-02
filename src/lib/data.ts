@@ -197,7 +197,17 @@ export const updateLocationPaymentMethods = async (
   try {
     const docRef = doc(firestore, 'sedes', locationId);
     // Use setDoc with merge to create the document if it doesn't exist, or update it if it does.
-    await setDoc(docRef, { paymentMethods }, { merge: true });
+    // First, check if the doc exists. If not, create it with initial data.
+    const docSnap = await getDoc(docRef);
+    if (!docSnap.exists()) {
+        const locationData = LOCATIONS_FALLBACK.find(l => l.id === locationId);
+        await setDoc(docRef, {
+            name: locationData?.name || locationId,
+            paymentMethods: paymentMethods
+        });
+    } else {
+        await updateDoc(docRef, { paymentMethods });
+    }
     return true;
   } catch (error) {
     console.error(
