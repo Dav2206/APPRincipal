@@ -1358,7 +1358,6 @@ export function getProfessionalAvailabilityForDate(
   const contractStatus = getContractDisplayStatus(professional.currentContract, targetDate);
 
   if (contractStatus !== 'Activo' && contractStatus !== 'Próximo a Vencer') {
-    // console.log(`[Availability] Prof ${professional.id} - Contract not active or near expiry on ${formatISO(targetDate)}. Status: ${contractStatus}. Not available.`);
     return { startTime: '', endTime: '', isWorking: false, reason: `Contrato: ${contractStatus}` };
   }
 
@@ -1368,7 +1367,6 @@ export function getProfessionalAvailabilityForDate(
   );
 
   if (customOverride) {
-    // console.log(`[Availability] Prof ${professional.id} - Found custom override for ${targetDateISO}:`, customOverride);
     if (!customOverride.isWorking) {
       return { startTime: '', endTime: '', isWorking: false, reason: `Descansando (Anulación: ${customOverride.notes || 'Sin especificar'})`, notes: customOverride.notes || undefined, workingLocationId: customOverride.locationId ?? professional.locationId };
     }
@@ -1379,7 +1377,7 @@ export function getProfessionalAvailabilityForDate(
         isWorking: true,
         reason: `Horario Especial (Anulación: ${customOverride.notes || 'Sin especificar'})`,
         notes: customOverride.notes || undefined,
-        workingLocationId: customOverride.locationId ?? professional.locationId, // Use override location if specified, else professional's base
+        workingLocationId: customOverride.locationId ?? professional.locationId,
       }; 
     }
   }
@@ -1388,7 +1386,6 @@ export function getProfessionalAvailabilityForDate(
   const dayOfWeekId = DAYS_OF_WEEK[(dayOfWeekIndex + 6) % 7].id as DayOfWeekId; 
   
   const baseSchedule = professional.workSchedule?.[dayOfWeekId];
-  // console.log(`[Availability] Prof ${professional.id} - Base schedule for ${dayOfWeekId} (${format(targetDate, 'EEEE', {locale: es})}):`, baseSchedule);
 
   if (baseSchedule && baseSchedule.isWorking && baseSchedule.startTime && baseSchedule.endTime) {
     return {
@@ -1396,11 +1393,11 @@ export function getProfessionalAvailabilityForDate(
       endTime: baseSchedule.endTime,
       isWorking: true,
       reason: "Horario base",
-      workingLocationId: professional.locationId, // Base schedule means working at base location
+      workingLocationId: professional.locationId,
     };
   }
-  // console.log(`[Availability] Prof ${professional.id} - Not working based on base schedule or missing start/end times for ${dayOfWeekId} on ${targetDateISO}.`);
-  return { startTime: '', endTime: '', isWorking: false, reason: `Descansando (Horario base: ${format(targetDate, 'EEEE', {locale: es})} libre)`, workingLocationId: null }; // Not working, no location
+
+  return { startTime: '', endTime: '', isWorking: false, reason: `Descansando (Horario base: ${format(targetDate, 'EEEE', {locale: es})} libre)`, workingLocationId: null };
 }
 // --- End Professional Availability ---
 
