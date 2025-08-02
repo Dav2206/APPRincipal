@@ -191,23 +191,23 @@ export default function FinancesPage() {
       return;
     }
 
-    setPaymentMethodsByLocation(prevMethods => {
-      const currentMethods = prevMethods[locationId] || [];
-      if (currentMethods.some(m => m.toLowerCase() === newMethodName.toLowerCase())) {
+    const currentMethods = paymentMethodsByLocation[locationId] || [];
+    if (currentMethods.some(m => m.toLowerCase() === newMethodName.toLowerCase())) {
         toast({ title: "Método Duplicado", description: `"${newMethodName}" ya existe para esta sede.`, variant: "default" });
-        return prevMethods; // Return previous state if duplicate
-      }
+        return; 
+    }
       
-      const newMethodsForLocation = [...currentMethods, newMethodName as PaymentMethod];
-      toast({ title: "Método Añadido", description: `"${newMethodName}" se añadió. Recuerde guardar los cambios.` });
-      setHasChanges(true);
-      setNewMethodInputs(prev => ({ ...prev, [locationId]: '' }));
-
+    setPaymentMethodsByLocation(prevMethods => {
+      const updatedMethodsForLocation = [...(prevMethods[locationId] || []), newMethodName as PaymentMethod];
       return {
         ...prevMethods,
-        [locationId]: newMethodsForLocation
+        [locationId]: updatedMethodsForLocation
       };
     });
+
+    toast({ title: "Método Añadido", description: `"${newMethodName}" se añadió. Recuerde guardar los cambios.` });
+    setHasChanges(true);
+    setNewMethodInputs(prev => ({ ...prev, [locationId]: '' }));
   };
   
   const handleRemoveMethod = useCallback((locationId: LocationId, methodToRemove: PaymentMethod) => {
