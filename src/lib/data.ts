@@ -1,4 +1,5 @@
 
+
 // src/lib/data.ts
 import type { User, Professional, Patient, Service, Appointment, AppointmentFormData, ProfessionalFormData, AppointmentStatus, ServiceFormData, Contract, PeriodicReminder, ImportantNote, PeriodicReminderFormData, ImportantNoteFormData, AddedServiceItem, AppointmentUpdateFormData, Location } from '@/types';
 import { USER_ROLES, APPOINTMENT_STATUS, APPOINTMENT_STATUS_DISPLAY, TIME_SLOTS, DAYS_OF_WEEK, LOCATIONS_FALLBACK } from '@/lib/constants';
@@ -1029,16 +1030,24 @@ export async function addAppointment(data: AppointmentFormData): Promise<Appoint
     if (!professionalIdToAssign) {
       console.log("[data.ts] addAppointment: Buscando profesional disponible...");
       const professionalsToConsider = await getProfessionals(data.searchExternal ? undefined : data.locationId);
+      
       const appointmentsForDay = await getAppointments({
         locationId: data.locationId,
         date: data.appointmentDate,
+        statuses: [APPOINTMENT_STATUS.BOOKED, APPOINTMENT_STATUS.CONFIRMED]
       });
+
       const proposedEndTime = dateFnsAddMinutes(proposedStartTime, totalDurationForSlotCheck);
 
       for (const prof of professionalsToConsider) {
-        if(prof.isManager) continue; // Exclude managers from automatic assignment
+        if(prof.isManager) continue; 
         const dailyAvailability = getProfessionalAvailabilityForDate(prof, data.appointmentDate);
+
         if (!dailyAvailability || !dailyAvailability.isWorking || !dailyAvailability.startTime || !dailyAvailability.endTime) continue;
+        
+        // This professional is working, now check if they are working at the target location.
+        if (dailyAvailability.workingLocationId !== data.locationId) continue;
+        
 
         const profWorkStartTime = parse(`${format(data.appointmentDate, 'yyyy-MM-dd')} ${dailyAvailability.startTime}`, 'yyyy-MM-dd HH:mm', new Date());
         const profWorkEndTime = parse(`${format(data.appointmentDate, 'yyyy-MM-dd')} ${dailyAvailability.endTime}`, 'yyyy-MM-dd HH:mm', new Date());
