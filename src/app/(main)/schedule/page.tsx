@@ -137,7 +137,7 @@ export default function SchedulePage() {
     } finally {
       setIsLoading(false);
     }
-  }, [user, actualEffectiveLocationId, currentDate, toast, authIsLoading]);
+  }, [user, actualEffectiveLocationId, currentDate, toast]);
 
 
   useEffect(() => {
@@ -391,7 +391,7 @@ export default function SchedulePage() {
           onAppointmentCreated={handleNewAppointmentCreated}
           defaultDate={currentDate}
           allProfessionals={allSystemProfessionals} 
-          currentLocationProfessionals={allSystemProfessionals}
+          currentLocationProfessionals={allSystemProfessionals.filter(p => p.locationId === actualEffectiveLocationId)}
         />
       )}
 
