@@ -191,10 +191,11 @@ export const updateLocationPaymentMethods = async (locationId: LocationId, payme
     }
     try {
         const docRef = doc(firestore, 'sedes', locationId);
-        await updateDoc(docRef, { paymentMethods });
+        // Use setDoc with merge to create the document if it doesn't exist, or update it if it does.
+        await setDoc(docRef, { paymentMethods }, { merge: true });
         return true;
     } catch (error) {
-        console.error(`Error updating payment methods for location ${locationId}:`, error);
+        console.error(`Error updating/setting payment methods for location ${locationId}:`, error);
         return false;
     }
 };
@@ -287,7 +288,7 @@ export async function addProfessional (data: Omit<ProfessionalFormData, 'id'>): 
         startTime: ov.isWorking ? ov.startTime : undefined,
         endTime: ov.isWorking ? ov.endTime : undefined,
         notes: ov.notes || null,
- locationId: ov.locationId || null, // Save locationId if present
+ locationId: (ov as any).locationId || null, // Save locationId if present
       })) || [],
       currentContract: (data.currentContract_startDate && data.currentContract_endDate) ? {
         id: generateId(),
@@ -404,7 +405,7 @@ export async function updateProfessional (id: string, data: Partial<Professional
         startTime: ov.isWorking ? ov.startTime : undefined,
         endTime: ov.isWorking ? ov.endTime : undefined,
         notes: ov.notes || null,
- locationId: ov.locationId || null, // Include locationId from form data
+ locationId: (ov as any).locationId || null, // Include locationId from form data
       })) || [];
     }
     
