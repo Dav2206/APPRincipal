@@ -82,13 +82,18 @@ export default function ProfessionalsPage() {
   }));
   const days = Array.from({ length: 31 }, (_, i) => ({ value: i + 1, label: (i + 1).toString() }));
 
+  const isAdminOrContador = useMemo(() => user?.role === USER_ROLES.ADMIN || user?.role === USER_ROLES.CONTADOR, [user]);
+  const isContadorOnly = useMemo(() => user?.role === USER_ROLES.CONTADOR, [user]);
+
   useEffect(() => {
     async function loadLocations() {
-      const fetchedLocations = await getLocations();
-      setLocations(fetchedLocations);
+      if (isAdminOrContador) {
+        const fetchedLocations = await getLocations();
+        setLocations(fetchedLocations);
+      }
     }
     loadLocations();
-  }, []);
+  }, [isAdminOrContador]);
 
   const form = useForm<ProfessionalFormData>({
     resolver: zodResolver(ProfessionalFormSchema),
@@ -114,8 +119,6 @@ export default function ProfessionalsPage() {
     name: "customScheduleOverrides"
   });
 
-  const isAdminOrContador = user?.role === USER_ROLES.ADMIN || user?.role === USER_ROLES.CONTADOR;
-  const isContadorOnly = user?.role === USER_ROLES.CONTADOR;
 
   const effectiveLocationIdForFetch = useMemo(() => {
     if (isAdminOrContador) {
@@ -154,11 +157,13 @@ export default function ProfessionalsPage() {
   useEffect(() => {
     if (isAdminOrContador && locations.length > 0) {
         fetchProfessionals();
+    } else if (isAdminOrContador && !effectiveLocationIdForFetch) { // Handle "All" locations case when locations might be loading
+        fetchProfessionals();
     } else if (!isAdminOrContador) {
         setIsLoading(false);
         setAllProfessionals([]);
     }
-  }, [fetchProfessionals, isAdminOrContador, locations]);
+  }, [fetchProfessionals, isAdminOrContador, locations, effectiveLocationIdForFetch]);
 
   const filteredProfessionals = useMemo(() => {
     return allProfessionals.filter(p =>
