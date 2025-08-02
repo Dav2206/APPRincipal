@@ -57,6 +57,7 @@ export default function FinancesPage() {
   const [paymentMethodsByLocation, setPaymentMethodsByLocation] = useState<Record<LocationId, PaymentMethod[]>>({} as Record<LocationId, PaymentMethod[]>);
   const [newMethodInputs, setNewMethodInputs] = useState<Record<LocationId, string>>({});
   const [isSaving, setIsSaving] = useState(false);
+  const [hasChanges, setHasChanges] = useState(false);
   const [completedAppointments, setCompletedAppointments] = useState<Appointment[]>([]);
   const [locationFilter, setLocationFilter] = useState<LocationId | 'all'>(ALL_LOCATIONS_FILTER);
 
@@ -206,6 +207,7 @@ export default function FinancesPage() {
       [locationId]: [...currentMethods, newMethodName as PaymentMethod]
     }));
     setNewMethodInputs(prev => ({ ...prev, [locationId]: '' }));
+    setHasChanges(true);
     toast({ title: "Método Añadido", description: `"${newMethodName}" ha sido añadido a la sede. Recuerde guardar los cambios.` });
   };
   
@@ -221,6 +223,7 @@ export default function FinancesPage() {
       ...prev,
       [locationId]: (prev[locationId] || []).filter(m => m !== methodToRemove)
     }));
+    setHasChanges(true);
     toast({ title: "Método Eliminado", description: `"${methodToRemove}" ha sido eliminado de la sede. Recuerde guardar los cambios.` });
   };
 
@@ -235,6 +238,7 @@ export default function FinancesPage() {
             title: "Configuración Guardada",
             description: "Los métodos de pago por sede han sido actualizados en la base de datos.",
         });
+        setHasChanges(false);
     } catch (error) {
         console.error("Error saving payment methods:", error);
         toast({
@@ -416,7 +420,7 @@ export default function FinancesPage() {
                 </div>
             ))}
              <div className="flex justify-end mt-6">
-                <Button onClick={handleSaveAllChanges} disabled={isSaving}>
+                <Button onClick={handleSaveAllChanges} disabled={isSaving || !hasChanges}>
                     {isSaving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                     Guardar Toda la Configuración
                 </Button>
@@ -427,3 +431,5 @@ export default function FinancesPage() {
     </div>
   );
 }
+
+    
