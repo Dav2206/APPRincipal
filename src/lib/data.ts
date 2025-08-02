@@ -1193,8 +1193,8 @@ export async function updateAppointment(
   });
 
   if (data.attachedPhotos !== undefined) {
-    const newPhotoDataUris = (data.attachedPhotos || []).map(p => p.url).filter(url => url && url.startsWith('data:image/'));
-    const existingPhotoUrlsFromForm = (data.attachedPhotos || []).map(p => p.url).filter(url => url && (url.startsWith('http') || url.startsWith('gs://')));
+    const newPhotoDataUris = (data.attachedPhotos || []).map(p => p && p.url).filter(url => url && url.startsWith('data:image/'));
+    const existingPhotoUrlsFromForm = (data.attachedPhotos || []).map(p => p && p.url).filter(url => url && (url.startsWith('http') || url.startsWith('gs://')));
     
     const newUploadedUrls = await Promise.all(
       newPhotoDataUris.map(async (dataUri) => {
@@ -1216,7 +1216,7 @@ export async function updateAppointment(
       console.log(`[data.ts] Fotos marcadas para eliminar de Storage:`, photosToDelete);
       await Promise.all(photosToDelete.map(async (url) => {
         try {
-          if (url.startsWith('http')) {
+          if (url && url.startsWith('http')) {
             const photoRef = storageRef(storage, url);
             await deleteObject(photoRef);
             console.log(`[data.ts] Imagen eliminada de Storage: ${url}`);
@@ -1364,8 +1364,19 @@ export function getProfessionalAvailabilityForDate(
   }
 
   const targetDateISO = formatISO(targetDate, { representation: 'date' });
+  
   const customOverride = professional.customScheduleOverrides?.find(
-    (override) => override.date === targetDateISO
+    (override) => {
+      if (typeof override.date === 'string') {
+        const overrideDateISO = parseISO(override.date).toISOString().split('T')[0];
+        return overrideDateISO === targetDateISO;
+      }
+      // This case is unlikely if data is saved correctly but good for safety.
+      if (override.date instanceof Date) {
+        return dateFnsIsSameDay(override.date, targetDate);
+      }
+      return false;
+    }
   );
 
   if (customOverride) {
