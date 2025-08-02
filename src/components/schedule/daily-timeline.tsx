@@ -2,14 +2,14 @@
 
 "use client";
 
-import type { Appointment, Professional, LocationId, Service, AddedServiceItem } from '@/types';
+import type { Appointment, Professional, LocationId, Service, AddedServiceItem, Location } from '@/types';
 import React from 'react';
 import { parseISO, getHours, getMinutes, addMinutes, format, setMinutes, setHours, startOfDay } from 'date-fns';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { ScrollArea, ScrollBar } from '@/components/ui/scroll-area';
 import { User, Clock, AlertTriangle, Shuffle, Navigation, ShoppingBag } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { LOCATIONS, APPOINTMENT_STATUS } from '@/lib/constants';
+import { APPOINTMENT_STATUS } from '@/lib/constants';
 import { Badge } from '@/components/ui/badge';
 import { es } from 'date-fns/locale';
 
@@ -20,6 +20,7 @@ interface DailyTimelineProps {
   currentDate: Date;
   onAppointmentClick?: (appointment: Appointment, serviceId?: string) => void;
   viewingLocationId: LocationId;
+  locations: Location[];
 }
 
 const stringToColor = (str: string): string => {
@@ -68,7 +69,7 @@ const isOverlapping = (blockA: RenderableServiceBlock, blockB: RenderableService
 };
 
 
-const DailyTimelineComponent = ({ professionals, appointments, timeSlots, onAppointmentClick, viewingLocationId, currentDate }: DailyTimelineProps) => {
+const DailyTimelineComponent = ({ professionals, appointments, timeSlots, onAppointmentClick, viewingLocationId, currentDate, locations }: DailyTimelineProps) => {
   const allServiceBlocks: RenderableServiceBlock[] = [];
 
   const relevantAppointments = appointments;
@@ -340,7 +341,7 @@ const DailyTimelineComponent = ({ professionals, appointments, timeSlots, onAppo
                               </div>
                               {block.isExternalProfessional && block.isMainService && (
                                 <Badge variant="outline" className="mt-1 text-[9px] p-0.5 h-fit bg-orange-100 text-orange-700 border-orange-300 self-start truncate">
-                                  <Shuffle size={10} className="mr-1" /> De: {LOCATIONS.find(l => l.id === block.externalProfessionalOriginLocationId)?.name}
+                                  <Shuffle size={10} className="mr-1" /> De: {locations.find(l => l.id === block.externalProfessionalOriginLocationId)?.name}
                                 </Badge>
                               )}
                             </div>
@@ -358,7 +359,7 @@ const DailyTimelineComponent = ({ professionals, appointments, timeSlots, onAppo
                             )}
                             {block.isExternalProfessional && block.isMainService && (
                               <p className="text-orange-600 text-xs mt-1 flex items-center gap-1">
-                                <Shuffle size={12} className="inline" /> Profesional de Sede Origen: {LOCATIONS.find(l => l.id === block.externalProfessionalOriginLocationId)?.name}
+                                <Shuffle size={12} className="inline" /> Profesional de Sede Origen: {locations.find(l => l.id === block.externalProfessionalOriginLocationId)?.name}
                               </p>
                             )}
                             {block.isMainService && block.bookingObservations && <p className="text-xs mt-1 italic">Obs. Reserva: {block.bookingObservations}</p>}
@@ -382,3 +383,5 @@ const DailyTimelineComponent = ({ professionals, appointments, timeSlots, onAppo
 };
 
 export const DailyTimeline = React.memo(DailyTimelineComponent);
+
+    

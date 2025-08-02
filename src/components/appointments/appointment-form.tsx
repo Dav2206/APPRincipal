@@ -6,11 +6,11 @@ import { useForm, Controller, useFieldArray } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { AppointmentFormSchema, type AppointmentFormData as FormSchemaType } from '@/lib/schemas';
 import type { LocationId } from '@/lib/constants';
-import type { Professional, Patient, Service, Appointment } from '@/types';
+import type { Professional, Patient, Service, Appointment, Location } from '@/types';
 import { useAuth } from '@/contexts/auth-provider';
 import { useAppState } from '@/contexts/app-state-provider';
-import { USER_ROLES, LOCATIONS, TIME_SLOTS, APPOINTMENT_STATUS } from '@/lib/constants';
-import { getServices, addAppointment, getPatientById, getProfessionalAvailabilityForDate, getAppointments } from '@/lib/data';
+import { USER_ROLES, TIME_SLOTS, APPOINTMENT_STATUS } from '@/lib/constants';
+import { getServices, addAppointment, getPatientById, getProfessionalAvailabilityForDate, getAppointments, getLocations } from '@/lib/data';
 import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -61,6 +61,7 @@ export function AppointmentForm({
   const { selectedLocationId: adminSelectedLocation } = useAppState();
   const { toast } = useToast();
 
+  const [locations, setLocations] = useState<Location[]>([]);
   const [servicesList, setServicesList] = useState<Service[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [isLoadingServices, setIsLoadingServices] = useState(true);
@@ -77,11 +78,22 @@ export function AppointmentForm({
 
 
   const isAdminOrContador = user?.role === USER_ROLES.ADMIN || user?.role === USER_ROLES.CONTADOR;
+  
+  useEffect(() => {
+    async function loadLocations() {
+        if (isOpen) {
+            const fetchedLocations = await getLocations();
+            setLocations(fetchedLocations);
+        }
+    }
+    loadLocations();
+  }, [isOpen]);
+
   const defaultLocation = user?.role === USER_ROLES.LOCATION_STAFF
     ? user.locationId
     : (isAdminOrContador && adminSelectedLocation && adminSelectedLocation !== 'all'
         ? adminSelectedLocation
-        : (isAdminOrContador ? LOCATIONS[0].id : undefined)
+        : (isAdminOrContador && locations.length > 0 ? locations[0].id : undefined)
     );
 
   const form = useForm<FormSchemaType>({
@@ -94,7 +106,7 @@ export function AppointmentForm({
       existingPatientId: initialData?.existingPatientId || null,
       isDiabetic: initialData?.isDiabetic || false,
       isWalkIn: initialData?.isWalkIn || false,
-      locationId: initialData?.locationId || defaultLocation || LOCATIONS[0].id,
+      locationId: initialData?.locationId || defaultLocation || (locations.length > 0 ? locations[0].id : ''),
       serviceId: initialData?.serviceId || '',
       appointmentDate: initialData?.appointmentDate || defaultDate || new Date(),
       appointmentTime: initialData?.appointmentTime || TIME_SLOTS.find(slot => slot === "10:00") || TIME_SLOTS[0],
@@ -104,6 +116,19 @@ export function AppointmentForm({
       addedServices: initialData?.addedServices || [],
     },
   });
+  
+  useEffect(() => {
+     if (locations.length > 0 && !form.getValues('locationId')) {
+        const newDefaultLocation = user?.role === USER_ROLES.LOCATION_STAFF
+            ? user.locationId
+            : (isAdminOrContador && adminSelectedLocation && adminSelectedLocation !== 'all'
+                ? adminSelectedLocation
+                : (isAdminOrContador ? locations[0].id : undefined)
+            );
+        if(newDefaultLocation) form.setValue('locationId', newDefaultLocation);
+    }
+  }, [locations, form, user, isAdminOrContador, adminSelectedLocation]);
+
 
   const { fields: addedServiceFields, append: appendAddedService, remove: removeAddedService } = useFieldArray({
     control: form.control,
@@ -445,7 +470,7 @@ export function AppointmentForm({
         form.reset({
           ...form.formState.defaultValues,
           appointmentDate: defaultDate || new Date(),
-          locationId: initialData?.locationId || defaultLocation || LOCATIONS[0].id,
+          locationId: initialData?.locationId || defaultLocation || (locations.length > 0 ? locations[0].id : ''),
           serviceId: servicesList.length > 0 ? servicesList[0].id : '',
           appointmentTime: TIME_SLOTS.find(slot => slot === "10:00") || TIME_SLOTS[0], 
           preferredProfessionalId: ANY_PROFESSIONAL_VALUE,
@@ -636,7 +661,7 @@ export function AppointmentForm({
                           <SelectTrigger><SelectValue placeholder="Seleccionar sede" /></SelectTrigger>
                         </FormControl>
                         <SelectContent>
-                          {LOCATIONS.map(loc => (
+                          {locations.map(loc => (
                             <SelectItem key={loc.id} value={loc.id}>{loc.name}</SelectItem>
                           ))}
                         </SelectContent>
@@ -827,7 +852,7 @@ export function AppointmentForm({
                             <SelectItem value={ANY_PROFESSIONAL_VALUE}>Cualquier profesional disponible</SelectItem>
                             {availableProfessionalsForTimeSlot.map(prof => (
                               <SelectItem key={prof.id} value={prof.id}>
-                                  {prof.firstName} {prof.lastName} {watchSearchExternal && prof.locationId !== watchLocationId ? `(Sede: ${LOCATIONS.find(l=>l.id === prof.locationId)?.name || 'Externa'})` : ''}
+                                  {prof.firstName} {prof.lastName} {watchSearchExternal && prof.locationId !== watchLocationId ? `(Sede: ${locations.find(l=>l.id === prof.locationId)?.name || 'Externa'})` : ''}
                               </SelectItem>
                             ))}
                           </SelectContent>
@@ -961,7 +986,7 @@ export function AppointmentForm({
                form.reset({
                 ...form.formState.defaultValues,
                 appointmentDate: defaultDate || new Date(),
-                locationId: initialData?.locationId || defaultLocation || LOCATIONS[0].id,
+                locationId: initialData?.locationId || defaultLocation || (locations.length > 0 ? locations[0].id : ''),
                 serviceId: servicesList.length > 0 ? servicesList[0].id : '',
                 appointmentTime: TIME_SLOTS.find(slot => slot === "10:00") || TIME_SLOTS[0], 
                 preferredProfessionalId: ANY_PROFESSIONAL_VALUE,
@@ -992,5 +1017,3 @@ export function AppointmentForm({
     </Dialog>
   );
 }
-
-    

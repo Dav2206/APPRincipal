@@ -1,13 +1,13 @@
 
 "use client";
 
-import type { Professional, ProfessionalFormData, Contract } from '@/types';
+import type { Professional, ProfessionalFormData, Contract, Location } from '@/types';
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useAuth } from '@/contexts/auth-provider';
 import { useAppState } from '@/contexts/app-state-provider';
-import { getProfessionals, addProfessional, updateProfessional, getProfessionalAvailabilityForDate, getContractDisplayStatus } from '@/lib/data';
+import { getProfessionals, addProfessional, updateProfessional, getProfessionalAvailabilityForDate, getContractDisplayStatus, getLocations } from '@/lib/data';
 import type { ContractDisplayStatus } from '@/lib/data';
-import { LOCATIONS, USER_ROLES, LocationId, TIME_SLOTS, DAYS_OF_WEEK, DayOfWeekId as DayOfWeekIdConst } from '@/lib/constants';
+import { USER_ROLES, LocationId, TIME_SLOTS, DAYS_OF_WEEK, DayOfWeekId as DayOfWeekIdConst } from '@/lib/constants';
 import type { DayOfWeekId } from '@/lib/constants';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -56,6 +56,7 @@ export default function ProfessionalsPage() {
   const { user } = useAuth();
   const { toast } = useToast();
   const { selectedLocationId: adminSelectedLocation } = useAppState();
+  const [locations, setLocations] = useState<Location[]>([]);
   const [allProfessionals, setAllProfessionals] = useState<(Professional & { contractDisplayStatus: ContractDisplayStatus })[]>([]);
   const [displayedProfessionals, setDisplayedProfessionals] = useState<(Professional & { contractDisplayStatus: ContractDisplayStatus })[]>([]);
   const [currentPage, setCurrentPage] = useState(1);
@@ -81,13 +82,20 @@ export default function ProfessionalsPage() {
   }));
   const days = Array.from({ length: 31 }, (_, i) => ({ value: i + 1, label: (i + 1).toString() }));
 
+  useEffect(() => {
+    async function loadLocations() {
+      const fetchedLocations = await getLocations();
+      setLocations(fetchedLocations);
+    }
+    loadLocations();
+  }, []);
 
   const form = useForm<ProfessionalFormData>({
     resolver: zodResolver(ProfessionalFormSchema),
     defaultValues: {
       firstName: '',
       lastName: '',
-      locationId: LOCATIONS[0].id,
+      locationId: locations.length > 0 ? locations[0].id : '',
       phone: '',
       isManager: false,
       workSchedule: defaultBaseWorkSchedule,
@@ -131,7 +139,7 @@ export default function ProfessionalsPage() {
         if (effectiveLocationIdForFetch) {
           profsToSet = await getProfessionals(effectiveLocationIdForFetch);
         } else { // 'all' selected by Admin/Contador
-          const allProfsPromises = LOCATIONS.map(loc => getProfessionals(loc.id));
+          const allProfsPromises = locations.map(loc => getProfessionals(loc.id));
           const results = await Promise.all(allProfsPromises);
           profsToSet = results.flat();
         }
@@ -144,7 +152,7 @@ export default function ProfessionalsPage() {
       toast({ title: "Error", description: "No se pudieron cargar los profesionales.", variant: "destructive" });
     }
     setIsLoading(false);
-  }, [effectiveLocationIdForFetch, user, toast, isAdminOrContador]);
+  }, [effectiveLocationIdForFetch, user, toast, isAdminOrContador, locations]);
 
   useEffect(() => {
     if (isAdminOrContador) { // Only Admin or Contador can fetch professionals
@@ -174,7 +182,7 @@ export default function ProfessionalsPage() {
     }
     setEditingProfessional(null);
     const defaultLoc = isAdminOrContador
-      ? (adminSelectedLocation && adminSelectedLocation !== 'all' ? adminSelectedLocation : LOCATIONS[0].id)
+      ? (adminSelectedLocation && adminSelectedLocation !== 'all' ? adminSelectedLocation : (locations.length > 0 ? locations[0].id : ''))
       : user?.locationId; // This case should ideally not be reached if page is restricted
 
     form.reset({
@@ -419,7 +427,7 @@ export default function ProfessionalsPage() {
             <CardDescription>Ver, agregar o editar información, horarios y contratos de los profesionales.</CardDescription>
             {isAdminOrContador && (
               <div className="mt-1 text-sm text-muted-foreground">
-                Viendo: {adminSelectedLocation === 'all' ? 'Todas las sedes' : LOCATIONS.find(l => l.id === adminSelectedLocation)?.name || ''}
+                Viendo: {adminSelectedLocation === 'all' ? 'Todas las sedes' : locations.find(l => l.id === adminSelectedLocation)?.name || ''}
               </div>
             )}
           </div>
@@ -469,7 +477,7 @@ export default function ProfessionalsPage() {
                           {prof.firstName} {prof.lastName}
                           {prof.isManager && <Badge variant="secondary" className="ml-2 text-xs">Gerente</Badge>}
                         </TableCell>
-                        <TableCell className="hidden md:table-cell">{LOCATIONS.find(l => l.id === prof.locationId)?.name}</TableCell>
+                        <TableCell className="hidden md:table-cell">{locations.find(l => l.id === prof.locationId)?.name}</TableCell>
                         <TableCell className="hidden lg:table-cell text-xs">{formatWorkScheduleDisplay(prof)}</TableCell>
                         <TableCell className="hidden xl:table-cell">{prof.phone || 'N/A'}</TableCell>
                         <TableCell className="hidden md:table-cell text-xs">
@@ -546,7 +554,7 @@ export default function ProfessionalsPage() {
                         <FormItem className="mt-4"><FormLabel>Sede</FormLabel>
                           <Select onValueChange={field.onChange} value={field.value} disabled={!isAdminOnly && !!editingProfessional}>
                             <FormControl><SelectTrigger><SelectValue placeholder="Seleccionar sede" /></SelectTrigger></FormControl>
-                            <SelectContent>{LOCATIONS.map(loc => (<SelectItem key={loc.id} value={loc.id}>{loc.name}</SelectItem>))}</SelectContent>
+                            <SelectContent>{locations.map(loc => (<SelectItem key={loc.id} value={loc.id}>{loc.name}</SelectItem>))}</SelectContent>
                           </Select><FormMessage />
                         </FormItem>
                     )}/>
@@ -795,4 +803,3 @@ export default function ProfessionalsPage() {
     </div>
   );
 }
-

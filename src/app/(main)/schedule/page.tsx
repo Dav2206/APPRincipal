@@ -1,18 +1,18 @@
 
 "use client";
 
-import type { Appointment, Professional } from '@/types';
+import type { Appointment, Professional, Location } from '@/types';
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useAuth } from '@/contexts/auth-provider';
 import { useAppState } from '@/contexts/app-state-provider';
-import { getAppointments, getProfessionals, getAppointmentById, getProfessionalAvailabilityForDate } from '@/lib/data';
-import { LOCATIONS, USER_ROLES, TIME_SLOTS, LocationId, APPOINTMENT_STATUS } from '@/lib/constants';
+import { getAppointments, getProfessionals, getAppointmentById, getProfessionalAvailabilityForDate, getLocations } from '@/lib/data';
+import { USER_ROLES, TIME_SLOTS, LocationId, APPOINTMENT_STATUS } from '@/lib/constants';
 import { DailyTimeline } from '@/components/schedule/daily-timeline';
 import { Button } from '@/components/ui/button';
 import { Calendar } from '@/components/ui/calendar';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { format, addDays, subDays, startOfDay, isEqual, parseISO, formatISO } from 'date-fns';
+import { format, addDays, subDays, startOfDay, isEqual, parseISO } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { CalendarIcon, ChevronLeftIcon, ChevronRightIcon, AlertTriangle, Loader2, CalendarClock, PlusCircleIcon, UserXIcon, ZoomIn, ZoomOut, RefreshCw, XIcon } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -32,6 +32,7 @@ export default function SchedulePage() {
 
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [allSystemProfessionals, setAllSystemProfessionals] = useState<Professional[]>([]);
+  const [locations, setLocations] = useState<Location[]>([]);
   const [workingProfessionalsForTimeline, setWorkingProfessionalsForTimeline] = useState<Professional[]>([]);
   const [currentDate, setCurrentDate] = useState<Date>(startOfDay(new Date()));
   const [isLoading, setIsLoading] = useState(true);
@@ -52,17 +53,26 @@ export default function SchedulePage() {
     return user.role === USER_ROLES.ADMIN || user.role === USER_ROLES.CONTADOR;
   }, [user]);
 
+  useEffect(() => {
+    async function loadLocations() {
+        const fetchedLocations = await getLocations();
+        setLocations(fetchedLocations);
+    }
+    loadLocations();
+  }, []);
+
+
   const actualEffectiveLocationId = useMemo(() => {
     if (!user) return null;
 
     if (isAdminOrContador) {
       const defaultAdminLocation = adminSelectedLocation === 'all' || !adminSelectedLocation
-                                   ? (LOCATIONS.length > 0 ? LOCATIONS[0].id : null)
+                                   ? (locations.length > 0 ? locations[0].id : null)
                                    : adminSelectedLocation as LocationId;
       return defaultAdminLocation;
     }
     return user.locationId || null;
-  }, [user, isAdminOrContador, adminSelectedLocation]);
+  }, [user, isAdminOrContador, adminSelectedLocation, locations]);
 
 
   const fetchData = useCallback(async () => {
@@ -252,7 +262,7 @@ export default function SchedulePage() {
   );
   
   const displayLocationName = actualEffectiveLocationId 
-    ? (LOCATIONS.find(l => l.id === actualEffectiveLocationId)?.name || `Sede Desconocida (ID: ${actualEffectiveLocationId})`) 
+    ? (locations.find(l => l.id === actualEffectiveLocationId)?.name || `Sede Desconocida (ID: ${actualEffectiveLocationId})`) 
     : 'Sede no especificada o no seleccionada';
   
   if (authIsLoading) {
@@ -267,7 +277,7 @@ export default function SchedulePage() {
      return <NoDataCard title="Error de Configuración de Sede" message="Su usuario no tiene una sede asignada. Por favor, contacte al administrador." />;
   }
   
-  if ((isAdminOrContador && !actualEffectiveLocationId) || (isAdminOrContador && adminSelectedLocation === 'all' && !LOCATIONS.find(l=> l.id === actualEffectiveLocationId))) {
+  if ((isAdminOrContador && !actualEffectiveLocationId) || (isAdminOrContador && adminSelectedLocation === 'all' && !locations.find(l=> l.id === actualEffectiveLocationId))) {
     return (
        <div className="container mx-auto py-8 px-4 md:px-0 space-y-6">
          <Card className="shadow-lg">
@@ -359,6 +369,7 @@ export default function SchedulePage() {
               currentDate={currentDate}
               onAppointmentClick={handleTimelineAppointmentClick}
               viewingLocationId={actualEffectiveLocationId!} 
+              locations={locations}
             />
           )}
         </CardContent>

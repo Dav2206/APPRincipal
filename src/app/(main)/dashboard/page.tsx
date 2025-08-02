@@ -1,16 +1,16 @@
 
 "use client";
 
-import type { PeriodicReminder, ImportantNote } from '@/types';
+import type { PeriodicReminder, ImportantNote, Location } from '@/types';
 import { useAuth } from '@/contexts/auth-provider';
-import { USER_ROLES, LOCATIONS, LocationId, APPOINTMENT_STATUS, DAYS_OF_WEEK } from '@/lib/constants';
+import { USER_ROLES, LocationId, APPOINTMENT_STATUS, DAYS_OF_WEEK } from '@/lib/constants';
 import type { Professional } from '@/types';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import Link from 'next/link';
 import { CalendarPlus, Users, History, Briefcase, Loader2, Bed, CalendarCheck2, Gift, Bell, StickyNote } from 'lucide-react';
 import { useAppState } from '@/contexts/app-state-provider';
 import { useState, useEffect, useMemo } from 'react';
-import { getAppointments, getProfessionals, getProfessionalAvailabilityForDate, getPeriodicReminders, getImportantNotes, getContractDisplayStatus } from '@/lib/data';
+import { getAppointments, getProfessionals, getProfessionalAvailabilityForDate, getPeriodicReminders, getImportantNotes, getContractDisplayStatus, getLocations } from '@/lib/data';
 import { startOfDay, endOfDay, startOfMonth, endOfMonth, nextSunday, isToday, addDays, differenceInDays, getYear, getMonth, getDate, parseISO, isBefore } from 'date-fns';
 import { StatCard } from '@/components/dashboard/stat-card';
 import { ActionCard } from '@/components/dashboard/action-card';
@@ -30,6 +30,7 @@ interface DashboardStats {
 export default function DashboardPage() {
   const { user } = useAuth();
   const { selectedLocationId } = useAppState();
+  const [locations, setLocations] = useState<Location[]>([]);
   const [stats, setStats] = useState<DashboardStats>({
     todayAppointments: "0",
     pendingConfirmations: "0",
@@ -56,10 +57,18 @@ export default function DashboardPage() {
     ? (selectedLocationId === 'all' ? undefined : selectedLocationId as LocationId) 
     : user?.locationId;
 
+  useEffect(() => {
+    async function loadLocations() {
+      const fetchedLocations = await getLocations();
+      setLocations(fetchedLocations);
+    }
+    loadLocations();
+  }, []);
+
 
   useEffect(() => {
     const fetchDashboardData = async () => {
-      if (!user) return;
+      if (!user || locations.length === 0) return;
 
       setIsLoadingStats(true);
       setIsLoadingProfessionalStatus(true);
@@ -82,7 +91,7 @@ export default function DashboardPage() {
         // Fetch Today's Appointments
         if (isAdminOrContador || user.role === USER_ROLES.LOCATION_STAFF) { 
           if (selectedLocationId === 'all' && (isAdminOrContador)) {
-            const allLocationsAppointmentsPromises = LOCATIONS.map(loc => getAppointments({ date: today, locationId: loc.id, statuses: [APPOINTMENT_STATUS.BOOKED, APPOINTMENT_STATUS.CONFIRMED] }));
+            const allLocationsAppointmentsPromises = locations.map(loc => getAppointments({ date: today, locationId: loc.id, statuses: [APPOINTMENT_STATUS.BOOKED, APPOINTMENT_STATUS.CONFIRMED] }));
             const allLocationsAppointmentsResults = await Promise.all(allLocationsAppointmentsPromises);
             todayAppointmentsCount = allLocationsAppointmentsResults.reduce((sum, result) => sum + (result.appointments ? result.appointments.length : 0), 0);
           } else if (effectiveLocationId) { // Covers Admin/Contador with specific sede AND Staff
@@ -99,7 +108,7 @@ export default function DashboardPage() {
           };
           
           if (selectedLocationId === 'all' && (isAdminOrContador)) {
-             const allLocationsPendingPromises = LOCATIONS.map(loc => getAppointments({ ...pendingConfirmationOptions, locationId: loc.id }));
+             const allLocationsPendingPromises = locations.map(loc => getAppointments({ ...pendingConfirmationOptions, locationId: loc.id }));
              const allLocationsPendingResults = await Promise.all(allLocationsPendingPromises);
              pendingConfirmationsCount = allLocationsPendingResults.reduce((sum, result) => sum + (result.appointments ? result.appointments.length : 0), 0);
           } else if (effectiveLocationId) { // Covers Admin/Contador with specific sede AND Staff
@@ -111,7 +120,7 @@ export default function DashboardPage() {
         // Fetch Total Revenue for Current Month (ONLY FOR CONTADOR)
         if (isContador) {
           if (selectedLocationId === 'all') {
-            const allLocationsCompletedPromises = LOCATIONS.map(loc => getAppointments({
+            const allLocationsCompletedPromises = locations.map(loc => getAppointments({
               statuses: [APPOINTMENT_STATUS.COMPLETED],
               locationId: loc.id,
               dateRange: { start: currentMonthStart, end: currentMonthEnd },
@@ -136,7 +145,7 @@ export default function DashboardPage() {
             if (effectiveLocationId) { 
                 allFetchedProfessionals = await getProfessionals(effectiveLocationId);
             } else { 
-                const allProfsPromises = LOCATIONS.map(loc => getProfessionals(loc.id));
+                const allProfsPromises = locations.map(loc => getProfessionals(loc.id));
                 const results = await Promise.all(allProfsPromises);
                 allFetchedProfessionals = results.flat();
             }
@@ -254,7 +263,7 @@ export default function DashboardPage() {
     };
 
     fetchDashboardData();
-  }, [user, selectedLocationId, effectiveLocationId, isAdminOrContador, isContador]);
+  }, [user, selectedLocationId, effectiveLocationId, isAdminOrContador, isContador, locations]);
 
 
   if (!user) {
@@ -276,7 +285,7 @@ export default function DashboardPage() {
   let displayLocationName = "Vista Desconocida";
   if (user.role === USER_ROLES.LOCATION_STAFF) {
     if (user.locationId) {
-      displayLocationName = LOCATIONS.find(l => l.id === user.locationId)?.name || "Sede del Staff no Válida";
+      displayLocationName = locations.find(l => l.id === user.locationId)?.name || "Sede del Staff no Válida";
     } else {
       displayLocationName = "Staff sin Sede Asignada";
     }
@@ -284,7 +293,7 @@ export default function DashboardPage() {
     if (selectedLocationId === 'all' || !selectedLocationId) {
       displayLocationName = "Todas las Sedes";
     } else {
-      displayLocationName = LOCATIONS.find(l => l.id === selectedLocationId)?.name || "Sede Seleccionada no Válida";
+      displayLocationName = locations.find(l => l.id === selectedLocationId)?.name || "Sede Seleccionada no Válida";
     }
   }
   
@@ -332,6 +341,7 @@ export default function DashboardPage() {
             isLoading={isLoadingProfessionalStatus}
             icon={<Bed className="h-6 w-6 text-primary" />}
             emptyMessage="Todos los profesionales están activos hoy."
+            locations={locations}
         />
         <ProfessionalStatusTodayCard
             title={`Profesionales Trabajando Próximo Domingo`}
@@ -339,6 +349,7 @@ export default function DashboardPage() {
             isLoading={isLoadingProfessionalStatus}
             icon={<CalendarCheck2 className="h-6 w-6 text-primary" />}
             emptyMessage="Ningún profesional programado para el próximo domingo."
+            locations={locations}
         />
         <UpcomingBirthdaysCard
             title="Próximos Cumpleaños (15 días)"
@@ -394,3 +405,5 @@ export default function DashboardPage() {
     </div>
   );
 }
+
+    
