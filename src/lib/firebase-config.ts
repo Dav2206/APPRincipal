@@ -42,8 +42,13 @@ if (useMockDatabase) {
     );
   } else {
     try {
-      app = !getApps().length ? initializeApp(firebaseConfig) : getApp();
-      console.log(`[FirebaseConfig] App de Firebase inicializada correctamente para el proyecto: '${app.options.projectId}'.`);
+      if (getApps().length === 0) {
+        app = initializeApp(firebaseConfig);
+        console.log(`[FirebaseConfig] Nueva App de Firebase inicializada para el proyecto: '${app.options.projectId}'.`);
+      } else {
+        app = getApp();
+        console.log(`[FirebaseConfig] Usando App de Firebase existente para el proyecto: '${app.options.projectId}'.`);
+      }
 
       firestoreInstance = getFirestore(app);
       console.log("[FirebaseConfig] Instancia de Firestore obtenida.");
@@ -106,3 +111,5 @@ console.log("-------------------------------------------");
 
 
 export { firestoreInstance as firestore, app, functionsInstance as functions, authInstance as auth, storageInstance as storage, useMockDatabase };
+
+    

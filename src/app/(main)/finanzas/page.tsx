@@ -6,7 +6,7 @@ import type { Appointment, LocationId, PaymentMethod, Location } from '@/types';
 import { useAuth } from '@/contexts/auth-provider';
 import { useAppState } from '@/contexts/app-state-provider';
 import { getAppointments, getLocations, updateLocationPaymentMethods } from '@/lib/data';
-import { USER_ROLES, APPOINTMENT_STATUS } from '@/lib/constants';
+import { USER_ROLES, APPOINTMENT_STATUS, APPOINTMENT_STATUS_DISPLAY } from '@/lib/constants';
 
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -52,7 +52,7 @@ export default function FinancesPage() {
   
   const [paymentMethodsByLocation, setPaymentMethodsByLocation] = useState<Record<LocationId, PaymentMethod[]>>({} as Record<LocationId, PaymentMethod[]>);
   const [newMethodInputs, setNewMethodInputs] = useState<Record<LocationId, string>>({});
-  const [isSaving, setIsSaving] = useState(false);
+  const [isSaving, setIsSaving] = useState(isSaving);
   const [hasChanges, setHasChanges] = useState(false);
   const [completedAppointments, setCompletedAppointments] = useState<Appointment[]>([]);
   const [locationFilter, setLocationFilter] = useState<LocationId | 'all'>(ALL_LOCATIONS_FILTER);
@@ -431,3 +431,5 @@ export default function FinancesPage() {
     </div>
   );
 }
+
+    

@@ -177,12 +177,42 @@ export const getUserByUsername = async (identity: string): Promise<User | undefi
 
 // --- Locations ---
 export const getLocations = async (): Promise<Location[]> => {
-  // This function will now consistently return the static list
-  // to ensure stability and prevent missing locations.
-  console.log(
-    '[data.ts] getLocations: Returning static location list from `constants.ts` to ensure consistency.'
-  );
-  return [...LOCATIONS_FALLBACK];
+  if (!firestore) {
+    console.warn("[data.ts] Firestore not initialized, returning fallback locations.");
+    return [...LOCATIONS_FALLBACK];
+  }
+
+  try {
+    const locationsCol = collection(firestore, 'sedes');
+    const snapshot = await getDocs(locationsCol);
+    
+    const dbLocations = snapshot.docs.map(doc => ({
+      id: doc.id as LocationId,
+      ...doc.data()
+    })) as Location[];
+
+    // Create a map of locations from DB for quick lookup
+    const dbLocationsMap = new Map(dbLocations.map(loc => [loc.id, loc]));
+
+    // Merge DB locations with fallback locations to ensure all are present
+    const mergedLocations = LOCATIONS_FALLBACK.map(fallbackLoc => {
+      const dbLoc = dbLocationsMap.get(fallbackLoc.id);
+      if (dbLoc) {
+        // If location exists in DB, use its payment methods, otherwise fallback's
+        return {
+          ...fallbackLoc,
+          paymentMethods: dbLoc.paymentMethods || fallbackLoc.paymentMethods || [],
+        };
+      }
+      return fallbackLoc; // Fallback if not in DB
+    });
+
+    return mergedLocations;
+
+  } catch (error) {
+    console.error("[data.ts] Error fetching locations from Firestore, returning fallback list:", error);
+    return [...LOCATIONS_FALLBACK];
+  }
 };
 
 export const updateLocationPaymentMethods = async (
@@ -195,16 +225,10 @@ export const updateLocationPaymentMethods = async (
   }
   try {
     const docRef = doc(firestore, 'sedes', locationId);
-    const locationDataFromConstants = LOCATIONS_FALLBACK.find(l => l.id === locationId);
-
-    const dataToSet = {
-      name: locationDataFromConstants?.name || locationId,
-      paymentMethods: paymentMethods
-    };
     
     // Use setDoc with merge:true. This creates the document if it doesn't exist,
     // or updates the specific fields if it does, without overwriting other fields.
-    await setDoc(docRef, dataToSet, { merge: true });
+    await setDoc(docRef, { paymentMethods }, { merge: true });
 
     return true;
   } catch (error) {
@@ -934,7 +958,7 @@ export async function getAppointmentById(id: string): Promise<Appointment | unde
  apptData.addedServices = apptData.addedServices.map(as => {
  const serviceDetail = allServices.find(s => s.id === as.serviceId);
  const profDetail = as.professionalId ? allProfessionals.find(p => p.id === as.professionalId) : undefined;
- return {...as, service: serviceDetail ? {...serviceDetail} : undefined, professional: profDetail ? {...profDetail} : undefined };
+ return {...as, service: serviceDetail, professional: profDetail };
  });
  }
  let totalDuration = apptData.durationMinutes || 0;
@@ -1483,3 +1507,5 @@ export async function deleteImportantNote(noteId: string): Promise<boolean> {
   }
 }
 // --- End Important Notes ---
+
+    
