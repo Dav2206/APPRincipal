@@ -105,8 +105,16 @@ export default function RegistryPage() {
 
   const fetchProfessionalsForReportContext = useCallback(async (locationContext?: LocationId | 'all') => {
     if (!user) return [];
+    
+    // For daily report context, we always fetch all professionals to correctly map names
+    // for external professionals who might have worked at the current location.
+    if (reportType === 'daily') {
+        const allProfs = await getProfessionals(undefined); // Fetch all
+        return allProfs;
+    }
+    
+    // For bi-weekly report, the original logic applies
     let profs: Professional[] = [];
-
     const targetLocation = locationContext === 'all' ? undefined : locationContext;
 
     if (isAdminOrContador) {
@@ -121,7 +129,7 @@ export default function RegistryPage() {
       profs = await getProfessionals(user.locationId);
     }
     return profs;
-  }, [user, isAdminOrContador, locations]);
+  }, [user, isAdminOrContador, locations, reportType]);
 
 
   useEffect(() => {
@@ -132,14 +140,9 @@ export default function RegistryPage() {
       }
       setIsLoading(true);
 
-      const profContext = isAdminOrContador ? (adminSelectedLocation === 'all' ? 'all' : effectiveLocationId) : user?.locationId;
-      const currentProfessionalsRaw = await fetchProfessionalsForReportContext(profContext);
+      // We fetch ALL professionals to ensure we can map names correctly, even for those from other locations.
+      const allSystemProfessionals = await fetchProfessionalsForReportContext();
       
-      const currentProfessionals = currentProfessionalsRaw.filter(prof => 
-        getProfessionalAvailabilityForDate(prof, selectedDate) !== null
-      );
-
-
       let appointmentsForDateResponse: { appointments: Appointment[] };
       if (isAdminOrContador && adminSelectedLocation === 'all') {
         const promises = locations.map(loc =>
@@ -160,81 +163,57 @@ export default function RegistryPage() {
       const dailyReportMap = new Map<string, Omit<DailyActivityReportItem, 'professionalName' | 'locationName' | 'type' > & { services: Map<string, { serviceName: string, count: number }> }>();
 
       appointmentsForDate.forEach(appt => {
-        // Only process completed appointments
         if (appt.status !== APPOINTMENT_STATUS.COMPLETED || !allServices) {
  return;
         }
 
-        // Process the main service if it has a professional assigned
         if (appt.professionalId) {
  const professionalIdPrincipal = appt.professionalId;
-
- // Ensure entry exists for the principal professional
  const reportEntryPrincipal = dailyReportMap.get(professionalIdPrincipal) || {
  professionalId: professionalIdPrincipal,
- locationId: appt.locationId, // Use appointment's location
+ locationId: appt.locationId, 
  totalRevenue: 0,
  services: new Map<string, { serviceName: string, count: number }>(),
  };
 
- // Count the main service
  const mainServiceName = allServices.find(s => s.id === appt.serviceId)?.name || 'Servicio Principal Desc.';
  const mainServiceEntry = reportEntryPrincipal.services.get(appt.serviceId) || { serviceName: mainServiceName, count: 0 };
  mainServiceEntry.count += 1;
  reportEntryPrincipal.services.set(appt.serviceId, mainServiceEntry);
 
-           // >>>>> AÑADIR LÓGICA PARA SUMAR EL MONTO PAGADO DE LA CITA PRINCIPAL <<<<<
-           // Sumar el total pagado de la cita al profesional principal.
-           // Esto ASUME que appt.amountPaid es el total de la cita.
-           // Si necesitas una distribución más compleja, esto podría necesitar ajuste.
  if (typeof appt.amountPaid === 'number' && appt.amountPaid > 0) {
                reportEntryPrincipal.totalRevenue += appt.amountPaid;
-                // console.log(`[RegistryPage] Sumando S/${appt.amountPaid} a profesional principal ${professionalForAppt.firstName} por cita ${appt.id}. Nuevo total: ${reportEntryPrincipal.totalRevenue}`);
-           } else {
-                // console.log(`[RegistryPage] Cita ${appt.id} (principal) para prof ${professionalForAppt.firstName} no tiene monto pagado total válido o > 0.`);
            }
 
-
- // Update the map with the principal professional's entry
  dailyReportMap.set(professionalIdPrincipal, reportEntryPrincipal);
         }
 
-        // Process added services
  appt.addedServices?.forEach(added => {
-          // Identify the professional for the added service (use added.professionalId or fallback to main professional)
  const professionalIdForAddedService = added.professionalId || appt.professionalId;
-
- // Only process if there is a professional assigned to this added service (or the main as fallback)
  if (professionalIdForAddedService) {
- // Ensure entry exists for the added service professional
  const reportEntryAdded = dailyReportMap.get(professionalIdForAddedService) || {
  professionalId: professionalIdForAddedService,
- locationId: appt.locationId, // Use appointment's location
+ locationId: appt.locationId, 
  totalRevenue: 0,
  services: new Map<string, { serviceName: string, count: number }>(),
  };
 
- // Count the added service
  const addedServiceName = allServices.find(s => s.id === added.serviceId)?.name || 'Servicio Adicional Desc.';
  const addedServiceEntry = reportEntryAdded.services.get(added.serviceId) || { serviceName: addedServiceName, count: 0 };
  addedServiceEntry.count += 1;
  reportEntryAdded.services.set(added.serviceId, addedServiceEntry);
 
- // SUM THE AMOUNT PAID FOR THE ADDED SERVICE TO THE TOTAL OF THE PROFESSIONAL WHO PERFORMED IT
- console.log("[RegistryPage] Procesando servicio adicional", added.serviceId, "amountPaid:", added.amountPaid, "(Tipo:", typeof added.amountPaid + ")"); // <-- ADDED LOG
  if (typeof added.amountPaid === 'number' && added.amountPaid > 0) {
  reportEntryAdded.totalRevenue += added.amountPaid;
  }
 
- // Update the map with the added service professional's entry
  dailyReportMap.set(professionalIdForAddedService, reportEntryAdded);
  }
           });
       });
 
-      console.log("[RegistryPage] dailyReportMap before final report:", dailyReportMap); // <-- ADDED LOG
       const finalReport: DailyActivityReportItem[] = Array.from(dailyReportMap.values()).map(item => {
-        const professional = currentProfessionals.find(p => p.id === item.professionalId);
+        const professional = allSystemProfessionals.find(p => p.id === item.professionalId); // Search in all professionals
         const location = locations.find(l => l.id === item.locationId);
         const servicesBreakdownArray = Array.from(item.services.values()).sort((a,b) => b.count - a.count);
         const totalServicesCount = servicesBreakdownArray.reduce((sum, s) => sum + s.count, 0);
@@ -275,7 +254,6 @@ export default function RegistryPage() {
       const startDate = selectedQuincena === 1 ? startOfMonth(baseDate) : addDays(startOfMonth(baseDate), 15);
       const endDate = selectedQuincena === 1 ? addDays(startOfMonth(baseDate), 14) : endOfMonth(baseDate);
       
-      // Filter professionals: must have an active contract at the END of the quincena to be included in earnings
       const professionalsList = professionalsListRaw.filter(prof => 
          getContractDisplayStatus(prof.currentContract, endDate) === 'Activo'
       );
@@ -306,17 +284,15 @@ export default function RegistryPage() {
 
       const biWeeklyReportMap = new Map<string, { professionalId: string, locationId: LocationId, biWeeklyEarnings: number }>();
 
-      // Initialize map only for active professionals for the period
       professionalsList.forEach(prof => {
          biWeeklyReportMap.set(prof.id, { professionalId: prof.id, locationId: prof.locationId, biWeeklyEarnings: 0 });
       });
       
       appointmentsForPeriod.forEach(appt => {
-        // Ensure the appointment's professional has an active contract AT THE TIME OF THE APPOINTMENT
-        const professionalForAppt = professionalsListRaw.find(p => p.id === appt.professionalId); // Check against raw list
+        const professionalForAppt = professionalsListRaw.find(p => p.id === appt.professionalId); 
         if (appt.professionalId && professionalForAppt && appt.status === APPOINTMENT_STATUS.COMPLETED && getContractDisplayStatus(professionalForAppt.currentContract, parseISO(appt.appointmentDateTime)) === 'Activo') {
             const entry = biWeeklyReportMap.get(appt.professionalId);
-            if (entry) { // Only sum if the professional is in our active list for the period
+            if (entry) { 
                 entry.biWeeklyEarnings += appt.amountPaid || 0;
                 biWeeklyReportMap.set(appt.professionalId, entry);
             }
@@ -329,7 +305,7 @@ export default function RegistryPage() {
         const locationTotals = new Map<LocationId, number>();
 
         Array.from(biWeeklyReportMap.values()).forEach(item => {
-          const professional = professionalsList.find(p => p.id === item.professionalId); // Ensure using the filtered list
+          const professional = professionalsList.find(p => p.id === item.professionalId); 
           const location = locations.find(l => l.id === item.locationId);
           if (!professional || !location) return;
 
@@ -367,7 +343,7 @@ export default function RegistryPage() {
         setReportData(groupedResult);
       } else {
         const finalReport: BiWeeklyEarningsReportItem[] = Array.from(biWeeklyReportMap.values()).map(item => {
-            const professional = professionalsList.find(p => p.id === item.professionalId); // Ensure using the filtered list
+            const professional = professionalsList.find(p => p.id === item.professionalId); 
             const location = locations.find(l => l.id === item.locationId);
             return {
             type: 'biWeekly',
@@ -741,3 +717,5 @@ export default function RegistryPage() {
     </div>
   );
 }
+
+    
