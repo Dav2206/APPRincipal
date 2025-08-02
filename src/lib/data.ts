@@ -1,4 +1,3 @@
-
 // src/lib/data.ts
 import type { User, Professional, Patient, Service, Appointment, AppointmentFormData, ProfessionalFormData, AppointmentStatus, ServiceFormData, Contract, PeriodicReminder, ImportantNote, PeriodicReminderFormData, ImportantNoteFormData, AddedServiceItem, AppointmentUpdateFormData, Location } from '@/types';
 import { USER_ROLES, APPOINTMENT_STATUS, APPOINTMENT_STATUS_DISPLAY, TIME_SLOTS, DAYS_OF_WEEK, LOCATIONS_FALLBACK } from '@/lib/constants';
@@ -196,22 +195,21 @@ export const updateLocationPaymentMethods = async (
   }
   try {
     const docRef = doc(firestore, 'sedes', locationId);
-    // Use setDoc with merge to create the document if it doesn't exist, or update it if it does.
-    // First, check if the doc exists. If not, create it with initial data.
-    const docSnap = await getDoc(docRef);
-    if (!docSnap.exists()) {
-        const locationData = LOCATIONS_FALLBACK.find(l => l.id === locationId);
-        await setDoc(docRef, {
-            name: locationData?.name || locationId,
-            paymentMethods: paymentMethods
-        });
-    } else {
-        await updateDoc(docRef, { paymentMethods });
-    }
+    const locationDataFromConstants = LOCATIONS_FALLBACK.find(l => l.id === locationId);
+
+    const dataToSet = {
+      name: locationDataFromConstants?.name || locationId,
+      paymentMethods: paymentMethods
+    };
+    
+    // Use setDoc with merge:true. This creates the document if it doesn't exist,
+    // or updates the specific fields if it does, without overwriting other fields.
+    await setDoc(docRef, dataToSet, { merge: true });
+
     return true;
   } catch (error) {
     console.error(
-      `Error updating/setting payment methods for location ${locationId}:`,
+      `Error setting/updating payment methods for location ${locationId}:`,
       error
     );
     return false;
