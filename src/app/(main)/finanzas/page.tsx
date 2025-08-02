@@ -189,30 +189,29 @@ export default function FinancesPage() {
   const handleAddNewMethod = useCallback((locationId: LocationId) => {
     const inputElement = newMethodInputsRef.current[locationId];
     if (!inputElement) return;
-
+  
     const newMethodName = inputElement.value.trim();
     if (!newMethodName) {
       toast({ title: "Nombre inválido", description: "El nombre del método de pago no puede estar vacío.", variant: "destructive" });
       return;
     }
-    
-    setPaymentMethodsByLocation(prev => {
-        const currentMethods = prev[locationId] || [];
-        if (currentMethods.some(m => m.toLowerCase() === newMethodName.toLowerCase())) {
-            toast({ title: "Método Duplicado", description: `"${newMethodName}" ya existe para esta sede.`, variant: "default" });
-            return prev; 
-        }
-
-        toast({ title: "Método Añadido", description: `"${newMethodName}" se añadió. Recuerde guardar los cambios.` });
-        setHasChanges(true);
-        inputElement.value = ''; // Clear the input field
-
-        return {
-            ...prev,
-            [locationId]: [...currentMethods, newMethodName as PaymentMethod]
-        };
-    });
-  }, [toast]);
+  
+    const currentMethods = paymentMethodsByLocation[locationId] || [];
+    if (currentMethods.some(m => m.toLowerCase() === newMethodName.toLowerCase())) {
+      toast({ title: "Método Duplicado", description: `"${newMethodName}" ya existe para esta sede.`, variant: "default" });
+      return;
+    }
+  
+    setPaymentMethodsByLocation(prev => ({
+      ...prev,
+      [locationId]: [...currentMethods, newMethodName as PaymentMethod]
+    }));
+  
+    setHasChanges(true);
+    toast({ title: "Método Añadido", description: `"${newMethodName}" se añadió. Recuerde guardar los cambios.` });
+    inputElement.value = ''; // Clear the input field after successful addition
+  
+  }, [toast, paymentMethodsByLocation]);
   
   const handleRemoveMethod = useCallback((locationId: LocationId, methodToRemove: PaymentMethod) => {
     const isMethodInUseInLocation = completedAppointments.some(
@@ -437,3 +436,4 @@ export default function FinancesPage() {
     </div>
   );
 }
+
