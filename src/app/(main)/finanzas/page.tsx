@@ -39,6 +39,8 @@ const months = Array.from({ length: 12 }, (_, i) => ({
   label: format(new Date(currentSystemYear, i), 'MMMM', { locale: es }),
 }));
 
+const ALL_LOCATIONS_FILTER = "all";
+
 export default function FinancesPage() {
   const { user, isLoading: authIsLoading } = useAuth();
   const { selectedLocationId: adminSelectedLocation } = useAppState();
@@ -62,6 +64,8 @@ export default function FinancesPage() {
   const [newMethodInputs, setNewMethodInputs] = useState<Record<LocationId, string>>({});
   const [isSaving, setIsSaving] = useState(false);
   const [completedAppointments, setCompletedAppointments] = useState<Appointment[]>([]);
+  const [locationFilter, setLocationFilter] = useState<LocationId | 'all'>(ALL_LOCATIONS_FILTER);
+
 
   // Collect all unique payment methods for table headers
   const allAvailablePaymentMethods = useMemo(() => {
@@ -206,6 +210,14 @@ export default function FinancesPage() {
     });
     setIsSaving(false);
   };
+  
+  const filteredLocationsForManagement = useMemo(() => {
+    if (locationFilter === ALL_LOCATIONS_FILTER) {
+      return LOCATIONS;
+    }
+    return LOCATIONS.filter(loc => loc.id === locationFilter);
+  }, [locationFilter]);
+
 
   if (authIsLoading || !user || (user.role !== USER_ROLES.CONTADOR && user.role !== USER_ROLES.ADMIN)) {
     return (
@@ -305,9 +317,23 @@ export default function FinancesPage() {
             <CardDescription>
                 Añada o elimine los métodos de pago para cada una de sus sedes.
             </CardDescription>
+            <div className="pt-4">
+              <Label htmlFor="location-filter">Filtrar por Sede</Label>
+              <Select value={locationFilter} onValueChange={(value) => setLocationFilter(value as LocationId | 'all')}>
+                  <SelectTrigger id="location-filter" className="w-full sm:w-[280px]">
+                      <SelectValue placeholder="Seleccionar Sede" />
+                  </SelectTrigger>
+                  <SelectContent>
+                      <SelectItem value={ALL_LOCATIONS_FILTER}>Todas las Sedes</SelectItem>
+                      {LOCATIONS.map(loc => (
+                          <SelectItem key={loc.id} value={loc.id}>{loc.name}</SelectItem>
+                      ))}
+                  </SelectContent>
+              </Select>
+          </div>
         </CardHeader>
         <CardContent className="space-y-6">
-            {LOCATIONS.map(location => (
+            {filteredLocationsForManagement.map(location => (
                 <div key={location.id} className="p-4 border rounded-lg">
                     <h4 className="font-semibold mb-4 text-lg">{location.name}</h4>
                     <div className="mb-4 flex gap-2 items-end">
