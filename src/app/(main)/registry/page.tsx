@@ -2,11 +2,11 @@
 "use client";
 
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
-import type { Appointment, Professional, LocationId, Service, Location } from '@/types';
+import type { Appointment, Professional, LocationId, Service, Location, PaymentMethod } from '@/types';
 import { useAuth } from '@/contexts/auth-provider';
 import { useAppState } from '@/contexts/app-state-provider';
-import { getAppointments, getProfessionals, getServices, getProfessionalAvailabilityForDate, getContractDisplayStatus, getLocations } from '@/lib/data';
-import { USER_ROLES, APPOINTMENT_STATUS, SERVICES as ALL_SERVICES_CONSTANTS } from '@/lib/constants';
+import { getAppointments, getProfessionals, getServices, getContractDisplayStatus, getLocations } from '@/lib/data';
+import { USER_ROLES, APPOINTMENT_STATUS } from '@/lib/constants';
 
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -16,7 +16,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow, TableCap
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { format, startOfDay, getMonth, getDate, startOfMonth, endOfMonth, addDays, getYear, subDays, setYear, setMonth, isSameDay, isAfter, subMonths, parseISO } from 'date-fns';
 import { es } from 'date-fns/locale';
-import { CalendarIcon, Loader2, AlertTriangle, FileText, DollarSign, ChevronLeft, ChevronRight, ListChecks } from 'lucide-react';
+import { CalendarIcon, Loader2, AlertTriangle, FileText, DollarSign, ChevronLeft, ChevronRight, ListChecks, Landmark } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -51,6 +51,13 @@ interface GroupedBiWeeklyReportItem {
   locationTotalEarnings: number;
 }
 
+interface DailyTotalsByLocation {
+    locationId: LocationId;
+    locationName: string;
+    totalRevenue: number;
+    totalsByMethod: Record<PaymentMethod, number>;
+}
+
 
 type ReportItem = DailyActivityReportItem | BiWeeklyEarningsReportItem | GroupedBiWeeklyReportItem;
 type ReportType = 'daily' | 'biWeekly';
@@ -69,6 +76,7 @@ export default function RegistryPage() {
 
   const [selectedDate, setSelectedDate] = useState<Date>(startOfDay(new Date()));
   const [reportData, setReportData] = useState<ReportItem[]>([]);
+  const [dailyTotalsByLocation, setDailyTotalsByLocation] = useState<DailyTotalsByLocation[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [reportType, setReportType] = useState<ReportType>('daily');
   const [allServices, setAllServices] = useState<Service[] | null>(null);
@@ -161,56 +169,81 @@ export default function RegistryPage() {
       const appointmentsForDate = appointmentsForDateResponse.appointments || [];
 
       const dailyReportMap = new Map<string, Omit<DailyActivityReportItem, 'professionalName' | 'locationName' | 'type' > & { services: Map<string, { serviceName: string, count: number }> }>();
+      const locationTotalsMap = new Map<LocationId, DailyTotalsByLocation>();
 
       appointmentsForDate.forEach(appt => {
         if (appt.status !== APPOINTMENT_STATUS.COMPLETED || !allServices) {
- return;
+          return;
         }
 
+        // --- Logic for Daily Totals by Payment Method ---
+        if (appt.amountPaid && appt.amountPaid > 0 && appt.paymentMethod) {
+            const locTotals = locationTotalsMap.get(appt.locationId) || {
+                locationId: appt.locationId,
+                locationName: locations.find(l => l.id === appt.locationId)?.name || 'Desconocida',
+                totalRevenue: 0,
+                totalsByMethod: {}
+            };
+            locTotals.totalRevenue += appt.amountPaid;
+            locTotals.totalsByMethod[appt.paymentMethod] = (locTotals.totalsByMethod[appt.paymentMethod] || 0) + appt.amountPaid;
+            
+            // Also account for added services payments under the same main payment method
+            appt.addedServices?.forEach(added => {
+                if (added.amountPaid && added.amountPaid > 0) {
+                     locTotals.totalRevenue += added.amountPaid;
+                     locTotals.totalsByMethod[appt.paymentMethod!] = (locTotals.totalsByMethod[appt.paymentMethod!] || 0) + added.amountPaid;
+                }
+            });
+            locationTotalsMap.set(appt.locationId, locTotals);
+        }
+
+        // --- Logic for Professional Activity Breakdown ---
         if (appt.professionalId) {
- const professionalIdPrincipal = appt.professionalId;
- const reportEntryPrincipal = dailyReportMap.get(professionalIdPrincipal) || {
- professionalId: professionalIdPrincipal,
- locationId: appt.locationId, 
- totalRevenue: 0,
- services: new Map<string, { serviceName: string, count: number }>(),
- };
+          const professionalIdPrincipal = appt.professionalId;
+          const reportEntryPrincipal = dailyReportMap.get(professionalIdPrincipal) || {
+            professionalId: professionalIdPrincipal,
+            locationId: appt.locationId, 
+            totalRevenue: 0,
+            services: new Map<string, { serviceName: string, count: number }>(),
+          };
 
- const mainServiceName = allServices.find(s => s.id === appt.serviceId)?.name || 'Servicio Principal Desc.';
- const mainServiceEntry = reportEntryPrincipal.services.get(appt.serviceId) || { serviceName: mainServiceName, count: 0 };
- mainServiceEntry.count += 1;
- reportEntryPrincipal.services.set(appt.serviceId, mainServiceEntry);
+          const mainServiceName = allServices.find(s => s.id === appt.serviceId)?.name || 'Servicio Principal Desc.';
+          const mainServiceEntry = reportEntryPrincipal.services.get(appt.serviceId) || { serviceName: mainServiceName, count: 0 };
+          mainServiceEntry.count += 1;
+          reportEntryPrincipal.services.set(appt.serviceId, mainServiceEntry);
 
- if (typeof appt.amountPaid === 'number' && appt.amountPaid > 0) {
-               reportEntryPrincipal.totalRevenue += appt.amountPaid;
-           }
+          if (typeof appt.amountPaid === 'number' && appt.amountPaid > 0) {
+            reportEntryPrincipal.totalRevenue += appt.amountPaid;
+          }
 
- dailyReportMap.set(professionalIdPrincipal, reportEntryPrincipal);
+          dailyReportMap.set(professionalIdPrincipal, reportEntryPrincipal);
         }
 
- appt.addedServices?.forEach(added => {
- const professionalIdForAddedService = added.professionalId || appt.professionalId;
- if (professionalIdForAddedService) {
- const reportEntryAdded = dailyReportMap.get(professionalIdForAddedService) || {
- professionalId: professionalIdForAddedService,
- locationId: appt.locationId, 
- totalRevenue: 0,
- services: new Map<string, { serviceName: string, count: number }>(),
- };
+        appt.addedServices?.forEach(added => {
+          const professionalIdForAddedService = added.professionalId || appt.professionalId;
+          if (professionalIdForAddedService) {
+            const reportEntryAdded = dailyReportMap.get(professionalIdForAddedService) || {
+              professionalId: professionalIdForAddedService,
+              locationId: appt.locationId, 
+              totalRevenue: 0,
+              services: new Map<string, { serviceName: string, count: number }>(),
+            };
 
- const addedServiceName = allServices.find(s => s.id === added.serviceId)?.name || 'Servicio Adicional Desc.';
- const addedServiceEntry = reportEntryAdded.services.get(added.serviceId) || { serviceName: addedServiceName, count: 0 };
- addedServiceEntry.count += 1;
- reportEntryAdded.services.set(added.serviceId, addedServiceEntry);
+            const addedServiceName = allServices.find(s => s.id === added.serviceId)?.name || 'Servicio Adicional Desc.';
+            const addedServiceEntry = reportEntryAdded.services.get(added.serviceId) || { serviceName: addedServiceName, count: 0 };
+            addedServiceEntry.count += 1;
+            reportEntryAdded.services.set(added.serviceId, addedServiceEntry);
 
- if (typeof added.amountPaid === 'number' && added.amountPaid > 0) {
- reportEntryAdded.totalRevenue += added.amountPaid;
- }
+            if (typeof added.amountPaid === 'number' && added.amountPaid > 0) {
+              reportEntryAdded.totalRevenue += added.amountPaid;
+            }
 
- dailyReportMap.set(professionalIdForAddedService, reportEntryAdded);
- }
-          });
+            dailyReportMap.set(professionalIdForAddedService, reportEntryAdded);
+          }
+        });
       });
+
+      setDailyTotalsByLocation(Array.from(locationTotalsMap.values()));
 
       const finalReport: DailyActivityReportItem[] = Array.from(dailyReportMap.values()).map(item => {
         const professional = allSystemProfessionals.find(p => p.id === item.professionalId); // Search in all professionals
@@ -363,6 +396,7 @@ export default function RegistryPage() {
     if (reportType === 'daily') {
       generateDailyReport();
     } else if (reportType === 'biWeekly') {
+      setDailyTotalsByLocation([]); // Clear daily totals when switching report type
       generateBiWeeklyReport();
     }
 
@@ -625,6 +659,38 @@ export default function RegistryPage() {
           {isLoading ? (
             <LoadingState />
           ) : (
+            <>
+            {reportType === 'daily' && dailyTotalsByLocation.length > 0 && (
+                <div className="mb-8 space-y-4">
+                    <h3 className="text-xl font-semibold flex items-center gap-2"><DollarSign />Resumen de Ingresos del Día</h3>
+                    <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+                        {dailyTotalsByLocation.map(locTotal => (
+                            <Card key={locTotal.locationId} className="shadow-sm">
+                                <CardHeader className="pb-2">
+                                    <CardTitle className="text-lg flex items-center gap-2">
+                                      <Landmark size={20} className="text-primary"/>
+                                      {locTotal.locationName}
+                                    </CardTitle>
+                                </CardHeader>
+                                <CardContent>
+                                    <ul className="text-sm space-y-1">
+                                        {Object.entries(locTotal.totalsByMethod).map(([method, total]) => (
+                                            <li key={method} className="flex justify-between">
+                                                <span className="text-muted-foreground">{method}:</span>
+                                                <span>S/ {total.toFixed(2)}</span>
+                                            </li>
+                                        ))}
+                                    </ul>
+                                    <div className="border-t mt-2 pt-2 flex justify-between font-bold">
+                                        <span>Total Sede:</span>
+                                        <span>S/ {locTotal.totalRevenue.toFixed(2)}</span>
+                                    </div>
+                                </CardContent>
+                            </Card>
+                        ))}
+                    </div>
+                </div>
+            )}
             <Table>
               <TableCaption>
                 {reportData.length > 0
@@ -632,7 +698,7 @@ export default function RegistryPage() {
                     ? (
                         isStaffRestrictedView
                         ? `Resumen del ${format(selectedDate, "PPP", { locale: es })}. Total Servicios Atendidos: ${totalServicesOverall}`
-                        : `Resumen del ${format(selectedDate, "PPP", { locale: es })}. Total Servicios Atendidos: ${totalServicesOverall}, Total Ingresos: S/ ${totalRevenueOverall.toFixed(2)}`
+                        : `Resumen de actividad del ${format(selectedDate, "PPP", { locale: es })}. Total Servicios Atendidos: ${totalServicesOverall}.`
                       )
                     : ( 
                         isStaffRestrictedView
@@ -711,11 +777,10 @@ export default function RegistryPage() {
                 }
               </TableBody>
             </Table>
+            </>
           )}
         </CardContent>
       </Card>
     </div>
   );
 }
-
-    

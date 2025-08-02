@@ -80,7 +80,7 @@ export interface AddedServiceItem {
   serviceId: string;
   professionalId?: string | null;
   amountPaid?: number | null;
-  startTime?: string | null; // Add this line
+  startTime?: string | null; 
   service?: Service; // Populated for display
   professional?: Professional; // Populated for display
 }
