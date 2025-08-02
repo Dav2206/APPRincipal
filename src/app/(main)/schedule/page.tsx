@@ -87,37 +87,33 @@ export default function SchedulePage() {
     setIsLoading(true);
 
     try {
-      const [allSystemProfsResponse, appointmentsResponse] = await Promise.all([
-        getProfessionals(), // Fetch all professionals for filtering and the form
-        getAppointments({   // Fetch appointments for the effective location and date
-          locationId: actualEffectiveLocationId,
-          date: currentDate,
-          statuses: [APPOINTMENT_STATUS.BOOKED, APPOINTMENT_STATUS.CONFIRMED, APPOINTMENT_STATUS.COMPLETED],
-        }),
-      ]);
-      
-      const systemProfs = allSystemProfsResponse || [];
+      // Step 1: Fetch ALL professionals first to determine who is working at the target location.
+      const allProfsResponse = await getProfessionals();
+      const systemProfs = allProfsResponse || [];
       setAllSystemProfessionals(systemProfs);
 
-      const dailyAppointments = appointmentsResponse.appointments || [];
-      
-      // Corrected logic to determine which professionals to display as columns
+      // Step 2: Determine which professionals to display as columns in the timeline.
+      // A professional is displayed if their availability for the day matches the viewing location.
       const professionalsForColumns = systemProfs.filter(prof => {
         if (prof.isManager) {
           return false; // Always exclude managers from columns
         }
-        
-        // Get the professional's specific availability for the current date.
-        // This function already considers base schedule and custom overrides (including location overrides).
         const availability = getProfessionalAvailabilityForDate(prof, currentDate);
-
-        // A professional should be displayed if they are working AND their working location for that specific day
-        // matches the location being viewed in the schedule.
+        // This is the key logic: show the professional if their working location for THIS specific day
+        // is the location we are currently viewing in the schedule.
         return availability?.isWorking && availability.workingLocationId === actualEffectiveLocationId;
       }).sort((a, b) => `${a.firstName} ${a.lastName}`.localeCompare(`${b.firstName} ${b.lastName}`));
 
-
       setWorkingProfessionalsForTimeline(professionalsForColumns);
+
+      // Step 3: Fetch all appointments for the effective location and date.
+      const appointmentsResponse = await getAppointments({
+        locationId: actualEffectiveLocationId,
+        date: currentDate,
+        statuses: [APPOINTMENT_STATUS.BOOKED, APPOINTMENT_STATUS.CONFIRMED, APPOINTMENT_STATUS.COMPLETED],
+      });
+      
+      const dailyAppointments = appointmentsResponse.appointments || [];
       
       const displayableAppointments = dailyAppointments
         .sort((a,b) => parseISO(a.appointmentDateTime).getTime() - parseISO(b.appointmentDateTime).getTime());
