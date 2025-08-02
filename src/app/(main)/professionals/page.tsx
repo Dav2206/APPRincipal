@@ -127,7 +127,7 @@ export default function ProfessionalsPage() {
 
 
   const fetchProfessionals = useCallback(async () => {
-    if(!user || (!isAdminOrContador && user.role !== USER_ROLES.LOCATION_STAFF) ) { 
+    if (!user || !isAdminOrContador) { 
       setIsLoading(false);
       setAllProfessionals([]);
       return;
@@ -135,14 +135,12 @@ export default function ProfessionalsPage() {
     setIsLoading(true);
     try {
       let profsToSet: (Professional & { contractDisplayStatus: ContractDisplayStatus })[] = [];
-      if (isAdminOrContador) { 
-        if (effectiveLocationIdForFetch) {
-          profsToSet = await getProfessionals(effectiveLocationIdForFetch);
-        } else { 
-          const allProfsPromises = locations.map(loc => getProfessionals(loc.id));
-          const results = await Promise.all(allProfsPromises);
-          profsToSet = results.flat();
-        }
+      if (effectiveLocationIdForFetch) {
+        profsToSet = await getProfessionals(effectiveLocationIdForFetch);
+      } else { 
+        const allProfsPromises = locations.map(loc => getProfessionals(loc.id));
+        const results = await Promise.all(allProfsPromises);
+        profsToSet = results.flat();
       }
       
       setAllProfessionals(profsToSet || []);
@@ -155,15 +153,13 @@ export default function ProfessionalsPage() {
   }, [effectiveLocationIdForFetch, user, toast, isAdminOrContador, locations]);
 
   useEffect(() => {
-    if (isAdminOrContador) { 
-        if (locations.length > 0 || !effectiveLocationIdForFetch) {
-            fetchProfessionals();
-        }
-    } else {
+    if (isAdminOrContador && locations.length > 0) {
+        fetchProfessionals();
+    } else if (!isAdminOrContador) {
         setIsLoading(false);
         setAllProfessionals([]);
     }
-  }, [fetchProfessionals, isAdminOrContador, locations.length, effectiveLocationIdForFetch]);
+  }, [fetchProfessionals, isAdminOrContador, locations]);
 
   const filteredProfessionals = useMemo(() => {
     return allProfessionals.filter(p =>
@@ -804,3 +800,4 @@ export default function ProfessionalsPage() {
     </div>
   );
 }
+
