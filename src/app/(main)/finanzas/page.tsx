@@ -52,7 +52,7 @@ export default function FinancesPage() {
   
   const [paymentMethodsByLocation, setPaymentMethodsByLocation] = useState<Record<LocationId, PaymentMethod[]>>({} as Record<LocationId, PaymentMethod[]>);
   const [newMethodInputs, setNewMethodInputs] = useState<Record<LocationId, string>>({});
-  const [isSaving, setIsSaving] = useState(isSaving);
+  const [isSaving, setIsSaving] = useState(false);
   const [hasChanges, setHasChanges] = useState(false);
   const [completedAppointments, setCompletedAppointments] = useState<Appointment[]>([]);
   const [locationFilter, setLocationFilter] = useState<LocationId | 'all'>(ALL_LOCATIONS_FILTER);
@@ -191,20 +191,23 @@ export default function FinancesPage() {
       return;
     }
 
-    const currentMethods = paymentMethodsByLocation[locationId] || [];
-    if (currentMethods.some(m => m.toLowerCase() === newMethodName.toLowerCase())) {
+    setPaymentMethodsByLocation(prevMethods => {
+      const currentMethods = prevMethods[locationId] || [];
+      if (currentMethods.some(m => m.toLowerCase() === newMethodName.toLowerCase())) {
         toast({ title: "Método Duplicado", description: `"${newMethodName}" ya existe para esta sede.`, variant: "default" });
-        return;
-    }
+        return prevMethods; // Return previous state if duplicate
+      }
+      
+      const newMethodsForLocation = [...currentMethods, newMethodName as PaymentMethod];
+      toast({ title: "Método Añadido", description: `"${newMethodName}" se añadió. Recuerde guardar los cambios.` });
+      setHasChanges(true);
+      setNewMethodInputs(prev => ({ ...prev, [locationId]: '' }));
 
-    setPaymentMethodsByLocation(prev => ({
-        ...prev,
-        [locationId]: [...(prev[locationId] || []), newMethodName as PaymentMethod]
-    }));
-    
-    setHasChanges(true);
-    setNewMethodInputs(prev => ({ ...prev, [locationId]: '' }));
-    toast({ title: "Método Añadido", description: `"${newMethodName}" se añadió. Recuerde guardar los cambios.` });
+      return {
+        ...prevMethods,
+        [locationId]: newMethodsForLocation
+      };
+    });
   };
   
   const handleRemoveMethod = useCallback((locationId: LocationId, methodToRemove: PaymentMethod) => {
@@ -431,5 +434,3 @@ export default function FinancesPage() {
     </div>
   );
 }
-
-    
