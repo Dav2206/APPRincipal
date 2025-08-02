@@ -1,13 +1,13 @@
 
 "use client";
 
-import type { Professional, Contract, ContractEditFormData, ProfessionalFormData } from '@/types';
+import type { Professional, Contract, ContractEditFormData, ProfessionalFormData, Location } from '@/types';
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useAuth } from '@/contexts/auth-provider';
 import { useAppState } from '@/contexts/app-state-provider';
-import { getProfessionals, updateProfessional } from '@/lib/data';
+import { getProfessionals, updateProfessional, getLocations } from '@/lib/data';
 import type { ContractDisplayStatus } from '@/lib/data';
-import { LOCATIONS, USER_ROLES, LocationId } from '@/lib/constants';
+import { USER_ROLES, LocationId } from '@/lib/constants';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -58,6 +58,7 @@ export default function ContractsPage() {
 
   const [allProfessionalsWithContracts, setAllProfessionalsWithContracts] = useState<(Professional & { contractDisplayStatus: ContractDisplayStatus })[]>([]);
   const [displayedProfessionals, setDisplayedProfessionals] = useState<(Professional & { contractDisplayStatus: ContractDisplayStatus })[]>([]);
+  const [locations, setLocations] = useState<Location[]>([]);
   const [currentPage, setCurrentPage] = useState(1);
   
   const [isLoading, setIsLoading] = useState(true);
@@ -94,13 +95,21 @@ export default function ContractsPage() {
     : user?.locationId;
 
   useEffect(() => {
+    async function loadLocations() {
+        const fetchedLocations = await getLocations();
+        setLocations(fetchedLocations);
+    }
+    loadLocations();
+  }, []);
+
+  useEffect(() => {
     if (!authIsLoading && (!user || !isAdminOrContador)) {
       router.replace('/dashboard');
     }
   }, [user, authIsLoading, isAdminOrContador, router]);
 
   const fetchContractData = useCallback(async () => {
-    if (!user || !isAdminOrContador) {
+    if (!user || !isAdminOrContador || locations.length === 0) {
       setIsLoading(false);
       setAllProfessionalsWithContracts([]);
       return;
@@ -111,7 +120,7 @@ export default function ContractsPage() {
       if (effectiveLocationId) {
         profs = await getProfessionals(effectiveLocationId);
       } else { 
-        const allProfsPromises = LOCATIONS.map(loc => getProfessionals(loc.id));
+        const allProfsPromises = locations.map(loc => getProfessionals(loc.id));
         const results = await Promise.all(allProfsPromises);
         profs = results.flat();
       }
@@ -122,13 +131,13 @@ export default function ContractsPage() {
     } finally {
       setIsLoading(false);
     }
-  }, [effectiveLocationId, user, isAdminOrContador]);
+  }, [effectiveLocationId, user, isAdminOrContador, locations]);
 
   useEffect(() => {
-    if (user && isAdminOrContador) {
+    if (user && isAdminOrContador && locations.length > 0) {
       fetchContractData();
     }
-  }, [fetchContractData, user, isAdminOrContador]);
+  }, [fetchContractData, user, isAdminOrContador, locations]);
 
   useEffect(() => {
     const derivedEmpresas = new Set<string>();
@@ -369,7 +378,7 @@ export default function ContractsPage() {
           <CardDescription>Visualizar, editar y crear contratos para los profesionales. Consultar historial.</CardDescription>
           {isAdminOrContador && (
             <div className="mt-1 text-sm text-muted-foreground">
-              Viendo: {adminSelectedLocation === 'all' ? 'Todas las sedes' : LOCATIONS.find(l => l.id === adminSelectedLocation)?.name || ''}
+              Viendo: {adminSelectedLocation === 'all' ? 'Todas las sedes' : locations.find(l => l.id === adminSelectedLocation)?.name || ''}
             </div>
           )}
         </CardHeader>
@@ -422,7 +431,7 @@ export default function ContractsPage() {
                     {displayedProfessionals.map(prof => (
                       <TableRow key={prof.id}>
                         <TableCell className="font-medium">{prof.firstName} {prof.lastName}</TableCell>
-                        <TableCell className="hidden md:table-cell">{LOCATIONS.find(l => l.id === prof.locationId)?.name}</TableCell>
+                        <TableCell className="hidden md:table-cell">{locations.find(l => l.id === prof.locationId)?.name}</TableCell>
                         <TableCell>
                           <span className={cn(
                             "text-xs font-medium px-2 py-0.5 rounded-full",
@@ -734,3 +743,5 @@ export default function ContractsPage() {
     </div>
   );
 }
+
+    
