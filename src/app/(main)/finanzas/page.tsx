@@ -24,6 +24,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
+import { FormDescription } from '@/components/ui/form';
 
 type ReportRow = {
   locationId: LocationId;
@@ -361,7 +362,7 @@ export default function FinancesPage() {
         <CardHeader>
             <CardTitle>Gestión de Métodos de Pago por Sede</CardTitle>
             <CardDescription>
-                Añada o elimine los métodos de pago para cada una de sus sedes. Use el formato "Tipo - Detalle" para agrupar en el reporte (ej: "Yape - Cuenta A").
+                Añada o elimine los métodos de pago para cada una de sus sedes.
             </CardDescription>
             <div className="pt-4">
               <Label htmlFor="location-filter">Filtrar por Sede</Label>
@@ -387,10 +388,12 @@ export default function FinancesPage() {
                         <Label htmlFor={`new-method-${location.id}`} className="text-xs">Nuevo Método de Pago</Label>
                         <Input
                             id={`new-method-${location.id}`}
-                            placeholder="Ej: Tarjeta - Scotiabank"
                             value={newMethodInputs[location.id] || ''}
                             onChange={(e) => setNewMethodInputs(prev => ({...prev, [location.id]: e.target.value}))}
                         />
+                         <FormDescription className="text-xs mt-1">
+                            Use el formato "Tipo - Detalle" para agrupar (ej: Yape - Cuenta A).
+                        </FormDescription>
                       </div>
                       <Button onClick={() => handleAddNewMethod(location.id)} size="sm">
                         <PlusCircle className="mr-2 h-4 w-4"/> Añadir
@@ -437,3 +440,5 @@ export default function FinancesPage() {
     </div>
   );
 }
+
+    
