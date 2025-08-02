@@ -127,7 +127,7 @@ export default function ProfessionalsPage() {
 
 
   const fetchProfessionals = useCallback(async () => {
-    if(!user || (!isAdminOrContador && user.role !== USER_ROLES.LOCATION_STAFF) || !effectiveLocationIdForFetch ) { 
+    if(!user || (!isAdminOrContador && user.role !== USER_ROLES.LOCATION_STAFF) ) { 
       setIsLoading(false);
       setAllProfessionals([]);
       return;
@@ -156,12 +156,14 @@ export default function ProfessionalsPage() {
 
   useEffect(() => {
     if (isAdminOrContador) { 
-        fetchProfessionals();
+        if (locations.length > 0 || !effectiveLocationIdForFetch) {
+            fetchProfessionals();
+        }
     } else {
         setIsLoading(false);
         setAllProfessionals([]);
     }
-  }, [fetchProfessionals, isAdminOrContador]);
+  }, [fetchProfessionals, isAdminOrContador, locations.length, effectiveLocationIdForFetch]);
 
   const filteredProfessionals = useMemo(() => {
     return allProfessionals.filter(p =>
