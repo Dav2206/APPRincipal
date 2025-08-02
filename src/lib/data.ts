@@ -1,6 +1,6 @@
 // src/lib/data.ts
 import type { User, Professional, Patient, Service, Appointment, AppointmentFormData, ProfessionalFormData, AppointmentStatus, ServiceFormData, Contract, PeriodicReminder, ImportantNote, PeriodicReminderFormData, ImportantNoteFormData, AddedServiceItem, AppointmentUpdateFormData, Location } from '@/types';
-import { USER_ROLES, APPOINTMENT_STATUS, APPOINTMENT_STATUS_DISPLAY, TIME_SLOTS, DAYS_OF_WEEK } from '@/lib/constants';
+import { USER_ROLES, APPOINTMENT_STATUS, APPOINTMENT_STATUS_DISPLAY, TIME_SLOTS, DAYS_OF_WEEK, LOCATIONS_FALLBACK } from '@/lib/constants';
 import type { LocationId, DayOfWeekId } from '@/lib/constants';
 import { formatISO, parseISO, addDays, setHours, setMinutes, startOfDay, endOfDay, isSameDay as dateFnsIsSameDay, startOfMonth, endOfMonth, subDays, isEqual, isBefore, isAfter, getDate, getYear, getMonth, setMonth, setYear, getHours, addMinutes as dateFnsAddMinutes, isWithinInterval, getDay, format, differenceInCalendarDays, areIntervalsOverlapping, parse } from 'date-fns';
 import { es } from 'date-fns/locale';
@@ -178,19 +178,20 @@ export const getUserByUsername = async (identity: string): Promise<User | undefi
 // --- Locations ---
 export const getLocations = async (): Promise<Location[]> => {
     if (!firestore) {
-        console.warn("[data.ts] getLocations: Firestore not available, returning empty array.");
-        return [];
+        console.warn("[data.ts] getLocations: Firestore not available, returning fallback array.");
+        return [...LOCATIONS_FALLBACK];
     }
     try {
         const locationsCol = collection(firestore, 'sedes');
         const snapshot = await getDocs(query(locationsCol, orderBy("name")));
         if (snapshot.empty) {
-            console.warn("[data.ts] Firestore 'sedes' collection is empty. Seeding with initial data is recommended.");
+            console.warn("[data.ts] Firestore 'sedes' collection is empty. Returning fallback constant.");
+            return [...LOCATIONS_FALLBACK];
         }
         return snapshot.docs.map(docSnap => ({ id: docSnap.id, ...convertDocumentData(docSnap.data()) } as Location));
     } catch (error) {
-        console.error("[data.ts] Error fetching locations from Firestore:", error);
-        return [];
+        console.error("[data.ts] Error fetching locations from Firestore, returning fallback:", error);
+        return [...LOCATIONS_FALLBACK];
     }
 };
 
@@ -214,12 +215,11 @@ export const updateLocationPaymentMethods = async (locationId: LocationId, payme
 
 export async function getProfessionals (locationId?: LocationId): Promise<(Professional & { contractDisplayStatus: ContractDisplayStatus })[]> {
   const currentSystemDate = new Date();
-  const LOCATIONS = await getLocations();
 
   try {
     if (!firestore) {
-      console.warn("[data.ts] getProfessionals: Firestore not available, returning empty array."); // Mensaje actualizado
-      return []; // Retorna un array vacío
+      console.warn("[data.ts] getProfessionals: Firestore not available, returning empty array.");
+      return [];
     }
 
     const professionalsCol = collection(firestore, 'profesionales') as CollectionReference<DocumentData>;
@@ -227,13 +227,10 @@ export async function getProfessionals (locationId?: LocationId): Promise<(Profe
     if (locationId) {
       qConstraints.push(where('locationId', '==', locationId));
     }
-    // qConstraints.push(orderBy("lastName"), orderBy("firstName")); // Esto requiere un índice compuesto
-
+    
     const finalQuery = query(professionalsCol, ...qConstraints);
     const snapshot = await getDocs(finalQuery);
     let fetchedProfessionals = snapshot.docs.map(docSnap => ({ id: docSnap.id, ...convertDocumentData(docSnap.data()) } as Professional));
-
-    // Se elimina el bloque que dependía de snapshot.empty y globalUseMockDatabase
 
     fetchedProfessionals.sort((a, b) => {
       const nameA = `${a.firstName || ''} ${a.lastName || ''}`.toLowerCase();
@@ -247,11 +244,10 @@ export async function getProfessionals (locationId?: LocationId): Promise<(Profe
     }));
 
   } catch (error: any) {
-    console.error("[data.ts] Error in getProfessionals. Query was for locationId:", locationId, "Error:", error); // Mensaje actualizado
+    console.error("[data.ts] Error in getProfessionals. Query was for locationId:", locationId, "Error:", error);
     if (error.message && error.message.includes("firestore/indexes?create_composite")) {
         console.error("[data.ts] Firestore query in getProfessionals requires an index. Please create it using the link in the error message:", error.message);
     }
-    // En caso de error, retorna un array vacío en lugar de datos simulados
     return [];
   }
 }

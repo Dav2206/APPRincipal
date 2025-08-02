@@ -111,15 +111,13 @@ export default function ProfessionalsPage() {
 
 
   const effectiveLocationIdForFetch = useMemo(() => {
-    if (isAdminOrContador) {
-      return adminSelectedLocation === 'all' ? undefined : adminSelectedLocation as LocationId;
-    }
-    return user?.locationId;
+    if (!user || !isAdminOrContador) return undefined;
+    return adminSelectedLocation === 'all' ? undefined : adminSelectedLocation as LocationId;
   }, [user, isAdminOrContador, adminSelectedLocation]);
 
 
  const fetchProfessionals = useCallback(async () => {
-    if (!isAdminOrContador) {
+    if (!isAdminOrContador || locations.length === 0) {
       setIsLoading(false);
       setAllProfessionals([]);
       return;
@@ -134,7 +132,7 @@ export default function ProfessionalsPage() {
       toast({ title: "Error", description: "No se pudieron cargar los profesionales.", variant: "destructive" });
     }
     setIsLoading(false);
-  }, [effectiveLocationIdForFetch, user, toast, isAdminOrContador]);
+  }, [effectiveLocationIdForFetch, user, toast, isAdminOrContador, locations]);
 
   useEffect(() => {
     async function loadInitialData() {
@@ -146,7 +144,7 @@ export default function ProfessionalsPage() {
         }
     }
     loadInitialData();
-  }, [isAdminOrContador, user]);
+  }, [isAdminOrContador]);
   
   useEffect(() => {
       if(isAdminOrContador && locations.length > 0) {
