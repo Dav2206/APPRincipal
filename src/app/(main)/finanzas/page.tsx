@@ -73,19 +73,14 @@ export default function FinancesPage() {
 
   const allAvailablePaymentTypes = useMemo(() => {
     const allTypes = new Set<string>();
-    const locationsToConsider = adminSelectedLocation === 'all'
-      ? locations.map(l => l.id)
-      : [adminSelectedLocation];
-
-    Object.entries(paymentMethodsByLocation).forEach(([locId, methods]) => {
-      if (!adminSelectedLocation || adminSelectedLocation === 'all' || locId === adminSelectedLocation) {
-        methods.forEach(method => {
-          const baseType = method.split(' - ')[0].trim();
-          allTypes.add(baseType);
-        });
-      }
+    
+    // Consider payment methods from the current state, which includes newly added (but unsaved) ones.
+    Object.values(paymentMethodsByLocation).flat().forEach(method => {
+        const baseType = method.split(' - ')[0].trim();
+        allTypes.add(baseType);
     });
 
+    // Also consider payment methods from historical completed appointments
     completedAppointments.forEach(appt => {
       const locationMatches = !adminSelectedLocation || adminSelectedLocation === 'all' || appt.locationId === adminSelectedLocation;
       if (locationMatches && appt.paymentMethod) {
@@ -95,7 +90,7 @@ export default function FinancesPage() {
     });
     
     return Array.from(allTypes).sort((a,b) => a.localeCompare(b));
-  }, [paymentMethodsByLocation, completedAppointments, adminSelectedLocation, locations]);
+  }, [paymentMethodsByLocation, completedAppointments, adminSelectedLocation]);
 
 
   useEffect(() => {
