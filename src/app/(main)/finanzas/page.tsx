@@ -1,7 +1,7 @@
 
 "use client";
 
-import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import type { Appointment, LocationId, PaymentMethod, Location } from '@/types';
 import { useAuth } from '@/contexts/auth-provider';
 import { useAppState } from '@/contexts/app-state-provider';
@@ -51,7 +51,7 @@ export default function FinancesPage() {
   const [selectedMonth, setSelectedMonth] = useState<number>(getMonth(new Date()));
   
   const [paymentMethodsByLocation, setPaymentMethodsByLocation] = useState<Record<LocationId, PaymentMethod[]>>({} as Record<LocationId, PaymentMethod[]>);
-  const newMethodInputsRef = useRef<Record<LocationId, HTMLInputElement | null>>({});
+  const [newMethodInputs, setNewMethodInputs] = useState<Record<LocationId, string>>({});
   const [isSaving, setIsSaving] = useState(false);
   const [hasChanges, setHasChanges] = useState(false);
   const [completedAppointments, setCompletedAppointments] = useState<Appointment[]>([]);
@@ -63,10 +63,13 @@ export default function FinancesPage() {
         const fetchedLocations = await getLocations();
         setLocations(fetchedLocations);
         const initialPaymentMethods: Record<LocationId, PaymentMethod[]> = {} as Record<LocationId, PaymentMethod[]>
+        const initialInputs: Record<LocationId, string> = {};
         fetchedLocations.forEach(loc => {
             initialPaymentMethods[loc.id] = loc.paymentMethods || [];
+            initialInputs[loc.id] = '';
         });
         setPaymentMethodsByLocation(initialPaymentMethods);
+        setNewMethodInputs(initialInputs);
     }
     loadLocations();
   }, []);
@@ -182,10 +185,7 @@ export default function FinancesPage() {
 
 
   const handleAddNewMethod = (locationId: LocationId) => {
-    const inputElement = newMethodInputsRef.current[locationId];
-    if (!inputElement) return;
-
-    const newMethodName = inputElement.value.trim();
+    const newMethodName = newMethodInputs[locationId]?.trim();
     if (!newMethodName) {
       toast({ title: "Nombre inválido", description: "El nombre del método de pago no puede estar vacío.", variant: "destructive" });
       return;
@@ -197,16 +197,14 @@ export default function FinancesPage() {
         return;
     }
 
-    setPaymentMethodsByLocation(prev => {
-        const updatedMethods = [...(prev[locationId] || []), newMethodName as PaymentMethod];
-        return {
-            ...prev,
-            [locationId]: updatedMethods
-        };
-    });
+    setPaymentMethodsByLocation(prev => ({
+        ...prev,
+        [locationId]: [...(prev[locationId] || []), newMethodName as PaymentMethod]
+    }));
+    
     setHasChanges(true);
+    setNewMethodInputs(prev => ({ ...prev, [locationId]: '' }));
     toast({ title: "Método Añadido", description: `"${newMethodName}" se añadió. Recuerde guardar los cambios.` });
-    inputElement.value = '';
   };
   
   const handleRemoveMethod = useCallback((locationId: LocationId, methodToRemove: PaymentMethod) => {
@@ -381,7 +379,8 @@ export default function FinancesPage() {
                         <Label htmlFor={`new-method-${location.id}`} className="text-xs">Nuevo Método de Pago</Label>
                         <Input
                             id={`new-method-${location.id}`}
-                            ref={(el) => (newMethodInputsRef.current[location.id] = el)}
+                            value={newMethodInputs[location.id] || ''}
+                            onChange={(e) => setNewMethodInputs(prev => ({...prev, [location.id]: e.target.value}))}
                         />
                          <p className="text-xs text-muted-foreground mt-1">
                             Use el formato "Tipo - Detalle" para agrupar (ej: Yape - Cuenta A).
@@ -432,5 +431,3 @@ export default function FinancesPage() {
     </div>
   );
 }
-
-    
