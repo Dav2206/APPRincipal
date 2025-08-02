@@ -101,25 +101,21 @@ export default function SchedulePage() {
 
       const dailyAppointments = appointmentsResponse.appointments || [];
       
+      // Corrected logic to determine which professionals to display as columns
       const professionalsForColumns = systemProfs.filter(prof => {
-        if (prof.isManager) return false; 
+        if (prof.isManager) {
+          return false; // Always exclude managers from columns
+        }
         
-        // Is the professional's base location the one we are viewing?
-        const isBasedHere = prof.locationId === actualEffectiveLocationId;
-        
-        // Do they have availability today at their base location?
+        // Get the professional's specific availability for the current date.
+        // This function already considers base schedule and custom overrides (including location overrides).
         const availability = getProfessionalAvailabilityForDate(prof, currentDate);
-        const worksAtBaseLocationToday = isBasedHere && availability && availability.isWorking;
-        
-        // Or, is this professional external but has an appointment scheduled at the location we are viewing?
-        const isExternalWithAppointmentAtEffectiveLocation = !isBasedHere && dailyAppointments.some(appt => 
-            appt.professionalId === prof.id && 
-            appt.isExternalProfessional && 
-            appt.locationId === actualEffectiveLocationId
-        );
-        
-        return worksAtBaseLocationToday || isExternalWithAppointmentAtEffectiveLocation;
+
+        // A professional should be displayed if they are working AND their working location for that specific day
+        // matches the location being viewed in the schedule.
+        return availability?.isWorking && availability.workingLocationId === actualEffectiveLocationId;
       }).sort((a, b) => `${a.firstName} ${a.lastName}`.localeCompare(`${b.firstName} ${b.lastName}`));
+
 
       setWorkingProfessionalsForTimeline(professionalsForColumns);
       
@@ -450,4 +446,3 @@ export default function SchedulePage() {
     </div>
   );
 }
-
