@@ -117,39 +117,40 @@ export default function ProfessionalsPage() {
 
 
   const fetchProfessionals = useCallback(async () => {
-    if (!isAdminOrContador) {
-        setIsLoading(false);
-        return;
+    if (!isAdminOrContador || locations.length === 0) {
+      setIsLoading(false);
+      return;
     }
     setIsLoading(true);
     try {
-        const profsToSet = await getProfessionals(effectiveLocationIdForFetch);
-        setAllProfessionals(profsToSet || []);
+      const profsToSet = await getProfessionals(effectiveLocationIdForFetch);
+      setAllProfessionals(profsToSet || []);
     } catch (error) {
-        console.error("Failed to fetch professionals:", error);
-        toast({ title: "Error", description: "No se pudieron cargar los profesionales.", variant: "destructive" });
-        setAllProfessionals([]);
+      console.error("Failed to fetch professionals:", error);
+      toast({ title: "Error", description: "No se pudieron cargar los profesionales.", variant: "destructive" });
+      setAllProfessionals([]);
     } finally {
-        setIsLoading(false);
+      setIsLoading(false);
     }
-  }, [effectiveLocationIdForFetch, isAdminOrContador, toast]);
+  }, [effectiveLocationIdForFetch, isAdminOrContador, toast, locations]);
   
 
   useEffect(() => {
     async function loadInitialData() {
-        if(isAdminOrContador){
-            setIsLoading(true);
-            const fetchedLocations = await getLocations();
-            setLocations(fetchedLocations);
-            // Now fetch professionals since locations are loaded
-            await fetchProfessionals();
-            setIsLoading(false);
-        } else {
-            setIsLoading(false);
-        }
+      setIsLoading(true);
+      const fetchedLocations = await getLocations();
+      setLocations(fetchedLocations);
+      // Let the fetchProfessionals hook handle its own loading state based on locations now being set
+      setIsLoading(false); 
     }
     loadInitialData();
-  }, [isAdminOrContador, fetchProfessionals]);
+  }, []);
+
+  useEffect(() => {
+    if (locations.length > 0) {
+      fetchProfessionals();
+    }
+  }, [locations, fetchProfessionals]);
 
 
   const filteredProfessionals = useMemo(() => {
