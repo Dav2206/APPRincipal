@@ -1,11 +1,11 @@
 
 "use client";
 
-import type { Appointment, Service, AppointmentStatus } from '@/types';
+import type { Appointment, Service, AppointmentStatus, Professional, Location } from '@/types';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { APPOINTMENT_STATUS, USER_ROLES, SERVICES as ALL_SERVICES_CONSTANTS, APPOINTMENT_STATUS_DISPLAY, LOCATIONS } from '@/lib/constants';
+import { APPOINTMENT_STATUS, USER_ROLES, SERVICES as ALL_SERVICES_CONSTANTS, APPOINTMENT_STATUS_DISPLAY } from '@/lib/constants';
 import { format, parseISO } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { CalendarIcon, ClockIcon, UserIcon, StethoscopeIcon, DollarSignIcon, EditIcon, Info, Paperclip, ShoppingBag, Shuffle, Navigation } from 'lucide-react';
@@ -13,8 +13,7 @@ import { useAuth } from '@/contexts/auth-provider';
 import React, { useState, useEffect, useRef } from 'react';
 import Image from 'next/image';
 import { AppointmentEditDialog } from './appointment-edit-dialog';
-import type { Professional } from '@/types';
-import { getProfessionals } from '@/lib/data';
+import { getProfessionals, getLocations } from '@/lib/data';
 
 import { Form, FormField } from "@/components/ui/form";
 import { useForm } from 'react-hook-form';
@@ -36,6 +35,7 @@ const AppointmentCardComponent = ({ appointment, onUpdate, onImageClick }: Appoi
   const { user } = useAuth();
   const [isUpdateModalOpen, setIsUpdateModalOpen] = useState(false);
   const [professionalsForDisplay, setProfessionalsForDisplay] = useState<Professional[]>([]);
+  const [locations, setLocations] = useState<Location[]>([]);
   const [isLoadingProfessionals, setIsLoadingProfessionals] = useState(false);
   const { toast } = useToast();
 
@@ -48,24 +48,27 @@ const AppointmentCardComponent = ({ appointment, onUpdate, onImageClick }: Appoi
   });
 
   useEffect(() => {
-    async function loadProfessionals() {
+    async function loadData() {
         if (user?.locationId || user?.role === USER_ROLES.ADMIN || user?.role === USER_ROLES.CONTADOR) {
             setIsLoadingProfessionals(true);
             try {
-                // If it's an external professional, we might need to fetch from their origin location
-                // For simplicity, ensure current location's professionals are always available for dropdowns in edit.
-                const profs = await getProfessionals(appointment.locationId);
+                const [profs, locs] = await Promise.all([
+                  getProfessionals(appointment.locationId),
+                  getLocations()
+                ]);
                 setProfessionalsForDisplay(profs);
+                setLocations(locs);
             } catch (error) {
-                console.error("Failed to load professionals for appointment card:", error);
+                console.error("Failed to load data for appointment card:", error);
                 setProfessionalsForDisplay([]);
+                setLocations([]);
             } finally {
                 setIsLoadingProfessionals(false);
             }
         }
     }
-    if (!appointment.isTravelBlock) { // Don't load professionals for travel blocks as they might not be editable here
-        loadProfessionals();
+    if (!appointment.isTravelBlock) { 
+        loadData();
     }
   }, [user, appointment.locationId, appointment.isTravelBlock]);
 
@@ -124,10 +127,10 @@ const AppointmentCardComponent = ({ appointment, onUpdate, onImageClick }: Appoi
   };
 
   if (appointment.isTravelBlock) {
-    const travelLocation = LOCATIONS.find(l => l.id === appointment.locationId);
+    const travelLocation = locations.find(l => l.id === appointment.locationId);
     const travelOriginLocationId = appointment.externalProfessionalOriginLocationId || appointment.professional?.locationId;
-    const originLocationName = LOCATIONS.find(l => l.id === travelOriginLocationId)?.name || 'Origen Desc.';
-    const destinationLocationName = LOCATIONS.find(l => l.id === appointment.locationId)?.name || 'Destino Desc.';
+    const originLocationName = locations.find(l => l.id === travelOriginLocationId)?.name || 'Origen Desc.';
+    const destinationLocationName = locations.find(l => l.id === appointment.locationId)?.name || 'Destino Desc.';
     
     let travelDescription = appointment.bookingObservations || "Traslado programado";
     if (appointment.bookingObservations?.includes("Traslado a")) {
@@ -208,7 +211,7 @@ const AppointmentCardComponent = ({ appointment, onUpdate, onImageClick }: Appoi
                 <UserIcon className="text-primary" />
                 {appointment.patient?.firstName} {appointment.patient?.lastName}
               </CardTitle>
-              <CardDescription>{appointment.service?.name} <span className="text-xs text-muted-foreground">({LOCATIONS.find(l=>l.id === appointment.locationId)?.name})</span></CardDescription>
+              <CardDescription>{appointment.service?.name} <span className="text-xs text-muted-foreground">({locations.find(l=>l.id === appointment.locationId)?.name})</span></CardDescription>
             </div>
             <Badge
               variant={getStatusBadgeVariant(appointment.status)}
@@ -233,7 +236,7 @@ const AppointmentCardComponent = ({ appointment, onUpdate, onImageClick }: Appoi
               <span>Atendido por: {appointment.professional.firstName} {appointment.professional.lastName}
                 {appointment.isExternalProfessional && appointment.externalProfessionalOriginLocationId && (
                   <Badge variant="outline" className="ml-1 text-xs p-1 h-fit bg-orange-100 text-orange-700 border-orange-300">
-                    <Shuffle size={12} className="mr-1"/> Traslado: {LOCATIONS.find(l => l.id === appointment.externalProfessionalOriginLocationId)?.name}
+                    <Shuffle size={12} className="mr-1"/> Traslado: {locations.find(l => l.id === appointment.externalProfessionalOriginLocationId)?.name}
                   </Badge>
                 )}
               </span>
@@ -323,3 +326,5 @@ const AppointmentCardComponent = ({ appointment, onUpdate, onImageClick }: Appoi
 }
 
 export const AppointmentCard = React.memo(AppointmentCardComponent);
+
+    

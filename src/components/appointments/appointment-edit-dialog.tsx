@@ -2,8 +2,8 @@
 
 "use client";
 
-import type { Appointment, Service, AppointmentStatus, Professional } from '@/types';
-import { PAYMENT_METHODS, USER_ROLES, APPOINTMENT_STATUS_DISPLAY, LOCATIONS, TIME_SLOTS, APPOINTMENT_STATUS } from '@/lib/constants';
+import type { Appointment, Service, AppointmentStatus, Professional, Location } from '@/types';
+import { PAYMENT_METHODS, USER_ROLES, APPOINTMENT_STATUS_DISPLAY, TIME_SLOTS, APPOINTMENT_STATUS } from '@/lib/constants';
 import { format, parseISO, setHours, setMinutes, formatISO } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { CameraIcon, Loader2, PlusCircle, Trash2, ShoppingBag, ConciergeBell, Clock, CalendarIcon as CalendarIconLucide, XCircle, RefreshCcw } from 'lucide-react';
@@ -38,7 +38,7 @@ import { useForm, useFieldArray } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { AppointmentUpdateSchema } from '@/lib/schemas';
 import { Form, FormControl, FormItem, FormLabel, FormMessage, FormField } from "@/components/ui/form";
-import { getProfessionals, updateAppointment as updateAppointmentData, getServices, deleteAppointment as deleteAppointmentData } from '@/lib/data';
+import { getProfessionals, updateAppointment as updateAppointmentData, getServices, deleteAppointment as deleteAppointmentData, getLocations } from '@/lib/data';
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useToast } from '@/hooks/use-toast';
 import Image from 'next/image';
@@ -67,6 +67,7 @@ export function AppointmentEditDialog({ appointment, isOpen, onOpenChange, onApp
   const { toast } = useToast();
   const [professionals, setProfessionals] = useState<Professional[]>([]);
   const [allServices, setAllServices] = useState<Service[] | null>(null);
+  const [locations, setLocations] = useState<Location[]>([]);
   const [isLoadingServices, setIsLoadingServices] = useState(true);
   const [isUploadingImage, setIsUploadingImage] = useState(false);
   const [isSubmittingForm, setIsSubmittingForm] = useState(false);
@@ -83,15 +84,10 @@ export function AppointmentEditDialog({ appointment, isOpen, onOpenChange, onApp
   const [videoDevices, setVideoDevices] = useState<MediaDeviceInfo[]>([]);
   const [currentDeviceIndex, setCurrentDeviceIndex] = useState(0);
 
-  // Payment methods are now location-specific, so we need to fetch/determine them
-  // For simplicity, we'll mimic the structure used in finances page.
-  // In a real app, this might come from a shared context or a direct fetch.
   const paymentMethodsForLocation = useMemo(() => {
-    const locConfig = LOCATIONS.find(l => l.id === appointment.locationId);
-    // This is a simplification. A real app would have a DB source for this.
-    // We assume the default list if nothing specific is configured.
+    const locConfig = locations.find(l => l.id === appointment.locationId);
     return locConfig?.paymentMethods || ['Efectivo', 'Tarjeta de Débito', 'Yape/Plin'];
-  }, [appointment.locationId]);
+  }, [appointment.locationId, locations]);
 
 
   const form = useForm<AppointmentUpdateFormData>({
@@ -209,16 +205,19 @@ export function AppointmentEditDialog({ appointment, isOpen, onOpenChange, onApp
         const locationForProfs = appointment.locationId || ( (user?.role === USER_ROLES.ADMIN || user?.role === USER_ROLES.CONTADOR) ? undefined : user?.locationId);
         
         try {
-          const [profsData, servicesDataFromApi] = await Promise.all([
+          const [profsData, servicesDataFromApi, locationsData] = await Promise.all([
             getProfessionals(locationForProfs),
-            getServices()
+            getServices(),
+            getLocations()
           ]);
           setProfessionals(profsData || []);
           setAllServices(servicesDataFromApi || []);
+          setLocations(locationsData || []);
         } catch (error) {
             console.error("Failed to load data for edit dialog:", error);
             setProfessionals([]);
             setAllServices([]);
+            setLocations([]);
             toast({ title: "Error", description: "No se pudieron cargar los datos necesarios para editar.", variant: "destructive"});
         } finally {
             setIsLoadingServices(false);
@@ -907,3 +906,5 @@ export function AppointmentEditDialog({ appointment, isOpen, onOpenChange, onApp
     </>
   );
 }
+
+    

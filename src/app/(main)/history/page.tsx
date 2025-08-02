@@ -1,12 +1,12 @@
 
 "use client";
 
-import type { Appointment, Patient } from '@/types';
+import type { Appointment, Patient, Location } from '@/types';
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { useAuth } from '@/contexts/auth-provider';
 import { useAppState } from '@/contexts/app-state-provider';
-import { getAppointments, getPatients } from '@/lib/data';
-import { LOCATIONS, USER_ROLES, SERVICES, LocationId, ServiceId, APPOINTMENT_STATUS, APPOINTMENT_STATUS_DISPLAY } from '@/lib/constants';
+import { getAppointments, getPatients, getLocations } from '@/lib/data';
+import { USER_ROLES, SERVICES, LocationId, ServiceId, APPOINTMENT_STATUS, APPOINTMENT_STATUS_DISPLAY } from '@/lib/constants';
 import { AppointmentCard } from '@/components/appointments/appointment-card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -35,6 +35,8 @@ export default function HistoryPage() {
   
   const [allPatients, setAllPatients] = useState<Patient[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [locations, setLocations] = useState<Location[]>([]);
+
 
   const [filterDate, setFilterDate] = useState<Date | undefined>(undefined);
   const [filterPatientName, setFilterPatientName] = useState('');
@@ -59,13 +61,17 @@ export default function HistoryPage() {
       setCurrentPage(1); 
       setDisplayedAppointments([]); 
 
-      const patientsData = await getPatients();
-      setAllPatients(patientsData.patients); // Ensure we're using the patients array
+      const [patientsData, locationsData, baseHistoryResult] = await Promise.all([
+        getPatients(),
+        getLocations(),
+        getAppointments({
+          locationId: effectiveLocationId,
+          statuses: [APPOINTMENT_STATUS.COMPLETED, APPOINTMENT_STATUS.CANCELLED_CLIENT, APPOINTMENT_STATUS.CANCELLED_STAFF, APPOINTMENT_STATUS.NO_SHOW],
+        })
+      ]);
 
-      const baseHistoryResult = await getAppointments({
-        locationId: effectiveLocationId,
-        statuses: [APPOINTMENT_STATUS.COMPLETED, APPOINTMENT_STATUS.CANCELLED_CLIENT, APPOINTMENT_STATUS.CANCELLED_STAFF, APPOINTMENT_STATUS.NO_SHOW],
-      });
+      setAllPatients(patientsData.patients);
+      setLocations(locationsData);
       setAllLocationHistory((baseHistoryResult.appointments || []).sort((a, b) => parseISO(b.appointmentDateTime).getTime() - parseISO(a.appointmentDateTime).getTime()));
       setIsLoading(false);
     }
@@ -189,7 +195,7 @@ export default function HistoryPage() {
           <CardDescription>Consulta citas pasadas. Utiliza los filtros para refinar tu búsqueda.</CardDescription>
            {isAdminOrContador && (
             <div className="mt-2 text-sm text-muted-foreground">
-              Viendo: {adminSelectedLocation === 'all' ? 'Todas las sedes' : LOCATIONS.find(l => l.id === adminSelectedLocation)?.name || ''}
+              Viendo: {adminSelectedLocation === 'all' ? 'Todas las sedes' : locations.find(l => l.id === adminSelectedLocation)?.name || ''}
             </div>
           )}
         </CardHeader>
