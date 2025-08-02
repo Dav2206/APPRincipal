@@ -84,40 +84,52 @@ export default function SchedulePage() {
       setAllSystemProfessionals([]);
       return;
     }
-
+  
     setIsLoading(true);
-
+  
     try {
-      // Step 1: Fetch ALL professionals to determine who is working at the target location.
-      const allProfsResponse = await getProfessionals();
+      // Step 1: Fetch appointments and all professionals in parallel.
+      const [appointmentsResponse, allProfsResponse] = await Promise.all([
+        getAppointments({
+          locationId: actualEffectiveLocationId,
+          date: currentDate,
+          statuses: [APPOINTMENT_STATUS.BOOKED, APPOINTMENT_STATUS.CONFIRMED, APPOINTMENT_STATUS.COMPLETED],
+        }),
+        getProfessionals()
+      ]);
+  
+      const dailyAppointments = appointmentsResponse.appointments || [];
       const systemProfs = allProfsResponse || [];
       setAllSystemProfessionals(systemProfs);
-
+      setAppointments(dailyAppointments.sort((a,b) => parseISO(a.appointmentDateTime).getTime() - parseISO(b.appointmentDateTime).getTime()));
+  
       // Step 2: Determine which professionals to display as columns in the timeline.
-      const professionalsForColumns = systemProfs.filter(prof => {
-        if (prof.isManager) {
-          return false; // Always exclude managers from columns
-        }
+      const professionalsForTimelineMap = new Map<string, Professional>();
+  
+      // Add professionals based on their scheduled availability (base or override)
+      systemProfs.forEach(prof => {
+        if (prof.isManager) return;
         const availability = getProfessionalAvailabilityForDate(prof, currentDate);
-        return availability?.isWorking && availability.workingLocationId === actualEffectiveLocationId;
-      }).sort((a, b) => `${a.firstName} ${a.lastName}`.localeCompare(`${b.firstName} ${b.lastName}`));
-
-      setWorkingProfessionalsForTimeline(professionalsForColumns);
-
-      // Step 3: Fetch all appointments for the effective location and date.
-      const appointmentsResponse = await getAppointments({
-        locationId: actualEffectiveLocationId,
-        date: currentDate,
-        statuses: [APPOINTMENT_STATUS.BOOKED, APPOINTMENT_STATUS.CONFIRMED, APPOINTMENT_STATUS.COMPLETED],
+        if (availability?.isWorking && availability.workingLocationId === actualEffectiveLocationId) {
+          professionalsForTimelineMap.set(prof.id, prof);
+        }
+      });
+  
+      // Add professionals who are external and have appointments at this location
+      dailyAppointments.forEach(appt => {
+        if (appt.isExternalProfessional && appt.professionalId && !professionalsForTimelineMap.has(appt.professionalId)) {
+          const externalProf = systemProfs.find(p => p.id === appt.professionalId);
+          if (externalProf && !externalProf.isManager) {
+            professionalsForTimelineMap.set(externalProf.id, externalProf);
+          }
+        }
       });
       
-      const dailyAppointments = appointmentsResponse.appointments || [];
-      
-      const displayableAppointments = dailyAppointments
-        .sort((a,b) => parseISO(a.appointmentDateTime).getTime() - parseISO(b.appointmentDateTime).getTime());
-      
-      setAppointments(displayableAppointments);
-
+      const professionalsForColumns = Array.from(professionalsForTimelineMap.values())
+        .sort((a, b) => `${a.firstName} ${a.lastName}`.localeCompare(`${b.firstName} ${b.lastName}`));
+  
+      setWorkingProfessionalsForTimeline(professionalsForColumns);
+  
     } catch (error) {
       console.error("[SchedulePage] Error fetching schedule data:", error);
       toast({
