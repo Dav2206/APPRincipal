@@ -1386,8 +1386,9 @@ export function getProfessionalAvailabilityForDate(
   );
 
   if (customOverride) {
+    const workingLocation = customOverride.locationId || professional.locationId;
     if (!customOverride.isWorking) {
-      return { startTime: '', endTime: '', isWorking: false, reason: `Descansando (Anulación: ${customOverride.notes || 'Sin especificar'})`, notes: customOverride.notes || undefined, workingLocationId: customOverride.locationId ?? professional.locationId };
+      return { startTime: '', endTime: '', isWorking: false, reason: `Descansando (Anulación: ${customOverride.notes || 'Sin especificar'})`, notes: customOverride.notes || undefined, workingLocationId: workingLocation };
     }
     if (customOverride.startTime && customOverride.endTime) {
       return {
@@ -1396,7 +1397,7 @@ export function getProfessionalAvailabilityForDate(
         isWorking: true,
         reason: `Horario Especial (Anulación: ${customOverride.notes || 'Sin especificar'})`,
         notes: customOverride.notes || undefined,
-        workingLocationId: customOverride.locationId ?? professional.locationId,
+        workingLocationId: workingLocation,
       }; 
     }
   }
@@ -1563,5 +1564,6 @@ export async function deleteImportantNote(noteId: string): Promise<boolean> {
   }
 }
 // --- End Important Notes ---
+
 
 

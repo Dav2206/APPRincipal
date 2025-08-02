@@ -1,4 +1,5 @@
 
+
 "use client";
 
 import type { Appointment, Professional, Location } from '@/types';
@@ -87,20 +88,17 @@ export default function SchedulePage() {
     setIsLoading(true);
 
     try {
-      // Step 1: Fetch ALL professionals first to determine who is working at the target location.
+      // Step 1: Fetch ALL professionals to determine who is working at the target location.
       const allProfsResponse = await getProfessionals();
       const systemProfs = allProfsResponse || [];
       setAllSystemProfessionals(systemProfs);
 
       // Step 2: Determine which professionals to display as columns in the timeline.
-      // A professional is displayed if their availability for the day matches the viewing location.
       const professionalsForColumns = systemProfs.filter(prof => {
         if (prof.isManager) {
           return false; // Always exclude managers from columns
         }
         const availability = getProfessionalAvailabilityForDate(prof, currentDate);
-        // This is the key logic: show the professional if their working location for THIS specific day
-        // is the location we are currently viewing in the schedule.
         return availability?.isWorking && availability.workingLocationId === actualEffectiveLocationId;
       }).sort((a, b) => `${a.firstName} ${a.lastName}`.localeCompare(`${b.firstName} ${b.lastName}`));
 
