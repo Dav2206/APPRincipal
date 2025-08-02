@@ -221,17 +221,7 @@ export function AppointmentForm({
 
   useEffect(() => {
     if (!isOpen || !watchAppointmentDate || !watchAppointmentTime || !watchServiceId || servicesList.length === 0 || isLoadingAppointments ) {
-      let defaultProfsToShow: Professional[] = [];
-      if(watchSearchExternal && Array.isArray(allSystemProfessionals)) {
-        defaultProfsToShow = allSystemProfessionals;
-      } else if (Array.isArray(professionalsForCurrentLocationProp)){
-        defaultProfsToShow = professionalsForCurrentLocationProp.filter(prof => prof.locationId === watchLocationId);
-      }
-      
-      setAvailableProfessionalsForTimeSlot(defaultProfsToShow.filter(prof => {
-        const availability = getProfessionalAvailabilityForDate(prof, watchAppointmentDate);
-        return availability !== null && availability.isWorking && availability.startTime !== '' && availability.endTime !== '';
-      }));
+      setAvailableProfessionalsForTimeSlot([]);
       setSlotAvailabilityMessage('');
       return;
     }
@@ -251,19 +241,21 @@ export function AppointmentForm({
     if(watchSearchExternal && Array.isArray(allSystemProfessionals)){
         professionalsToConsider = allSystemProfessionals;
     } else if (Array.isArray(professionalsForCurrentLocationProp)) {
-        professionalsToConsider = professionalsForCurrentLocationProp.filter(p => p.locationId === watchLocationId);
+        professionalsToConsider = professionalsForCurrentLocationProp;
     }
 
     const availableProfs: Professional[] = [];
     for (const prof of professionalsToConsider) {
-       if (!watchSearchExternal && prof.locationId !== watchLocationId) {
-        continue;
-      }
-      const dailyAvailability = getProfessionalAvailabilityForDate(prof, watchAppointmentDate);
+       const dailyAvailability = getProfessionalAvailabilityForDate(prof, watchAppointmentDate);
 
-      if (!dailyAvailability || !dailyAvailability.isWorking || !dailyAvailability.startTime || !dailyAvailability.endTime) {
-        continue;
-      }
+       if (!dailyAvailability || !dailyAvailability.isWorking || !dailyAvailability.startTime || !dailyAvailability.endTime) {
+         continue;
+       }
+
+       // Check if the professional should be considered for THIS location on THIS day
+       if (dailyAvailability.workingLocationId !== watchLocationId) {
+         continue;
+       }
 
       const profWorkStartTime = parse(`${format(watchAppointmentDate, 'yyyy-MM-dd')} ${dailyAvailability.startTime}`, 'yyyy-MM-dd HH:mm', new Date());
       const profWorkEndTime = parse(`${format(watchAppointmentDate, 'yyyy-MM-dd')} ${dailyAvailability.endTime}`, 'yyyy-MM-dd HH:mm', new Date());
