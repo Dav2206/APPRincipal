@@ -69,6 +69,9 @@ export default function ProfessionalsPage() {
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [editingProfessional, setEditingProfessional] = useState<(Professional & { contractDisplayStatus: ContractDisplayStatus }) | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
+  
+  const [scheduleViewDate, setScheduleViewDate] = useState<Date>(new Date());
+
 
   const defaultBaseWorkSchedule: ProfessionalFormData['workSchedule'] = {
     monday: { isWorking: true, startTime: '10:00', endTime: '19:00' },
@@ -284,44 +287,24 @@ export default function ProfessionalsPage() {
     setCurrentPage(prev => prev + 1);
   };
   
-  const calculateNextGeneralDayOff = useCallback((prof: Professional, referenceDate: Date): Date | null => {
-    for (let i = 0; i <= 30; i++) {
-      const checkDate = dateFnsAddDays(referenceDate, i);
-      const availability = getProfessionalAvailabilityForDate(prof, checkDate);
-      if (!availability || (availability && !availability.isWorking && !availability.startTime && !availability.endTime)) {
-        return checkDate;
-      }
-    }
-    return null;
-  }, []);
+  const formatWorkScheduleDisplay = useCallback((prof: Professional, date: Date) => {
+    const availability = getProfessionalAvailabilityForDate(prof, date);
   
-  const formatWorkScheduleDisplay = useCallback((prof: Professional) => {
-    const today = startOfDay(new Date());
-    const availabilityToday = getProfessionalAvailabilityForDate(prof, today);
-  
-    let todayStr = "Hoy: ";
-    if (availabilityToday && availabilityToday.isWorking && availabilityToday.startTime && availabilityToday.endTime) {
-      todayStr += `${availabilityToday.startTime}-${availabilityToday.endTime}`;
-      if (availabilityToday.notes && availabilityToday.notes.trim() !== "") {
-        todayStr += ` (${availabilityToday.notes.substring(0,30)}${availabilityToday.notes.length > 30 ? '...' : ''})`;
-      } else if (availabilityToday.reason && availabilityToday.reason.trim() !== "" && availabilityToday.reason !== "Horario base") {
-        todayStr += ` (${availabilityToday.reason})`;
-      }
+    if (availability && availability.isWorking && availability.startTime && availability.endTime) {
+        let locationName = locations.find(l => l.id === availability.workingLocationId)?.name;
+        if (!locationName) {
+            locationName = locations.find(l => l.id === prof.locationId)?.name || 'Sede Desc.';
+        }
+
+        let scheduleStr = `${availability.startTime}-${availability.endTime} en ${locationName}`;
+        if (availability.reason && availability.reason !== 'Horario base') {
+             scheduleStr += ` (Especial)`;
+        }
+        return <span className="text-green-600">{scheduleStr}</span>;
     } else {
-      todayStr += availabilityToday?.reason || "Descansando";
+        return <span className="text-red-600">{availability?.reason || 'Descansando'}</span>;
     }
-  
-    const nextDayOffDate = calculateNextGeneralDayOff(prof, today);
-    let nextDayOffDisplayStr = "";
-    if (nextDayOffDate) {
-      const formattedDate = format(nextDayOffDate, "EEEE, d 'de' MMMM", { locale: es });
-      nextDayOffDisplayStr = ` | Próx. Desc.: ${formattedDate.charAt(0).toUpperCase() + formattedDate.slice(1)}`;
-    } else {
-      nextDayOffDisplayStr = " | Próx. Desc.: No definido próximamente";
-    }
-    
-    return `${todayStr}${nextDayOffDisplayStr}`;
-  }, [calculateNextGeneralDayOff]);
+  }, [locations]);
 
   if (!user) {
     return (
@@ -365,17 +348,43 @@ export default function ProfessionalsPage() {
           )}
         </CardHeader>
         <CardContent>
-          <div className="mb-4">
-            <div className="relative">
-              <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-              <Input
-                type="search"
-                placeholder="Buscar profesionales por nombre o teléfono..."
-                value={searchTerm}
-                onChange={(e) => { setSearchTerm(e.target.value); setCurrentPage(1); }}
-                className="pl-8 w-full"
-              />
-            </div>
+          <div className="mb-4 flex flex-col sm:flex-row gap-4">
+              <div className="relative flex-grow">
+                <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+                <Input
+                  type="search"
+                  placeholder="Buscar profesionales por nombre o teléfono..."
+                  value={searchTerm}
+                  onChange={(e) => { setSearchTerm(e.target.value); setCurrentPage(1); }}
+                  className="pl-8 w-full"
+                />
+              </div>
+              <div className="flex items-center gap-2">
+                <Label htmlFor="schedule-view-date" className="text-sm font-medium whitespace-nowrap">Ver estado para:</Label>
+                 <Popover>
+                    <PopoverTrigger asChild>
+                    <Button
+                        id="schedule-view-date"
+                        variant={"outline"}
+                        className={cn(
+                        "w-[240px] justify-start text-left font-normal",
+                        !scheduleViewDate && "text-muted-foreground"
+                        )}
+                    >
+                        <CalendarIconLucide className="mr-2 h-4 w-4" />
+                        {scheduleViewDate ? format(scheduleViewDate, "PPP", {locale: es}) : <span>Seleccionar fecha</span>}
+                    </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-auto p-0">
+                    <Calendar
+                        mode="single"
+                        selected={scheduleViewDate}
+                        onSelect={(date) => setScheduleViewDate(date || new Date())}
+                        initialFocus
+                    />
+                    </PopoverContent>
+                </Popover>
+              </div>
           </div>
           {isLoading ? <LoadingState/> : (
             <>
@@ -387,8 +396,7 @@ export default function ProfessionalsPage() {
                   <TableHeader>
                     <TableRow>
                       <TableHead>Nombre Completo</TableHead>
-                      <TableHead className="hidden md:table-cell">Sede</TableHead>
-                      <TableHead className="hidden lg:table-cell">Horario y Próximo Descanso</TableHead>
+                      <TableHead className="hidden lg:table-cell">Horario y Sede del Día</TableHead>
                       <TableHead className="hidden xl:table-cell">Teléfono</TableHead>
                       <TableHead className="hidden md:table-cell">Estado Contrato</TableHead>
                        <TableHead className="hidden md:table-cell">Empresa</TableHead>
@@ -404,8 +412,7 @@ export default function ProfessionalsPage() {
                           {prof.firstName} {prof.lastName}
                           {prof.isManager && <Badge variant="secondary" className="ml-2 text-xs">Gerente</Badge>}
                         </TableCell>
-                        <TableCell className="hidden md:table-cell">{locations.find(l => l.id === prof.locationId)?.name}</TableCell>
-                        <TableCell className="hidden lg:table-cell text-xs">{formatWorkScheduleDisplay(prof)}</TableCell>
+                        <TableCell className="hidden lg:table-cell text-xs">{formatWorkScheduleDisplay(prof, scheduleViewDate)}</TableCell>
                         <TableCell className="hidden xl:table-cell">{prof.phone || 'N/A'}</TableCell>
                         <TableCell className="hidden md:table-cell text-xs">
                           <span className={cn(
@@ -609,14 +616,19 @@ export default function ProfessionalsPage() {
                     Registrar Días de Descanso / Horarios Especiales
                   </AccordionTrigger>
                   <AccordionContent className="space-y-4 pt-2">
-                    <div className="flex items-center justify-center gap-2">
-                      <Button type="button" variant="ghost" size="icon" className="h-6 w-6" onClick={() => setOverrideDisplayDate(prev => subMonths(prev, 1))}>
-                          <ChevronLeft className="h-4 w-4" />
-                      </Button>
-                      <span className="text-sm font-medium text-muted-foreground capitalize">{format(overrideDisplayDate, 'MMMM yyyy', { locale: es })}</span>
-                      <Button type="button" variant="ghost" size="icon" className="h-6 w-6" onClick={() => setOverrideDisplayDate(prev => addMonths(prev, 1))}>
-                          <ChevronRight className="h-4 w-4" />
-                      </Button>
+                    <div className="flex items-center justify-between">
+                         <h4 className="text-md font-semibold mb-2">
+                            Horarios para {format(overrideDisplayDate, 'MMMM yyyy', { locale: es })}
+                        </h4>
+                        <div className="flex items-center justify-center gap-2">
+                            <Button type="button" variant="ghost" size="icon" className="h-6 w-6" onClick={() => setOverrideDisplayDate(prev => subMonths(prev, 1))}>
+                                <ChevronLeft className="h-4 w-4" />
+                            </Button>
+                            <span className="text-sm font-medium text-muted-foreground capitalize">{format(overrideDisplayDate, 'MMMM yyyy', { locale: es })}</span>
+                            <Button type="button" variant="ghost" size="icon" className="h-6 w-6" onClick={() => setOverrideDisplayDate(prev => addMonths(prev, 1))}>
+                                <ChevronRight className="h-4 w-4" />
+                            </Button>
+                        </div>
                     </div>
                     <FormDescription className="text-xs px-1">
                       Utilice esta sección para marcar días específicos en los que el profesional no trabajará o si tendrá un horario diferente al de su base semanal.
@@ -755,3 +767,6 @@ export default function ProfessionalsPage() {
   );
 }
 
+
+
+    
