@@ -1032,9 +1032,8 @@ export async function addAppointment(data: AppointmentFormData): Promise<Appoint
       const professionalsToConsider = await getProfessionals(data.searchExternal ? undefined : data.locationId);
       
       const appointmentsForDay = await getAppointments({
-        locationId: data.locationId,
         date: data.appointmentDate,
-        statuses: [APPOINTMENT_STATUS.BOOKED, APPOINTMENT_STATUS.CONFIRMED]
+        statuses: [APPOINTMENT_STATUS.BOOKED, APPOINTMENT_STATUS.CONFIRMED, APPOINTMENT_STATUS.COMPLETED] // Widen status check
       });
 
       const proposedEndTime = dateFnsAddMinutes(proposedStartTime, totalDurationForSlotCheck);
@@ -1045,10 +1044,8 @@ export async function addAppointment(data: AppointmentFormData): Promise<Appoint
 
         if (!dailyAvailability || !dailyAvailability.isWorking || !dailyAvailability.startTime || !dailyAvailability.endTime) continue;
         
-        // This professional is working, now check if they are working at the target location.
         if (dailyAvailability.workingLocationId !== data.locationId) continue;
         
-
         const profWorkStartTime = parse(`${format(data.appointmentDate, 'yyyy-MM-dd')} ${dailyAvailability.startTime}`, 'yyyy-MM-dd HH:mm', new Date());
         const profWorkEndTime = parse(`${format(data.appointmentDate, 'yyyy-MM-dd')} ${dailyAvailability.endTime}`, 'yyyy-MM-dd HH:mm', new Date());
         
@@ -1566,4 +1563,5 @@ export async function deleteImportantNote(noteId: string): Promise<boolean> {
   }
 }
 // --- End Important Notes ---
+
 
