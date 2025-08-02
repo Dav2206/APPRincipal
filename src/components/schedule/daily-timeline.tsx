@@ -264,7 +264,8 @@ const DailyTimelineComponent = ({ professionals, appointments, timeSlots, onAppo
                                 style={styleProps}
                                 onClick={() => onAppointmentClick?.(block.originalAppointmentData)}
                               >
-                                <Navigation size={14} className="mb-0.5" />
+                                <p className="font-bold text-[11px] leading-tight truncate">{prof.firstName}</p>
+                                <Navigation size={12} className="my-0.5" />
                                 <p className="font-semibold truncate leading-tight text-[10px]">
                                    {block.bookingObservations || 'Traslado'}
                                 </p>
@@ -383,5 +384,3 @@ const DailyTimelineComponent = ({ professionals, appointments, timeSlots, onAppo
 };
 
 export const DailyTimeline = React.memo(DailyTimelineComponent);
-
-    
