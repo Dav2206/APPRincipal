@@ -1,4 +1,3 @@
-
 // src/lib/data.ts
 import type { User, Professional, Patient, Service, Appointment, AppointmentFormData, ProfessionalFormData, AppointmentStatus, ServiceFormData, Contract, PeriodicReminder, ImportantNote, PeriodicReminderFormData, ImportantNoteFormData, AddedServiceItem, AppointmentUpdateFormData, Location } from '@/types';
 import { USER_ROLES, APPOINTMENT_STATUS, APPOINTMENT_STATUS_DISPLAY, TIME_SLOTS, DAYS_OF_WEEK, LOCATIONS_FALLBACK } from '@/lib/constants';
@@ -178,26 +177,34 @@ export const getUserByUsername = async (identity: string): Promise<User | undefi
 
 // --- Locations ---
 export const getLocations = async (): Promise<Location[]> => {
-    // This function will now consistently return the static list
-    // to ensure stability and prevent missing locations.
-    console.log("[data.ts] getLocations: Devolviendo la lista de sedes estática de `constants.ts` para asegurar consistencia.");
-    return [...LOCATIONS_FALLBACK];
+  // This function will now consistently return the static list
+  // to ensure stability and prevent missing locations.
+  console.log(
+    '[data.ts] getLocations: Returning static location list from `constants.ts` to ensure consistency.'
+  );
+  return [...LOCATIONS_FALLBACK];
 };
 
-export const updateLocationPaymentMethods = async (locationId: LocationId, paymentMethods: string[]): Promise<boolean> => {
-    if (!firestore) {
-        console.error("Firestore not initialized for updateLocationPaymentMethods");
-        return false;
-    }
-    try {
-        const docRef = doc(firestore, 'sedes', locationId);
-        // Use setDoc with merge to create the document if it doesn't exist, or update it if it does.
-        await setDoc(docRef, { paymentMethods }, { merge: true });
-        return true;
-    } catch (error) {
-        console.error(`Error updating/setting payment methods for location ${locationId}:`, error);
-        return false;
-    }
+export const updateLocationPaymentMethods = async (
+  locationId: LocationId,
+  paymentMethods: string[]
+): Promise<boolean> => {
+  if (!firestore) {
+    console.error('Firestore not initialized for updateLocationPaymentMethods');
+    return false;
+  }
+  try {
+    const docRef = doc(firestore, 'sedes', locationId);
+    // Use setDoc with merge to create the document if it doesn't exist, or update it if it does.
+    await setDoc(docRef, { paymentMethods }, { merge: true });
+    return true;
+  } catch (error) {
+    console.error(
+      `Error updating/setting payment methods for location ${locationId}:`,
+      error
+    );
+    return false;
+  }
 };
 
 
