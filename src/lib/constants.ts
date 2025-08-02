@@ -1,6 +1,7 @@
 
 
 
+
 // This constant is now used as a fallback.
 export const LOCATIONS_FALLBACK = [
   { id: 'higuereta', name: 'Higuereta', paymentMethods: ['Efectivo', 'Yape/Plin Higuereta', 'Tarjeta Débito Higuereta'] },
