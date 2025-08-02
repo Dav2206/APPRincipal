@@ -24,7 +24,6 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
-import { FormDescription } from '@/components/ui/form';
 
 type ReportRow = {
   locationId: LocationId;
@@ -67,7 +66,7 @@ export default function FinancesPage() {
     async function loadLocations() {
         const fetchedLocations = await getLocations();
         setLocations(fetchedLocations);
-        const initialPaymentMethods: Record<LocationId, PaymentMethod[]> = {} as Record<LocationId, PaymentMethod[]>;
+        const initialPaymentMethods: Record<LocationId, PaymentMethod[]> = {} as Record<LocationId, PaymentMethod[]>);
         fetchedLocations.forEach(loc => {
             initialPaymentMethods[loc.id] = loc.paymentMethods || [];
         });
@@ -391,9 +390,9 @@ export default function FinancesPage() {
                             value={newMethodInputs[location.id] || ''}
                             onChange={(e) => setNewMethodInputs(prev => ({...prev, [location.id]: e.target.value}))}
                         />
-                         <FormDescription className="text-xs mt-1">
+                         <p className="text-xs text-muted-foreground mt-1">
                             Use el formato "Tipo - Detalle" para agrupar (ej: Yape - Cuenta A).
-                        </FormDescription>
+                        </p>
                       </div>
                       <Button onClick={() => handleAddNewMethod(location.id)} size="sm">
                         <PlusCircle className="mr-2 h-4 w-4"/> Añadir
