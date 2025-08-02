@@ -1,6 +1,6 @@
 
 
-import type { LocationId, UserRole, PaymentMethod, AppointmentStatus, DayOfWeekId } from '@/lib/constants';
+import type { LocationId, UserRole, PaymentMethod, AppointmentStatus, DayOfWeekId } from './lib/constants';
 
 export interface BaseEntity {
   id: string;
@@ -215,6 +215,7 @@ export interface PeriodicReminderFormData {
 }
 
 export interface ImportantNote extends BaseEntity {
+  id?: string;
   title: string;
   content: string;
   createdAt?: string; // ISO Date string

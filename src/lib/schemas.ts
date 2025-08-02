@@ -1,8 +1,8 @@
 
 
 import { z } from 'zod';
-import { LOCATIONS, TIME_SLOTS, APPOINTMENT_STATUS_DISPLAY, DAYS_OF_WEEK } from './constants';
-import type { DayOfWeekId } from './constants';
+import { TIME_SLOTS, APPOINTMENT_STATUS_DISPLAY, DAYS_OF_WEEK } from '@/lib/constants';
+import type { DayOfWeekId, LocationId } from '@/lib/constants';
 import { getDay, differenceInCalendarDays, parseISO } from 'date-fns';
 
 export const LoginSchema = z.object({
@@ -11,7 +11,7 @@ export const LoginSchema = z.object({
 });
 export type LoginFormData = z.infer<typeof LoginSchema>;
 
-const locationIds = LOCATIONS.map(loc => loc.id);
+// const locationIds = LOCATIONS.map(loc => loc.id); // Replaced with a more generic string check
 // const paymentMethodValues = PAYMENT_METHODS.map(pm => pm); // No longer a strict enum
 const appointmentStatusKeys = Object.keys(APPOINTMENT_STATUS_DISPLAY) as (keyof typeof APPOINTMENT_STATUS_DISPLAY)[];
 const dayOfWeekIds = DAYS_OF_WEEK.map(day => day.id);
@@ -38,7 +38,7 @@ export const AppointmentFormSchema = z.object({
   isDiabetic: z.boolean().optional(),
   isWalkIn: z.boolean().optional(),
 
-  locationId: z.string().refine(val => locationIds.includes(val as any), { message: "Sede inválida."}),
+  locationId: z.string().min(1, "Sede es requerida."),
   serviceId: z.string().min(1, "Servicio es requerido."),
   appointmentDate: z.date({ required_error: "Fecha de la cita es requerida."}),
   appointmentTime: z.string().refine(val => TIME_SLOTS.includes(val), { message: "Hora inválida."}),
@@ -94,7 +94,7 @@ export const ProfessionalFormSchema = z.object({
   id: z.string().optional(),
   firstName: z.string().min(2, "Nombre es requerido."),
   lastName: z.string().min(2, "Apellido es requerido."),
-  locationId: z.string().refine(val => locationIds.includes(val as any), { message: "Sede inválida." }),
+  locationId: z.string().min(1, "Sede es requerida."),
   phone: z.string().optional().nullable(),
   isManager: z.boolean().optional(), // Nuevo campo para gerente
   birthDay: z.coerce.number().int().min(1).max(31).optional().nullable(),

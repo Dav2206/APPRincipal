@@ -4,16 +4,20 @@
 // export const PAYMENT_METHODS = ['Efectivo', 'Tarjeta de Débito', 'Yape/Plin'] as const;
 export type PaymentMethod = string; // Now it's just a string, fully dynamic.
 
-export const LOCATIONS = [
-  { id: 'higuereta', name: 'Higuereta', paymentMethods: ['Efectivo', 'Yape/Plin Higuereta', 'Tarjeta Débito Higuereta'] as PaymentMethod[] },
-  { id: 'eden_benavides', name: 'Edén Benavides', paymentMethods: ['Efectivo', 'Yape/Plin Edén', 'Tarjeta Débito Edén'] as PaymentMethod[] },
-  { id: 'crucetas', name: 'Crucetas', paymentMethods: ['Efectivo', 'Yape/Plin Crucetas', 'Tarjeta Débito Crucetas'] as PaymentMethod[] },
-  { id: 'carpaccio', name: 'Carpaccio', paymentMethods: ['Efectivo', 'Yape/Plin Carpaccio', 'Tarjeta Débito Carpaccio'] as PaymentMethod[] },
-  { id: 'vista_alegre', name: 'Vista Alegre', paymentMethods: ['Efectivo', 'Yape/Plin Vista Alegre', 'Tarjeta Débito Vista Alegre'] as PaymentMethod[] },
-  { id: 'san_antonio', name: 'San Antonio', paymentMethods: ['Efectivo', 'Yape/Plin San Antonio', 'Tarjeta Débito San Antonio'] as PaymentMethod[] },
-] as const;
 
-export type LocationId = typeof LOCATIONS[number]['id'];
+// This is now deprecated and will be fetched from Firestore.
+// Kept for reference during transition.
+// export const LOCATIONS = [
+//   { id: 'higuereta', name: 'Higuereta', paymentMethods: ['Efectivo', 'Yape/Plin Higuereta', 'Tarjeta Débito Higuereta'] as PaymentMethod[] },
+//   { id: 'eden_benavides', name: 'Edén Benavides', paymentMethods: ['Efectivo', 'Yape/Plin Edén', 'Tarjeta Débito Edén'] as PaymentMethod[] },
+//   { id: 'crucetas', name: 'Crucetas', paymentMethods: ['Efectivo', 'Yape/Plin Crucetas', 'Tarjeta Débito Crucetas'] as PaymentMethod[] },
+//   { id: 'carpaccio', name: 'Carpaccio', paymentMethods: ['Efectivo', 'Yape/Plin Carpaccio', 'Tarjeta Débito Carpaccio'] as PaymentMethod[] },
+//   { id: 'vista_alegre', name: 'Vista Alegre', paymentMethods: ['Efectivo', 'Yape/Plin Vista Alegre', 'Tarjeta Débito Vista Alegre'] as PaymentMethod[] },
+//   { id: 'san_antonio', name: 'San Antonio', paymentMethods: ['Efectivo', 'Yape/Plin San Antonio', 'Tarjeta Débito San Antonio'] as PaymentMethod[] },
+// ] as const;
+
+export type LocationId = 'higuereta' | 'eden_benavides' | 'crucetas' | 'carpaccio' | 'vista_alegre' | 'san_antonio';
+
 
 export const USER_ROLES = {
   ADMIN: 'admin',

@@ -1,7 +1,7 @@
 // src/lib/data.ts
-import type { User, Professional, Patient, Service, Appointment, AppointmentFormData, ProfessionalFormData, AppointmentStatus, ServiceFormData, Contract, PeriodicReminder, ImportantNote, PeriodicReminderFormData, ImportantNoteFormData, AddedServiceItem, AppointmentUpdateFormData } from '@/types';
-import { LOCATIONS, USER_ROLES, SERVICES as SERVICES_CONSTANTS, APPOINTMENT_STATUS, LocationId, ServiceId as ConstantServiceId, APPOINTMENT_STATUS_DISPLAY, PAYMENT_METHODS, TIME_SLOTS, DAYS_OF_WEEK } from './constants';
-import type { DayOfWeekId } from './constants';
+import type { User, Professional, Patient, Service, Appointment, AppointmentFormData, ProfessionalFormData, AppointmentStatus, ServiceFormData, Contract, PeriodicReminder, ImportantNote, PeriodicReminderFormData, ImportantNoteFormData, AddedServiceItem, AppointmentUpdateFormData, Location } from '@/types';
+import { USER_ROLES, APPOINTMENT_STATUS, APPOINTMENT_STATUS_DISPLAY, TIME_SLOTS, DAYS_OF_WEEK } from '@/lib/constants';
+import type { LocationId, DayOfWeekId } from '@/lib/constants';
 import { formatISO, parseISO, addDays, setHours, setMinutes, startOfDay, endOfDay, isSameDay as dateFnsIsSameDay, startOfMonth, endOfMonth, subDays, isEqual, isBefore, isAfter, getDate, getYear, getMonth, setMonth, setYear, getHours, addMinutes as dateFnsAddMinutes, isWithinInterval, getDay, format, differenceInCalendarDays, areIntervalsOverlapping, parse } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { firestore, useMockDatabase as globalUseMockDatabase, storage } from './firebase-config'; // Centralized mock flag
@@ -175,11 +175,46 @@ export const getUserByUsername = async (identity: string): Promise<User | undefi
     return undefined;
 };
 
+// --- Locations ---
+export const getLocations = async (): Promise<Location[]> => {
+    if (!firestore) {
+        console.warn("[data.ts] getLocations: Firestore not available, returning empty array.");
+        return [];
+    }
+    try {
+        const locationsCol = collection(firestore, 'sedes');
+        const snapshot = await getDocs(query(locationsCol, orderBy("name")));
+        if (snapshot.empty) {
+            console.warn("[data.ts] Firestore 'sedes' collection is empty. Seeding with initial data is recommended.");
+        }
+        return snapshot.docs.map(docSnap => ({ id: docSnap.id, ...convertDocumentData(docSnap.data()) } as Location));
+    } catch (error) {
+        console.error("[data.ts] Error fetching locations from Firestore:", error);
+        return [];
+    }
+};
+
+export const updateLocationPaymentMethods = async (locationId: LocationId, paymentMethods: string[]): Promise<boolean> => {
+    if (!firestore) {
+        console.error("Firestore not initialized for updateLocationPaymentMethods");
+        return false;
+    }
+    try {
+        const docRef = doc(firestore, 'sedes', locationId);
+        await updateDoc(docRef, { paymentMethods });
+        return true;
+    } catch (error) {
+        console.error(`Error updating payment methods for location ${locationId}:`, error);
+        return false;
+    }
+};
+
 
 // --- Professionals ---
 
 export async function getProfessionals (locationId?: LocationId): Promise<(Professional & { contractDisplayStatus: ContractDisplayStatus })[]> {
   const currentSystemDate = new Date();
+  const LOCATIONS = await getLocations();
 
   try {
     if (!firestore) {
@@ -249,6 +284,7 @@ export async function updateProfessionalById(id: string, data: Partial<Professio
 }
 
 export async function addProfessional (data: Omit<ProfessionalFormData, 'id'>): Promise<Professional> {
+  const LOCATIONS = await getLocations();
   try {
     const newProfessionalData: Omit<Professional, 'id' | 'biWeeklyEarnings'> = {
       firstName: data.firstName,
@@ -756,6 +792,7 @@ export async function getAppointments(options: GetAppointmentsOptions = {}): Pro
             console.warn("[data.ts] getAppointments: Firestore not available, returning empty array.");
             return { appointments: [] };
         }
+        const LOCATIONS = await getLocations();
 
         const appointmentsCol = collection(firestore, 'citas') as CollectionReference<DocumentData>;
         let queryConstraints: QueryConstraint[] = [];
@@ -919,6 +956,7 @@ export async function addAppointment(data: AppointmentFormData): Promise<Appoint
     console.error("[data.ts] addAppointment: Firestore not initialized.");
     throw new Error("Firestore not initialized. Appointment not added.");
   }
+  const LOCATIONS = await getLocations();
 
   try {
     const allServicesList = await getServices();
@@ -1106,7 +1144,7 @@ export async function addAppointment(data: AppointmentFormData): Promise<Appoint
 export async function updateAppointment(
   id: string,
   data: Partial<AppointmentUpdateFormData>,
-  originalPhotos: string[] = []
+  originalPhotos: { url: string }[] = []
 ): Promise<Appointment | undefined> {
   console.log(`[data.ts] updateAppointment: Iniciando actualización para cita ID ${id}`, data);
 
@@ -1123,10 +1161,10 @@ export async function updateAppointment(
     }
   });
 
-  if (data.attachedPhotos) {
+  if (data.attachedPhotos !== undefined) {
     const newPhotoDataUris = (data.attachedPhotos || []).map(p => p.url).filter(url => url && url.startsWith('data:image/'));
     const existingPhotoUrlsFromForm = (data.attachedPhotos || []).map(p => p.url).filter(url => url && (url.startsWith('http') || url.startsWith('gs://')));
-
+    
     const newUploadedUrls = await Promise.all(
       newPhotoDataUris.map(async (dataUri) => {
         const photoName = generateId();
@@ -1139,8 +1177,9 @@ export async function updateAppointment(
     
     appointmentToUpdate.attachedPhotos = [...existingPhotoUrlsFromForm, ...newUploadedUrls];
     console.log(`[data.ts] URLs de fotos finales para Firestore:`, appointmentToUpdate.attachedPhotos);
-
-    const photosToDelete = originalPhotos.filter(originalUrl => !existingPhotoUrlsFromForm.includes(originalUrl));
+    
+    const originalPhotoUrls = originalPhotos.map(p => p.url);
+    const photosToDelete = originalPhotoUrls.filter(originalUrl => !existingPhotoUrlsFromForm.includes(originalUrl));
     
     if (photosToDelete.length > 0) {
       console.log(`[data.ts] Fotos marcadas para eliminar de Storage:`, photosToDelete);

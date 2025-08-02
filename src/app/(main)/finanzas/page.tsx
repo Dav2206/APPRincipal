@@ -2,11 +2,11 @@
 "use client";
 
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
-import type { Appointment, LocationId, PaymentMethod } from '@/types';
+import type { Appointment, LocationId, PaymentMethod, Location } from '@/types';
 import { useAuth } from '@/contexts/auth-provider';
 import { useAppState } from '@/contexts/app-state-provider';
-import { getAppointments } from '@/lib/data';
-import { LOCATIONS, USER_ROLES, APPOINTMENT_STATUS } from '@/lib/constants';
+import { getAppointments, getLocations, updateLocationPaymentMethods } from '@/lib/data';
+import { USER_ROLES, APPOINTMENT_STATUS } from '@/lib/constants';
 
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -47,29 +47,37 @@ export default function FinancesPage() {
   const router = useRouter();
   const { toast } = useToast();
 
+  const [locations, setLocations] = useState<Location[]>([]);
   const [reportData, setReportData] = useState<ReportRow[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   
   const [selectedYear, setSelectedYear] = useState<number>(getYear(new Date()));
   const [selectedMonth, setSelectedMonth] = useState<number>(getMonth(new Date()));
   
-  const [paymentMethodsByLocation, setPaymentMethodsByLocation] = useState<Record<LocationId, PaymentMethod[]>>(() => {
-    const initialConfig = {} as Record<LocationId, PaymentMethod[]>;
-    LOCATIONS.forEach(loc => {
-      initialConfig[loc.id] = [...(loc.paymentMethods || ['Efectivo', 'Tarjeta de Débito', 'Yape/Plin'])];
-    });
-    return initialConfig;
-  });
+  const [paymentMethodsByLocation, setPaymentMethodsByLocation] = useState<Record<LocationId, PaymentMethod[]>>({} as Record<LocationId, PaymentMethod[]>);
   const [newMethodInputs, setNewMethodInputs] = useState<Record<LocationId, string>>({});
   const [isSaving, setIsSaving] = useState(false);
   const [completedAppointments, setCompletedAppointments] = useState<Appointment[]>([]);
   const [locationFilter, setLocationFilter] = useState<LocationId | 'all'>(ALL_LOCATIONS_FILTER);
 
 
+  useEffect(() => {
+    async function loadLocations() {
+        const fetchedLocations = await getLocations();
+        setLocations(fetchedLocations);
+        const initialPaymentMethods: Record<LocationId, PaymentMethod[]> = {} as Record<LocationId, PaymentMethod[]>;
+        fetchedLocations.forEach(loc => {
+            initialPaymentMethods[loc.id] = loc.paymentMethods || [];
+        });
+        setPaymentMethodsByLocation(initialPaymentMethods);
+    }
+    loadLocations();
+  }, []);
+
   const allAvailablePaymentTypes = useMemo(() => {
     const allTypes = new Set<string>();
     const locationsToConsider = adminSelectedLocation === 'all'
-      ? LOCATIONS.map(l => l.id)
+      ? locations.map(l => l.id)
       : [adminSelectedLocation];
 
     // Add configured payment methods for the selected location(s)
@@ -91,7 +99,7 @@ export default function FinancesPage() {
     });
     
     return Array.from(allTypes).sort((a,b) => a.localeCompare(b));
-  }, [paymentMethodsByLocation, completedAppointments, adminSelectedLocation]);
+  }, [paymentMethodsByLocation, completedAppointments, adminSelectedLocation, locations]);
 
 
   useEffect(() => {
@@ -122,7 +130,7 @@ export default function FinancesPage() {
             });
             appointments = result.appointments || [];
         } else { 
-            const allLocationPromises = LOCATIONS.map(loc => getAppointments({
+            const allLocationPromises = locations.map(loc => getAppointments({
                 locationId: loc.id,
                 dateRange: { start: startDate, end: endDate },
                 statuses: [APPOINTMENT_STATUS.COMPLETED]
@@ -138,7 +146,7 @@ export default function FinancesPage() {
         appointments.forEach(appt => {
           if (!appt.paymentMethod || !appt.amountPaid || appt.amountPaid <= 0) return;
 
-          const locationName = LOCATIONS.find(l => l.id === appt.locationId)?.name || 'Desconocida';
+          const locationName = locations.find(l => l.id === appt.locationId)?.name || 'Desconocida';
           let entry = reportMap.get(appt.locationId) || {
             locationId: appt.locationId,
             locationName: locationName,
@@ -164,10 +172,10 @@ export default function FinancesPage() {
       }
     }
 
-    if (user && (user.role === USER_ROLES.ADMIN || user.role === USER_ROLES.CONTADOR)) {
+    if (user && (user.role === USER_ROLES.ADMIN || user.role === USER_ROLES.CONTADOR) && locations.length > 0) {
       generateReport();
     }
-  }, [user, selectedYear, selectedMonth, adminSelectedLocation, toast]);
+  }, [user, selectedYear, selectedMonth, adminSelectedLocation, toast, locations]);
   
   const grandTotal = useMemo(() => {
     return reportData.reduce((sum, row) => sum + row.locationTotal, 0);
@@ -198,7 +206,7 @@ export default function FinancesPage() {
       [locationId]: [...currentMethods, newMethodName as PaymentMethod]
     }));
     setNewMethodInputs(prev => ({ ...prev, [locationId]: '' }));
-    toast({ title: "Método Añadido", description: `"${newMethodName}" ha sido añadido a la sede.` });
+    toast({ title: "Método Añadido", description: `"${newMethodName}" ha sido añadido a la sede. Recuerde guardar los cambios.` });
   };
   
   const handleRemoveMethod = (locationId: LocationId, methodToRemove: PaymentMethod) => {
@@ -213,27 +221,38 @@ export default function FinancesPage() {
       ...prev,
       [locationId]: (prev[locationId] || []).filter(m => m !== methodToRemove)
     }));
-    toast({ title: "Método Eliminado", description: `"${methodToRemove}" ha sido eliminado de la sede.` });
+    toast({ title: "Método Eliminado", description: `"${methodToRemove}" ha sido eliminado de la sede. Recuerde guardar los cambios.` });
   };
 
   const handleSaveAllChanges = async () => {
     setIsSaving(true);
-    console.log("Guardando la siguiente configuración de métodos de pago:", paymentMethodsByLocation);
-    // En una app real, se guardaría `paymentMethodsByLocation` en la DB
-    await new Promise(resolve => setTimeout(resolve, 1000));
-    toast({
-      title: "Configuración Guardada",
-      description: "Los métodos de pago por sede han sido actualizados. (Simulación)",
-    });
-    setIsSaving(false);
+    try {
+        const updatePromises = Object.entries(paymentMethodsByLocation).map(([locationId, methods]) =>
+            updateLocationPaymentMethods(locationId as LocationId, methods)
+        );
+        await Promise.all(updatePromises);
+        toast({
+            title: "Configuración Guardada",
+            description: "Los métodos de pago por sede han sido actualizados en la base de datos.",
+        });
+    } catch (error) {
+        console.error("Error saving payment methods:", error);
+        toast({
+            title: "Error al Guardar",
+            description: "No se pudieron guardar los cambios en la base de datos.",
+            variant: "destructive",
+        });
+    } finally {
+        setIsSaving(false);
+    }
   };
   
   const filteredLocationsForManagement = useMemo(() => {
     if (locationFilter === ALL_LOCATIONS_FILTER) {
-      return LOCATIONS;
+      return locations;
     }
-    return LOCATIONS.filter(loc => loc.id === locationFilter);
-  }, [locationFilter]);
+    return locations.filter(loc => loc.id === locationFilter);
+  }, [locationFilter, locations]);
 
 
   if (authIsLoading || !user || (user.role !== USER_ROLES.CONTADOR && user.role !== USER_ROLES.ADMIN)) {
@@ -274,7 +293,7 @@ export default function FinancesPage() {
           </div>
            {user && (user.role === USER_ROLES.ADMIN || user.role === USER_ROLES.CONTADOR) && (
             <div className="mt-2 text-sm text-muted-foreground">
-              Viendo para: {adminSelectedLocation === 'all' ? 'Todas las sedes' : LOCATIONS.find(l => l.id === adminSelectedLocation)?.name || 'Sede no especificada'}
+              Viendo para: {adminSelectedLocation === 'all' ? 'Todas las sedes' : locations.find(l => l.id === adminSelectedLocation)?.name || 'Sede no especificada'}
             </div>
           )}
         </CardHeader>
@@ -342,7 +361,7 @@ export default function FinancesPage() {
                   </SelectTrigger>
                   <SelectContent>
                       <SelectItem value={ALL_LOCATIONS_FILTER}>Todas las Sedes</SelectItem>
-                      {LOCATIONS.map(loc => (
+                      {locations.map(loc => (
                           <SelectItem key={loc.id} value={loc.id}>{loc.name}</SelectItem>
                       ))}
                   </SelectContent>
@@ -402,13 +421,7 @@ export default function FinancesPage() {
                     Guardar Toda la Configuración
                 </Button>
             </div>
-            <Alert variant="default" className="mt-4 bg-blue-50 border-blue-200 text-blue-800">
-                <AlertTriangle className="h-4 w-4 !text-blue-800" />
-                <CardTitle className="text-blue-900 text-sm">Nota sobre la Persistencia</CardTitle>
-                <AlertDescription className="text-xs">
-                    Actualmente, esta configuración es una simulación visual. Los cambios no se guardarán permanentemente al recargar la página.
-                </AlertDescription>
-            </Alert>
+            
         </CardContent>
       </Card>
     </div>
