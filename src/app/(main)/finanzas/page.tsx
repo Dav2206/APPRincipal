@@ -15,14 +15,10 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { format, startOfMonth, endOfMonth, getYear, getMonth, setYear, setMonth } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { Landmark, Loader2, AlertTriangle, ListPlus, Trash2, Filter, PlusCircle } from 'lucide-react';
-import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
-import { Alert, AlertDescription } from '@/components/ui/alert';
 import { useRouter } from 'next/navigation';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter, DialogClose } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
-import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
 
 type ReportRow = {
@@ -81,9 +77,8 @@ export default function FinancesPage() {
       ? locations.map(l => l.id)
       : [adminSelectedLocation];
 
-    // Add configured payment methods for the selected location(s)
     Object.entries(paymentMethodsByLocation).forEach(([locId, methods]) => {
-      if (locationsToConsider.includes(locId as LocationId)) {
+      if (!adminSelectedLocation || adminSelectedLocation === 'all' || locId === adminSelectedLocation) {
         methods.forEach(method => {
           const baseType = method.split(' - ')[0].trim();
           allTypes.add(baseType);
@@ -91,9 +86,9 @@ export default function FinancesPage() {
       }
     });
 
-    // Add used payment methods from the completed appointments of the selected location(s)
     completedAppointments.forEach(appt => {
-      if (locationsToConsider.includes(appt.locationId) && appt.paymentMethod) {
+      const locationMatches = !adminSelectedLocation || adminSelectedLocation === 'all' || appt.locationId === adminSelectedLocation;
+      if (locationMatches && appt.paymentMethod) {
           const baseType = appt.paymentMethod.split(' - ')[0].trim();
           allTypes.add(baseType);
       }
