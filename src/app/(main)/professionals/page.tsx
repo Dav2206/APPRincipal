@@ -224,6 +224,7 @@ export default function ProfessionalsPage() {
             startTime: ov.startTime || undefined,
             endTime: ov.endTime || undefined,
             notes: ov.notes || undefined,
+            locationId: ov.locationId || undefined,
         })) || [],
         currentContract_startDate: professional.currentContract?.startDate ? parseISO(professional.currentContract.startDate) : null,
         currentContract_endDate: professional.currentContract?.endDate ? parseISO(professional.currentContract.endDate) : null,
@@ -282,6 +283,7 @@ export default function ProfessionalsPage() {
             startTime: ov.isWorking ? ov.startTime : undefined,
             endTime: ov.isWorking ? ov.endTime : undefined,
             notes: ov.notes || null,
+            locationId: ov.locationId || null
         })) || [],
         currentContract: currentContract,
         contractHistory: editingProfessional?.contractHistory || [],
@@ -703,6 +705,17 @@ export default function ProfessionalsPage() {
                                   <SelectContent>{TIME_SLOTS.map(slot => (<SelectItem key={`cs-end-${slot}`} value={slot}>{slot}</SelectItem>))}</SelectContent>
                                 </Select><FormMessage /></FormItem>
                             )}/>
+                             <FormField control={form.control} name={`customScheduleOverrides.${index}.locationId`} render={({ field: locField }) => (
+                                <FormItem className="col-span-2"><FormLabel className="text-xs">Sede de Trabajo (Opcional)</FormLabel>
+                                  <Select onValueChange={locField.onChange} value={locField.value || ''} >
+                                    <FormControl><SelectTrigger><SelectValue placeholder="Usar sede base del profesional" /></SelectTrigger></FormControl>
+                                    <SelectContent>
+                                        <SelectItem value="">Usar sede base del profesional</SelectItem>
+                                        {locations.map(loc => (<SelectItem key={`ov-loc-${loc.id}-${index}`} value={loc.id}>{loc.name}</SelectItem>))}
+                                    </SelectContent>
+                                  </Select>
+                                <FormMessage /></FormItem>
+                            )}/>
                           </div>
                         )}
                         <FormField control={form.control} name={`customScheduleOverrides.${index}.notes`} render={({ field: notesField }) => (
@@ -710,7 +723,7 @@ export default function ProfessionalsPage() {
                         )}/>
                       </div>
                     ))}
-                    <Button type="button" variant="outline" size="sm" className="mt-4" onClick={() => appendCustomSchedule({ id: generateId(), date: new Date(), isWorking: false, startTime: undefined, endTime: undefined, notes: 'Descanso' })}>
+                    <Button type="button" variant="outline" size="sm" className="mt-4" onClick={() => appendCustomSchedule({ id: generateId(), date: new Date(), isWorking: false, startTime: undefined, endTime: undefined, notes: 'Descanso', locationId: undefined })}>
                       <PlusCircle className="mr-2 h-4 w-4" /> Agregar Anulación de Horario
                     </Button>
                   </AccordionContent>

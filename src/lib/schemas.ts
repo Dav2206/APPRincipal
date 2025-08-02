@@ -115,6 +115,7 @@ export const ProfessionalFormSchema = z.object({
       startTime: z.string().regex(/^([01]\d|2[0-3]):([0-5]\d)$/, "Formato HH:MM").optional().nullable(),
       endTime: z.string().regex(/^([01]\d|2[0-3]):([0-5]\d)$/, "Formato HH:MM").optional().nullable(),
       notes: z.string().optional().nullable(),
+      locationId: z.string().optional().nullable(),
     }).refine(data => {
       if (data.isWorking) {
         return data.startTime && data.endTime && data.startTime < data.endTime;

@@ -329,7 +329,7 @@ export async function addProfessional (data: Omit<ProfessionalFormData, 'id'>): 
         startTime: ov.isWorking ? ov.startTime : undefined,
         endTime: ov.isWorking ? ov.endTime : undefined,
         notes: ov.notes || null,
- locationId: (ov as any).locationId || null, // Save locationId if present
+        locationId: ov.locationId || null, // Include locationId from form data
       })) || [],
       currentContract: (data.currentContract_startDate && data.currentContract_endDate) ? {
         id: generateId(),
@@ -386,7 +386,7 @@ export async function addProfessional (data: Omit<ProfessionalFormData, 'id'>): 
         startTime: ov.startTime ?? null,
         endTime: ov.endTime ?? null,
         notes: ov.notes ?? null,
- locationId: ov.locationId ?? null, // Ensure locationId is saved or null
+        locationId: ov.locationId ?? null, // Ensure locationId is saved or null
       }));
     } else {
       firestoreData.customScheduleOverrides = [];
@@ -446,7 +446,7 @@ export async function updateProfessional (id: string, data: Partial<Professional
         startTime: ov.isWorking ? ov.startTime : undefined,
         endTime: ov.isWorking ? ov.endTime : undefined,
         notes: ov.notes || null,
- locationId: (ov as any).locationId || null, // Include locationId from form data
+        locationId: ov.locationId || null, // Include locationId from form data
       })) || [];
     }
     
@@ -521,7 +521,7 @@ export async function updateProfessional (id: string, data: Partial<Professional
         startTime: ov.startTime ?? null,
         endTime: ov.endTime ?? null,
         notes: ov.notes ?? null,
- locationId: ov.locationId ?? null, // Include locationId from form data
+        locationId: ov.locationId ?? null, // Include locationId from form data
       }));
     }
    
@@ -1034,6 +1034,7 @@ export async function addAppointment(data: AppointmentFormData): Promise<Appoint
       const proposedEndTime = dateFnsAddMinutes(proposedStartTime, totalDurationForSlotCheck);
 
       for (const prof of professionalsToConsider) {
+        if(prof.isManager) continue; // Exclude managers from automatic assignment
         const dailyAvailability = getProfessionalAvailabilityForDate(prof, data.appointmentDate);
         if (!dailyAvailability || !dailyAvailability.isWorking || !dailyAvailability.startTime || !dailyAvailability.endTime) continue;
 
@@ -1378,7 +1379,7 @@ export function getProfessionalAvailabilityForDate(
         isWorking: true,
         reason: `Horario Especial (Anulación: ${customOverride.notes || 'Sin especificar'})`,
         notes: customOverride.notes || undefined,
- workingLocationId: customOverride.locationId ?? professional.locationId, // Use override location if specified, else professional's base
+        workingLocationId: customOverride.locationId ?? professional.locationId, // Use override location if specified, else professional's base
       }; 
     }
   }
@@ -1395,7 +1396,7 @@ export function getProfessionalAvailabilityForDate(
       endTime: baseSchedule.endTime,
       isWorking: true,
       reason: "Horario base",
- workingLocationId: professional.locationId, // Base schedule means working at base location
+      workingLocationId: professional.locationId, // Base schedule means working at base location
     };
   }
   // console.log(`[Availability] Prof ${professional.id} - Not working based on base schedule or missing start/end times for ${dayOfWeekId} on ${targetDateISO}.`);
@@ -1546,5 +1547,3 @@ export async function deleteImportantNote(noteId: string): Promise<boolean> {
   }
 }
 // --- End Important Notes ---
-
-    

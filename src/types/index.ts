@@ -1,6 +1,6 @@
 
 
-import type { LocationId, UserRole, PaymentMethod, AppointmentStatus, DayOfWeekId } from './lib/constants';
+import type { LocationId, UserRole, PaymentMethod, AppointmentStatus, DayOfWeekId } from '../lib/constants';
 
 export interface BaseEntity {
   id: string;
@@ -86,7 +86,7 @@ export interface AddedServiceItem {
 }
 
 export interface Appointment extends BaseEntity {
-  patientId: string;
+  patientId: string | null;
   patient?: Patient;
   locationId: LocationId;
   professionalId?: string | null;
@@ -152,6 +152,7 @@ export type ProfessionalFormData = {
     isWorking: boolean;
     startTime?: string;
     endTime?: string;
+    locationId?: LocationId | null;
     notes?: string | null;
   }>;
   currentContract_startDate?: Date | null;
