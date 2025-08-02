@@ -326,7 +326,7 @@ export async function addProfessional (data: Omit<ProfessionalFormData, 'id'>): 
       customScheduleOverrides: (data.customScheduleOverrides || []).map(ov => ({
         ...ov,
         id: ov.id || generateId(),
-        date: typeof ov.date === 'string' ? ov.date : formatISO(ov.date, { representation: 'date' }),
+        date: formatISO(ov.date, { representation: 'date' }),
         startTime: ov.isWorking ? ov.startTime : undefined,
         endTime: ov.isWorking ? ov.endTime : undefined,
         notes: ov.notes || null,
@@ -1566,3 +1566,4 @@ export async function deleteImportantNote(noteId: string): Promise<boolean> {
   }
 }
 // --- End Important Notes ---
+
