@@ -53,7 +53,6 @@ export default function FinancesPage() {
   const [selectedYear, setSelectedYear] = useState<number>(getYear(new Date()));
   const [selectedMonth, setSelectedMonth] = useState<number>(getMonth(new Date()));
   
-  // State for payment methods per location
   const [paymentMethodsByLocation, setPaymentMethodsByLocation] = useState<Record<LocationId, PaymentMethod[]>>(() => {
     const initialConfig = {} as Record<LocationId, PaymentMethod[]>;
     LOCATIONS.forEach(loc => {
@@ -67,14 +66,20 @@ export default function FinancesPage() {
   const [locationFilter, setLocationFilter] = useState<LocationId | 'all'>(ALL_LOCATIONS_FILTER);
 
 
-  // Collect all unique payment methods for table headers
-  const allAvailablePaymentMethods = useMemo(() => {
-    const allMethods = new Set<PaymentMethod>();
-    Object.values(paymentMethodsByLocation).forEach(methods => {
-      methods.forEach(method => allMethods.add(method));
+  const allAvailablePaymentTypes = useMemo(() => {
+    const allTypes = new Set<string>();
+    Object.values(paymentMethodsByLocation).flat().forEach(method => {
+      const baseType = method.split(' - ')[0].trim();
+      allTypes.add(baseType);
     });
-    return Array.from(allMethods).sort((a,b) => a.localeCompare(b));
-  }, [paymentMethodsByLocation]);
+    completedAppointments.forEach(appt => {
+        if(appt.paymentMethod) {
+            const baseType = appt.paymentMethod.split(' - ')[0].trim();
+            allTypes.add(baseType);
+        }
+    });
+    return Array.from(allTypes).sort((a,b) => a.localeCompare(b));
+  }, [paymentMethodsByLocation, completedAppointments]);
 
 
   useEffect(() => {
@@ -104,7 +109,7 @@ export default function FinancesPage() {
                 statuses: [APPOINTMENT_STATUS.COMPLETED]
             });
             appointments = result.appointments || [];
-        } else { // Admin/Contador viewing 'all'
+        } else { 
             const allLocationPromises = LOCATIONS.map(loc => getAppointments({
                 locationId: loc.id,
                 dateRange: { start: startDate, end: endDate },
@@ -128,8 +133,10 @@ export default function FinancesPage() {
             totalsByMethod: {},
             locationTotal: 0
           };
+          
+          const basePaymentType = appt.paymentMethod.split(' - ')[0].trim();
 
-          entry.totalsByMethod[appt.paymentMethod] = (entry.totalsByMethod[appt.paymentMethod] || 0) + appt.amountPaid;
+          entry.totalsByMethod[basePaymentType] = (entry.totalsByMethod[basePaymentType] || 0) + appt.amountPaid;
           entry.locationTotal += appt.amountPaid;
 
           reportMap.set(appt.locationId, entry);
@@ -155,14 +162,12 @@ export default function FinancesPage() {
   }, [reportData]);
   
   const totalsByAllMethods = useMemo(() => {
-    const totals: Partial<Record<PaymentMethod, number>> = {};
-    reportData.forEach(row => {
-      for (const method in row.totalsByMethod) {
-        totals[method as PaymentMethod] = (totals[method as PaymentMethod] || 0) + (row.totalsByMethod[method as PaymentMethod] || 0);
-      }
+    const totals: Partial<Record<string, number>> = {};
+    allAvailablePaymentTypes.forEach(type => {
+        totals[type] = reportData.reduce((sum, row) => sum + (row.totalsByMethod[type] || 0), 0);
     });
     return totals;
-  }, [reportData]);
+  }, [reportData, allAvailablePaymentTypes]);
 
 
   const handleAddNewMethod = (locationId: LocationId) => {
@@ -189,7 +194,7 @@ export default function FinancesPage() {
       appt => appt.locationId === locationId && appt.paymentMethod === methodToRemove
     );
     if (isMethodInUseInLocation) {
-      toast({ title: "No se puede eliminar", description: `"${methodToRemove}" está en uso en citas completadas para esta sede y no puede ser eliminado.`, variant: "destructive" });
+      toast({ title: "No se puede eliminar", description: `"${methodToRemove}" está en uso en citas completadas para esta sede y no puede ser eliminado.`, variant: "destructive", duration: 6000 });
       return;
     }
     setPaymentMethodsByLocation(prev => ({
@@ -274,7 +279,7 @@ export default function FinancesPage() {
               <TableHeader>
                 <TableRow>
                   <TableHead>Sede</TableHead>
-                  {allAvailablePaymentMethods.map(method => <TableHead key={method} className="text-right">{method}</TableHead>)}
+                  {allAvailablePaymentTypes.map(method => <TableHead key={method} className="text-right">{method}</TableHead>)}
                   <TableHead className="text-right font-bold">Total Sede</TableHead>
                 </TableRow>
               </TableHeader>
@@ -282,9 +287,9 @@ export default function FinancesPage() {
                 {reportData.map(row => (
                   <TableRow key={row.locationId}>
                     <TableCell className="font-medium">{row.locationName}</TableCell>
-                    {allAvailablePaymentMethods.map(method => (
-                      <TableCell key={method} className="text-right">
-                        {(row.totalsByMethod[method as PaymentMethod] || 0).toFixed(2)}
+                    {allAvailablePaymentTypes.map(type => (
+                      <TableCell key={type} className="text-right">
+                        {(row.totalsByMethod[type] || 0).toFixed(2)}
                       </TableCell>
                     ))}
                     <TableCell className="text-right font-bold">
@@ -296,9 +301,9 @@ export default function FinancesPage() {
               <TableFooter>
                 <TableRow className="bg-muted/80 font-bold">
                   <TableCell>Total General</TableCell>
-                  {allAvailablePaymentMethods.map(method => (
-                    <TableCell key={method} className="text-right">
-                      {(totalsByAllMethods[method as PaymentMethod] || 0).toFixed(2)}
+                  {allAvailablePaymentTypes.map(type => (
+                    <TableCell key={type} className="text-right">
+                      {(totalsByAllMethods[type] || 0).toFixed(2)}
                     </TableCell>
                   ))}
                   <TableCell className="text-right text-lg">
@@ -315,7 +320,7 @@ export default function FinancesPage() {
         <CardHeader>
             <CardTitle>Gestión de Métodos de Pago por Sede</CardTitle>
             <CardDescription>
-                Añada o elimine los métodos de pago para cada una de sus sedes.
+                Añada o elimine los métodos de pago para cada una de sus sedes. Use el formato "Tipo - Detalle" para agrupar en el reporte (ej: "Yape - Cuenta A").
             </CardDescription>
             <div className="pt-4">
               <Label htmlFor="location-filter">Filtrar por Sede</Label>
