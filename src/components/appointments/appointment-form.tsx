@@ -238,9 +238,9 @@ export function AppointmentForm({
     const proposedEndTime = addMinutes(proposedStartTime, appointmentDuration);
 
     let professionalsToConsider: Professional[] = [];
-    if(watchSearchExternal && Array.isArray(allSystemProfessionals)){
+    if (watchSearchExternal) {
         professionalsToConsider = allSystemProfessionals;
-    } else if (Array.isArray(professionalsForCurrentLocationProp)) {
+    } else {
         professionalsToConsider = professionalsForCurrentLocationProp;
     }
 
