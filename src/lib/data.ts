@@ -1010,7 +1010,7 @@ export async function addAppointment(data: AppointmentFormData): Promise<Appoint
     
     if (!professionalIdToAssign) {
       console.log("[data.ts] addAppointment: Buscando profesional disponible...");
-      const professionalsToConsider = await getProfessionals(data.searchExternal ? undefined : data.locationId);
+      const professionalsToConsider = await getProfessionals(data.searchExternal ? data.professionalOriginLocationId as LocationId : data.locationId);
       
       const appointmentsForDay = await getAppointments({
         date: data.appointmentDate,
@@ -1023,9 +1023,15 @@ export async function addAppointment(data: AppointmentFormData): Promise<Appoint
         if(prof.isManager) continue; 
         const dailyAvailability = getProfessionalAvailabilityForDate(prof, data.appointmentDate);
 
+        let targetLocationForAvailabilityCheck = data.locationId;
+        // If searching external, the professional's availability must be checked at their origin location, not the destination.
+        if (data.searchExternal && data.professionalOriginLocationId) {
+            targetLocationForAvailabilityCheck = data.professionalOriginLocationId as LocationId;
+        }
+
         if (!dailyAvailability || !dailyAvailability.isWorking || !dailyAvailability.startTime || !dailyAvailability.endTime) continue;
         
-        if (dailyAvailability.workingLocationId !== data.locationId) continue;
+        if (dailyAvailability.workingLocationId !== targetLocationForAvailabilityCheck) continue;
         
         const profWorkStartTime = parse(`${format(data.appointmentDate, 'yyyy-MM-dd')} ${dailyAvailability.startTime}`, 'yyyy-MM-dd HH:mm', new Date());
         const profWorkEndTime = parse(`${format(data.appointmentDate, 'yyyy-MM-dd')} ${dailyAvailability.endTime}`, 'yyyy-MM-dd HH:mm', new Date());
@@ -1072,15 +1078,15 @@ export async function addAppointment(data: AppointmentFormData): Promise<Appoint
       durationMinutes: mainServiceDuration,
       isExternalProfessional,
       externalProfessionalOriginLocationId,
-      actualArrivalTime: data.actualArrivalTime || null,
-      paymentMethod: data.paymentMethod || null,
-      amountPaid: data.amountPaid === undefined ? null : data.amountPaid,
-      staffNotes: data.staffNotes || null,
-      attachedPhotos: data.attachedPhotos?.map(p => p.url) || [],
+      actualArrivalTime: null, // Initial value
+      paymentMethod: null,
+      amountPaid: null,
+      staffNotes: null,
+      attachedPhotos: [],
       addedServices: (data.addedServices || []).map((as) => ({
         serviceId: as.serviceId!,
         professionalId: as.professionalId === '_no_selection_placeholder_' ? null : (as.professionalId || null),
-        amountPaid: (as as any).amountPaid ?? null,
+        amountPaid: null,
         startTime: as.startTime ?? null,
       })),
       totalCalculatedDurationMinutes: totalDurationForSlotCheck,
@@ -1340,45 +1346,51 @@ export async function getPatientAppointmentHistory(patientId: string): Promise<{
 // --- End Appointments ---
 
 // --- Professional Availability ---
-export function getProfessionalAvailabilityForDate(professional: Professional, targetDate: Date): { startTime: string; endTime: string; isWorking: boolean; reason?: string, notes?: string, workingLocationId?: LocationId | null } | null {
+export function getProfessionalAvailabilityForDate(professional: Professional, targetDate: Date, targetLocationId?: LocationId): { startTime: string; endTime: string; isWorking: boolean; reason?: string, notes?: string, workingLocationId?: LocationId | null } | null {
   const contractStatus = getContractDisplayStatus(professional.currentContract, targetDate);
   const targetDateISO = formatISO(targetDate, { representation: 'date' });
-
   const customOverride = professional.customScheduleOverrides?.find(
     (override) => parseISO(override.date).toISOString().split('T')[0] === targetDateISO
   );
 
-  // Determine the authoritative working location for the day
-  let workingLocationIdForDay: LocationId | null = professional.locationId;
-  if (customOverride && customOverride.overrideType === 'traslado' && customOverride.locationId) {
-      workingLocationIdForDay = customOverride.locationId;
-  }
+  let authoritativeLocationId: LocationId | null = professional.locationId;
+  let reason = "Horario base";
 
-  // First, check contract status, as it's a hard blocker
-  if (contractStatus !== 'Activo' && contractStatus !== 'Próximo a Vencer') {
-    return { startTime: '', endTime: '', isWorking: false, reason: `Contrato: ${contractStatus}`, workingLocationId: workingLocationIdForDay };
-  }
-
-  // If there's a custom override, it takes precedence
   if (customOverride) {
-    if (customOverride.overrideType === 'descanso') {
-      return { startTime: '', endTime: '', isWorking: false, reason: `Descansando (${customOverride.notes || 'Sin especificar'})`, workingLocationId: workingLocationIdForDay };
+    if (customOverride.overrideType === 'traslado' && customOverride.locationId) {
+      authoritativeLocationId = customOverride.locationId;
+      reason = `Traslado (${customOverride.notes || 'Día completo'})`;
+    } else if (customOverride.overrideType === 'turno_especial') {
+      authoritativeLocationId = professional.locationId;
+      reason = `Turno Especial (${customOverride.notes || 'Sin especificar'})`;
+    } else if (customOverride.overrideType === 'descanso') {
+       return { startTime: '', endTime: '', isWorking: false, reason: `Descansando (${customOverride.notes || 'Sin especificar'})`, workingLocationId: authoritativeLocationId };
     }
-    if ((customOverride.overrideType === 'turno_especial' || customOverride.overrideType === 'traslado') && customOverride.startTime && customOverride.endTime) {
-      return {
-        startTime: customOverride.startTime,
-        endTime: customOverride.endTime,
-        isWorking: true,
-        reason: `${customOverride.overrideType === 'traslado' ? 'Traslado' : 'Turno Especial'} (${customOverride.notes || 'Sin especificar'})`,
-        workingLocationId: workingLocationIdForDay
-      };
-    }
-    // Fallback for incomplete override data
-    return { startTime: '', endTime: '', isWorking: false, reason: 'Anulación incompleta', workingLocationId: workingLocationIdForDay };
   }
 
-  
-  // If no override and contract is active, check base schedule
+  // If a targetLocationId is provided for a specific check (e.g., from appointment form),
+  // the professional is only available if their authoritative location for the day matches.
+  if (targetLocationId && authoritativeLocationId !== targetLocationId) {
+    return { startTime: '', endTime: '', isWorking: false, reason: 'Trabajando en otra sede', workingLocationId: authoritativeLocationId };
+  }
+
+  // Contract status is a hard blocker
+  if (contractStatus !== 'Activo' && contractStatus !== 'Próximo a Vencer') {
+    return { startTime: '', endTime: '', isWorking: false, reason: `Contrato: ${contractStatus}`, workingLocationId: authoritativeLocationId };
+  }
+
+  // Use override schedule if it exists and is not a descanso
+  if (customOverride && customOverride.isWorking && customOverride.startTime && customOverride.endTime) {
+    return {
+      startTime: customOverride.startTime,
+      endTime: customOverride.endTime,
+      isWorking: true,
+      reason,
+      workingLocationId: authoritativeLocationId
+    };
+  }
+
+  // If no applicable override, use base schedule
   const dayOfWeekIndex = getDay(targetDate); // Sunday is 0, Monday is 1, etc.
   const dayOfWeekId = DAYS_OF_WEEK[(dayOfWeekIndex + 6) % 7].id as DayOfWeekId; // Adjust to make Monday 0 -> 'monday'
   const baseSchedule = professional.workSchedule?.[dayOfWeekId];

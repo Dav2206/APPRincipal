@@ -126,6 +126,7 @@ export type AppointmentFormData = {
   serviceId: string;
   appointmentDate: Date;
   appointmentTime: string;
+  searchExternal?: boolean; // New flag for UI
   professionalOriginLocationId?: string;
   preferredProfessionalId?: string | null;
   bookingObservations?: string | null;
