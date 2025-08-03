@@ -287,9 +287,10 @@ export default function RegistryPage() {
       const startDate = selectedQuincena === 1 ? startOfMonth(baseDate) : addDays(startOfMonth(baseDate), 15);
       const endDate = selectedQuincena === 1 ? addDays(startOfMonth(baseDate), 14) : endOfMonth(baseDate);
       
-      const professionalsList = professionalsListRaw.filter(prof => 
-         getContractDisplayStatus(prof.currentContract, endDate) === 'Activo'
-      );
+      const professionalsList = professionalsListRaw.filter(prof => {
+        const contractStatus = getContractDisplayStatus(prof.currentContract, endDate);
+        return contractStatus === 'Activo' || contractStatus === 'Próximo a Vencer';
+      });
 
       let appointmentsForPeriodResponse: { appointments: Appointment[] };
       if (isAdminOrContador && adminSelectedLocation === 'all') {
@@ -323,11 +324,14 @@ export default function RegistryPage() {
       
       appointmentsForPeriod.forEach(appt => {
         const professionalForAppt = professionalsListRaw.find(p => p.id === appt.professionalId); 
-        if (appt.professionalId && professionalForAppt && appt.status === APPOINTMENT_STATUS.COMPLETED && getContractDisplayStatus(professionalForAppt.currentContract, parseISO(appt.appointmentDateTime)) === 'Activo') {
-            const entry = biWeeklyReportMap.get(appt.professionalId);
-            if (entry) { 
-                entry.biWeeklyEarnings += appt.amountPaid || 0;
-                biWeeklyReportMap.set(appt.professionalId, entry);
+        if (appt.professionalId && professionalForAppt && appt.status === APPOINTMENT_STATUS.COMPLETED) {
+            const contractStatusOnApptDate = getContractDisplayStatus(professionalForAppt.currentContract, parseISO(appt.appointmentDateTime));
+            if (contractStatusOnApptDate === 'Activo' || contractStatusOnApptDate === 'Próximo a Vencer') {
+                const entry = biWeeklyReportMap.get(appt.professionalId);
+                if (entry) { 
+                    entry.biWeeklyEarnings += appt.amountPaid || 0;
+                    biWeeklyReportMap.set(appt.professionalId, entry);
+                }
             }
         }
       });
