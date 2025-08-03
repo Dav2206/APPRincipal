@@ -247,28 +247,24 @@ export function AppointmentForm({
     const proposedEndTime = addMinutes(proposedStartTime, appointmentDuration);
     
     const finalAvailableProfs = new Set<Professional>();
-
-    // 1. Get professionals whose authoritative working location IS the target appointment location
-    const nativeOrFullDayTransferProfs = allSystemProfessionals.filter(prof => {
-        const availability = getProfessionalAvailabilityForDate(prof, watchAppointmentDate);
-        return availability?.isWorking && availability.workingLocationId === watchLocationId;
-    });
-
-    // 2. Get professionals from a different origin for temporary transfer
+    
     const isTempTransfer = watchProfessionalOriginLocationId !== SAME_LOCATION_AS_APPOINTMENT_VALUE;
-    const temporaryTransferProfs = isTempTransfer 
-        ? allSystemProfessionals.filter(prof => prof.locationId === watchProfessionalOriginLocationId)
-        : [];
-    
-    const professionalsToEvaluate = [...nativeOrFullDayTransferProfs, ...temporaryTransferProfs];
-    
-    for (const prof of professionalsToEvaluate) {
+
+    for (const prof of allSystemProfessionals) {
         if(prof.isManager) continue;
 
        const availability = getProfessionalAvailabilityForDate(prof, watchAppointmentDate);
 
        if (!availability || !availability.isWorking || !availability.startTime || !availability.endTime) {
          continue;
+       }
+       
+       const isWorkingAtTargetLocation = availability.workingLocationId === watchLocationId;
+       const isEligibleForTempTransfer = isTempTransfer && availability.workingLocationId === watchProfessionalOriginLocationId;
+       
+       // A professional is a candidate if they work at the target location OR if we are doing a temp transfer from their location
+       if (!isWorkingAtTargetLocation && !isEligibleForTempTransfer) {
+           continue;
        }
 
       const profWorkStartTime = parse(`${format(watchAppointmentDate, 'yyyy-MM-dd')} ${availability.startTime}`, 'yyyy-MM-dd HH:mm', new Date());
@@ -280,7 +276,7 @@ export function AppointmentForm({
 
       let isBusy = false;
       const appointmentsForThisProfAndDay = (appointmentsForSelectedDate || []).filter(
-        (appt) => appt.professionalId === prof.id
+        (appt) => appt.professionalId === prof.id && appt.locationId === availability.workingLocationId // Check against their actual working location
       );
 
       for (const existingAppt of appointmentsForThisProfAndDay) {
