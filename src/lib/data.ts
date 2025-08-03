@@ -1364,13 +1364,9 @@ export function getProfessionalAvailabilityForDate(
   targetDate: Date
 ): { startTime: string; endTime: string; isWorking: boolean; reason?: string, notes?: string, workingLocationId?: LocationId | null } | null {
   const contractStatus = getContractDisplayStatus(professional.currentContract, targetDate);
-
-  if (contractStatus !== 'Activo' && contractStatus !== 'Próximo a Vencer') {
-    return { startTime: '', endTime: '', isWorking: false, reason: `Contrato: ${contractStatus}` };
-  }
-
   const targetDateISO = formatISO(targetDate, { representation: 'date' });
-  
+
+  // 1. Check for a specific override for the target date. This has the highest priority.
   const customOverride = professional.customScheduleOverrides?.find(
     (override) => {
       if (typeof override.date === 'string') {
@@ -1385,6 +1381,7 @@ export function getProfessionalAvailabilityForDate(
   );
 
   if (customOverride) {
+    // An override exists, its rules are absolute for this day.
     const workingLocation = customOverride.locationId || professional.locationId;
     if (!customOverride.isWorking) {
       return { startTime: '', endTime: '', isWorking: false, reason: `Descansando (Anulación: ${customOverride.notes || 'Sin especificar'})`, notes: customOverride.notes || undefined, workingLocationId: workingLocation };
@@ -1394,16 +1391,23 @@ export function getProfessionalAvailabilityForDate(
         startTime: customOverride.startTime,
         endTime: customOverride.endTime,
         isWorking: true,
-        reason: `Horario Especial (Anulación: ${customOverride.notes || 'Sin especificar'})`,
+        reason: `Horario Especial (${customOverride.notes || 'Sin especificar'})`,
         notes: customOverride.notes || undefined,
         workingLocationId: workingLocation,
-      }; 
+      };
     }
+     // If override exists but is incomplete (e.g., isWorking:true but no times), it's invalid. Fallback to not working.
+    return { startTime: '', endTime: '', isWorking: false, reason: 'Anulación incompleta', workingLocationId: workingLocation };
   }
 
-  const dayOfWeekIndex = getDay(targetDate); 
-  const dayOfWeekId = DAYS_OF_WEEK[(dayOfWeekIndex + 6) % 7].id as DayOfWeekId; 
+  // 2. If no override, check if the contract is valid for this date.
+  if (contractStatus !== 'Activo' && contractStatus !== 'Próximo a Vencer') {
+    return { startTime: '', endTime: '', isWorking: false, reason: `Contrato: ${contractStatus}`, workingLocationId: professional.locationId };
+  }
   
+  // 3. If no override and contract is valid, check the base weekly schedule.
+  const dayOfWeekIndex = getDay(targetDate);
+  const dayOfWeekId = DAYS_OF_WEEK[(dayOfWeekIndex + 6) % 7].id as DayOfWeekId;
   const baseSchedule = professional.workSchedule?.[dayOfWeekId];
 
   if (baseSchedule && baseSchedule.isWorking && baseSchedule.startTime && baseSchedule.endTime) {
@@ -1416,7 +1420,8 @@ export function getProfessionalAvailabilityForDate(
     };
   }
 
-  return { startTime: '', endTime: '', isWorking: false, reason: `Descansando (Horario base: ${format(targetDate, 'EEEE', {locale: es})} libre)`, workingLocationId: null };
+  // 4. If no override, contract is valid, but no base schedule for the day, they are not working.
+  return { startTime: '', endTime: '', isWorking: false, reason: `Descansando (Horario base: ${format(targetDate, 'EEEE', {locale: es})} libre)`, workingLocationId: professional.locationId };
 }
 // --- End Professional Availability ---
 
@@ -1563,5 +1568,6 @@ export async function deleteImportantNote(noteId: string): Promise<boolean> {
   }
 }
 // --- End Important Notes ---
+
 
 
