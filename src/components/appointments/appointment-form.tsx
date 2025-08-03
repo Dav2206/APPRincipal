@@ -1,4 +1,5 @@
 
+
 "use client";
 
 import React, { useState, useEffect, useMemo } from 'react';
@@ -10,7 +11,7 @@ import type { Professional, Patient, Service, Appointment, Location } from '@/ty
 import { useAuth } from '@/contexts/auth-provider';
 import { useAppState } from '@/contexts/app-state-provider';
 import { USER_ROLES, TIME_SLOTS, APPOINTMENT_STATUS } from '@/lib/constants';
-import { getServices, addAppointment, getPatientById, getProfessionalAvailabilityForDate, getAppointments, getLocations } from '@/lib/data';
+import { getServices, addAppointment, getPatientById, getProfessionalAvailabilityForDate, getAppointments, getLocations, getProfessionals } from '@/lib/data';
 import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';

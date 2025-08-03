@@ -1377,7 +1377,6 @@ export function getProfessionalAvailabilityForDate(
         const overrideDateISO = parseISO(override.date).toISOString().split('T')[0];
         return overrideDateISO === targetDateISO;
       }
-      // This case is unlikely if data is saved correctly but good for safety.
       if (override.date instanceof Date) {
         return dateFnsIsSameDay(override.date, targetDate);
       }
@@ -1564,4 +1563,5 @@ export async function deleteImportantNote(noteId: string): Promise<boolean> {
   }
 }
 // --- End Important Notes ---
+
 
