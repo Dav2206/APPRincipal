@@ -243,7 +243,7 @@ export const updateLocationPaymentMethods = async (
 
 
 // --- Professionals ---
-export async function getProfessionals (locationId?: LocationId): Promise<(Professional & { contractDisplayStatus: ContractDisplayStatus })[]> {
+export async function getProfessionals(locationId?: LocationId): Promise<(Professional & { contractDisplayStatus: ContractDisplayStatus })[]> {
   const currentSystemDate = new Date();
   if (!firestore) {
     console.warn("[data.ts] getProfessionals: Firestore not available, returning empty array.");
@@ -252,16 +252,16 @@ export async function getProfessionals (locationId?: LocationId): Promise<(Profe
   try {
     const professionalsCol = collection(firestore, 'profesionales') as CollectionReference<DocumentData>;
     let queryConstraints: QueryConstraint[] = [];
-    
+
     if (locationId) {
       queryConstraints.push(where('locationId', '==', locationId));
     }
-    
+
     queryConstraints.push(orderBy('lastName'), orderBy('firstName'));
-    
+
     const finalQuery = query(professionalsCol, ...queryConstraints);
     const snapshot = await getDocs(finalQuery);
-    
+
     const fetchedProfessionals = snapshot.docs.map(docSnap => ({ id: docSnap.id, ...convertDocumentData(docSnap.data()) } as Professional));
 
     return fetchedProfessionals.map(prof => ({
@@ -272,7 +272,7 @@ export async function getProfessionals (locationId?: LocationId): Promise<(Profe
   } catch (error: any) {
     console.error("[data.ts] Error in getProfessionals. Query was for locationId:", locationId, "Error:", error);
     if (error.message && error.message.includes("firestore/indexes?create_composite")) {
-        console.error("[data.ts] Firestore query in getProfessionals requires an index. Please create it using the link in the error message:", error.message);
+      console.error("[data.ts] Firestore query in getProfessionals requires an index. Please create it using the link in the error message:", error.message);
     }
     return [];
   }
@@ -1348,28 +1348,35 @@ export function getProfessionalAvailabilityForDate(professional: Professional, t
     (override) => parseISO(override.date).toISOString().split('T')[0] === targetDateISO
   );
 
+  // Determine the authoritative working location for the day
+  let workingLocationIdForDay: LocationId | null = professional.locationId;
+  if (customOverride && customOverride.overrideType === 'traslado' && customOverride.locationId) {
+      workingLocationIdForDay = customOverride.locationId;
+  }
+
+  // First, check contract status, as it's a hard blocker
+  if (contractStatus !== 'Activo' && contractStatus !== 'Próximo a Vencer') {
+    return { startTime: '', endTime: '', isWorking: false, reason: `Contrato: ${contractStatus}`, workingLocationId: workingLocationIdForDay };
+  }
+
+  // If there's a custom override, it takes precedence
   if (customOverride) {
     if (customOverride.overrideType === 'descanso') {
-      return { startTime: '', endTime: '', isWorking: false, reason: `Descansando (${customOverride.notes || 'Sin especificar'})`, workingLocationId: professional.locationId };
+      return { startTime: '', endTime: '', isWorking: false, reason: `Descansando (${customOverride.notes || 'Sin especificar'})`, workingLocationId: workingLocationIdForDay };
     }
     if ((customOverride.overrideType === 'turno_especial' || customOverride.overrideType === 'traslado') && customOverride.startTime && customOverride.endTime) {
-      const workingLocation = customOverride.overrideType === 'traslado' ? customOverride.locationId : professional.locationId;
       return {
         startTime: customOverride.startTime,
         endTime: customOverride.endTime,
         isWorking: true,
         reason: `${customOverride.overrideType === 'traslado' ? 'Traslado' : 'Turno Especial'} (${customOverride.notes || 'Sin especificar'})`,
-        workingLocationId: workingLocation
+        workingLocationId: workingLocationIdForDay
       };
     }
     // Fallback for incomplete override data
-    return { startTime: '', endTime: '', isWorking: false, reason: 'Anulación incompleta', workingLocationId: professional.locationId };
+    return { startTime: '', endTime: '', isWorking: false, reason: 'Anulación incompleta', workingLocationId: workingLocationIdForDay };
   }
 
-  // If no override, check contract status
-  if (contractStatus !== 'Activo' && contractStatus !== 'Próximo a Vencer') {
-    return { startTime: '', endTime: '', isWorking: false, reason: `Contrato: ${contractStatus}`, workingLocationId: professional.locationId };
-  }
   
   // If no override and contract is active, check base schedule
   const dayOfWeekIndex = getDay(targetDate); // Sunday is 0, Monday is 1, etc.
