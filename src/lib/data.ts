@@ -1061,17 +1061,21 @@ export async function addAppointment(data: AppointmentFormData): Promise<Appoint
       }
     }
     
-    let assignedProf: Professional | undefined;
+    // Correctly determine if the assigned professional is external for THIS appointment
     if (professionalIdToAssign) {
-        assignedProf = await getProfessionalById(professionalIdToAssign);
-        // Check if this is a temporary transfer (not a full-day override)
-        const availability = getProfessionalAvailabilityForDate(assignedProf!, data.appointmentDate);
-        if (assignedProf && availability?.workingLocationId !== data.locationId) {
+        const assignedProf = await getProfessionalById(professionalIdToAssign);
+        const availabilityOnDay = assignedProf ? getProfessionalAvailabilityForDate(assignedProf, data.appointmentDate) : null;
+        
+        // It's an external professional for this specific appointment IF their authoritative working location for the day
+        // is NOT the same as the appointment's location.
+        if (availabilityOnDay && availabilityOnDay.workingLocationId !== data.locationId) {
             isExternalProfessional = true;
-            externalProfessionalOriginLocationId = assignedProf.locationId;
-            console.log(`[data.ts] addAppointment: Profesional ${assignedProf.firstName} es externo (traslado temporal). Origen: ${externalProfessionalOriginLocationId}, Destino: ${data.locationId}`);
+            // The origin is their authoritative working location for the day.
+            externalProfessionalOriginLocationId = availabilityOnDay.workingLocationId;
+            console.log(`[data.ts] addAppointment: Profesional ${assignedProf?.firstName} es externo (traslado por cita). Origen autorizado: ${externalProfessionalOriginLocationId}, Destino cita: ${data.locationId}`);
         }
     }
+
 
     const newAppointmentData: Omit<Appointment, 'id' | 'createdAt' | 'updatedAt'> = {
       patientId: patientId,
@@ -1320,11 +1324,11 @@ export async function deleteAppointment(appointmentId: string): Promise<boolean>
 
       if (!startOfDayForQuery || !endOfDayForQuery) {
           console.error("[data.ts] Could not create a valid date range for travel block query.");
-          // We proceed with deleting only the main appointment to avoid leaving it orphaned.
           await batch.commit();
           return true; 
       }
       
+      // Simplified query to avoid composite index
       const travelBlockQuery = query(
         appointmentsCol,
         where('isTravelBlock', '==', true),
@@ -1336,9 +1340,11 @@ export async function deleteAppointment(appointmentId: string): Promise<boolean>
       const travelBlockSnapshot = await getDocs(travelBlockQuery);
       
       if (!travelBlockSnapshot.empty) {
-        // Find the specific travel block that matches by origin location and duration.
+        // Now, filter client-side. This is efficient as a professional will have very few travel blocks per day.
         const blockToDelete = travelBlockSnapshot.docs.find(doc => {
             const blockData = doc.data() as Appointment;
+            // A travel block is a match if its origin location matches the main appointment's origin,
+            // and its duration matches the main appointment's total duration.
             return blockData.locationId === mainAppointmentData.externalProfessionalOriginLocationId &&
                    blockData.durationMinutes === mainAppointmentData.totalCalculatedDurationMinutes;
         });
@@ -1574,4 +1580,5 @@ export async function deleteImportantNote(noteId: string): Promise<boolean> {
   }
 }
 // --- End Important Notes ---
+
 

@@ -128,22 +128,9 @@ const AppointmentCardComponent = ({ appointment, onUpdate, onImageClick }: Appoi
 
   if (appointment.isTravelBlock) {
     const travelLocation = locations.find(l => l.id === appointment.locationId);
-    const travelOriginLocationId = appointment.externalProfessionalOriginLocationId || appointment.professional?.locationId;
-    const originLocationName = locations.find(l => l.id === travelOriginLocationId)?.name || 'Origen Desc.';
-    const destinationLocationName = locations.find(l => l.id === appointment.locationId)?.name || 'Destino Desc.';
+    const originLocationName = locations.find(l => l.id === appointment.externalProfessionalOriginLocationId)?.name || 'Origen Desc.';
     
     let travelDescription = appointment.bookingObservations || "Traslado programado";
-    if (appointment.bookingObservations?.includes("Traslado a")) {
-      // Use the observation as it's more specific
-    } else if (appointment.professional?.locationId === appointment.locationId) {
-        // This implies professional is at their base (appointment.locationId) and the travel block is for a trip *from* there
-        // to somewhere else (which isn't directly stored on the travel block, but implied by a later appointment)
-        // For display on *this* location's "Citas del Día", it's a departure.
-        travelDescription = `Salida de ${appointment.professional?.firstName} hacia otra sede`;
-    } else {
-        // This implies professional is traveling *to* this appointment.locationId from their base.
-        travelDescription = `Llegada de ${appointment.professional?.firstName} desde ${originLocationName}`;
-    }
 
 
     return (
