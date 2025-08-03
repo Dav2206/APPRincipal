@@ -1064,10 +1064,12 @@ export async function addAppointment(data: AppointmentFormData): Promise<Appoint
     let assignedProf: Professional | undefined;
     if (professionalIdToAssign) {
         assignedProf = await getProfessionalById(professionalIdToAssign);
-        if (assignedProf && assignedProf.locationId !== data.locationId) {
+        // Check if this is a temporary transfer (not a full-day override)
+        const availability = getProfessionalAvailabilityForDate(assignedProf!, data.appointmentDate);
+        if (assignedProf && availability?.workingLocationId !== data.locationId) {
             isExternalProfessional = true;
             externalProfessionalOriginLocationId = assignedProf.locationId;
-            console.log(`[data.ts] addAppointment: Profesional ${assignedProf.firstName} es externo. Origen: ${externalProfessionalOriginLocationId}, Destino: ${data.locationId}`);
+            console.log(`[data.ts] addAppointment: Profesional ${assignedProf.firstName} es externo (traslado temporal). Origen: ${externalProfessionalOriginLocationId}, Destino: ${data.locationId}`);
         }
     }
 
@@ -1312,22 +1314,43 @@ export async function deleteAppointment(appointmentId: string): Promise<boolean>
     if (mainAppointmentData.isExternalProfessional && mainAppointmentData.externalProfessionalOriginLocationId && mainAppointmentData.professionalId) {
       console.log(`[data.ts] This is an external professional's appointment. Searching for travel block to delete.`);
       const appointmentsCol = collection(firestore, 'citas');
+      
+      const startOfDayForQuery = toFirestoreTimestamp(startOfDay(parseISO(mainAppointmentData.appointmentDateTime)));
+      const endOfDayForQuery = toFirestoreTimestamp(endOfDay(parseISO(mainAppointmentData.appointmentDateTime)));
+
+      if (!startOfDayForQuery || !endOfDayForQuery) {
+          console.error("[data.ts] Could not create a valid date range for travel block query.");
+          // We proceed with deleting only the main appointment to avoid leaving it orphaned.
+          await batch.commit();
+          return true; 
+      }
+      
       const travelBlockQuery = query(
         appointmentsCol,
         where('isTravelBlock', '==', true),
         where('professionalId', '==', mainAppointmentData.professionalId),
-        where('locationId', '==', mainAppointmentData.externalProfessionalOriginLocationId),
-        where('appointmentDateTime', '==', toFirestoreTimestamp(mainAppointmentData.appointmentDateTime))
+        where('appointmentDateTime', '>=', startOfDayForQuery),
+        where('appointmentDateTime', '<=', endOfDayForQuery)
       );
 
       const travelBlockSnapshot = await getDocs(travelBlockQuery);
+      
       if (!travelBlockSnapshot.empty) {
-        travelBlockSnapshot.forEach(travelDoc => {
-          console.log(`[data.ts] deleteAppointment (batch): Found and queued travel block ${travelDoc.id} for deletion.`);
-          batch.delete(travelDoc.ref);
+        // Find the specific travel block that matches by origin location and duration.
+        const blockToDelete = travelBlockSnapshot.docs.find(doc => {
+            const blockData = doc.data() as Appointment;
+            return blockData.locationId === mainAppointmentData.externalProfessionalOriginLocationId &&
+                   blockData.durationMinutes === mainAppointmentData.totalCalculatedDurationMinutes;
         });
+
+        if(blockToDelete) {
+           console.log(`[data.ts] deleteAppointment (batch): Found and queued travel block ${blockToDelete.id} for deletion.`);
+           batch.delete(blockToDelete.ref);
+        } else {
+             console.warn(`[data.ts] Could not find a matching travel block to delete for appointment ${appointmentId}. It may have been deleted manually or data mismatch.`);
+        }
       } else {
-        console.warn(`[data.ts] Could not find a matching travel block to delete for appointment ${appointmentId}. It may have been deleted manually.`);
+        console.warn(`[data.ts] Could not find any travel blocks for professional ${mainAppointmentData.professionalId} on that day.`);
       }
     }
 
@@ -1551,3 +1574,4 @@ export async function deleteImportantNote(noteId: string): Promise<boolean> {
   }
 }
 // --- End Important Notes ---
+
