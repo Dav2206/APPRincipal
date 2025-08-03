@@ -243,7 +243,6 @@ export const updateLocationPaymentMethods = async (
 
 
 // --- Professionals ---
-
 export async function getProfessionals (locationId?: LocationId): Promise<(Professional & { contractDisplayStatus: ContractDisplayStatus })[]> {
   const currentSystemDate = new Date();
   if (!firestore) {
@@ -278,6 +277,7 @@ export async function getProfessionals (locationId?: LocationId): Promise<(Profe
     return [];
   }
 }
+
 
 export async function getProfessionalById (id: string): Promise<Professional | undefined> {
   try {
@@ -396,6 +396,19 @@ export async function addProfessional (data: Omit<ProfessionalFormData, 'id'>): 
 
 export async function updateProfessional (id: string, data: Partial<ProfessionalFormData>): Promise<Professional | undefined> {
   try {
+    if (!firestore) {
+      console.error("[data.ts] updateProfessional: Firestore is not initialized.");
+      throw new Error("Firestore not initialized. Professional not updated.");
+    }
+    
+    const docRef = doc(firestore, 'profesionales', id);
+    const existingProfSnap = await getDoc(docRef);
+    if (!existingProfSnap.exists()) {
+        console.warn(`[data.ts] Professional with ID ${id} not found.`);
+        return undefined;
+    }
+    const existingFirestoreProfessional = { id: existingProfSnap.id, ...convertDocumentData(existingProfSnap.data()) } as Professional;
+
     const professionalToUpdate: Partial<Omit<Professional, 'id'|'biWeeklyEarnings'>> = {};
 
     if (data.hasOwnProperty('firstName')) professionalToUpdate.firstName = data.firstName;
@@ -437,27 +450,26 @@ export async function updateProfessional (id: string, data: Partial<Professional
     }
     
     let newCurrentContractData: Contract | null | undefined = undefined; 
-    const existingProfForContract = await getProfessionalById(id);
-
+    
     const contractFieldsPresent = ['currentContract_startDate', 'currentContract_endDate', 'currentContract_notes', 'currentContract_empresa']
         .some(field => data.hasOwnProperty(field));
 
     if (contractFieldsPresent) {
         if (data.currentContract_startDate && data.currentContract_endDate) {
-            const oldContractId = existingProfForContract?.currentContract?.id;
+            const oldContractId = existingFirestoreProfessional?.currentContract?.id;
             
-            const existingStartDate = existingProfForContract?.currentContract?.startDate ? parseISO(existingProfForContract.currentContract.startDate).toISOString().split('T')[0] : null;
+            const existingStartDate = existingFirestoreProfessional?.currentContract?.startDate ? parseISO(existingFirestoreProfessional.currentContract.startDate).toISOString().split('T')[0] : null;
             const newStartDate = data.currentContract_startDate ? formatISO(data.currentContract_startDate, {representation: 'date'}) : null;
             
-            const existingEndDate = existingProfForContract?.currentContract?.endDate ? parseISO(existingProfForContract.currentContract.endDate).toISOString().split('T')[0] : null;
+            const existingEndDate = existingFirestoreProfessional?.currentContract?.endDate ? parseISO(existingFirestoreProfessional.currentContract.endDate).toISOString().split('T')[0] : null;
             const newEndDate = data.currentContract_endDate ? formatISO(data.currentContract_endDate, {representation: 'date'}) : null;
 
             const dataHasChanged = 
               !oldContractId ||
               (newStartDate !== existingStartDate) ||
               (newEndDate !== existingEndDate) ||
-              ((data.currentContract_notes ?? null) !== (existingProfForContract?.currentContract?.notes ?? null)) ||
-              ((data.currentContract_empresa ?? null) !== (existingProfForContract?.currentContract?.empresa ?? null));
+              ((data.currentContract_notes ?? null) !== (existingFirestoreProfessional?.currentContract?.notes ?? null)) ||
+              ((data.currentContract_empresa ?? null) !== (existingFirestoreProfessional?.currentContract?.empresa ?? null));
 
             newCurrentContractData = {
                 id: dataHasChanged ? generateId() : oldContractId!,
@@ -468,8 +480,8 @@ export async function updateProfessional (id: string, data: Partial<Professional
             };
         } else if (data.hasOwnProperty('currentContract_startDate') && data.currentContract_startDate === null && data.hasOwnProperty('currentContract_endDate') && data.currentContract_endDate === null) {
             newCurrentContractData = null;
-        } else if (existingProfForContract?.currentContract) {
-            newCurrentContractData = { ...existingProfForContract.currentContract };
+        } else if (existingFirestoreProfessional?.currentContract) {
+            newCurrentContractData = { ...existingFirestoreProfessional.currentContract };
             if (data.hasOwnProperty('currentContract_notes')) newCurrentContractData.notes = data.currentContract_notes || null;
             if (data.hasOwnProperty('currentContract_empresa')) newCurrentContractData.empresa = data.currentContract_empresa || null;
         }
@@ -479,19 +491,6 @@ export async function updateProfessional (id: string, data: Partial<Professional
         professionalToUpdate.currentContract = newCurrentContractData;
     }
 
-    if (!firestore) {
-      console.error("[data.ts] updateProfessional: Firestore is not initialized.");
-      throw new Error("Firestore not initialized. Professional not updated.");
-    }
-
-    const docRef = doc(firestore, 'profesionales', id);
-    const professionalDocSnap = await getDoc(docRef); 
-    if (!professionalDocSnap.exists()) {
-        console.warn(`[data.ts] Professional with ID ${id} not found in Firestore for update.`);
-        return undefined;
-    }
-    const existingFirestoreProfessional = { id: professionalDocSnap.id, ...convertDocumentData(professionalDocSnap.data()) } as Professional;
-    
     const firestoreUpdateData: any = { ...professionalToUpdate };
     firestoreUpdateData.phone = firestoreUpdateData.phone ?? null;
     firestoreUpdateData.isManager = firestoreUpdateData.isManager ?? false;
@@ -561,6 +560,7 @@ export async function updateProfessional (id: string, data: Partial<Professional
     throw error;
   }
 }
+
 // --- End Professionals ---
 
 // --- Patients ---
