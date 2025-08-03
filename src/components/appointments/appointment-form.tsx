@@ -44,9 +44,9 @@ interface AppointmentFormProps {
 }
 
 const ANY_PROFESSIONAL_VALUE = "_any_professional_placeholder_";
-const DEFAULT_SERVICE_ID_PLACEHOLDER = "_default_service_id_placeholder_"; // Puede que ya no sea necesario
+const DEFAULT_SERVICE_ID_PLACEHOLDER = "_default_service_id_placeholder_";
 const NO_SELECTION_PLACEHOLDER = "_no_selection_placeholder_";
-
+const SAME_LOCATION_AS_APPOINTMENT_VALUE = "_same_location_as_appointment_";
 
 export function AppointmentForm({
   isOpen,
@@ -55,7 +55,6 @@ export function AppointmentForm({
   initialData,
   defaultDate,
   allProfessionals: allSystemProfessionals,
-  currentLocationProfessionals: professionalsForCurrentLocationProp
 }: AppointmentFormProps) {
   const { user } = useAuth();
   const { selectedLocationId: adminSelectedLocation } = useAppState();
@@ -110,9 +109,9 @@ export function AppointmentForm({
       serviceId: initialData?.serviceId || '',
       appointmentDate: initialData?.appointmentDate || defaultDate || new Date(),
       appointmentTime: initialData?.appointmentTime || TIME_SLOTS.find(slot => slot === "10:00") || TIME_SLOTS[0],
+      professionalOriginLocationId: initialData?.professionalOriginLocationId || SAME_LOCATION_AS_APPOINTMENT_VALUE,
       preferredProfessionalId: initialData?.preferredProfessionalId || ANY_PROFESSIONAL_VALUE,
       bookingObservations: initialData?.bookingObservations || '',
-      searchExternal: initialData?.searchExternal || false,
       addedServices: initialData?.addedServices || [],
     },
   });
@@ -141,9 +140,8 @@ export function AppointmentForm({
   const watchAppointmentTime = form.watch('appointmentTime');
   const watchServiceId = form.watch('serviceId');
   const watchPreferredProfessionalId = form.watch('preferredProfessionalId');
-  const watchSearchExternal = form.watch('searchExternal');
   const watchIsWalkIn = form.watch('isWalkIn');
-
+  const watchProfessionalOriginLocationId = form.watch('professionalOriginLocationId');
 
   useEffect(() => {
     async function loadInitialServices() {
@@ -166,14 +164,13 @@ export function AppointmentForm({
 
   useEffect(() => {
     if (isOpen && initialData?.locationId !== watchLocationId) { 
-        form.setValue('searchExternal', false);
+        form.setValue('professionalOriginLocationId', SAME_LOCATION_AS_APPOINTMENT_VALUE);
         form.setValue('preferredProfessionalId', ANY_PROFESSIONAL_VALUE);
     }
   }, [watchLocationId, isOpen, form, initialData?.locationId]);
 
   useEffect(() => {
     if (watchIsWalkIn) {
-      // Clear patient search and personal details
       form.setValue('existingPatientId', null);
       form.setValue('patientFirstName', 'Cliente');
       form.setValue('patientLastName', 'de Paso');
@@ -183,7 +180,6 @@ export function AppointmentForm({
       setCurrentPatientForHistory(null);
       setShowPatientHistory(false);
     } else {
-       // If unchecking, clear the walk-in values
        if(form.getValues('patientFirstName') === 'Cliente' && form.getValues('patientLastName') === 'de Paso'){
           form.setValue('patientFirstName', '');
           form.setValue('patientLastName', '');
@@ -219,6 +215,15 @@ export function AppointmentForm({
   }, [isOpen, watchLocationId, watchAppointmentDate]);
 
 
+  const professionalsToConsider = useMemo(() => {
+    const originLocation = watchProfessionalOriginLocationId;
+    if (!originLocation || originLocation === SAME_LOCATION_AS_APPOINTMENT_VALUE) {
+        return allSystemProfessionals.filter(p => p.locationId === watchLocationId);
+    }
+    return allSystemProfessionals.filter(p => p.locationId === originLocation);
+  }, [allSystemProfessionals, watchLocationId, watchProfessionalOriginLocationId]);
+
+
   useEffect(() => {
     if (!isOpen || !watchAppointmentDate || !watchAppointmentTime || !watchServiceId || servicesList.length === 0 || isLoadingAppointments ) {
       setAvailableProfessionalsForTimeSlot([]);
@@ -236,14 +241,7 @@ export function AppointmentForm({
     const appointmentDuration = selectedService.defaultDuration;
     const proposedStartTime = parse(`${format(watchAppointmentDate, 'yyyy-MM-dd')} ${watchAppointmentTime}`, 'yyyy-MM-dd HH:mm', new Date());
     const proposedEndTime = addMinutes(proposedStartTime, appointmentDuration);
-
-    let professionalsToConsider: Professional[] = [];
-    if (watchSearchExternal) {
-        professionalsToConsider = allSystemProfessionals;
-    } else {
-        professionalsToConsider = professionalsForCurrentLocationProp;
-    }
-
+    
     const availableProfs: Professional[] = [];
     for (const prof of professionalsToConsider) {
        const dailyAvailability = getProfessionalAvailabilityForDate(prof, watchAppointmentDate);
@@ -252,7 +250,6 @@ export function AppointmentForm({
          continue;
        }
 
-       // Check if the professional should be considered for THIS location on THIS day
        if (dailyAvailability.workingLocationId !== watchLocationId) {
          continue;
        }
@@ -294,10 +291,6 @@ export function AppointmentForm({
         setSlotAvailabilityMessage(
             <>
               {baseMessage}
-              {watchSearchExternal && " (incluyendo otras sedes)."}
-              {!watchSearchExternal && professionalsForCurrentLocationProp?.length > 0 && allSystemProfessionals?.length > professionalsForCurrentLocationProp.length && 
-                <span className="block text-xs mt-1">Pruebe marcando "Buscar profesional en otras sedes".</span>
-              }
             </>
         );
     } else {
@@ -309,11 +302,9 @@ export function AppointmentForm({
       watchAppointmentTime, 
       watchServiceId, 
       servicesList, 
-      professionalsForCurrentLocationProp, 
-      allSystemProfessionals, 
+      professionalsToConsider,
       appointmentsForSelectedDate, 
       isLoadingAppointments, 
-      watchSearchExternal, 
       watchLocationId
     ]);
 
@@ -401,6 +392,7 @@ export function AppointmentForm({
         serviceId: servicesList.length > 0 ? servicesList[0].id : '',
         appointmentTime: TIME_SLOTS.find(slot => slot === "10:00") || TIME_SLOTS[0], 
         preferredProfessionalId: ANY_PROFESSIONAL_VALUE,
+        professionalOriginLocationId: SAME_LOCATION_AS_APPOINTMENT_VALUE,
         patientFirstName: '',
         patientLastName: '',
         patientPhone: '',
@@ -409,7 +401,6 @@ export function AppointmentForm({
         existingPatientId: null,
         isWalkIn: false,
         bookingObservations: '',
-        searchExternal: false,
         addedServices: [],
       });
       setCurrentPatientForHistory(null);
@@ -466,6 +457,7 @@ export function AppointmentForm({
           serviceId: servicesList.length > 0 ? servicesList[0].id : '',
           appointmentTime: TIME_SLOTS.find(slot => slot === "10:00") || TIME_SLOTS[0], 
           preferredProfessionalId: ANY_PROFESSIONAL_VALUE,
+          professionalOriginLocationId: SAME_LOCATION_AS_APPOINTMENT_VALUE,
           patientFirstName: '',
           patientLastName: '',
           patientPhone: '',
@@ -474,7 +466,6 @@ export function AppointmentForm({
           isWalkIn: false,
           existingPatientId: null,
           bookingObservations: '',
-          searchExternal: false,
           addedServices: [],
         });
         setCurrentPatientForHistory(null);
@@ -647,8 +638,8 @@ export function AppointmentForm({
                   name="locationId"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel className="flex items-center gap-1"><Building size={16}/>Sede</FormLabel>
-                      <Select onValueChange={(value) => { field.onChange(value); form.setValue('searchExternal', false); form.setValue('preferredProfessionalId', ANY_PROFESSIONAL_VALUE);}} value={field.value || ""} disabled={(user?.role === USER_ROLES.LOCATION_STAFF && !isAdminOrContador) || isLoadingServices || servicesList.length === 0}>
+                      <FormLabel className="flex items-center gap-1"><Building size={16}/>Sede de la Cita (Destino)</FormLabel>
+                      <Select onValueChange={(value) => { field.onChange(value); form.setValue('professionalOriginLocationId', SAME_LOCATION_AS_APPOINTMENT_VALUE); form.setValue('preferredProfessionalId', ANY_PROFESSIONAL_VALUE);}} value={field.value || ""} disabled={(user?.role === USER_ROLES.LOCATION_STAFF && !isAdminOrContador) || isLoadingServices || servicesList.length === 0}>
                         <FormControl>
                           <SelectTrigger><SelectValue placeholder="Seleccionar sede" /></SelectTrigger>
                         </FormControl>
@@ -795,31 +786,42 @@ export function AppointmentForm({
                 
                 <div className="space-y-2">
                   <h4 className="text-md font-semibold flex items-center gap-2"><Briefcase /> Profesional y Observaciones</h4>
-                   <FormField
+                  <FormField
                       control={form.control}
-                      name="searchExternal"
+                      name="professionalOriginLocationId"
                       render={({ field }) => (
-                          <FormItem className="flex flex-row items-center space-x-3 space-y-0 rounded-md border p-3 shadow-sm">
-                              <FormControl>
-                                  <Checkbox
-                                      checked={field.value}
-                                      onCheckedChange={(checked) => {
-                                          const isChecked = Boolean(checked);
-                                          field.onChange(isChecked);
-                                          form.setValue('preferredProfessionalId', ANY_PROFESSIONAL_VALUE);
-                                      }}
-                                      disabled={checkboxDisabledReason}
-                                      id="searchExternalCheckbox"
-                                  />
-                              </FormControl>
-                              <div className="space-y-1 leading-none">
-                                  <Label htmlFor="searchExternalCheckbox" className={cn("cursor-pointer", checkboxDisabledReason && "text-muted-foreground")}>
-                                      Buscar profesional en otras sedes
-                                  </Label>
-                              </div>
-                          </FormItem>
+                        <FormItem>
+                          <FormLabel>Sede de Origen del Profesional</FormLabel>
+                          <Select
+                            onValueChange={(value) => {
+                              field.onChange(value);
+                              form.setValue('preferredProfessionalId', ANY_PROFESSIONAL_VALUE); // Reset professional selection
+                            }}
+                            value={field.value || SAME_LOCATION_AS_APPOINTMENT_VALUE}
+                            disabled={checkboxDisabledReason}
+                          >
+                            <FormControl>
+                              <SelectTrigger>
+                                <SelectValue placeholder="Seleccionar sede de origen" />
+                              </SelectTrigger>
+                            </FormControl>
+                            <SelectContent>
+                              <SelectItem value={SAME_LOCATION_AS_APPOINTMENT_VALUE}>
+                                Misma Sede de la Cita
+                              </SelectItem>
+                              {locations
+                                .filter(loc => loc.id !== watchLocationId) // Exclude the destination location
+                                .map(loc => (
+                                  <SelectItem key={loc.id} value={loc.id}>
+                                    {loc.name}
+                                  </SelectItem>
+                                ))}
+                            </SelectContent>
+                          </Select>
+                          <FormMessage />
+                        </FormItem>
                       )}
-                  />
+                    />
                   <FormField
                     control={form.control}
                     name="preferredProfessionalId"
@@ -835,7 +837,7 @@ export function AppointmentForm({
                             <SelectTrigger>
                                 <SelectValue placeholder={
                                     (isLoadingAppointments || isLoadingServices) ? "Cargando..." :
-                                    (availableProfessionalsForTimeSlot.length > 0 || watchSearchExternal) ? "Cualquier profesional disponible" :
+                                    (availableProfessionalsForTimeSlot.length > 0) ? "Cualquier profesional disponible" :
                                     "No hay profesionales disponibles"
                                 } />
                             </SelectTrigger>
@@ -844,7 +846,7 @@ export function AppointmentForm({
                             <SelectItem value={ANY_PROFESSIONAL_VALUE}>Cualquier profesional disponible</SelectItem>
                             {availableProfessionalsForTimeSlot.map(prof => (
                               <SelectItem key={prof.id} value={prof.id}>
-                                  {prof.firstName} {prof.lastName} {watchSearchExternal && prof.locationId !== watchLocationId ? `(Sede: ${locations.find(l=>l.id === prof.locationId)?.name || 'Externa'})` : ''}
+                                  {prof.firstName} {prof.lastName}
                               </SelectItem>
                             ))}
                           </SelectContent>
@@ -982,6 +984,7 @@ export function AppointmentForm({
                 serviceId: servicesList.length > 0 ? servicesList[0].id : '',
                 appointmentTime: TIME_SLOTS.find(slot => slot === "10:00") || TIME_SLOTS[0], 
                 preferredProfessionalId: ANY_PROFESSIONAL_VALUE,
+                professionalOriginLocationId: SAME_LOCATION_AS_APPOINTMENT_VALUE,
                 patientFirstName: '',
                 patientLastName: '',
                 patientPhone: '',
@@ -990,7 +993,6 @@ export function AppointmentForm({
                 isWalkIn: false,
                 existingPatientId: null,
                 bookingObservations: '',
-                searchExternal: false,
                 addedServices: [],
               });
               setCurrentPatientForHistory(null);

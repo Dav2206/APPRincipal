@@ -11,8 +11,6 @@ export const LoginSchema = z.object({
 });
 export type LoginFormData = z.infer<typeof LoginSchema>;
 
-// const locationIds = LOCATIONS.map(loc => loc.id); // Replaced with a more generic string check
-// const paymentMethodValues = PAYMENT_METHODS.map(pm => pm); // No longer a strict enum
 const appointmentStatusKeys = Object.keys(APPOINTMENT_STATUS_DISPLAY) as (keyof typeof APPOINTMENT_STATUS_DISPLAY)[];
 const dayOfWeekIds = DAYS_OF_WEEK.map(day => day.id);
 
@@ -42,16 +40,15 @@ export const AppointmentFormSchema = z.object({
   serviceId: z.string().min(1, "Servicio es requerido."),
   appointmentDate: z.date({ required_error: "Fecha de la cita es requerida."}),
   appointmentTime: z.string().refine(val => TIME_SLOTS.includes(val), { message: "Hora inválida."}),
+  professionalOriginLocationId: z.string().optional(),
   preferredProfessionalId: z.string().optional().nullable(),
   bookingObservations: z.string().optional().nullable(),
-  searchExternal: z.boolean().optional(),
   addedServices: z.array(z.object({
     serviceId: z.string().min(1, "Servicio adicional inválido."),
     professionalId: z.string().optional().nullable(),
     amountPaid: z.coerce.number().positive("El monto pagado debe ser positivo.").optional().nullable(),
     startTime: z.string().regex(/^([01]\d|2[0-3]):([0-5]\d)$/, "Formato HH:MM").optional().nullable(),
   })).optional().nullable(),
-   // Campos de AppointmentUpdateFormData que no están aquí
    status: z.string().optional(),
    actualArrivalTime: z.string().optional().nullable(),
    durationMinutes: z.number().optional(),
@@ -96,7 +93,7 @@ export const ProfessionalFormSchema = z.object({
   lastName: z.string().min(2, "Apellido es requerido."),
   locationId: z.string().min(1, "Sede es requerida."),
   phone: z.string().optional().nullable(),
-  isManager: z.boolean().optional(), // Nuevo campo para gerente
+  isManager: z.boolean().optional(),
   birthDay: z.coerce.number().int().min(1).max(31).optional().nullable(),
   birthMonth: z.coerce.number().int().min(1).max(12).optional().nullable(),
 
@@ -150,9 +147,9 @@ export const AppointmentUpdateSchema = z.object({
   appointmentTime: z.string().refine(val => TIME_SLOTS.includes(val), { message: "Hora inválida."}).optional(),
   actualArrivalTime: z.string().optional().nullable(),
   professionalId: z.string().optional().nullable(),
-  durationMinutes: z.coerce.number().int().min(0, "La duración debe ser un número positivo o cero.").optional().nullable(), // Permitir cero
+  durationMinutes: z.coerce.number().int().min(0, "La duración debe ser un número positivo o cero.").optional().nullable(),
   paymentMethod: z.string().min(1, { message: "El método de pago es requerido si se completa." }).optional().nullable(),
-  amountPaid: z.coerce.number().min(0, "El monto pagado no puede ser negativo.").optional().nullable(), // Permitir cero
+  amountPaid: z.coerce.number().min(0, "El monto pagado no puede ser negativo.").optional().nullable(),
   staffNotes: z.string().optional().nullable(),
   attachedPhotos: z.array(z.object({ url: z.string() })).optional().nullable(),
   addedServices: z.array(z.object({ 

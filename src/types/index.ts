@@ -126,9 +126,9 @@ export type AppointmentFormData = {
   serviceId: string;
   appointmentDate: Date;
   appointmentTime: string;
+  professionalOriginLocationId?: string;
   preferredProfessionalId?: string | null;
   bookingObservations?: string | null;
-  searchExternal?: boolean;
   addedServices?: Partial<AddedServiceItem>[];
 };
 
