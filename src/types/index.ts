@@ -228,5 +228,3 @@ export interface ImportantNoteFormData {
   title: string;
   content: string;
 }
-
-    

@@ -255,7 +255,7 @@ export async function getProfessionals (locationId?: LocationId): Promise<(Profe
     let queryConstraints: QueryConstraint[] = [];
     
     if (locationId) {
-      q_constraints.push(where('locationId', '==', locationId));
+      queryConstraints.push(where('locationId', '==', locationId));
     }
     
     queryConstraints.push(orderBy('lastName'), orderBy('firstName'));
@@ -1362,15 +1362,18 @@ export function getProfessionalAvailabilityForDate(professional: Professional, t
         workingLocationId: workingLocation
       };
     }
+    // Fallback for incomplete override data
     return { startTime: '', endTime: '', isWorking: false, reason: 'Anulación incompleta', workingLocationId: professional.locationId };
   }
 
+  // If no override, check contract status
   if (contractStatus !== 'Activo' && contractStatus !== 'Próximo a Vencer') {
     return { startTime: '', endTime: '', isWorking: false, reason: `Contrato: ${contractStatus}`, workingLocationId: professional.locationId };
   }
   
-  const dayOfWeekIndex = getDay(targetDate);
-  const dayOfWeekId = DAYS_OF_WEEK[(dayOfWeekIndex + 6) % 7].id as DayOfWeekId;
+  // If no override and contract is active, check base schedule
+  const dayOfWeekIndex = getDay(targetDate); // Sunday is 0, Monday is 1, etc.
+  const dayOfWeekId = DAYS_OF_WEEK[(dayOfWeekIndex + 6) % 7].id as DayOfWeekId; // Adjust to make Monday 0 -> 'monday'
   const baseSchedule = professional.workSchedule?.[dayOfWeekId];
 
   if (baseSchedule && baseSchedule.isWorking && baseSchedule.startTime && baseSchedule.endTime) {
@@ -1383,6 +1386,7 @@ export function getProfessionalAvailabilityForDate(professional: Professional, t
     };
   }
 
+  // If no override, contract is active, but base schedule says not working
   return { startTime: '', endTime: '', isWorking: false, reason: `Descansando (Horario base: ${format(targetDate, 'EEEE', {locale: es})} libre)`, workingLocationId: professional.locationId };
 }
 // --- End Professional Availability ---
@@ -1530,5 +1534,3 @@ export async function deleteImportantNote(noteId: string): Promise<boolean> {
   }
 }
 // --- End Important Notes ---
-
-    
