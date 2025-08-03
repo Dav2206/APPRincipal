@@ -1,5 +1,4 @@
 
-
 // src/lib/data.ts
 import type { User, Professional, Patient, Service, Appointment, AppointmentFormData, ProfessionalFormData, AppointmentStatus, ServiceFormData, Contract, PeriodicReminder, ImportantNote, PeriodicReminderFormData, ImportantNoteFormData, AddedServiceItem, AppointmentUpdateFormData, Location } from '@/types';
 import { USER_ROLES, APPOINTMENT_STATUS, APPOINTMENT_STATUS_DISPLAY, TIME_SLOTS, DAYS_OF_WEEK, LOCATIONS_FALLBACK } from '@/lib/constants';
@@ -247,28 +246,24 @@ export const updateLocationPaymentMethods = async (
 
 export async function getProfessionals (locationId?: LocationId): Promise<(Professional & { contractDisplayStatus: ContractDisplayStatus })[]> {
   const currentSystemDate = new Date();
-
+  if (!firestore) {
+    console.warn("[data.ts] getProfessionals: Firestore not available, returning empty array.");
+    return [];
+  }
   try {
-    if (!firestore) {
-      console.warn("[data.ts] getProfessionals: Firestore not available, returning empty array.");
-      return [];
-    }
-
     const professionalsCol = collection(firestore, 'profesionales') as CollectionReference<DocumentData>;
-    let qConstraints: QueryConstraint[] = [];
+    let queryConstraints: QueryConstraint[] = [];
+    
     if (locationId) {
-      qConstraints.push(where('locationId', '==', locationId));
+      q_constraints.push(where('locationId', '==', locationId));
     }
     
-    const finalQuery = query(professionalsCol, ...qConstraints);
+    queryConstraints.push(orderBy('lastName'), orderBy('firstName'));
+    
+    const finalQuery = query(professionalsCol, ...queryConstraints);
     const snapshot = await getDocs(finalQuery);
-    let fetchedProfessionals = snapshot.docs.map(docSnap => ({ id: docSnap.id, ...convertDocumentData(docSnap.data()) } as Professional));
-
-    fetchedProfessionals.sort((a, b) => {
-      const nameA = `${a.firstName || ''} ${a.lastName || ''}`.toLowerCase();
-      const nameB = `${b.firstName || ''} ${b.lastName || ''}`.toLowerCase();
-      return nameA.localeCompare(nameB);
-    });
+    
+    const fetchedProfessionals = snapshot.docs.map(docSnap => ({ id: docSnap.id, ...convertDocumentData(docSnap.data()) } as Professional));
 
     return fetchedProfessionals.map(prof => ({
       ...prof,
@@ -286,7 +281,6 @@ export async function getProfessionals (locationId?: LocationId): Promise<(Profe
 
 export async function getProfessionalById (id: string): Promise<Professional | undefined> {
   try {
-   
     if (!firestore) {
       console.warn("[data.ts] getProfessionalById: Firestore not available, returning undefined.");
       return undefined;
@@ -294,122 +288,110 @@ export async function getProfessionalById (id: string): Promise<Professional | u
     const docRef = doc(firestore, 'profesionales', id);
     const docSnap = await getDoc(docRef);
     if (docSnap.exists()) {
- return { id: docSnap.id, ...convertDocumentData(docSnap.data()) } as Professional;
+      return { id: docSnap.id, ...convertDocumentData(docSnap.data()) } as Professional;
     }
     return undefined;
   } catch (error) {
     console.error(`[data.ts] Error fetching professional by ID "${id}":`, error);
-  
- return undefined;
+    return undefined;
   }
-}
-export async function updateProfessionalById(id: string, data: Partial<ProfessionalFormData>): Promise<Professional | undefined> {
-  // Esta es la función que consolida la lógica de 'updateProfessional'
-  // El contenido de 'updateProfessional' se mueve aquí.
-  // ... (toda la lógica de 'updateProfessional' va aquí) ...
-  // Por simplicidad en este ejemplo, se asume que la lógica ya fue movida.
-  return updateProfessional(id, data);
 }
 
 export async function addProfessional (data: Omit<ProfessionalFormData, 'id'>): Promise<Professional> {
-  const LOCATIONS = await getLocations();
-  try {
-    const newProfessionalData: Omit<Professional, 'id' | 'biWeeklyEarnings'> = {
-      firstName: data.firstName,
-      lastName: data.lastName,
-      locationId: data.locationId,
-      phone: data.phone || null,
-      isManager: data.isManager || false,
-      birthDay: data.birthDay ?? null,
-      birthMonth: data.birthMonth ?? null,
-      workSchedule: {}, 
-      customScheduleOverrides: (data.customScheduleOverrides || []).map(ov => ({
-        ...ov,
-        id: ov.id || generateId(),
-        date: formatISO(ov.date, { representation: 'date' }),
-        startTime: ov.isWorking ? ov.startTime : undefined,
-        endTime: ov.isWorking ? ov.endTime : undefined,
-        notes: ov.notes || null,
-        locationId: ov.locationId || null,
-      })),
-      currentContract: (data.currentContract_startDate && data.currentContract_endDate) ? {
-        id: generateId(),
-        startDate: formatISO(data.currentContract_startDate, { representation: 'date' }),
-        endDate: formatISO(data.currentContract_endDate, { representation: 'date' }),
-        notes: data.currentContract_notes || null,
-        empresa: data.currentContract_empresa || null,
-      } : null,
-      contractHistory: [],
-    };
+  const newProfessionalData: Omit<Professional, 'id' | 'biWeeklyEarnings'> = {
+    firstName: data.firstName,
+    lastName: data.lastName,
+    locationId: data.locationId,
+    phone: data.phone || null,
+    isManager: data.isManager || false,
+    birthDay: data.birthDay ?? null,
+    birthMonth: data.birthMonth ?? null,
+    workSchedule: {}, 
+    customScheduleOverrides: (data.customScheduleOverrides || []).map(ov => ({
+      ...ov,
+      id: ov.id || generateId(),
+      date: formatISO(ov.date, { representation: 'date' }),
+      overrideType: ov.overrideType || 'descanso',
+      isWorking: ov.overrideType !== 'descanso',
+      startTime: ov.overrideType !== 'descanso' ? ov.startTime : undefined,
+      endTime: ov.overrideType !== 'descanso' ? ov.endTime : undefined,
+      locationId: ov.overrideType === 'traslado' ? ov.locationId : undefined,
+      notes: ov.notes || null,
+    })),
+    currentContract: (data.currentContract_startDate && data.currentContract_endDate) ? {
+      id: generateId(),
+      startDate: formatISO(data.currentContract_startDate, { representation: 'date' }),
+      endDate: formatISO(data.currentContract_endDate, { representation: 'date' }),
+      notes: data.currentContract_notes || null,
+      empresa: data.currentContract_empresa || null,
+    } : null,
+    contractHistory: [],
+  };
 
-    if (data.workSchedule) {
-      (Object.keys(data.workSchedule) as Array<DayOfWeekId>).forEach(dayId => {
-        const dayData = data.workSchedule![dayId];
-        if (dayData) { 
-          newProfessionalData.workSchedule[dayId] = {
-            startTime: dayData.startTime || '00:00',
-            endTime: dayData.endTime || '00:00',
-            isWorking: dayData.isWorking === undefined ? (!!dayData.startTime && !!dayData.endTime) : dayData.isWorking,
-          };
-        } else {
-           newProfessionalData.workSchedule[dayId] = { startTime: '00:00', endTime: '00:00', isWorking: false };
-        }
+  if (data.workSchedule) {
+    (Object.keys(data.workSchedule) as Array<DayOfWeekId>).forEach(dayId => {
+      const dayData = data.workSchedule![dayId];
+      if (dayData) { 
+        newProfessionalData.workSchedule[dayId] = {
+          startTime: dayData.startTime || '00:00',
+          endTime: dayData.endTime || '00:00',
+          isWorking: dayData.isWorking === undefined ? (!!dayData.startTime && !!dayData.endTime) : dayData.isWorking,
+        };
+      } else {
+         newProfessionalData.workSchedule[dayId] = { startTime: '00:00', endTime: '00:00', isWorking: false };
+      }
+    });
+  } else {
+      DAYS_OF_WEEK.forEach(dayInfo => {
+           newProfessionalData.workSchedule[dayInfo.id] = { startTime: '00:00', endTime: '00:00', isWorking: false };
       });
-    } else {
-        DAYS_OF_WEEK.forEach(dayInfo => {
-             newProfessionalData.workSchedule[dayInfo.id] = { startTime: '00:00', endTime: '00:00', isWorking: false };
-        });
-    }
-
-    if (!firestore) {
-      console.error("[data.ts] addProfessional: Firestore is not initialized.");
-      throw new Error("Firestore not initialized. Professional not added.");
-    }
-
-    const firestoreData: any = { ...newProfessionalData, biWeeklyEarnings: 0 };
-    firestoreData.phone = firestoreData.phone ?? null; 
-    firestoreData.isManager = firestoreData.isManager ?? false;
-    firestoreData.birthDay = firestoreData.birthDay ?? null;
-    firestoreData.birthMonth = firestoreData.birthMonth ?? null;
-   
-    if (firestoreData.currentContract) {
-      firestoreData.currentContract.startDate = toFirestoreTimestamp(firestoreData.currentContract.startDate);
-      firestoreData.currentContract.endDate = toFirestoreTimestamp(firestoreData.currentContract.endDate);
-      firestoreData.currentContract.notes = firestoreData.currentContract.notes ?? null;
-      firestoreData.currentContract.empresa = firestoreData.currentContract.empresa ?? null;
-    } else {
-      firestoreData.currentContract = null;
-    }
-
-    if (firestoreData.customScheduleOverrides) {
-      firestoreData.customScheduleOverrides = firestoreData.customScheduleOverrides.map((ov: any) => ({
-        ...ov,
-        date: toFirestoreTimestamp(ov.date), // Correct conversion for new professionals
-        startTime: ov.startTime ?? null,
-        endTime: ov.endTime ?? null,
-        notes: ov.notes ?? null,
-        locationId: ov.locationId ?? null,
-      }));
-    } else {
-      firestoreData.customScheduleOverrides = [];
-    }
-    
-     firestoreData.contractHistory = firestoreData.contractHistory ? firestoreData.contractHistory.map((ch:any) => ({
-      ...ch,
-      id: ch.id || generateId(),
-      startDate: toFirestoreTimestamp(ch.startDate),
-      endDate: toFirestoreTimestamp(ch.endDate),
-      notes: ch.notes ?? null,
-      empresa: ch.empresa ?? null,
-    })) : [];
-
-    const docRef = await addDoc(collection(firestore, 'profesionales'), firestoreData);
-    const finalAddedProf = { ...newProfessionalData, id: docRef.id, biWeeklyEarnings: 0 } as Professional;
-    return finalAddedProf;
-  } catch (error) {
-    console.error("[data.ts] Error adding professional:", error);
-    throw error;
   }
+
+  if (!firestore) {
+    console.error("[data.ts] addProfessional: Firestore is not initialized.");
+    throw new Error("Firestore not initialized. Professional not added.");
+  }
+
+  const firestoreData: any = { ...newProfessionalData, biWeeklyEarnings: 0 };
+  firestoreData.phone = firestoreData.phone ?? null; 
+  firestoreData.isManager = firestoreData.isManager ?? false;
+  firestoreData.birthDay = firestoreData.birthDay ?? null;
+  firestoreData.birthMonth = firestoreData.birthMonth ?? null;
+ 
+  if (firestoreData.currentContract) {
+    firestoreData.currentContract.startDate = toFirestoreTimestamp(firestoreData.currentContract.startDate);
+    firestoreData.currentContract.endDate = toFirestoreTimestamp(firestoreData.currentContract.endDate);
+    firestoreData.currentContract.notes = firestoreData.currentContract.notes ?? null;
+    firestoreData.currentContract.empresa = firestoreData.currentContract.empresa ?? null;
+  } else {
+    firestoreData.currentContract = null;
+  }
+
+  if (firestoreData.customScheduleOverrides) {
+    firestoreData.customScheduleOverrides = firestoreData.customScheduleOverrides.map((ov: any) => ({
+      ...ov,
+      date: toFirestoreTimestamp(ov.date),
+      startTime: ov.startTime ?? null,
+      endTime: ov.endTime ?? null,
+      notes: ov.notes ?? null,
+      locationId: ov.locationId ?? null,
+    }));
+  } else {
+    firestoreData.customScheduleOverrides = [];
+  }
+  
+   firestoreData.contractHistory = firestoreData.contractHistory ? firestoreData.contractHistory.map((ch:any) => ({
+    ...ch,
+    id: ch.id || generateId(),
+    startDate: toFirestoreTimestamp(ch.startDate),
+    endDate: toFirestoreTimestamp(ch.endDate),
+    notes: ch.notes ?? null,
+    empresa: ch.empresa ?? null,
+  })) : [];
+
+  const docRef = await addDoc(collection(firestore, 'profesionales'), firestoreData);
+  const finalAddedProf = { ...newProfessionalData, id: docRef.id, biWeeklyEarnings: 0 } as Professional;
+  return finalAddedProf;
 }
 
 export async function updateProfessional (id: string, data: Partial<ProfessionalFormData>): Promise<Professional | undefined> {
@@ -423,7 +405,6 @@ export async function updateProfessional (id: string, data: Partial<Professional
     if (data.hasOwnProperty('isManager')) professionalToUpdate.isManager = data.isManager || false;
     if (data.hasOwnProperty('birthDay')) professionalToUpdate.birthDay = data.birthDay ?? null;
     if (data.hasOwnProperty('birthMonth')) professionalToUpdate.birthMonth = data.birthMonth ?? null;
-
 
     if (data.workSchedule !== undefined) {
         professionalToUpdate.workSchedule = {};
@@ -445,11 +426,13 @@ export async function updateProfessional (id: string, data: Partial<Professional
       professionalToUpdate.customScheduleOverrides = (data.customScheduleOverrides || []).map(ov => ({
         ...ov,
         id: ov.id || generateId(),
-        date: typeof ov.date === 'string' ? ov.date : formatISO(ov.date, { representation: 'date' }), // Ensure it is a string
-        startTime: ov.isWorking ? ov.startTime : undefined,
-        endTime: ov.isWorking ? ov.endTime : undefined,
+        date: typeof ov.date === 'string' ? ov.date : formatISO(ov.date, { representation: 'date' }),
+        overrideType: ov.overrideType || 'descanso',
+        isWorking: ov.overrideType !== 'descanso',
+        startTime: ov.overrideType !== 'descanso' ? ov.startTime : undefined,
+        endTime: ov.overrideType !== 'descanso' ? ov.endTime : undefined,
+        locationId: ov.overrideType === 'traslado' ? ov.locationId : undefined,
         notes: ov.notes || null,
-        locationId: ov.locationId || null,
       }));
     }
     
@@ -495,8 +478,6 @@ export async function updateProfessional (id: string, data: Partial<Professional
         }
         professionalToUpdate.currentContract = newCurrentContractData;
     }
-
-  
 
     if (!firestore) {
       console.error("[data.ts] updateProfessional: Firestore is not initialized.");
@@ -1359,53 +1340,35 @@ export async function getPatientAppointmentHistory(patientId: string): Promise<{
 // --- End Appointments ---
 
 // --- Professional Availability ---
-export function getProfessionalAvailabilityForDate(
-  professional: Professional,
-  targetDate: Date
-): { startTime: string; endTime: string; isWorking: boolean; reason?: string, notes?: string, workingLocationId?: LocationId | null } | null {
+export function getProfessionalAvailabilityForDate(professional: Professional, targetDate: Date): { startTime: string; endTime: string; isWorking: boolean; reason?: string, notes?: string, workingLocationId?: LocationId | null } | null {
   const contractStatus = getContractDisplayStatus(professional.currentContract, targetDate);
   const targetDateISO = formatISO(targetDate, { representation: 'date' });
 
-  // 1. Check for a specific override for the target date. This has the highest priority.
   const customOverride = professional.customScheduleOverrides?.find(
-    (override) => {
-      if (typeof override.date === 'string') {
-        const overrideDateISO = parseISO(override.date).toISOString().split('T')[0];
-        return overrideDateISO === targetDateISO;
-      }
-      if (override.date instanceof Date) {
-        return dateFnsIsSameDay(override.date, targetDate);
-      }
-      return false;
-    }
+    (override) => parseISO(override.date).toISOString().split('T')[0] === targetDateISO
   );
 
   if (customOverride) {
-    // An override exists, its rules are absolute for this day.
-    const workingLocation = customOverride.locationId || professional.locationId;
-    if (!customOverride.isWorking) {
-      return { startTime: '', endTime: '', isWorking: false, reason: `Descansando (Anulación: ${customOverride.notes || 'Sin especificar'})`, notes: customOverride.notes || undefined, workingLocationId: workingLocation };
+    if (customOverride.overrideType === 'descanso') {
+      return { startTime: '', endTime: '', isWorking: false, reason: `Descansando (${customOverride.notes || 'Sin especificar'})`, workingLocationId: professional.locationId };
     }
-    if (customOverride.startTime && customOverride.endTime) {
+    if ((customOverride.overrideType === 'turno_especial' || customOverride.overrideType === 'traslado') && customOverride.startTime && customOverride.endTime) {
+      const workingLocation = customOverride.overrideType === 'traslado' ? customOverride.locationId : professional.locationId;
       return {
         startTime: customOverride.startTime,
         endTime: customOverride.endTime,
         isWorking: true,
-        reason: `Horario Especial (${customOverride.notes || 'Sin especificar'})`,
-        notes: customOverride.notes || undefined,
-        workingLocationId: workingLocation,
+        reason: `${customOverride.overrideType === 'traslado' ? 'Traslado' : 'Turno Especial'} (${customOverride.notes || 'Sin especificar'})`,
+        workingLocationId: workingLocation
       };
     }
-     // If override exists but is incomplete (e.g., isWorking:true but no times), it's invalid. Fallback to not working.
-    return { startTime: '', endTime: '', isWorking: false, reason: 'Anulación incompleta', workingLocationId: workingLocation };
+    return { startTime: '', endTime: '', isWorking: false, reason: 'Anulación incompleta', workingLocationId: professional.locationId };
   }
 
-  // 2. If no override, check if the contract is valid for this date.
   if (contractStatus !== 'Activo' && contractStatus !== 'Próximo a Vencer') {
     return { startTime: '', endTime: '', isWorking: false, reason: `Contrato: ${contractStatus}`, workingLocationId: professional.locationId };
   }
   
-  // 3. If no override and contract is valid, check the base weekly schedule.
   const dayOfWeekIndex = getDay(targetDate);
   const dayOfWeekId = DAYS_OF_WEEK[(dayOfWeekIndex + 6) % 7].id as DayOfWeekId;
   const baseSchedule = professional.workSchedule?.[dayOfWeekId];
@@ -1420,7 +1383,6 @@ export function getProfessionalAvailabilityForDate(
     };
   }
 
-  // 4. If no override, contract is valid, but no base schedule for the day, they are not working.
   return { startTime: '', endTime: '', isWorking: false, reason: `Descansando (Horario base: ${format(targetDate, 'EEEE', {locale: es})} libre)`, workingLocationId: professional.locationId };
 }
 // --- End Professional Availability ---
@@ -1569,5 +1531,4 @@ export async function deleteImportantNote(noteId: string): Promise<boolean> {
 }
 // --- End Important Notes ---
 
-
-
+    

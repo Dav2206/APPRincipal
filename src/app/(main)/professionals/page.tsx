@@ -97,7 +97,7 @@ export default function ProfessionalsPage() {
     defaultValues: {
       firstName: '',
       lastName: '',
-      locationId: locations.length > 0 ? locations[0].id : '',
+      locationId: '',
       phone: '',
       isManager: false,
       workSchedule: defaultBaseWorkSchedule,
@@ -116,22 +116,13 @@ export default function ProfessionalsPage() {
     name: "customScheduleOverrides"
   });
 
-
-  const effectiveLocationIdForFetch = useMemo(() => {
-    if (!user || !isAdminOrContador) return undefined;
-    return adminSelectedLocation === 'all' ? undefined : adminSelectedLocation as LocationId;
-  }, [user, isAdminOrContador, adminSelectedLocation]);
-
-
   const fetchProfessionals = useCallback(async () => {
-    if (!isAdminOrContador || locations.length === 0) {
-      setIsLoading(false);
-      return;
-    }
+    if (!user || !isAdminOrContador) return;
     setIsLoading(true);
     try {
-      const profsToSet = await getProfessionals(effectiveLocationIdForFetch);
-      setAllProfessionals(profsToSet || []);
+      const locationToFetch = adminSelectedLocation === 'all' ? undefined : adminSelectedLocation as LocationId;
+      const profs = await getProfessionals(locationToFetch);
+      setAllProfessionals(profs || []);
     } catch (error) {
       console.error("Failed to fetch professionals:", error);
       toast({ title: "Error", description: "No se pudieron cargar los profesionales.", variant: "destructive" });
@@ -139,26 +130,26 @@ export default function ProfessionalsPage() {
     } finally {
       setIsLoading(false);
     }
-  }, [effectiveLocationIdForFetch, isAdminOrContador, toast, locations]);
-  
+  }, [user, isAdminOrContador, adminSelectedLocation, toast]);
 
   useEffect(() => {
     async function loadInitialData() {
-      setIsLoading(true);
       const fetchedLocations = await getLocations();
       setLocations(fetchedLocations);
-      // Let the fetchProfessionals hook handle its own loading state based on locations now being set
-      setIsLoading(false); 
+      if (user && isAdminOrContador) {
+        fetchProfessionals();
+      } else {
+        setIsLoading(false);
+      }
     }
     loadInitialData();
-  }, []);
+  }, [user, isAdminOrContador, fetchProfessionals]);
 
   useEffect(() => {
-    if (locations.length > 0) {
+    if (user && isAdminOrContador) {
       fetchProfessionals();
     }
-  }, [locations, fetchProfessionals]);
-
+  }, [adminSelectedLocation, fetchProfessionals, user, isAdminOrContador]);
 
   const filteredProfessionals = useMemo(() => {
     return allProfessionals.filter(p =>
@@ -249,17 +240,18 @@ export default function ProfessionalsPage() {
         return;
     }
     try {
-      // Correctly format override dates to ISO strings before submission
-      const formattedData = {
+      const formattedData: ProfessionalFormData = {
         ...data,
-        customScheduleOverrides: data.customScheduleOverrides?.map(ov => ({
-          ...ov,
-          date: dateFnsFormatISO(ov.date, { representation: 'date' }),
-        }))
+        customScheduleOverrides: (data.customScheduleOverrides || []).map(ov => ({
+            ...ov,
+            startTime: ov.overrideType !== 'descanso' ? ov.startTime : undefined,
+            endTime: ov.overrideType !== 'descanso' ? ov.endTime : undefined,
+            locationId: ov.overrideType === 'traslado' ? ov.locationId : undefined,
+        })),
       };
 
       const result = editingProfessional && editingProfessional.id
-        ? await updateProfessional(editingProfessional.id, formattedData as any)
+        ? await updateProfessional(editingProfessional.id, formattedData)
         : await addProfessional(formattedData as any);
 
       if (result) {
@@ -461,7 +453,7 @@ export default function ProfessionalsPage() {
       </Card>
 
       <Dialog open={isFormOpen} onOpenChange={setIsFormOpen}>
-        <DialogContent className="sm:max-w-2xl">
+        <DialogContent className="sm:max-w-3xl">
           <DialogHeader>
             <DialogTitle>{editingProfessional ? 'Editar' : 'Agregar'} Profesional</DialogTitle>
             <DialogDescription>
@@ -472,7 +464,7 @@ export default function ProfessionalsPage() {
             <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-1 py-4 max-h-[80vh] overflow-y-auto pr-2">
               {editingProfessional && <input type="hidden" {...form.register("id")} />}
 
-              <Accordion type="multiple" defaultValue={['personal-info', 'base-schedule', 'contract-info']} className="w-full">
+              <Accordion type="multiple" defaultValue={['personal-info', 'base-schedule']} className="w-full">
                 <AccordionItem value="personal-info">
                   <AccordionTrigger className="text-lg font-semibold">Información Personal</AccordionTrigger>
                   <AccordionContent className="space-y-4 pt-2">
@@ -485,7 +477,7 @@ export default function ProfessionalsPage() {
                       )}/>
                     </div>
                     <FormField control={form.control} name="locationId" render={({ field }) => (
-                        <FormItem className="mt-4"><FormLabel>Sede</FormLabel>
+                        <FormItem className="mt-4"><FormLabel>Sede Base</FormLabel>
                           <Select onValueChange={field.onChange} value={field.value} disabled={isContadorOnly && !!editingProfessional}>
                             <FormControl><SelectTrigger><SelectValue placeholder="Seleccionar sede" /></SelectTrigger></FormControl>
                             <SelectContent>{locations.map(loc => (<SelectItem key={loc.id} value={loc.id}>{loc.name}</SelectItem>))}</SelectContent>
@@ -613,12 +605,12 @@ export default function ProfessionalsPage() {
 
                 <AccordionItem value="custom-overrides">
                   <AccordionTrigger className="text-lg font-semibold">
-                    Registrar Días de Descanso / Horarios Especiales
+                    Registrar Excepciones (Descansos, Turnos Especiales, Traslados)
                   </AccordionTrigger>
                   <AccordionContent className="space-y-4 pt-2">
                     <div className="flex items-center justify-between">
                          <h4 className="text-md font-semibold mb-2">
-                            Horarios para {format(overrideDisplayDate, 'MMMM yyyy', { locale: es })}
+                            Excepciones para {format(overrideDisplayDate, 'MMMM yyyy', { locale: es })}
                         </h4>
                         <div className="flex items-center justify-center gap-2">
                             <Button type="button" variant="ghost" size="icon" className="h-6 w-6" onClick={() => setOverrideDisplayDate(prev => subMonths(prev, 1))}>
@@ -630,30 +622,51 @@ export default function ProfessionalsPage() {
                             </Button>
                         </div>
                     </div>
-                    <FormDescription className="text-xs px-1">
-                      Utilice esta sección para marcar días específicos en los que el profesional no trabajará o si tendrá un horario diferente al de su base semanal.
-                    </FormDescription>
-                    {customScheduleFields.filter(field => isSameMonth(field.date, overrideDisplayDate)).map((field, index) => (
+                    
+                    {customScheduleFields.filter(field => isSameMonth(field.date, overrideDisplayDate)).map((field, index) => {
+                      const overrideType = form.watch(`customScheduleOverrides.${index}.overrideType`);
+                      return (
                       <div key={field.id} className="p-4 border rounded-lg space-y-3 relative bg-muted/30">
                           <Button type="button" variant="ghost" size="icon" className="absolute top-2 right-2 h-7 w-7" onClick={() => removeCustomSchedule(index)}>
-                            <Trash2 className="h-4 w-4 text-destructive" /> <span className="sr-only">Eliminar Anulación</span>
+                            <Trash2 className="h-4 w-4 text-destructive" /> <span className="sr-only">Eliminar Excepción</span>
                           </Button>
-                        <FormField control={form.control} name={`customScheduleOverrides.${index}.date`} render={({ field: dateField }) => (
-                          <FormItem className="flex flex-col"><FormLabel>Fecha Específica</FormLabel>
-                            <Popover><PopoverTrigger asChild><FormControl>
-                                <Button variant={"outline"} className={cn("w-full pl-3 text-left font-normal", !dateField.value && "text-muted-foreground")}>
-                                  {dateField.value ? format(dateField.value, "PPP", {locale: es}) : <span>Seleccionar fecha</span>} <CalendarIconLucide className="ml-auto h-4 w-4 opacity-50" />
-                                </Button></FormControl></PopoverTrigger>
-                              <PopoverContent className="w-auto p-0" align="start"><Calendar mode="single" selected={dateField.value} onSelect={dateField.onChange} initialFocus month={overrideDisplayDate} /></PopoverContent>
-                            </Popover><FormMessage /></FormItem>
-                        )}/>
-                        <FormField control={form.control} name={`customScheduleOverrides.${index}.isWorking`} render={({ field: isWorkingField }) => (
-                          <FormItem className="flex flex-row items-center space-x-3 space-y-0 rounded-md border p-3 shadow-sm bg-background">
-                            <FormControl><Checkbox checked={isWorkingField.value} onCheckedChange={isWorkingField.onChange} /></FormControl>
-                            <div className="space-y-1 leading-none"><FormLabel>¿Trabaja este día?</FormLabel></div>
-                          </FormItem>
-                        )}/>
-                        {form.watch(`customScheduleOverrides.${index}.isWorking`) && (
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                          <FormField control={form.control} name={`customScheduleOverrides.${index}.date`} render={({ field: dateField }) => (
+                            <FormItem className="flex flex-col"><FormLabel>Fecha Específica</FormLabel>
+                              <Popover><PopoverTrigger asChild><FormControl>
+                                  <Button variant={"outline"} className={cn("w-full pl-3 text-left font-normal", !dateField.value && "text-muted-foreground")}>
+                                    {dateField.value ? format(dateField.value, "PPP", {locale: es}) : <span>Seleccionar fecha</span>} <CalendarIconLucide className="ml-auto h-4 w-4 opacity-50" />
+                                  </Button></FormControl></PopoverTrigger>
+                                <PopoverContent className="w-auto p-0" align="start"><Calendar mode="single" selected={dateField.value} onSelect={dateField.onChange} initialFocus month={overrideDisplayDate} /></PopoverContent>
+                              </Popover><FormMessage /></FormItem>
+                          )}/>
+                          <FormField control={form.control} name={`customScheduleOverrides.${index}.overrideType`} render={({ field: typeField }) => (
+                            <FormItem><FormLabel>Tipo de Excepción</FormLabel>
+                              <Select onValueChange={typeField.onChange} value={typeField.value}>
+                                <FormControl><SelectTrigger><SelectValue placeholder="Seleccionar tipo" /></SelectTrigger></FormControl>
+                                <SelectContent>
+                                    <SelectItem value="descanso">Descanso (No trabaja)</SelectItem>
+                                    <SelectItem value="turno_especial">Turno Especial (en Sede Base)</SelectItem>
+                                    <SelectItem value="traslado">Traslado (a otra Sede)</SelectItem>
+                                </SelectContent>
+                              </Select><FormMessage /></FormItem>
+                          )}/>
+                        </div>
+
+                        {overrideType === 'traslado' && (
+                           <FormField control={form.control} name={`customScheduleOverrides.${index}.locationId`} render={({ field: locField }) => (
+                            <FormItem><FormLabel className="text-xs">Sede de Destino</FormLabel>
+                              <Select onValueChange={locField.onChange} value={locField.value || ""}>
+                                <FormControl><SelectTrigger><SelectValue placeholder="Seleccionar sede de destino" /></SelectTrigger></FormControl>
+                                <SelectContent>
+                                    {locations.map(loc => (<SelectItem key={`ov-loc-${loc.id}-${index}`} value={loc.id}>{loc.name}</SelectItem>))}
+                                </SelectContent>
+                              </Select>
+                            <FormMessage /></FormItem>
+                          )}/>
+                        )}
+
+                        {(overrideType === 'turno_especial' || overrideType === 'traslado') && (
                           <div className="grid grid-cols-2 gap-3">
                             <FormField control={form.control} name={`customScheduleOverrides.${index}.startTime`} render={({ field: stField }) => (
                               <FormItem><FormLabel className="text-xs">Hora Inicio</FormLabel>
@@ -667,29 +680,19 @@ export default function ProfessionalsPage() {
                                   <SelectContent>{TIME_SLOTS.map(slot => (<SelectItem key={`cs-end-${slot}`} value={slot}>{slot}</SelectItem>))}</SelectContent>
                                 </Select><FormMessage /></FormItem>
                             )}/>
-                             <FormField control={form.control} name={`customScheduleOverrides.${index}.locationId`} render={({ field: locField }) => (
-                                <FormItem className="col-span-2"><FormLabel className="text-xs">Sede de Trabajo (Opcional)</FormLabel>
-                                  <Select onValueChange={(value) => locField.onChange(value === USE_BASE_LOCATION_PLACEHOLDER ? null : value)} value={locField.value || USE_BASE_LOCATION_PLACEHOLDER}>
-                                    <FormControl><SelectTrigger><SelectValue placeholder="Usar sede base del profesional" /></SelectTrigger></FormControl>
-                                    <SelectContent>
-                                        <SelectItem value={USE_BASE_LOCATION_PLACEHOLDER}>Usar sede base del profesional</SelectItem>
-                                        {locations.map(loc => (<SelectItem key={`ov-loc-${loc.id}-${index}`} value={loc.id}>{loc.name}</SelectItem>))}
-                                    </SelectContent>
-                                  </Select>
-                                <FormMessage /></FormItem>
-                            )}/>
                           </div>
                         )}
                         <FormField control={form.control} name={`customScheduleOverrides.${index}.notes`} render={({ field: notesField }) => (
-                          <FormItem><FormLabel className="text-xs">Notas (Razón del descanso o detalle del horario especial)</FormLabel><FormControl><Textarea placeholder="Ej: Vacaciones, Cita médica, Turno especial tarde" {...notesField} value={notesField.value ?? ''} /></FormControl><FormMessage /></FormItem>
+                          <FormItem><FormLabel className="text-xs">Notas (Razón del descanso, detalle del turno, etc.)</FormLabel><FormControl><Textarea placeholder="Ej: Vacaciones, Cita médica, Turno especial tarde" {...notesField} value={notesField.value ?? ''} /></FormControl><FormMessage /></FormItem>
                         )}/>
                       </div>
-                    ))}
+                      )
+                    })}
                     {customScheduleFields.filter(field => isSameMonth(field.date, overrideDisplayDate)).length === 0 && (
-                        <p className="text-sm text-muted-foreground text-center py-4">No hay horarios especiales para {format(overrideDisplayDate, 'MMMM yyyy', { locale: es })}.</p>
+                        <p className="text-sm text-muted-foreground text-center py-4">No hay excepciones para {format(overrideDisplayDate, 'MMMM yyyy', { locale: es })}.</p>
                     )}
-                    <Button type="button" variant="outline" size="sm" className="mt-4" onClick={() => appendCustomSchedule({ id: generateId(), date: startOfMonth(overrideDisplayDate), isWorking: false, startTime: undefined, endTime: undefined, notes: 'Descanso', locationId: undefined })}>
-                      <PlusCircle className="mr-2 h-4 w-4" /> Agregar Anulación de Horario
+                    <Button type="button" variant="outline" size="sm" className="mt-4" onClick={() => appendCustomSchedule({ id: generateId(), date: startOfMonth(overrideDisplayDate), overrideType: 'descanso', notes: 'Descanso' })}>
+                      <PlusCircle className="mr-2 h-4 w-4" /> Agregar Excepción
                     </Button>
                   </AccordionContent>
                 </AccordionItem>
@@ -766,7 +769,5 @@ export default function ProfessionalsPage() {
     </div>
   );
 }
-
-
 
     

@@ -1,5 +1,4 @@
 
-
 import { z } from 'zod';
 import { TIME_SLOTS, APPOINTMENT_STATUS_DISPLAY, DAYS_OF_WEEK } from '@/lib/constants';
 import type { DayOfWeekId, LocationId } from '@/lib/constants';
@@ -108,18 +107,26 @@ export const ProfessionalFormSchema = z.object({
     z.object({
       id: z.string(),
       date: z.date({ required_error: "La fecha es requerida para la anulación." }),
-      isWorking: z.boolean(),
+      overrideType: z.enum(['descanso', 'turno_especial', 'traslado'], { required_error: "Debe seleccionar un tipo de excepción."}),
       startTime: z.string().regex(/^([01]\d|2[0-3]):([0-5]\d)$/, "Formato HH:MM").optional().nullable(),
       endTime: z.string().regex(/^([01]\d|2[0-3]):([0-5]\d)$/, "Formato HH:MM").optional().nullable(),
       notes: z.string().optional().nullable(),
       locationId: z.string().optional().nullable(),
     }).refine(data => {
-      if (data.isWorking) {
+      if (data.overrideType === 'traslado') {
+        return !!data.locationId;
+      }
+      return true;
+    }, {
+      message: "Debe seleccionar una sede de destino para un traslado.",
+      path: ["locationId"],
+    }).refine(data => {
+      if (data.overrideType === 'turno_especial' || data.overrideType === 'traslado') {
         return data.startTime && data.endTime && data.startTime < data.endTime;
       }
       return true;
     }, {
-      message: "Si trabaja, inicio y fin son requeridos, y inicio debe ser antes que fin.",
+      message: "Para turnos especiales o traslados, inicio y fin son requeridos, y inicio debe ser antes que fin.",
       path: ["startTime"],
     })
   ).optional().nullable(),
@@ -211,3 +218,5 @@ export const ImportantNoteFormSchema = z.object({
   content: z.string().min(1, "El contenido es requerido."),
 });
 export type ImportantNoteFormData = z.infer<typeof ImportantNoteFormSchema>;
+
+    

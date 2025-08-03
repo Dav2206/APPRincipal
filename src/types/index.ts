@@ -1,5 +1,4 @@
 
-
 import type { LocationId, UserRole, PaymentMethod, AppointmentStatus, DayOfWeekId } from '../lib/constants';
 
 export interface BaseEntity {
@@ -48,10 +47,11 @@ export interface Professional extends BaseEntity {
   customScheduleOverrides?: Array<{
     id: string;
     date: string; // ISO Date string 'YYYY-MM-DD'
+    overrideType: 'descanso' | 'turno_especial' | 'traslado';
     isWorking: boolean;
     startTime?: string;
     endTime?: string;
-    locationId?: LocationId | null; // Optional override location
+    locationId?: LocationId | null; // Used for 'traslado' type
     notes?: string | null;
   }>;
 
@@ -149,7 +149,7 @@ export type ProfessionalFormData = {
   customScheduleOverrides?: Array<{
     id: string;
     date: Date;
-    isWorking: boolean;
+    overrideType: 'descanso' | 'turno_especial' | 'traslado';
     startTime?: string;
     endTime?: string;
     locationId?: LocationId | null;
@@ -228,3 +228,5 @@ export interface ImportantNoteFormData {
   title: string;
   content: string;
 }
+
+    
