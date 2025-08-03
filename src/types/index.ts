@@ -110,6 +110,7 @@ export interface Appointment extends BaseEntity {
   isExternalProfessional?: boolean;
   externalProfessionalOriginLocationId?: LocationId | null;
   isTravelBlock?: boolean;
+  originalAppointmentId?: string; // Link to the main appointment for travel blocks
   _deleted?: boolean; // Flag for UI handling of deleted items
 }
 

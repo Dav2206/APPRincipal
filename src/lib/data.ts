@@ -1117,28 +1117,20 @@ export async function addAppointment(data: AppointmentFormData): Promise<Appoint
 
     if (isExternalProfessional && externalProfessionalOriginLocationId && professionalIdToAssign) {
       const travelBlockRef = doc(collection(firestore, 'citas'));
-      const travelBlockData: Omit<Appointment, 'id' | 'createdAt' | 'updatedAt'> = {
-        patientId: null,
+      const travelBlockData: Partial<Appointment> = {
+        isTravelBlock: true,
+        originalAppointmentId: mainAppointmentRef.id, // Link to the main appointment
         professionalId: professionalIdToAssign,
-        serviceId: 'travel',
         locationId: externalProfessionalOriginLocationId, 
         appointmentDateTime: formatISO(proposedStartTime),
         durationMinutes: totalDurationForSlotCheck,
         totalCalculatedDurationMinutes: totalDurationForSlotCheck,
         status: 'booked',
-        isTravelBlock: true,
         bookingObservations: `Traslado a ${LOCATIONS.find(l => l.id === data.locationId)?.name || 'otra sede'}`,
-        externalProfessionalOriginLocationId: externalProfessionalOriginLocationId,
-        isExternalProfessional: false,
-        addedServices: [],
-        amountPaid: null,
-        paymentMethod: null,
-        staffNotes: null,
-        attachedPhotos: [],
       };
       const travelBlockFirestoreData = {
         ...travelBlockData,
-        appointmentDateTime: toFirestoreTimestamp(travelBlockData.appointmentDateTime),
+        appointmentDateTime: toFirestoreTimestamp(travelBlockData.appointmentDateTime!),
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
       };
@@ -1174,6 +1166,53 @@ export async function addAppointment(data: AppointmentFormData): Promise<Appoint
   }
 }
 
+// Helper function to find and manage travel blocks
+async function manageRelatedTravelBlock(
+  batch: ReturnType<typeof writeBatch>,
+  mainAppointmentId: string,
+  updatedAppointmentData: Partial<Appointment>,
+  oldAppointmentData: Appointment
+) {
+  if (!firestore) return;
+  const appointmentsCol = collection(firestore, 'citas');
+
+  // 1. Find and delete the OLD travel block, if it exists
+  const oldTravelBlockQuery = query(appointmentsCol, where('originalAppointmentId', '==', mainAppointmentId));
+  const oldTravelBlockSnapshot = await getDocs(oldTravelBlockQuery);
+  oldTravelBlockSnapshot.forEach(doc => {
+    console.log(`[manageRelatedTravelBlock] Found old travel block ${doc.id} to delete.`);
+    batch.delete(doc.ref);
+  });
+
+  // 2. If the updated appointment is STILL an external one, create a NEW travel block
+  if (updatedAppointmentData.isExternalProfessional && updatedAppointmentData.externalProfessionalOriginLocationId && updatedAppointmentData.professionalId) {
+    const travelBlockRef = doc(collection(firestore, 'citas'));
+    const travelBlockData: Partial<Appointment> = {
+      isTravelBlock: true,
+      originalAppointmentId: mainAppointmentId,
+      professionalId: updatedAppointmentData.professionalId,
+      locationId: updatedAppointmentData.externalProfessionalOriginLocationId,
+      appointmentDateTime: updatedAppointmentData.appointmentDateTime,
+      durationMinutes: updatedAppointmentData.totalCalculatedDurationMinutes,
+      totalCalculatedDurationMinutes: updatedAppointmentData.totalCalculatedDurationMinutes,
+      status: 'booked',
+      bookingObservations: `Traslado a ${updatedAppointmentData.locationId}`,
+      createdAt: oldAppointmentData.createdAt, // Keep original creation date if needed
+      updatedAt: serverTimestamp(),
+    };
+    const firestoreTravelBlockData = { ...travelBlockData };
+    if (firestoreTravelBlockData.appointmentDateTime) {
+      firestoreTravelBlockData.appointmentDateTime = toFirestoreTimestamp(firestoreTravelBlockData.appointmentDateTime);
+    }
+     if (firestoreTravelBlockData.createdAt) {
+      firestoreTravelBlockData.createdAt = toFirestoreTimestamp(firestoreTravelBlockData.createdAt);
+    }
+    batch.set(travelBlockRef, firestoreTravelBlockData);
+    console.log(`[manageRelatedTravelBlock] Queued new travel block ${travelBlockRef.id} for creation.`);
+  }
+}
+
+
 export async function updateAppointment(
   id: string,
   data: Partial<AppointmentUpdateFormData>,
@@ -1186,6 +1225,13 @@ export async function updateAppointment(
   }
 
   const docRef = doc(firestore, 'citas', id);
+  const oldAppointmentSnap = await getDoc(docRef);
+  if (!oldAppointmentSnap.exists()) {
+    console.warn(`[data.ts] updateAppointment: No se encontró la cita con ID ${id}.`);
+    return undefined;
+  }
+  const oldAppointmentData = { id: oldAppointmentSnap.id, ...convertDocumentData(oldAppointmentSnap.data()) } as Appointment;
+
   const appointmentToUpdate: { [key: string]: any } = {};
 
   Object.keys(data).forEach(key => {
@@ -1194,6 +1240,7 @@ export async function updateAppointment(
     }
   });
 
+  // Photo handling logic remains the same
   if (data.attachedPhotos !== undefined) {
     const newPhotoDataUris = (data.attachedPhotos || []).map(p => p && p.url).filter(url => url && url.startsWith('data:image/'));
     const existingPhotoUrlsFromForm = (data.attachedPhotos || []).map(p => p && p.url).filter(url => url && (url.startsWith('http') || url.startsWith('gs://')));
@@ -1265,9 +1312,46 @@ export async function updateAppointment(
   
   delete firestoreUpdateData.appointmentDate;
   delete firestoreUpdateData.appointmentTime;
+
+  // New logic to determine if the appointment is now external
+  const allServicesList = await getServices();
+  const mainService = allServicesList.find(s => s.id === (data.serviceId || oldAppointmentData.serviceId));
+  let totalDuration = mainService?.defaultDuration || 0;
+  if(data.addedServices) {
+      data.addedServices.forEach(as => {
+          const addedSvcInfo = allServicesList.find(s => s.id === as.serviceId);
+          if (addedSvcInfo) totalDuration += addedSvcInfo.defaultDuration;
+      });
+  }
+  firestoreUpdateData.totalCalculatedDurationMinutes = totalDuration;
   
-  console.log(`[data.ts] Objeto final enviado para actualización en Firestore (ID: ${id}):`, firestoreUpdateData);
-  await updateDoc(docRef, firestoreUpdateData);
+  const assignedProfessionalId = data.professionalId === '_no_selection_placeholder_' ? null : data.professionalId || oldAppointmentData.professionalId;
+  firestoreUpdateData.professionalId = assignedProfessionalId;
+
+  if (assignedProfessionalId) {
+      const assignedProf = await getProfessionalById(assignedProfessionalId);
+      const availabilityOnDay = assignedProf ? getProfessionalAvailabilityForDate(assignedProf, data.appointmentDate || parseISO(oldAppointmentData.appointmentDateTime)) : null;
+      if (availabilityOnDay && availabilityOnDay.workingLocationId !== oldAppointmentData.locationId) {
+          firestoreUpdateData.isExternalProfessional = true;
+          firestoreUpdateData.externalProfessionalOriginLocationId = availabilityOnDay.workingLocationId;
+      } else {
+          firestoreUpdateData.isExternalProfessional = false;
+          firestoreUpdateData.externalProfessionalOriginLocationId = null;
+      }
+  } else {
+       firestoreUpdateData.isExternalProfessional = false;
+       firestoreUpdateData.externalProfessionalOriginLocationId = null;
+  }
+  
+  const batch = writeBatch(firestore);
+  batch.update(docRef, firestoreUpdateData);
+
+  const finalUpdatedData = { ...oldAppointmentData, ...firestoreUpdateData };
+  finalUpdatedData.appointmentDateTime = formatISO(data.appointmentDate || parseISO(oldAppointmentData.appointmentDateTime)); // Use ISO string for logic
+
+  await manageRelatedTravelBlock(batch, id, finalUpdatedData, oldAppointmentData);
+
+  await batch.commit();
 
   const updatedDoc = await getDoc(docRef);
   if (updatedDoc.exists()) {
@@ -1299,69 +1383,27 @@ export async function deleteAppointment(appointmentId: string): Promise<boolean>
     throw new Error("Firestore not initialized. Appointment not deleted.");
   }
   try {
-    const mainAppointmentRef = doc(firestore, 'citas', appointmentId);
-    const mainAppointmentSnap = await getDoc(mainAppointmentRef);
-
-    if (!mainAppointmentSnap.exists()) {
-      console.warn(`[data.ts] deleteAppointment: Appointment with ID ${appointmentId} not found.`);
-      return true; // Already gone, so success.
-    }
-
-    const mainAppointmentData = convertDocumentData(mainAppointmentSnap.data()) as Appointment;
     const batch = writeBatch(firestore);
+    const mainAppointmentRef = doc(firestore, 'citas', appointmentId);
+    
+    // Also find and delete the related travel block
+    const travelBlockQuery = query(collection(firestore, 'citas'), where('originalAppointmentId', '==', appointmentId));
+    const travelBlockSnapshot = await getDocs(travelBlockQuery);
+    
+    if (!travelBlockSnapshot.empty) {
+      const travelBlockDoc = travelBlockSnapshot.docs[0];
+      console.log(`[data.ts] deleteAppointment (batch): Found and queued travel block ${travelBlockDoc.id} for deletion.`);
+      batch.delete(travelBlockDoc.ref);
+    } else {
+      console.log(`[data.ts] deleteAppointment: No associated travel block found for appointment ${appointmentId}.`);
+    }
 
     // Delete the main appointment
     batch.delete(mainAppointmentRef);
     console.log(`[data.ts] deleteAppointment (batch): Queued main appointment ${appointmentId} for deletion.`);
 
-    // If it was an external professional's appointment, find and delete the corresponding travel block
-    if (mainAppointmentData.isExternalProfessional && mainAppointmentData.externalProfessionalOriginLocationId && mainAppointmentData.professionalId) {
-      console.log(`[data.ts] This is an external professional's appointment. Searching for travel block to delete.`);
-      const appointmentsCol = collection(firestore, 'citas');
-      
-      const startOfDayForQuery = toFirestoreTimestamp(startOfDay(parseISO(mainAppointmentData.appointmentDateTime)));
-      const endOfDayForQuery = toFirestoreTimestamp(endOfDay(parseISO(mainAppointmentData.appointmentDateTime)));
-
-      if (!startOfDayForQuery || !endOfDayForQuery) {
-          console.error("[data.ts] Could not create a valid date range for travel block query.");
-          await batch.commit();
-          return true; 
-      }
-      
-      // Simplified query to avoid composite index
-      const travelBlockQuery = query(
-        appointmentsCol,
-        where('isTravelBlock', '==', true),
-        where('professionalId', '==', mainAppointmentData.professionalId),
-        where('appointmentDateTime', '>=', startOfDayForQuery),
-        where('appointmentDateTime', '<=', endOfDayForQuery)
-      );
-
-      const travelBlockSnapshot = await getDocs(travelBlockQuery);
-      
-      if (!travelBlockSnapshot.empty) {
-        // Now, filter client-side. This is efficient as a professional will have very few travel blocks per day.
-        const blockToDelete = travelBlockSnapshot.docs.find(doc => {
-            const blockData = doc.data() as Appointment;
-            // A travel block is a match if its origin location matches the main appointment's origin,
-            // and its duration matches the main appointment's total duration.
-            return blockData.locationId === mainAppointmentData.externalProfessionalOriginLocationId &&
-                   blockData.durationMinutes === mainAppointmentData.totalCalculatedDurationMinutes;
-        });
-
-        if(blockToDelete) {
-           console.log(`[data.ts] deleteAppointment (batch): Found and queued travel block ${blockToDelete.id} for deletion.`);
-           batch.delete(blockToDelete.ref);
-        } else {
-             console.warn(`[data.ts] Could not find a matching travel block to delete for appointment ${appointmentId}. It may have been deleted manually or data mismatch.`);
-        }
-      } else {
-        console.warn(`[data.ts] Could not find any travel blocks for professional ${mainAppointmentData.professionalId} on that day.`);
-      }
-    }
-
     await batch.commit();
-    console.log(`[data.ts] deleteAppointment (batch): Batch committed successfully.`);
+    console.log(`[data.ts] deleteAppointment (batch): Batch committed successfully for appointment ${appointmentId} and its travel block (if any).`);
     return true;
   } catch (error) {
     console.error(`[data.ts] deleteAppointment (Firestore): Error deleting appointment ${appointmentId}:`, error);
@@ -1580,5 +1622,6 @@ export async function deleteImportantNote(noteId: string): Promise<boolean> {
   }
 }
 // --- End Important Notes ---
+
 
 
