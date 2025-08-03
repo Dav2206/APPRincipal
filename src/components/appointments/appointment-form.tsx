@@ -191,18 +191,30 @@ export function AppointmentForm({
 
   useEffect(() => {
     async function fetchAppointmentsForSlotCheck() {
-      if (!isOpen || !watchLocationId || !watchAppointmentDate) {
+      if (!isOpen || !watchAppointmentDate) {
         setAppointmentsForSelectedDate([]);
         return;
       }
       setIsLoadingAppointments(true);
       try {
-        const result = await getAppointments({
-          locationId: watchLocationId as LocationId,
-          date: watchAppointmentDate,
-          statuses: [APPOINTMENT_STATUS.BOOKED, APPOINTMENT_STATUS.CONFIRMED, APPOINTMENT_STATUS.COMPLETED] 
-        });
-        setAppointmentsForSelectedDate(result.appointments || []);
+        // Fetch for both target and origin locations if a temporary transfer is considered
+        const locationsToFetch = new Set<LocationId>();
+        if (watchLocationId) locationsToFetch.add(watchLocationId as LocationId);
+        if (watchProfessionalOriginLocationId && watchProfessionalOriginLocationId !== SAME_LOCATION_AS_APPOINTMENT_VALUE) {
+          locationsToFetch.add(watchProfessionalOriginLocationId as LocationId);
+        }
+
+        const appointmentPromises = Array.from(locationsToFetch).map(locId => 
+            getAppointments({
+                locationId: locId,
+                date: watchAppointmentDate,
+                statuses: [APPOINTMENT_STATUS.BOOKED, APPOINTMENT_STATUS.CONFIRMED, APPOINTMENT_STATUS.COMPLETED] 
+            })
+        );
+        const results = await Promise.all(appointmentPromises);
+        const allAppointments = results.flatMap(res => res.appointments || []);
+
+        setAppointmentsForSelectedDate(allAppointments);
       } catch (error) {
         console.error("[AppointmentForm] Error fetching appointments for slot check:", error);
         setAppointmentsForSelectedDate([]);
@@ -213,16 +225,7 @@ export function AppointmentForm({
     if (isOpen) {
       fetchAppointmentsForSlotCheck();
     }
-  }, [isOpen, watchLocationId, watchAppointmentDate]);
-
-
-  const professionalsToConsider = useMemo(() => {
-    const originLocation = watchProfessionalOriginLocationId;
-    if (!originLocation || originLocation === SAME_LOCATION_AS_APPOINTMENT_VALUE) {
-        return allSystemProfessionals.filter(p => p.locationId === watchLocationId);
-    }
-    return allSystemProfessionals.filter(p => p.locationId === originLocation);
-  }, [allSystemProfessionals, watchLocationId, watchProfessionalOriginLocationId]);
+  }, [isOpen, watchLocationId, watchAppointmentDate, watchProfessionalOriginLocationId]);
 
 
   useEffect(() => {
@@ -243,20 +246,33 @@ export function AppointmentForm({
     const proposedStartTime = parse(`${format(watchAppointmentDate, 'yyyy-MM-dd')} ${watchAppointmentTime}`, 'yyyy-MM-dd HH:mm', new Date());
     const proposedEndTime = addMinutes(proposedStartTime, appointmentDuration);
     
-    const availableProfs: Professional[] = [];
-    for (const prof of professionalsToConsider) {
-       const dailyAvailability = getProfessionalAvailabilityForDate(prof, watchAppointmentDate);
+    const finalAvailableProfs = new Set<Professional>();
 
-       if (!dailyAvailability || !dailyAvailability.isWorking || !dailyAvailability.startTime || !dailyAvailability.endTime) {
+    // 1. Get professionals whose authoritative working location IS the target appointment location
+    const nativeOrFullDayTransferProfs = allSystemProfessionals.filter(prof => {
+        const availability = getProfessionalAvailabilityForDate(prof, watchAppointmentDate);
+        return availability?.isWorking && availability.workingLocationId === watchLocationId;
+    });
+
+    // 2. Get professionals from a different origin for temporary transfer
+    const isTempTransfer = watchProfessionalOriginLocationId !== SAME_LOCATION_AS_APPOINTMENT_VALUE;
+    const temporaryTransferProfs = isTempTransfer 
+        ? allSystemProfessionals.filter(prof => prof.locationId === watchProfessionalOriginLocationId)
+        : [];
+    
+    const professionalsToEvaluate = [...nativeOrFullDayTransferProfs, ...temporaryTransferProfs];
+    
+    for (const prof of professionalsToEvaluate) {
+        if(prof.isManager) continue;
+
+       const availability = getProfessionalAvailabilityForDate(prof, watchAppointmentDate);
+
+       if (!availability || !availability.isWorking || !availability.startTime || !availability.endTime) {
          continue;
        }
 
-       if (dailyAvailability.workingLocationId !== watchLocationId) {
-         continue;
-       }
-
-      const profWorkStartTime = parse(`${format(watchAppointmentDate, 'yyyy-MM-dd')} ${dailyAvailability.startTime}`, 'yyyy-MM-dd HH:mm', new Date());
-      const profWorkEndTime = parse(`${format(watchAppointmentDate, 'yyyy-MM-dd')} ${dailyAvailability.endTime}`, 'yyyy-MM-dd HH:mm', new Date());
+      const profWorkStartTime = parse(`${format(watchAppointmentDate, 'yyyy-MM-dd')} ${availability.startTime}`, 'yyyy-MM-dd HH:mm', new Date());
+      const profWorkEndTime = parse(`${format(watchAppointmentDate, 'yyyy-MM-dd')} ${availability.endTime}`, 'yyyy-MM-dd HH:mm', new Date());
 
       if (isBefore(proposedStartTime, profWorkStartTime) || isAfter(proposedEndTime, profWorkEndTime)) {
         continue;
@@ -264,7 +280,7 @@ export function AppointmentForm({
 
       let isBusy = false;
       const appointmentsForThisProfAndDay = (appointmentsForSelectedDate || []).filter(
-        (appt) => appt.professionalId === prof.id && !appt.isTravelBlock
+        (appt) => appt.professionalId === prof.id
       );
 
       for (const existingAppt of appointmentsForThisProfAndDay) {
@@ -279,12 +295,14 @@ export function AppointmentForm({
         }
       }
       if (!isBusy) {
-        availableProfs.push(prof);
+        finalAvailableProfs.add(prof);
       }
     }
     
-    setAvailableProfessionalsForTimeSlot(availableProfs.sort((a,b) => `${a.firstName} ${a.lastName}`.localeCompare(`${b.firstName} ${b.lastName}`)));
-    if (availableProfs.length === 0) {
+    const sortedAvailableProfs = Array.from(finalAvailableProfs).sort((a,b) => `${a.firstName} ${a.lastName}`.localeCompare(`${b.firstName} ${b.lastName}`));
+    setAvailableProfessionalsForTimeSlot(sortedAvailableProfs);
+
+    if (sortedAvailableProfs.length === 0) {
         let baseMessage = 'No hay profesionales disponibles para este horario y servicio.';
         if(!watchServiceId || !selectedService) {
              baseMessage = 'Por favor, seleccione un servicio principal válido para ver la disponibilidad.';
@@ -302,11 +320,12 @@ export function AppointmentForm({
       watchAppointmentDate, 
       watchAppointmentTime, 
       watchServiceId, 
+      watchLocationId,
+      watchProfessionalOriginLocationId,
       servicesList, 
-      professionalsToConsider,
+      allSystemProfessionals,
       appointmentsForSelectedDate, 
       isLoadingAppointments, 
-      watchLocationId
     ]);
 
 
@@ -792,7 +811,7 @@ export function AppointmentForm({
                       name="professionalOriginLocationId"
                       render={({ field }) => (
                         <FormItem>
-                          <FormLabel>Sede de Origen del Profesional</FormLabel>
+                          <FormLabel className="flex items-center gap-1"><Shuffle size={14}/>Sede de Origen del Profesional</FormLabel>
                           <Select
                             onValueChange={(value) => {
                               field.onChange(value);
@@ -819,6 +838,9 @@ export function AppointmentForm({
                                 ))}
                             </SelectContent>
                           </Select>
+                          <FormDescription className="text-xs">
+                            Para traslados temporales por una cita, elija una sede de origen distinta.
+                          </FormDescription>
                           <FormMessage />
                         </FormItem>
                       )}
@@ -848,6 +870,11 @@ export function AppointmentForm({
                             {availableProfessionalsForTimeSlot.map(prof => (
                               <SelectItem key={prof.id} value={prof.id}>
                                   {prof.firstName} {prof.lastName}
+                                  {prof.locationId !== watchLocationId && (
+                                    <span className="text-xs text-muted-foreground ml-1">
+                                      ({locations.find(l=>l.id===prof.locationId)?.name})
+                                    </span>
+                                  )}
                               </SelectItem>
                             ))}
                           </SelectContent>

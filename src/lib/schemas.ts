@@ -218,5 +218,3 @@ export const ImportantNoteFormSchema = z.object({
   content: z.string().min(1, "El contenido es requerido."),
 });
 export type ImportantNoteFormData = z.infer<typeof ImportantNoteFormSchema>;
-
-    
