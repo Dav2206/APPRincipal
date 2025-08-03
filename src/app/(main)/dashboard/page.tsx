@@ -7,10 +7,10 @@ import { USER_ROLES, LocationId, APPOINTMENT_STATUS, DAYS_OF_WEEK } from '@/lib/
 import type { Professional } from '@/types';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import Link from 'next/link';
-import { CalendarPlus, Users, History, Briefcase, Loader2, Bed, CalendarCheck2, Gift, Bell, StickyNote } from 'lucide-react';
+import { CalendarPlus, Users, History, Briefcase, Loader2, Bed, CalendarCheck2, Gift, Bell, StickyNote, Trash2 } from 'lucide-react';
 import { useAppState } from '@/contexts/app-state-provider';
 import { useState, useEffect, useMemo } from 'react';
-import { getAppointments, getProfessionals, getProfessionalAvailabilityForDate, getPeriodicReminders, getImportantNotes, getContractDisplayStatus, getLocations } from '@/lib/data';
+import { getAppointments, getProfessionals, getProfessionalAvailabilityForDate, getPeriodicReminders, getImportantNotes, getContractDisplayStatus, getLocations, cleanupOrphanedTravelBlocks } from '@/lib/data';
 import { startOfDay, endOfDay, startOfMonth, endOfMonth, nextSunday, isToday, addDays, differenceInDays, getYear, getMonth, getDate, parseISO, isBefore } from 'date-fns';
 import { StatCard } from '@/components/dashboard/stat-card';
 import { ActionCard } from '@/components/dashboard/action-card';
@@ -18,6 +18,20 @@ import { ProfessionalStatusTodayCard } from '@/components/dashboard/professional
 import { UpcomingBirthdaysCard } from '@/components/dashboard/upcoming-birthdays-card';
 import { UpcomingRemindersCard } from '@/components/dashboard/upcoming-reminders-card';
 import { ImportantNotesCard } from '@/components/dashboard/important-notes-card';
+import { Button } from '@/components/ui/button';
+import { useToast } from '@/hooks/use-toast';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
+import { buttonVariants } from '@/components/ui/button';
 
 
 interface DashboardStats {
@@ -48,9 +62,12 @@ export default function DashboardPage() {
   const [isLoadingUpcomingBirthdays, setIsLoadingUpcomingBirthdays] = useState(true);
   const [isLoadingReminders, setIsLoadingReminders] = useState(true);
   const [isLoadingImportantNotes, setIsLoadingImportantNotes] = useState(true);
+  const [isCleaningBlocks, setIsCleaningBlocks] = useState(false);
+  const { toast } = useToast();
 
 
   const isAdminOrContador = user?.role === USER_ROLES.ADMIN || user?.role === USER_ROLES.CONTADOR;
+  const isAdmin = user?.role === USER_ROLES.ADMIN;
   const isContador = user?.role === USER_ROLES.CONTADOR;
   
   const effectiveLocationId = isAdminOrContador 
@@ -265,6 +282,26 @@ export default function DashboardPage() {
     fetchDashboardData();
   }, [user, selectedLocationId, effectiveLocationId, isAdminOrContador, isContador, locations]);
 
+  const handleCleanup = async () => {
+    setIsCleaningBlocks(true);
+    try {
+      const count = await cleanupOrphanedTravelBlocks();
+      toast({
+        title: "Limpieza Completada",
+        description: `Se han eliminado ${count} bloqueos de viaje huérfanos.`,
+      });
+    } catch (error) {
+      console.error("Error during cleanup:", error);
+      toast({
+        title: "Error en la Limpieza",
+        description: "No se pudo completar la operación de limpieza. Revise la consola para más detalles.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsCleaningBlocks(false);
+    }
+  };
+
 
   if (!user) {
     return null; 
@@ -401,10 +438,44 @@ export default function DashboardPage() {
             icon={<Briefcase className="h-8 w-8 mb-2 text-accent" />}
           />
         )}
+         {isAdmin && (
+           <Card>
+            <CardHeader>
+              <Trash2 className="h-8 w-8 mb-2 text-destructive" />
+              <CardTitle>Mantenimiento</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <p className="text-sm text-muted-foreground mb-4">
+                Elimina los bloques de viaje que ya no están vinculados a ninguna cita principal.
+              </p>
+                <AlertDialog>
+                  <AlertDialogTrigger asChild>
+                    <Button variant="destructive" className="w-full" disabled={isCleaningBlocks}>
+                      {isCleaningBlocks && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                      Limpiar Bloqueos Huérfanos
+                    </Button>
+                  </AlertDialogTrigger>
+                  <AlertDialogContent>
+                    <AlertDialogHeader>
+                      <AlertDialogTitle>¿Confirmar Limpieza?</AlertDialogTitle>
+                      <AlertDialogDescription>
+                        Esta acción buscará y eliminará permanentemente todos los bloques de viaje que no tengan una cita principal válida. Esta operación no se puede deshacer.
+                      </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                      <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                      <AlertDialogAction onClick={handleCleanup} disabled={isCleaningBlocks}>
+                        {isCleaningBlocks && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                        Sí, limpiar ahora
+                      </AlertDialogAction>
+                    </AlertDialogFooter>
+                  </AlertDialogContent>
+                </AlertDialog>
+            </CardContent>
+           </Card>
+        )}
       </div>
 
     </div>
   );
 }
-
-    

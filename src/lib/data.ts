@@ -1068,7 +1068,7 @@ export async function addAppointment(data: AppointmentFormData): Promise<Appoint
         
         // It's an external professional for this specific appointment IF their authoritative working location for the day
         // is NOT the same as the appointment's location.
-        if (availabilityOnDay && availabilityOnDay.workingLocationId !== data.locationId) {
+        if (availabilityOnDay && availabilityOnDay.isWorking && availabilityOnDay.workingLocationId !== data.locationId) {
             isExternalProfessional = true;
             // The origin is their authoritative working location for the day.
             externalProfessionalOriginLocationId = availabilityOnDay.workingLocationId;
@@ -1187,6 +1187,7 @@ async function manageRelatedTravelBlock(
   // 2. If the updated appointment is STILL an external one, create a NEW travel block
   if (updatedAppointmentData.isExternalProfessional && updatedAppointmentData.externalProfessionalOriginLocationId && updatedAppointmentData.professionalId) {
     const travelBlockRef = doc(collection(firestore, 'citas'));
+    const LOCATIONS = await getLocations();
     const travelBlockData: Partial<Appointment> = {
       isTravelBlock: true,
       originalAppointmentId: mainAppointmentId,
@@ -1196,7 +1197,7 @@ async function manageRelatedTravelBlock(
       durationMinutes: updatedAppointmentData.totalCalculatedDurationMinutes,
       totalCalculatedDurationMinutes: updatedAppointmentData.totalCalculatedDurationMinutes,
       status: 'booked',
-      bookingObservations: `Traslado a ${updatedAppointmentData.locationId}`,
+      bookingObservations: `Traslado a ${LOCATIONS.find(l => l.id === updatedAppointmentData.locationId)?.name || 'otra sede'}`,
       createdAt: oldAppointmentData.createdAt, // Keep original creation date if needed
       updatedAt: serverTimestamp(),
     };
@@ -1331,7 +1332,7 @@ export async function updateAppointment(
   if (assignedProfessionalId) {
       const assignedProf = await getProfessionalById(assignedProfessionalId);
       const availabilityOnDay = assignedProf ? getProfessionalAvailabilityForDate(assignedProf, data.appointmentDate || parseISO(oldAppointmentData.appointmentDateTime)) : null;
-      if (availabilityOnDay && availabilityOnDay.workingLocationId !== oldAppointmentData.locationId) {
+      if (availabilityOnDay && availabilityOnDay.isWorking && availabilityOnDay.workingLocationId !== oldAppointmentData.locationId) {
           firestoreUpdateData.isExternalProfessional = true;
           firestoreUpdateData.externalProfessionalOriginLocationId = availabilityOnDay.workingLocationId;
       } else {
@@ -1346,10 +1347,13 @@ export async function updateAppointment(
   const batch = writeBatch(firestore);
   batch.update(docRef, firestoreUpdateData);
 
-  const finalUpdatedData = { ...oldAppointmentData, ...firestoreUpdateData };
-  finalUpdatedData.appointmentDateTime = formatISO(data.appointmentDate || parseISO(oldAppointmentData.appointmentDateTime)); // Use ISO string for logic
+  const finalUpdatedDataForTravelBlock = { 
+    ...oldAppointmentData, 
+    ...firestoreUpdateData, 
+    appointmentDateTime: formatISO(data.appointmentDate || parseISO(oldAppointmentData.appointmentDateTime)) // Use ISO string for logic
+  };
 
-  await manageRelatedTravelBlock(batch, id, finalUpdatedData, oldAppointmentData);
+  await manageRelatedTravelBlock(batch, id, finalUpdatedDataForTravelBlock, oldAppointmentData);
 
   await batch.commit();
 
@@ -1623,5 +1627,80 @@ export async function deleteImportantNote(noteId: string): Promise<boolean> {
 }
 // --- End Important Notes ---
 
+// --- Maintenance Functions ---
+export async function cleanupOrphanedTravelBlocks(): Promise<number> {
+  if (!firestore) {
+    console.error("Firestore not initialized for cleanup.");
+    throw new Error("Firestore not initialized.");
+  }
+  
+  console.log("Starting cleanup of orphaned travel blocks...");
+  const appointmentsCol = collection(firestore, 'citas');
+  const travelBlocksQuery = query(appointmentsCol, where('isTravelBlock', '==', true));
+  const travelBlocksSnapshot = await getDocs(travelBlocksQuery);
+
+  if (travelBlocksSnapshot.empty) {
+    console.log("No travel blocks found to check. Cleanup finished.");
+    return 0;
+  }
+
+  const mainAppointmentIds = travelBlocksSnapshot.docs
+    .map(doc => doc.data().originalAppointmentId)
+    .filter(id => id); // Filter out any blocks that might not have the ID
+
+  if (mainAppointmentIds.length === 0) {
+    console.log("No travel blocks with originalAppointmentId found. Checking for blocks without the link...");
+    // This part handles very old blocks that might not have the linking field.
+    const batch = writeBatch(firestore);
+    let orphanCount = 0;
+    travelBlocksSnapshot.docs.forEach(doc => {
+      if (!doc.data().originalAppointmentId) {
+        console.log(`Found orphan travel block (no originalAppointmentId): ${doc.id}. Deleting.`);
+        batch.delete(doc.ref);
+        orphanCount++;
+      }
+    });
+    if(orphanCount > 0){
+      await batch.commit();
+      console.log(`Deleted ${orphanCount} legacy orphaned blocks.`);
+    }
+    return orphanCount;
+  }
 
 
+  // Split into chunks of 30 for the 'in' query limit
+  const idChunks: string[][] = [];
+  for (let i = 0; i < mainAppointmentIds.length; i += 30) {
+    idChunks.push(mainAppointmentIds.slice(i, i + 30));
+  }
+
+  const existingMainAppointmentIds = new Set<string>();
+  
+  for (const chunk of idChunks) {
+    const mainAppointmentsQuery = query(appointmentsCol, where(documentId(), 'in', chunk));
+    const mainAppointmentsSnapshot = await getDocs(mainAppointmentsQuery);
+    mainAppointmentsSnapshot.forEach(doc => existingMainAppointmentIds.add(doc.id));
+  }
+  
+  const batch = writeBatch(firestore);
+  let deletedCount = 0;
+
+  travelBlocksSnapshot.forEach(doc => {
+    const travelBlock = doc.data();
+    if (!travelBlock.originalAppointmentId || !existingMainAppointmentIds.has(travelBlock.originalAppointmentId)) {
+      console.log(`Found orphan travel block: ${doc.id}. Linked appointment ${travelBlock.originalAppointmentId} does not exist. Deleting.`);
+      batch.delete(doc.ref);
+      deletedCount++;
+    }
+  });
+
+  if (deletedCount > 0) {
+    await batch.commit();
+    console.log(`Successfully deleted ${deletedCount} orphaned travel blocks.`);
+  } else {
+    console.log("No orphaned travel blocks found to delete.");
+  }
+
+  return deletedCount;
+}
+// --- End Maintenance ---
