@@ -18,6 +18,7 @@ export const metadata = {
   title: 'Footprints Scheduler',
   description: 'Appointment scheduling for podology centers',
   robots: 'noindex, nofollow',
+  manifest: '/manifest.json',
 };
 
 export default function RootLayout({
