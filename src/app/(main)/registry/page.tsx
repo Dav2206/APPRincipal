@@ -668,7 +668,10 @@ export default function RegistryPage() {
                 <div className="mb-8 space-y-4">
                     <h3 className="text-xl font-semibold flex items-center gap-2"><DollarSign />Resumen de Ingresos del Día</h3>
                     <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-                        {dailyTotalsByLocation.map(locTotal => (
+                        {dailyTotalsByLocation.map(locTotal => {
+                          const isHigueretaStaff = user?.role === USER_ROLES.LOCATION_STAFF && locTotal.locationId === 'higuereta';
+                          const cashTotal = locTotal.totalsByMethod['Efectivo'] || 0;
+                          return (
                             <Card key={locTotal.locationId} className="shadow-sm">
                                 <CardHeader className="pb-2">
                                     <CardTitle className="text-lg flex items-center gap-2">
@@ -678,20 +681,28 @@ export default function RegistryPage() {
                                 </CardHeader>
                                 <CardContent>
                                     <ul className="text-sm space-y-1">
-                                        {Object.entries(locTotal.totalsByMethod).map(([method, total]) => (
+                                      {isHigueretaStaff ? (
+                                          <li key="efectivo" className="flex justify-between">
+                                            <span className="text-muted-foreground">Efectivo:</span>
+                                            <span>S/ {cashTotal.toFixed(2)}</span>
+                                          </li>
+                                      ) : (
+                                        Object.entries(locTotal.totalsByMethod).map(([method, total]) => (
                                             <li key={method} className="flex justify-between">
                                                 <span className="text-muted-foreground">{method}:</span>
                                                 <span>S/ {total.toFixed(2)}</span>
                                             </li>
-                                        ))}
+                                        ))
+                                      )}
                                     </ul>
                                     <div className="border-t mt-2 pt-2 flex justify-between font-bold">
                                         <span>Total Sede:</span>
-                                        <span>S/ {locTotal.totalRevenue.toFixed(2)}</span>
+                                        <span>S/ {isHigueretaStaff ? cashTotal.toFixed(2) : locTotal.totalRevenue.toFixed(2)}</span>
                                     </div>
                                 </CardContent>
                             </Card>
-                        ))}
+                          )
+                        })}
                     </div>
                 </div>
             )}
