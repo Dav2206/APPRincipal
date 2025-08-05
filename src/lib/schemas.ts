@@ -34,6 +34,8 @@ export const AppointmentFormSchema = z.object({
   existingPatientId: z.string().optional().nullable(),
   isDiabetic: z.boolean().optional(),
   isWalkIn: z.boolean().optional(),
+  isForFamilyMember: z.boolean().optional(),
+  familyMemberRelation: z.string().optional().nullable(),
 
   locationId: z.string().min(1, "Sede es requerida."),
   serviceId: z.string().min(1, "Servicio es requerido."),
@@ -72,6 +74,13 @@ export const AppointmentFormSchema = z.object({
           path: ["patientLastName"],
         });
       }
+    }
+    if (data.isForFamilyMember && !data.familyMemberRelation) {
+        ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            message: "Debe seleccionar el parentesco del familiar.",
+            path: ["familyMemberRelation"],
+        });
     }
   });
 

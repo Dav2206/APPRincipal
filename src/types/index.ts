@@ -112,6 +112,8 @@ export interface Appointment extends BaseEntity {
   isTravelBlock?: boolean;
   originalAppointmentId?: string; // Link to the main appointment for travel blocks
   _deleted?: boolean; // Flag for UI handling of deleted items
+  isForFamilyMember?: boolean;
+  familyMemberRelation?: string | null;
 }
 
 export type AppointmentFormData = {
@@ -132,6 +134,8 @@ export type AppointmentFormData = {
   preferredProfessionalId?: string | null;
   bookingObservations?: string | null;
   addedServices?: Partial<AddedServiceItem>[];
+  isForFamilyMember?: boolean;
+  familyMemberRelation?: string | null;
 };
 
 export type ProfessionalFormData = {

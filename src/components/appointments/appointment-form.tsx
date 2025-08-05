@@ -22,7 +22,7 @@ import { Calendar } from '@/components/ui/calendar';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter, DialogClose } from '@/components/ui/dialog';
-import { CalendarIcon, ClockIcon, UserPlus, Building, Briefcase, ConciergeBell, Edit3, Loader2, UserRound, AlertCircle, Shuffle, ShoppingBag, PlusCircle, Trash2, ChevronsUpDown, Check, Footprints } from 'lucide-react';
+import { CalendarIcon, ClockIcon, UserPlus, Building, Briefcase, ConciergeBell, Edit3, Loader2, UserRound, AlertCircle, Shuffle, ShoppingBag, PlusCircle, Trash2, ChevronsUpDown, Check, Footprints, UsersIcon } from 'lucide-react';
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
 import { format, parse, parseISO, addMinutes, areIntervalsOverlapping, startOfDay, isBefore, isAfter } from 'date-fns';
 import { es } from 'date-fns/locale';
@@ -48,6 +48,8 @@ const ANY_PROFESSIONAL_VALUE = "_any_professional_placeholder_";
 const DEFAULT_SERVICE_ID_PLACEHOLDER = "_default_service_id_placeholder_";
 const NO_SELECTION_PLACEHOLDER = "_no_selection_placeholder_";
 const SAME_LOCATION_AS_APPOINTMENT_VALUE = "_same_location_as_appointment_";
+const FAMILY_RELATIONS = ["Papá", "Mamá", "Hijo", "Hija", "Hermano", "Hermana", "Pareja", "Otro"];
+
 
 export function AppointmentForm({
   isOpen,
@@ -106,6 +108,8 @@ export function AppointmentForm({
       existingPatientId: initialData?.existingPatientId || null,
       isDiabetic: initialData?.isDiabetic || false,
       isWalkIn: initialData?.isWalkIn || false,
+      isForFamilyMember: initialData?.isForFamilyMember || false,
+      familyMemberRelation: initialData?.familyMemberRelation || null,
       locationId: initialData?.locationId || defaultLocation || (locations.length > 0 ? locations[0].id : ''),
       serviceId: initialData?.serviceId || '',
       appointmentDate: initialData?.appointmentDate || defaultDate || new Date(),
@@ -142,6 +146,7 @@ export function AppointmentForm({
   const watchServiceId = form.watch('serviceId');
   const watchPreferredProfessionalId = form.watch('preferredProfessionalId');
   const watchIsWalkIn = form.watch('isWalkIn');
+  const watchIsForFamilyMember = form.watch('isForFamilyMember');
   const watchProfessionalOriginLocationId = form.watch('professionalOriginLocationId');
 
   useEffect(() => {
@@ -391,6 +396,8 @@ export function AppointmentForm({
         patientAge: data.patientAge === 0 ? null : data.patientAge, 
         bookingObservations: data.bookingObservations?.trim() || undefined,
         addedServices: validAddedServices,
+        isForFamilyMember: data.isForFamilyMember || false,
+        familyMemberRelation: data.isForFamilyMember ? data.familyMemberRelation : null,
       };
 
       await addAppointment(submitData);
@@ -414,10 +421,12 @@ export function AppointmentForm({
         patientPhone: '',
         patientAge: null,
         isDiabetic: false,
-        existingPatientId: null,
         isWalkIn: false,
+        existingPatientId: null,
         bookingObservations: '',
         addedServices: [],
+        isForFamilyMember: false,
+        familyMemberRelation: null,
       });
       setCurrentPatientForHistory(null);
       setShowPatientHistory(false);
@@ -483,6 +492,8 @@ export function AppointmentForm({
           existingPatientId: null,
           bookingObservations: '',
           addedServices: [],
+          isForFamilyMember: false,
+          familyMemberRelation: null,
         });
         setCurrentPatientForHistory(null);
         setShowPatientHistory(false);
@@ -634,6 +645,50 @@ export function AppointmentForm({
                             </FormItem>
                             )}
                           />
+                         <FormField
+                            control={form.control}
+                            name="isForFamilyMember"
+                            render={({ field }) => (
+                            <FormItem className="flex flex-row items-center space-x-3 space-y-0 rounded-md border p-3 shadow-sm">
+                                <FormControl>
+                                <Checkbox
+                                    checked={field.value}
+                                    onCheckedChange={field.onChange}
+                                />
+                                </FormControl>
+                                <div className="space-y-1 leading-none">
+                                <FormLabel className="flex items-center gap-1.5"><UsersIcon size={16} />¿La cita es para un familiar?</FormLabel>
+                                </div>
+                                <FormMessage />
+                            </FormItem>
+                            )}
+                          />
+
+                          {watchIsForFamilyMember && (
+                            <FormField
+                              control={form.control}
+                              name="familyMemberRelation"
+                              render={({ field }) => (
+                                <FormItem>
+                                  <FormLabel>Parentesco</FormLabel>
+                                  <Select onValueChange={field.onChange} value={field.value || ""}>
+                                    <FormControl>
+                                      <SelectTrigger>
+                                        <SelectValue placeholder="Seleccionar parentesco" />
+                                      </SelectTrigger>
+                                    </FormControl>
+                                    <SelectContent>
+                                      {FAMILY_RELATIONS.map(rel => (
+                                        <SelectItem key={rel} value={rel}>{rel}</SelectItem>
+                                      ))}
+                                    </SelectContent>
+                                  </Select>
+                                  <FormMessage />
+                                </FormItem>
+                              )}
+                            />
+                          )}
+
                     </>
                  )}
 
@@ -1018,6 +1073,8 @@ export function AppointmentForm({
                 existingPatientId: null,
                 bookingObservations: '',
                 addedServices: [],
+                 isForFamilyMember: false,
+                 familyMemberRelation: null,
               });
               setCurrentPatientForHistory(null);
               setShowPatientHistory(false);
