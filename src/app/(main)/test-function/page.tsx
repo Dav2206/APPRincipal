@@ -2,30 +2,22 @@
 "use client";
 
 import React, { useState } from 'react';
-import { functions } from '@/lib/firebase-config'; // Importa la instancia de functions
-import { httpsCallable } from 'firebase/functions';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Loader2, Send, Terminal } from 'lucide-react';
-import { useAuth } from '@/contexts/auth-provider'; // Para obtener el token de autenticación si es necesario
+import { Loader2, Send, Terminal, Bot, Mail } from 'lucide-react';
+import { handleEmailRequest } from '@/ai/flows/email-bot';
+import { Alert, AlertTitle, AlertDescription } from '@/components/ui/alert';
 
 export default function TestFunctionPage() {
-  const { user } = useAuth(); // Útil si tu función requiere autenticación
-  const [name, setName] = useState('');
-  const [message, setMessage] = useState('');
+  const [emailContent, setEmailContent] = useState('Hola, soy Carlos Villagrán y quisiera una quiropodia para mañana a las 4pm. Gracias!');
   const [response, setResponse] = useState<any>(null);
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
 
   const handleCallFunction = async () => {
-    if (!functions) {
-      setError("Error de Configuración: La instancia de Firebase Functions no está inicializada. Revisa `src/lib/firebase-config.ts` y los logs de la consola del navegador para más detalles.");
-      console.error("Firebase Functions instance is undefined in TestFunctionPage.");
-      return;
-    }
-    if (!name.trim()) {
-      setError("Por favor, ingresa un nombre para enviar a la función.");
+    if (!emailContent.trim()) {
+      setError("Por favor, ingrese el contenido del correo electrónico.");
       return;
     }
 
@@ -34,24 +26,13 @@ export default function TestFunctionPage() {
     setError(null);
 
     try {
-      // Nombre de la función callable tal como la exportaste en functions/src/index.ts
-      const miFuncion = httpsCallable(functions, 'miPrimeraFuncionCallable');
-      
-      const result = await miFuncion({ nombre: name, mensaje: message });
-      setResponse(result.data);
+      const result = await handleEmailRequest({ emailBody: emailContent });
+      setResponse(result);
     } catch (err: any) {
-      console.error("Error llamando a la función:", err);
-      let errorMessage = "Ocurrió un error desconocido al llamar a la función.";
-       if (err.code === 'unavailable') {
-        errorMessage = "Error de Conexión: No se pudo contactar con el servidor de Firebase Functions. Verifica tu conexión a internet o el estado del servicio de Firebase.";
-      } else if (err.code === 'not-found') {
-        errorMessage = "Error 404: La función 'miPrimeraFuncionCallable' no se encontró en tu proyecto de Firebase. Asegúrate de que se haya desplegado correctamente.";
-      } else if (err.code === 'permission-denied') {
-          errorMessage = "Error de Permisos: No tienes permiso para ejecutar esta función. Asegúrate de que el usuario esté autenticado si la función lo requiere.";
-      } else if (err.code) {
-        errorMessage = `Error (${err.code}): ${err.message}`;
-      } else {
-        errorMessage = err.message || errorMessage;
+      console.error("Error llamando a la función del bot de email:", err);
+      let errorMessage = "Ocurrió un error desconocido al procesar el email.";
+      if (err.message) {
+        errorMessage = err.message;
       }
       setError(errorMessage);
     } finally {
@@ -64,62 +45,51 @@ export default function TestFunctionPage() {
       <Card className="shadow-lg">
         <CardHeader>
           <CardTitle className="text-2xl flex items-center gap-2">
-            <Terminal className="text-primary" />
-            Probar Conexión con Firebase
+            <Bot className="text-primary" />
+            Probar Asistente de Citas por Email
           </CardTitle>
           <CardDescription>
-            Usa esta herramienta para verificar que tu aplicación se está comunicando correctamente con tu backend de Firebase Functions.
+            Simula ser un cliente enviando un correo para agendar una cita. El asistente de IA intentará procesarlo y agendarlo automáticamente.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           <div>
-            <label htmlFor="nameInput" className="block text-sm font-medium text-foreground mb-1">
-              Nombre a Enviar:
+            <label htmlFor="emailContent" className="block text-sm font-medium text-foreground mb-1">
+              Contenido del Correo Electrónico del Cliente:
             </label>
-            <Input
-              id="nameInput"
-              type="text"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              placeholder="Ej: Ana"
-              className="max-w-sm"
+            <Textarea
+              id="emailContent"
+              value={emailContent}
+              onChange={(e) => setEmailContent(e.target.value)}
+              placeholder="Escribe aquí el email del cliente..."
+              className="max-w-lg min-h-[100px]"
             />
           </div>
-          <div>
-            <label htmlFor="messageInput" className="block text-sm font-medium text-foreground mb-1">
-              Mensaje Adicional (Opcional):
-            </label>
-            <Input
-              id="messageInput"
-              type="text"
-              value={message}
-              onChange={(e) => setMessage(e.target.value)}
-              placeholder="Ej: ¿Cómo estás?"
-              className="max-w-sm"
-            />
-          </div>
+          
           <Button onClick={handleCallFunction} disabled={isLoading}>
             {isLoading ? (
               <Loader2 className="mr-2 h-4 w-4 animate-spin" />
             ) : (
-              <Send className="mr-2 h-4 w-4" />
+              <Mail className="mr-2 h-4 w-4" />
             )}
-            Probar Conexión
+            Procesar Email
           </Button>
 
           {error && (
-            <div className="mt-4 p-3 bg-destructive/10 border border-destructive text-destructive rounded-md">
-              <p className="font-semibold">Resultado: Fallido</p>
-              <p className="text-sm">{error}</p>
-            </div>
+            <Alert variant="destructive" className="mt-4">
+              <AlertTitle>Error del Asistente</AlertTitle>
+              <AlertDescription>{error}</AlertDescription>
+            </Alert>
           )}
 
           {response && (
-            <div className="mt-4 p-3 bg-green-100 border border-green-600 text-green-900 rounded-md">
-              <p className="font-semibold">Resultado: ¡Éxito!</p>
-              <p className="text-sm mb-2">La aplicación se comunicó correctamente con Firebase. Respuesta recibida:</p>
-              <pre className="text-sm whitespace-pre-wrap bg-white/50 p-2 rounded text-foreground/80">{JSON.stringify(response, null, 2)}</pre>
-            </div>
+             <Alert variant="default" className="mt-4 bg-blue-50 border-blue-200 text-blue-800">
+                <AlertTitle className="text-blue-900 font-semibold">Respuesta Generada por el Asistente</AlertTitle>
+                <AlertDescription>
+                    <p className="mb-2">El asistente ha procesado la solicitud. Esta sería la respuesta para el cliente:</p>
+                    <pre className="text-sm whitespace-pre-wrap bg-white/50 p-3 rounded-md text-foreground/90 font-mono">{response.reply}</pre>
+                </AlertDescription>
+            </Alert>
           )}
         </CardContent>
       </Card>
@@ -129,19 +99,13 @@ export default function TestFunctionPage() {
         </CardHeader>
         <CardContent className="text-sm space-y-2 text-muted-foreground">
             <p>
-                1. Asegúrate de haber creado la carpeta `functions` en la raíz de tu proyecto Firebase (el mismo nivel que `src`).
+                1. Este es un simulador. Para que funcione en el mundo real, necesitaríamos conectar este flujo a un servicio que lea un buzón de correo real (como Gmail o Outlook).
             </p>
             <p>
-                2. Dentro de `functions`, inicializa Firebase Functions con `firebase init functions` (elige TypeScript).
-            </p>
-            <p>
-                3. Copia el código de la función `miPrimeraFuncionCallable` (proporcionado en la conversación) en el archivo `functions/src/index.ts`.
-            </p>
-            <p>
-                4. Despliega tus funciones usando el comando: `firebase deploy --only functions` desde la raíz de tu proyecto Firebase.
+                2. El bot utiliza la disponibilidad actual de tus profesionales para encontrar un hueco. ¡Los cambios que hagas en la agenda afectarán el resultado!
             </p>
              <p>
-                5. Si esta prueba falla, revisa los mensajes de error y la consola del navegador para más pistas.
+                3. Prueba con diferentes frases, como "Quisiera un tratamiento para uñas para el viernes por la mañana" o "¿Tienen espacio para una consulta el 25 de diciembre a las 10am?".
             </p>
         </CardContent>
       </Card>

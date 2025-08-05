@@ -4,3 +4,4 @@ config();
 
 import '@/ai/flows/predict-patient-attendance.ts';
 import '@/ai/flows/whatsapp-bot.ts';
+import '@/ai/flows/email-bot.ts';
