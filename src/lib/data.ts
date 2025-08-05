@@ -1,4 +1,5 @@
 
+
 // src/lib/data.ts
 import type { User, Professional, Patient, Service, Appointment, AppointmentFormData, ProfessionalFormData, AppointmentStatus, ServiceFormData, Contract, PeriodicReminder, ImportantNote, PeriodicReminderFormData, ImportantNoteFormData, AddedServiceItem, AppointmentUpdateFormData, Location } from '@/types';
 import { USER_ROLES, APPOINTMENT_STATUS, APPOINTMENT_STATUS_DISPLAY, TIME_SLOTS, DAYS_OF_WEEK, LOCATIONS_FALLBACK } from '@/lib/constants';
@@ -575,9 +576,21 @@ export async function getPatients (options?: { page?: number, limit?: number, se
     }
 
     const patientsCol = collection(firestore, 'pacientes') as CollectionReference<DocumentData>;
-    let queryConstraints: QueryConstraint[] = [];
-    let countQueryConstraints: QueryConstraint[] = [];
-    
+    let allPatients: Patient[] = [];
+
+    // Fetch all patients since search is client-side
+    const snapshotAll = await getDocs(query(patientsCol, orderBy('lastName'), orderBy('firstName')));
+    allPatients = snapshotAll.docs.map(docSnap => ({ id: docSnap.id, ...convertDocumentData(docSnap.data()) } as Patient));
+
+    let filteredPatients = allPatients;
+
+    if (searchTerm) {
+      filteredPatients = filteredPatients.filter(p =>
+          (`${p.firstName || ''} ${p.lastName || ''}`.toLowerCase().includes(searchTerm.toLowerCase()) ||
+          (user?.role === USER_ROLES.ADMIN && p.phone && p.phone.includes(searchTerm)))
+      );
+    }
+
     if (filterToday && user) {
         const today = startOfDay(new Date());
         const effectiveLocationId = (user.role === USER_ROLES.ADMIN || user.role === USER_ROLES.CONTADOR)
@@ -585,69 +598,17 @@ export async function getPatients (options?: { page?: number, limit?: number, se
             : user.locationId;
 
         const dailyAppointmentsResponse = await getAppointments({ date: today, locationId: effectiveLocationId });
-        const patientIdsWithApptsToday = (dailyAppointmentsResponse.appointments || []).map(appt => appt.patientId);
-
-        if (patientIdsWithApptsToday.length > 0) {
-            if (patientIdsWithApptsToday.length <= 30) { // Firestore 'in' query limit
-                queryConstraints.push(where(documentId(), 'in', patientIdsWithApptsToday));
-                countQueryConstraints.push(where(documentId(), 'in', patientIdsWithApptsToday));
-            } else {
-                console.warn("[data.ts] More than 30 patients with appointments today. Fetching all and filtering client-side for 'filterToday'.");
-                // No specific Firestore constraint here, will filter client-side
-            }
-        } else {
-            return { patients: [], totalCount: 0, lastVisiblePatientId: null }; // No patients match if no appts today
-        }
-    }
-
-    // Add sorting after all potential 'where' clauses that might restrict it
-    queryConstraints.push(orderBy('lastName'), orderBy('firstName'));
-
-    if (page > 1 && lastVisibleId) {
-      const lastVisibleDoc = await getDoc(doc(patientsCol, lastVisibleId));
-      if (lastVisibleDoc.exists()) {
-        queryConstraints.push(startAfter(lastVisibleDoc));
-      }
-    }
-    queryConstraints.push(limit(pageSize));
-
-    const finalQuery = query(patientsCol, ...queryConstraints);
-    const snapshot = await getDocs(finalQuery);
-    let fetchedPatients = snapshot.docs.map(docSnap => ({ id: docSnap.id, ...convertDocumentData(docSnap.data()) } as Patient));
-    
-    if (searchTerm) {
-        fetchedPatients = fetchedPatients.filter(p =>
-            (`${p.firstName || ''} ${p.lastName || ''}`.toLowerCase().includes(searchTerm.toLowerCase()) ||
-            (user?.role === USER_ROLES.ADMIN && p.phone && p.phone.includes(searchTerm)))
-        );
-    }
-
-    // If filterToday was applied client-side due to >30 IDs
-    if (filterToday && user && (countQueryConstraints.length === 0 || !countQueryConstraints.some(c => (c as any)._f?.toString().includes(documentId()._key.path.segments.join('/')))) ) { // Heuristic to check if Firestore filter was applied
-      const today = startOfDay(new Date());
-      const effectiveLocationId = (user.role === USER_ROLES.ADMIN || user.role === USER_ROLES.CONTADOR)
-          ? (adminSelectedLocation === 'all' ? undefined : adminSelectedLocation as LocationId)
-          : user.locationId;
-      const dailyAppointmentsResponse = await getAppointments({ date: today, locationId: effectiveLocationId });
-      const patientIdsWithApptsToday = new Set((dailyAppointmentsResponse.appointments || []).map(appt => appt.patientId));
-      fetchedPatients = fetchedPatients.filter(p => patientIdsWithApptsToday.has(p.id));
+        const patientIdsWithApptsToday = new Set((dailyAppointmentsResponse.appointments || []).map(appt => appt.patientId));
+        
+        filteredPatients = filteredPatients.filter(p => patientIdsWithApptsToday.has(p.id));
     }
     
-    const totalCountSnapshot = await getCountFromServer(query(patientsCol, ...countQueryConstraints));
-    let totalCount = totalCountSnapshot.data().count;
+    const totalCount = filteredPatients.length;
+    const startIndex = (page - 1) * pageSize;
+    const paginatedPatients = filteredPatients.slice(startIndex, startIndex + pageSize);
+    const newLastVisibleId = paginatedPatients.length > 0 ? paginatedPatients[paginatedPatients.length - 1].id : null;
 
-    if (searchTerm && (!countQueryConstraints.some(c => (c as any)._f?.toString().includes('searchTerm')))) { // If search is client-side, totalCount might be inaccurate
-        console.warn("[data.ts] Total count for patients might be inaccurate with client-side search term filtering.");
-        // Potentially re-fetch all matching search term then count, or accept inaccuracy. For now, it's based on pre-search filters.
-    }
-    if (filterToday && user && (countQueryConstraints.length === 0 || !countQueryConstraints.some(c => (c as any)._f?.toString().includes(documentId()._key.path.segments.join('/'))))) {
-      totalCount = fetchedPatients.length; // If filterToday was client-side, totalCount is the length of the client-filtered array.
-    }
-
-
-    const newLastVisibleId = fetchedPatients.length > 0 ? fetchedPatients[fetchedPatients.length - 1].id : null;
-
-    return { patients: fetchedPatients, totalCount, lastVisiblePatientId: newLastVisibleId };
+    return { patients: paginatedPatients, totalCount, lastVisiblePatientId: newLastVisibleId };
 
   } catch (error: any) {
     console.error("[data.ts] Error in getPatients:", error);

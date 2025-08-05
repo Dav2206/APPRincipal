@@ -1,4 +1,5 @@
 
+
 "use client";
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
@@ -65,7 +66,6 @@ export default function PatientsPage() {
   const { selectedLocationId: adminSelectedLocation } = useAppState();
   const { toast } = useToast();
   
-  const [allPatients, setAllPatients] = useState<Patient[]>([]);
   const [displayedPatients, setDisplayedPatients] = useState<Patient[]>([]);
   const [currentPage, setCurrentPage] = useState(1);
   const [totalPatientCount, setTotalPatientCount] = useState(0);
@@ -78,9 +78,7 @@ export default function PatientsPage() {
   const [searchTerm, setSearchTerm] = useState('');
   const [viewingPatientDetails, setViewingPatientDetails] = useState<Patient | null>(null);
   const [filterPatientsWithAppointmentsToday, setFilterPatientsWithAppointmentsToday] = useState(false);
-  const [patientsWithAppointmentsTodayIds, setPatientsWithAppointmentsTodayIds] = useState<Set<string>>(new Set());
-  const [isLoadingTodayAppointments, setIsLoadingTodayAppointments] = useState(false);
-
+  
   // State for image modal
   const [selectedImageForModal, setSelectedImageForModal] = useState<string | null>(null);
   const [zoomLevel, setZoomLevel] = useState(1);
@@ -110,27 +108,23 @@ export default function PatientsPage() {
     }
   });
 
-  const fetchPatientsData = useCallback(async (pageToFetch = 1, currentSearchTerm = searchTerm, currentFilterToday = filterPatientsWithAppointmentsToday, lastVisibleId: string | null = null) => {
+  const fetchPatientsData = useCallback(async (pageToFetch = 1, lastVisibleId: string | null = null) => {
     setIsLoading(true);
     if (pageToFetch === 1) { 
         setDisplayedPatients([]);
-        setLastVisiblePatientId(null);
     }
     try {
       const { patients: fetchedPatients, totalCount, lastVisiblePatientId: newLastVisibleId } = await getPatients({
         page: pageToFetch,
         limit: PATIENTS_PER_PAGE,
-        searchTerm: currentSearchTerm,
-        filterToday: currentFilterToday,
+        searchTerm: searchTerm,
+        filterToday: filterPatientsWithAppointmentsToday,
         adminSelectedLocation: adminSelectedLocation,
         user: user,
         lastVisiblePatientId: pageToFetch > 1 ? lastVisibleId : null,
       });
       
-      const sortedPatients = fetchedPatients.sort((a,b) => `${a.firstName} ${a.lastName}`.localeCompare(`${b.firstName} ${b.lastName}`));
-
-      setDisplayedPatients(prev => pageToFetch === 1 ? sortedPatients : [...prev, ...sortedPatients]);
-      setAllPatients(prev => pageToFetch === 1 ? sortedPatients : [...prev, ...sortedPatients].sort((a,b) => `${a.firstName} ${a.lastName}`.localeCompare(`${b.firstName} ${b.lastName}`)));
+      setDisplayedPatients(prev => pageToFetch === 1 ? fetchedPatients : [...prev, ...fetchedPatients]);
       setTotalPatientCount(totalCount);
       setCurrentPage(pageToFetch);
       setLastVisiblePatientId(newLastVisibleId);
@@ -145,48 +139,8 @@ export default function PatientsPage() {
 
 
   useEffect(() => {
-    fetchPatientsData(1, searchTerm, filterPatientsWithAppointmentsToday, null); 
-  }, [fetchPatientsData, searchTerm, filterPatientsWithAppointmentsToday]);
-
-
-  const fetchPatientsWithAppointmentsToday = useCallback(async () => {
-    if (!filterPatientsWithAppointmentsToday) {
-      setPatientsWithAppointmentsTodayIds(new Set());
-      fetchPatientsData(1, searchTerm, false, null);
-      return;
-    }
-    setIsLoadingTodayAppointments(true);
-    try {
-      const today = startOfDay(new Date());
-      const isAdminOrContador = user?.role === USER_ROLES.ADMIN || user?.role === USER_ROLES.CONTADOR;
-      const effectiveLocationId = isAdminOrContador
-        ? (adminSelectedLocation === 'all' ? undefined : adminSelectedLocation) 
-        : user?.locationId;
-
-      const { appointments: dailyAppointments } = await getAppointments({ 
-        date: today,
-        locationId: effectiveLocationId 
-      });
-      const patientIds = new Set((dailyAppointments || []).map(app => app.patientId));
-      setPatientsWithAppointmentsTodayIds(patientIds);
-      fetchPatientsData(1, searchTerm, true, null); 
-    } catch (error) {
-      console.error("Error fetching patients with appointments today:", error);
-      toast({ title: "Error", description: "No se pudo cargar pacientes con citas hoy.", variant: "destructive" });
-    } finally {
-      setIsLoadingTodayAppointments(false);
-    }
-  }, [filterPatientsWithAppointmentsToday, user, adminSelectedLocation, toast, fetchPatientsData, searchTerm]);
-
- 
-  useEffect(() => {
-     if (filterPatientsWithAppointmentsToday) {
-        fetchPatientsWithAppointmentsToday();
-     } else {
-        setPatientsWithAppointmentsTodayIds(new Set());
-        fetchPatientsData(1, searchTerm, false, null);
-     }
-  }, [filterPatientsWithAppointmentsToday]); 
+    fetchPatientsData(1, null); 
+  }, [fetchPatientsData]);
 
 
   const handleAddPatient = () => {
@@ -246,7 +200,7 @@ export default function PatientsPage() {
         toast({ title: "Paciente Agregado", description: `${data.firstName} ${data.lastName} agregado.` });
       }
       setIsFormOpen(false);
-      fetchPatientsData(1, searchTerm, filterPatientsWithAppointmentsToday, null); 
+      fetchPatientsData(1, null); 
 
     } catch (error) {
       toast({ title: "Error", description: "No se pudo guardar el paciente.", variant: "destructive" });
@@ -255,8 +209,7 @@ export default function PatientsPage() {
   };
 
   const handleSearchTermChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const newSearchTerm = e.target.value;
-    setSearchTerm(newSearchTerm);
+    setSearchTerm(e.target.value);
   };
 
   const handleFilterTodayChange = (checked: boolean) => {
@@ -264,7 +217,7 @@ export default function PatientsPage() {
   };
   
   const handleLoadMore = () => {
-    fetchPatientsData(currentPage + 1, searchTerm, filterPatientsWithAppointmentsToday, lastVisiblePatientId);
+    fetchPatientsData(currentPage + 1, lastVisiblePatientId);
   };
 
   // Image Modal Handlers
@@ -412,7 +365,7 @@ export default function PatientsPage() {
               <Label htmlFor="filterToday" className="text-sm font-medium whitespace-nowrap flex items-center gap-1">
                 <CalendarClock size={16} /> Mostrar solo pacientes con citas hoy
               </Label>
-              {isLoadingTodayAppointments && <Loader2 className="h-4 w-4 animate-spin" />}
+              {isLoading && <Loader2 className="h-4 w-4 animate-spin" />}
             </div>
           </div>
 
