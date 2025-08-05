@@ -32,10 +32,12 @@ export type WhatsAppOutput = z.infer<typeof WhatsAppOutputSchema>;
 
 // Esquema para la extracción de datos del mensaje
 const ExtractedInfoSchema = z.object({
+  intent: z.enum(['agendar', 'confirmar_llegada', 'confirmar_pago', 'consulta', 'otro'])
+    .describe('La intención del mensaje del usuario. Por ejemplo, si el mensaje es "Ya llegó el cliente Juan", la intención es "confirmar_llegada". Si es "Quiero una cita", es "agendar".'),
   patientName: z.string().describe('El nombre completo del paciente.'),
-  requestedService: z.string().describe('El servicio que el paciente desea, por ejemplo, "quiropodia".'),
-  requestedDate: z.string().describe('La fecha deseada en formato YYYY-MM-DD.'),
-  requestedTime: z.string().describe('La hora deseada en formato HH:mm (24 horas).'),
+  requestedService: z.string().describe('El servicio que el paciente desea, por ejemplo, "quiropodia".').optional(),
+  requestedDate: z.string().describe('La fecha deseada en formato YYYY-MM-DD.').optional(),
+  requestedTime: z.string().describe('La hora deseada en formato HH:mm (24 horas).').optional(),
 });
 
 
@@ -62,9 +64,10 @@ const whatsAppBotFlow = ai.defineFlow(
       name: 'extractAppointmentInfoFromWhatsAppPrompt',
       input: { schema: z.object({ messageText: z.string(), currentDate: z.string() }) },
       output: { schema: ExtractedInfoSchema },
-      prompt: `Extrae la siguiente información del mensaje de texto. La fecha actual es {{currentDate}}.
-      - Nombre del paciente (patientName)
-      - Servicio solicitado (requestedService)
+      prompt: `Analiza el siguiente mensaje de texto y extrae la información clave. La fecha actual es {{currentDate}}.
+      - Determina la intención principal (intent): ¿es para 'agendar' una nueva cita, 'confirmar_llegada' de un paciente, 'confirmar_pago', una 'consulta' general u 'otro'?
+      - Nombre del paciente (patientName).
+      - Servicio solicitado (requestedService), si se menciona.
       - Fecha deseada (requestedDate), si mencionan "mañana" o un día de la semana, conviértelo a YYYY-MM-DD.
       - Hora deseada (requestedTime) en formato HH:mm.
 
@@ -80,8 +83,14 @@ const whatsAppBotFlow = ai.defineFlow(
       return { reply: 'Lo siento, no pude entender completamente la solicitud. Por favor, asegúrate de incluir nombre, servicio, fecha y hora.' };
     }
     
-    const { patientName, requestedService, requestedDate, requestedTime } = extractionResult.output;
+    const { intent, patientName, requestedService, requestedDate, requestedTime } = extractionResult.output;
     
+    // Si la intención no es agendar, por ahora devolvemos un mensaje informativo.
+    // En el futuro, aquí se manejarían las otras intenciones.
+    if (intent !== 'agendar' || !requestedService || !requestedDate || !requestedTime) {
+      return { reply: `He entendido que la intención es '${intent}' para el paciente '${patientName}'. La lógica para esta acción aún no está implementada.` };
+    }
+
     // 2. Encontrar el servicio y su duración
     const services = await getServices();
     const service = services.find(s => s.name.toLowerCase().includes(requestedService.toLowerCase()));
