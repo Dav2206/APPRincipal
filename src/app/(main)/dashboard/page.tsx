@@ -456,7 +456,7 @@ export default function DashboardPage() {
         )}
       </div>
       
-      <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+      <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
         <ActionCard
           title="Gestionar Citas"
           description="Ver calendario, agendar nuevas citas y confirmar llegadas."
