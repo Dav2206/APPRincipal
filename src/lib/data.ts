@@ -1389,28 +1389,22 @@ export async function getPatientAppointmentHistory(patientId: string): Promise<{
 
 // --- Professional Availability ---
 export function getProfessionalAvailabilityForDate(professional: Professional, targetDate: Date): { startTime: string; endTime: string; isWorking: boolean; reason?: string, notes?: string, workingLocationId?: LocationId | null } | null {
-  const contractStatus = getContractDisplayStatus(professional.currentContract, targetDate);
-
-  // First, check the contract status. If not active or upcoming, they are not available, regardless of any override.
-  if (contractStatus !== 'Activo' && contractStatus !== 'Próximo a Vencer') {
-    return { startTime: '', endTime: '', isWorking: false, reason: `Contrato: ${contractStatus}`, workingLocationId: professional.locationId };
-  }
-  
   const targetDateISO = formatISO(targetDate, { representation: 'date' });
+
+  // First, check for a specific override for the target date.
   const customOverride = professional.customScheduleOverrides?.find(
     (override) => parseISO(override.date).toISOString().split('T')[0] === targetDateISO
   );
 
-  // If there is an override, it takes precedence over the base schedule.
   if (customOverride) {
     const workingLocationId = customOverride.overrideType === 'traslado' ? customOverride.locationId : professional.locationId;
     if (customOverride.overrideType === 'descanso') {
       return { startTime: '', endTime: '', isWorking: false, reason: `Descansando (${customOverride.notes || 'Sin especificar'})`, workingLocationId };
     }
     if (customOverride.isWorking && customOverride.startTime && customOverride.endTime) {
-       const reason = customOverride.overrideType === 'traslado' 
-         ? `Traslado (${customOverride.notes || 'Día completo'})` 
-         : `Turno Especial (${customOverride.notes || 'Sin especificar'})`;
+      const reason = customOverride.overrideType === 'traslado' 
+        ? `Traslado (${customOverride.notes || 'Día completo'})` 
+        : `Turno Especial (${customOverride.notes || 'Sin especificar'})`;
       return {
         startTime: customOverride.startTime,
         endTime: customOverride.endTime,
@@ -1421,7 +1415,7 @@ export function getProfessionalAvailabilityForDate(professional: Professional, t
     }
   }
 
-  // If no applicable override, use base schedule
+  // If no override, use the base weekly schedule.
   const dayOfWeekIndex = getDay(targetDate); // Sunday is 0, Monday is 1, etc.
   const dayOfWeekId = DAYS_OF_WEEK[(dayOfWeekIndex + 6) % 7].id as DayOfWeekId; // Adjust to make Monday 0 -> 'monday'
   const baseSchedule = professional.workSchedule?.[dayOfWeekId];
@@ -1436,7 +1430,7 @@ export function getProfessionalAvailabilityForDate(professional: Professional, t
     };
   }
 
-  // If no override, contract is active, but base schedule says not working
+  // If no override and base schedule says not working.
   return { startTime: '', endTime: '', isWorking: false, reason: `Descansando (Horario base: ${format(targetDate, 'EEEE', {locale: es})} libre)`, workingLocationId: professional.locationId };
 }
 // --- End Professional Availability ---
@@ -1707,4 +1701,5 @@ export async function mergePatients(primaryPatientId: string, duplicateIds: stri
 }
 
 // --- End Maintenance ---
+
 

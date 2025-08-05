@@ -76,15 +76,11 @@ export default function SchedulePage() {
   }, [user, isAdminOrContador, adminSelectedLocation, locations]);
 
 
-  const fetchData = useCallback(async () => {
+const fetchData = useCallback(async () => {
     if (!user || !actualEffectiveLocationId) {
         setIsLoading(false);
-        setAppointments([]);
-        setWorkingProfessionalsForTimeline([]);
-        setAllSystemProfessionals([]);
         return;
     }
-
     setIsLoading(true);
 
     try {
@@ -94,40 +90,39 @@ export default function SchedulePage() {
                 date: currentDate,
                 statuses: [APPOINTMENT_STATUS.BOOKED, APPOINTMENT_STATUS.CONFIRMED, APPOINTMENT_STATUS.COMPLETED],
             }),
-            getProfessionals() // Fetch all professionals to correctly check availability
+            getProfessionals()
         ]);
 
         const dailyAppointments = appointmentsResponse.appointments || [];
         const allProfessionals = allProfsResponse || [];
-        setAllSystemProfessionals(allProfessionals);
+
         setAppointments(dailyAppointments.sort((a,b) => parseISO(a.appointmentDateTime).getTime() - parseISO(b.appointmentDateTime).getTime()));
+        setAllSystemProfessionals(allProfessionals);
 
-        // --- Start of Corrected Logic ---
-        
-        // 1. Identify all professionals who have appointments at the target location today.
-        const professionalIdsFromAppointments = new Set<string>(
-            dailyAppointments.map(appt => appt.professionalId).filter((id): id is string => !!id)
-        );
+        const professionalIdsInSchedule = new Set<string>();
 
-        // 2. Identify all professionals whose base location is the target location.
-        const localProfessionals = allProfessionals.filter(p => p.locationId === actualEffectiveLocationId);
-        localProfessionals.forEach(p => professionalIdsFromAppointments.add(p.id));
+        // Rule 1: Add professionals whose base location is the current view and are scheduled to work
+        allProfessionals.forEach(prof => {
+            if (prof.locationId === actualEffectiveLocationId) {
+                const availability = getProfessionalAvailabilityForDate(prof, currentDate);
+                if (availability?.isWorking) {
+                    professionalIdsInSchedule.add(prof.id);
+                }
+            }
+        });
 
-        // 3. Create a consolidated list of all relevant professionals for the day.
-        const allRelevantProfessionalIds = Array.from(professionalIdsFromAppointments);
-        const allRelevantProfessionals = allProfessionals.filter(p => allRelevantProfessionalIds.includes(p.id));
+        // Rule 2: Add professionals who have an appointment (or travel block) in the current view, regardless of base location
+        dailyAppointments.forEach(appt => {
+            if (appt.professionalId) {
+                professionalIdsInSchedule.add(appt.professionalId);
+            }
+        });
 
-        // 4. Determine who is actually working from this consolidated list and should have a column.
-        const professionalsForTimeline = allRelevantProfessionals.filter(prof => {
-            if (prof.isManager) return false;
-            const availability = getProfessionalAvailabilityForDate(prof, currentDate);
-            // The professional should be shown if their work schedule for the day places them at the currently viewed location.
-            return availability?.isWorking && availability.workingLocationId === actualEffectiveLocationId;
-        }).sort((a, b) => `${a.firstName} ${a.lastName}`.localeCompare(`${b.firstName} ${b.lastName}`));
-        
-        // --- End of Corrected Logic ---
-        
-        setWorkingProfessionalsForTimeline(professionalsForTimeline);
+        const timelineProfessionals = allProfessionals
+            .filter(prof => professionalIdsInSchedule.has(prof.id) && !prof.isManager)
+            .sort((a, b) => `${a.firstName} ${a.lastName}`.localeCompare(`${b.firstName} ${b.lastName}`));
+            
+        setWorkingProfessionalsForTimeline(timelineProfessionals);
 
     } catch (error) {
         console.error("[SchedulePage] Error fetching schedule data:", error);
@@ -138,7 +133,6 @@ export default function SchedulePage() {
         });
         setAppointments([]);
         setWorkingProfessionalsForTimeline([]);
-        setAllSystemProfessionals([]);
     } finally {
         setIsLoading(false);
     }
@@ -451,6 +445,7 @@ export default function SchedulePage() {
     </div>
   );
 }
+
 
 
 
