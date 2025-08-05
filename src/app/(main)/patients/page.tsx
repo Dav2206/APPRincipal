@@ -5,7 +5,7 @@ import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import type { Patient, Appointment } from '@/types';
 import { useAuth } from '@/contexts/auth-provider';
 import { getPatients, addPatient, findPatient, getAppointments, updatePatient, getPatientById, findPotentialDuplicatePatients, mergePatients } from '@/lib/data';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
