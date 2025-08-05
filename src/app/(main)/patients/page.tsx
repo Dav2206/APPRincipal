@@ -380,7 +380,7 @@ export default function PatientsPage() {
             <CardTitle className="text-2xl flex items-center gap-2"><Users className="text-primary"/> Gestión de Pacientes</CardTitle>
             <CardDescription>Ver, agregar o editar información de pacientes.</CardDescription>
           </div>
-          <div className="flex flex-col sm:flex-row gap-2 w-full md:w-auto">
+          <div className="flex flex-col sm:flex-row gap-2 w-full md:w-auto mt-4 md:mt-0">
             {user?.role === USER_ROLES.ADMIN && (
               <Button onClick={handleFindDuplicates} variant="outline">
                 <GitMerge className="mr-2 h-4 w-4" /> Buscar Duplicados
@@ -706,5 +706,3 @@ export default function PatientsPage() {
     </div>
   );
 }
-
-    
