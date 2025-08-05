@@ -7,7 +7,7 @@ import { USER_ROLES, LocationId, APPOINTMENT_STATUS, DAYS_OF_WEEK } from '@/lib/
 import type { Professional } from '@/types';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import Link from 'next/link';
-import { CalendarPlus, Users, History, Briefcase, Loader2, Bed, CalendarCheck2, Gift, Bell, StickyNote, Trash2 } from 'lucide-react';
+import { CalendarPlus, Users, History, Briefcase, Loader2, Bed, CalendarCheck2, Gift, Bell, StickyNote, Trash2, Download } from 'lucide-react';
 import { useAppState } from '@/contexts/app-state-provider';
 import { useState, useEffect, useMemo } from 'react';
 import { getAppointments, getProfessionals, getProfessionalAvailabilityForDate, getPeriodicReminders, getImportantNotes, getContractDisplayStatus, getLocations, cleanupOrphanedTravelBlocks } from '@/lib/data';
@@ -41,6 +41,16 @@ interface DashboardStats {
   totalRevenueMonth: string;
 }
 
+interface BeforeInstallPromptEvent extends Event {
+  readonly platforms: Array<string>;
+  readonly userChoice: Promise<{
+    outcome: 'accepted' | 'dismissed',
+    platform: string,
+  }>;
+  prompt(): Promise<void>;
+}
+
+
 export default function DashboardPage() {
   const { user } = useAuth();
   const { selectedLocationId } = useAppState();
@@ -63,6 +73,7 @@ export default function DashboardPage() {
   const [isLoadingReminders, setIsLoadingReminders] = useState(true);
   const [isLoadingImportantNotes, setIsLoadingImportantNotes] = useState(true);
   const [isCleaningBlocks, setIsCleaningBlocks] = useState(false);
+  const [installPromptEvent, setInstallPromptEvent] = useState<BeforeInstallPromptEvent | null>(null);
   const { toast } = useToast();
 
 
@@ -73,6 +84,34 @@ export default function DashboardPage() {
   const effectiveLocationId = isAdminOrContador 
     ? (selectedLocationId === 'all' ? undefined : selectedLocationId as LocationId) 
     : user?.locationId;
+  
+  useEffect(() => {
+    const handleBeforeInstallPrompt = (e: Event) => {
+      e.preventDefault();
+      setInstallPromptEvent(e as BeforeInstallPromptEvent);
+    };
+
+    window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+
+    return () => {
+      window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+    };
+  }, []);
+
+  const handleInstallClick = () => {
+    if (installPromptEvent) {
+      installPromptEvent.prompt();
+      installPromptEvent.userChoice.then((choiceResult) => {
+        if (choiceResult.outcome === 'accepted') {
+          toast({ title: "Instalación completa", description: "La aplicación se ha instalado en tu dispositivo." });
+        } else {
+          toast({ title: "Instalación cancelada", description: "Puedes instalar la aplicación más tarde desde aquí." });
+        }
+        setInstallPromptEvent(null);
+      });
+    }
+  };
+
 
   useEffect(() => {
     async function loadLocations() {
@@ -437,6 +476,22 @@ export default function DashboardPage() {
             href="/professionals"
             icon={<Briefcase className="h-8 w-8 mb-2 text-accent" />}
           />
+        )}
+         {installPromptEvent && (
+          <Card>
+            <CardHeader>
+              <Download className="h-8 w-8 mb-2 text-primary" />
+              <CardTitle>Instalar Aplicación</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <p className="text-sm text-muted-foreground mb-4">
+                Instale la aplicación en su dispositivo para un acceso más rápido y una experiencia nativa.
+              </p>
+              <Button onClick={handleInstallClick} className="w-full">
+                Instalar Ahora
+              </Button>
+            </CardContent>
+          </Card>
         )}
          {isAdmin && (
            <Card>
