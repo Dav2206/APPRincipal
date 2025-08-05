@@ -88,31 +88,31 @@ export default function SchedulePage() {
     setIsLoading(true);
   
     try {
-      // Step 1: Fetch appointments and professionals for the current location in parallel.
+      // Step 1: Fetch appointments and base professionals for the current location in parallel.
       const [appointmentsResponse, professionalsForLocationResponse] = await Promise.all([
         getAppointments({
           locationId: actualEffectiveLocationId,
           date: currentDate,
           statuses: [APPOINTMENT_STATUS.BOOKED, APPOINTMENT_STATUS.CONFIRMED, APPOINTMENT_STATUS.COMPLETED],
         }),
-        getProfessionals(actualEffectiveLocationId) 
+        getProfessionals(actualEffectiveLocationId)
       ]);
   
       const dailyAppointments = appointmentsResponse.appointments || [];
       const locationProfs = professionalsForLocationResponse || [];
       const professionalsMap = new Map(locationProfs.map(p => [p.id, p]));
   
-      // Step 2: Identify external professionals from appointments and fetch them if needed.
-      const externalProfIds = new Set<string>();
+      // Step 2: Identify external professionals from appointments and fetch them if they are not already in our map.
+      const externalProfIdsToFetch = new Set<string>();
       dailyAppointments.forEach(appt => {
         if (appt.isExternalProfessional && appt.professionalId && !professionalsMap.has(appt.professionalId)) {
-          externalProfIds.add(appt.professionalId);
+          externalProfIdsToFetch.add(appt.professionalId);
         }
       });
   
-      if (externalProfIds.size > 0) {
+      if (externalProfIdsToFetch.size > 0) {
         const externalProfs = await Promise.all(
-          Array.from(externalProfIds).map(id => getProfessionalById(id))
+          Array.from(externalProfIdsToFetch).map(id => getProfessionalById(id))
         );
         externalProfs.forEach(prof => {
           if (prof) professionalsMap.set(prof.id, prof);
@@ -120,24 +120,20 @@ export default function SchedulePage() {
       }
       
       const allRelevantProfessionals = Array.from(professionalsMap.values());
+      
+      // Step 3: Determine which professionals to display as columns in the timeline.
+      // This is the definitive list of who is working at the target location today.
+      const professionalsForTimeline = allRelevantProfessionals.filter(prof => {
+        if (prof.isManager) return false;
+        const availability = getProfessionalAvailabilityForDate(prof, currentDate);
+        // The key is to check if their authoritative working location for the day matches the location we are viewing.
+        return availability?.isWorking && availability.workingLocationId === actualEffectiveLocationId;
+      }).sort((a, b) => `${a.firstName} ${a.lastName}`.localeCompare(`${b.firstName} ${b.lastName}`));
+
+      // Step 4: Set all state at once to avoid partial renders.
       setAllSystemProfessionals(allRelevantProfessionals);
       setAppointments(dailyAppointments.sort((a,b) => parseISO(a.appointmentDateTime).getTime() - parseISO(b.appointmentDateTime).getTime()));
-  
-      // Step 3: Determine which professionals to display as columns in the timeline.
-      const professionalsForTimelineMap = new Map<string, Professional>();
-  
-      allRelevantProfessionals.forEach(prof => {
-        if (prof.isManager) return;
-        const availability = getProfessionalAvailabilityForDate(prof, currentDate);
-        if (availability?.isWorking && availability.workingLocationId === actualEffectiveLocationId) {
-          professionalsForTimelineMap.set(prof.id, prof);
-        }
-      });
-      
-      const professionalsForColumns = Array.from(professionalsForTimelineMap.values())
-        .sort((a, b) => `${a.firstName} ${a.lastName}`.localeCompare(`${b.firstName} ${b.lastName}`));
-  
-      setWorkingProfessionalsForTimeline(professionalsForColumns);
+      setWorkingProfessionalsForTimeline(professionalsForTimeline);
   
     } catch (error) {
       console.error("[SchedulePage] Error fetching schedule data:", error);
@@ -461,4 +457,5 @@ export default function SchedulePage() {
     </div>
   );
 }
+
 
