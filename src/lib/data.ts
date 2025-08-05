@@ -1390,41 +1390,35 @@ export async function getPatientAppointmentHistory(patientId: string): Promise<{
 // --- Professional Availability ---
 export function getProfessionalAvailabilityForDate(professional: Professional, targetDate: Date): { startTime: string; endTime: string; isWorking: boolean; reason?: string, notes?: string, workingLocationId?: LocationId | null } | null {
   const contractStatus = getContractDisplayStatus(professional.currentContract, targetDate);
+
+  // First, check the contract status. If not active or upcoming, they are not available, regardless of any override.
+  if (contractStatus !== 'Activo' && contractStatus !== 'Próximo a Vencer') {
+    return { startTime: '', endTime: '', isWorking: false, reason: `Contrato: ${contractStatus}`, workingLocationId: professional.locationId };
+  }
+  
   const targetDateISO = formatISO(targetDate, { representation: 'date' });
   const customOverride = professional.customScheduleOverrides?.find(
     (override) => parseISO(override.date).toISOString().split('T')[0] === targetDateISO
   );
 
-  // Determine the authoritative working location for the day
-  let authoritativeLocationId: LocationId | null = professional.locationId;
-  let reason = "Horario base";
+  // If there is an override, it takes precedence over the base schedule.
   if (customOverride) {
-      if (customOverride.overrideType === 'traslado' && customOverride.locationId) {
-          authoritativeLocationId = customOverride.locationId;
-          reason = `Traslado (${customOverride.notes || 'Día completo'})`;
-      } else if (customOverride.overrideType === 'turno_especial') {
-          // It's a special shift, so the location is their base location.
-          authoritativeLocationId = professional.locationId;
-          reason = `Turno Especial (${customOverride.notes || 'Sin especificar'})`;
-      } else if (customOverride.overrideType === 'descanso') {
-          return { startTime: '', endTime: '', isWorking: false, reason: `Descansando (${customOverride.notes || 'Sin especificar'})`, workingLocationId: authoritativeLocationId };
-      }
-  }
-  
-  // Contract status is a hard blocker, regardless of location.
-  if (contractStatus !== 'Activo' && contractStatus !== 'Próximo a Vencer') {
-    return { startTime: '', endTime: '', isWorking: false, reason: `Contrato: ${contractStatus}`, workingLocationId: authoritativeLocationId };
-  }
-
-  // Use override schedule if it exists and is not a descanso
-  if (customOverride && customOverride.isWorking && customOverride.startTime && customOverride.endTime) {
-    return {
-      startTime: customOverride.startTime,
-      endTime: customOverride.endTime,
-      isWorking: true,
-      reason,
-      workingLocationId: authoritativeLocationId,
-    };
+    const workingLocationId = customOverride.overrideType === 'traslado' ? customOverride.locationId : professional.locationId;
+    if (customOverride.overrideType === 'descanso') {
+      return { startTime: '', endTime: '', isWorking: false, reason: `Descansando (${customOverride.notes || 'Sin especificar'})`, workingLocationId };
+    }
+    if (customOverride.isWorking && customOverride.startTime && customOverride.endTime) {
+       const reason = customOverride.overrideType === 'traslado' 
+         ? `Traslado (${customOverride.notes || 'Día completo'})` 
+         : `Turno Especial (${customOverride.notes || 'Sin especificar'})`;
+      return {
+        startTime: customOverride.startTime,
+        endTime: customOverride.endTime,
+        isWorking: true,
+        reason,
+        workingLocationId,
+      };
+    }
   }
 
   // If no applicable override, use base schedule
