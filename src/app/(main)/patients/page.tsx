@@ -41,7 +41,7 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
-import { PlusCircle, Edit2, Users, Search, Loader2, FileText, CalendarClock, ChevronsDown, AlertTriangle, CheckSquare, Square, UserRound, ZoomIn, ZoomOut, RefreshCw, XIcon, GitMerge, AlertCircleIcon } from 'lucide-react';
+import { PlusCircle, Edit2, Users, Search, Loader2, FileText, CalendarClock, ChevronsDown, AlertTriangle, CheckSquare, Square, UserRound, ZoomIn, ZoomOut, RefreshCw, XIcon, GitMerge, AlertCircleIcon, CheckCircle } from 'lucide-react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { PatientFormSchema, type PatientFormData } from '@/lib/schemas';
@@ -301,7 +301,7 @@ export default function PatientsPage() {
 
   const handleMouseUp = (e: React.MouseEvent<HTMLDivElement>) => {
     setIsDragging(false);
-     e.currentTarget.style.cursor = zoomLevel > 1 ? 'grab' : 'default';
+     e.currentTarget.style.cursor = zoomLevel > 1 ? (isDragging ? 'grabbing' : 'grab') : 'default';
   };
   
   // Merge Duplicates Handlers
@@ -706,3 +706,5 @@ export default function PatientsPage() {
     </div>
   );
 }
+
+    
