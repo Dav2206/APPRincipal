@@ -1,5 +1,4 @@
 
-
 "use client";
 
 import React, { useState, useEffect, useMemo } from 'react';
@@ -32,6 +31,7 @@ import { PatientHistoryPanel } from './patient-history-panel';
 import { AttendancePredictionTool } from './attendance-prediction-tool';
 import { useToast } from '@/hooks/use-toast';
 import { Alert, AlertDescription } from '@/components/ui/alert';
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 
 
 interface AppointmentFormProps {
@@ -492,8 +492,8 @@ export function AppointmentForm({
           existingPatientId: null,
           bookingObservations: '',
           addedServices: [],
-          isForFamilyMember: false,
-          familyMemberRelation: null,
+                 isForFamilyMember: false,
+                 familyMemberRelation: null,
         });
         setCurrentPatientForHistory(null);
         setShowPatientHistory(false);
@@ -502,7 +502,7 @@ export function AppointmentForm({
       }
       onOpenChange(open);
     }}>
-      <DialogContent className="sm:max-w-3xl max-h-[90vh] flex flex-col">
+      <DialogContent className="sm:max-w-xl max-h-[90vh] flex flex-col">
         <DialogHeader>
           <DialogTitle className="text-2xl flex items-center gap-2">
             <CalendarIcon className="text-primary"/>
@@ -515,525 +515,339 @@ export function AppointmentForm({
 
         <div className="flex-grow overflow-y-auto pr-2 -mr-2"> 
           <Form {...form}>
-            <form onSubmit={form.handleSubmit(onSubmit)} className="grid grid-cols-1 md:grid-cols-2 gap-6 py-4">
-              
-              <div className="md:col-span-1 space-y-4 p-4 border rounded-lg shadow-sm bg-card">
-                <h3 className="text-lg font-semibold flex items-center gap-2"><UserPlus /> Información del Paciente</h3>
+            <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-0">
+               <Accordion type="multiple" defaultValue={['item-1', 'item-2']} className="w-full">
 
-                <FormField
-                  control={form.control}
-                  name="isWalkIn"
-                  render={({ field }) => (
-                    <FormItem className="flex flex-row items-center space-x-3 space-y-0 rounded-md border p-3 shadow-sm bg-amber-50 border-amber-200">
-                      <FormControl>
-                        <Checkbox
-                          checked={field.value}
-                          onCheckedChange={field.onChange}
-                        />
-                      </FormControl>
-                      <div className="space-y-1 leading-none">
-                        <FormLabel className="flex items-center gap-1.5"><Footprints size={16} />Cliente de Paso (Sin Registro)</FormLabel>
-                        <FormDescription className="text-xs">
-                          Marcar para clientes no habituales sin registrar sus datos.
-                        </FormDescription>
-                      </div>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-
-                <FormField
-                  control={form.control}
-                  name="existingPatientId"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Paciente Registrado</FormLabel>
-                      <PatientSearchField
-                        onPatientSelect={handlePatientSelect}
-                        selectedPatientId={field.value}
-                        onClear={() => { 
-                          form.setValue('existingPatientId', null);
-                          form.setValue('patientFirstName', '');
-                          form.setValue('patientLastName', '');
-                          form.setValue('patientPhone', '');
-                          form.setValue('patientAge', null);
-                          form.setValue('isDiabetic', false);
-                          setCurrentPatientForHistory(null);
-                          setShowPatientHistory(false);
-                        }}
-                        disabled={watchIsWalkIn}
+                <AccordionItem value="item-1">
+                  <AccordionTrigger className="text-lg font-semibold"><UserPlus className="mr-2 h-5 w-5"/>Información del Paciente</AccordionTrigger>
+                  <AccordionContent className="space-y-4 pt-4">
+                      <FormField
+                        control={form.control}
+                        name="isWalkIn"
+                        render={({ field }) => (
+                          <FormItem className="flex flex-row items-center space-x-3 space-y-0 rounded-md border p-3 shadow-sm bg-amber-50 border-amber-200">
+                            <FormControl>
+                              <Checkbox
+                                checked={field.value}
+                                onCheckedChange={field.onChange}
+                              />
+                            </FormControl>
+                            <div className="space-y-1 leading-none">
+                              <FormLabel className="flex items-center gap-1.5"><Footprints size={16} />Cliente de Paso (Sin Registro)</FormLabel>
+                              <FormDescription className="text-xs">
+                                Marcar para clientes no habituales sin registrar sus datos.
+                              </FormDescription>
+                            </div>
+                            <FormMessage />
+                          </FormItem>
+                        )}
                       />
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <FormField
-                    control={form.control}
-                    name="patientFirstName"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Nombre(s)</FormLabel>
-                        <FormControl><Input placeholder="Ej: Juan" {...field} disabled={!!form.getValues("existingPatientId") || watchIsWalkIn} /></FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                  <FormField
-                    control={form.control}
-                    name="patientLastName"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Apellido(s)</FormLabel>
-                        <FormControl><Input placeholder="Ej: Pérez" {...field} disabled={!!form.getValues("existingPatientId") || watchIsWalkIn} /></FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                </div>
-                 {!watchIsWalkIn && (
-                    <>
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                          <FormField
-                            control={form.control}
-                            name="patientPhone"
-                            render={({ field }) => (
-                              <FormItem>
-                                <FormLabel>Teléfono (Opcional)</FormLabel>
-                                <FormControl><Input
-                                  type="tel"
-                                  placeholder={(!!form.getValues("existingPatientId") && user?.role !== USER_ROLES.ADMIN) ? "Teléfono Restringido" : "Ej: 987654321"}
-                                  {...field}
-                                  value={field.value || ''}
-                                  disabled={!!form.getValues("existingPatientId") && user?.role !== USER_ROLES.ADMIN}
-                                /></FormControl>
-                                <FormMessage />
-                              </FormItem>
-                            )}
-                          />
-                          <FormField
-                            control={form.control}
-                            name="patientAge"
-                            render={({ field }) => (
-                              <FormItem>
-                                <FormLabel className="flex items-center gap-1"><UserRound size={16}/>Edad (Opcional)</FormLabel>
-                                <FormControl><Input type="number" placeholder="Ej: 30" {...field} onChange={e => field.onChange(e.target.value === '' ? null : parseInt(e.target.value,10) || null)} disabled={!!form.getValues("existingPatientId")} value={field.value ?? ''}/></FormControl>
-                                <FormMessage />
-                              </FormItem>
-                            )}
-                          />
-                        </div>
+                      <FormField
+                        control={form.control}
+                        name="existingPatientId"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Paciente Registrado</FormLabel>
+                            <PatientSearchField
+                              onPatientSelect={handlePatientSelect}
+                              selectedPatientId={field.value}
+                              onClear={() => { 
+                                form.setValue('existingPatientId', null);
+                                form.setValue('patientFirstName', '');
+                                form.setValue('patientLastName', '');
+                                form.setValue('patientPhone', '');
+                                form.setValue('patientAge', null);
+                                form.setValue('isDiabetic', false);
+                                setCurrentPatientForHistory(null);
+                                setShowPatientHistory(false);
+                              }}
+                              disabled={watchIsWalkIn}
+                            />
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                         <FormField
-                            control={form.control}
-                            name="isDiabetic"
-                            render={({ field }) => (
-                            <FormItem className="flex flex-row items-center space-x-3 space-y-0 rounded-md border p-3 shadow-sm h-fit">
-                                <FormControl>
-                                <Checkbox
-                                    checked={field.value}
-                                    onCheckedChange={field.onChange}
-                                    disabled={!!form.getValues("existingPatientId")}
-                                />
-                                </FormControl>
-                                <div className="space-y-1 leading-none">
-                                <FormLabel className={!!form.getValues("existingPatientId") ? "text-muted-foreground" : ""}>
-                                    ¿Paciente diabético?
-                                </FormLabel>
-                                </div>
-                                <FormMessage />
+                          control={form.control}
+                          name="patientFirstName"
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel>Nombre(s)</FormLabel>
+                              <FormControl><Input placeholder="Ej: Juan" {...field} disabled={!!form.getValues("existingPatientId") || watchIsWalkIn} /></FormControl>
+                              <FormMessage />
                             </FormItem>
-                            )}
-                          />
-                         <FormField
-                            control={form.control}
-                            name="isForFamilyMember"
-                            render={({ field }) => (
-                            <FormItem className="flex flex-row items-center space-x-3 space-y-0 rounded-md border p-3 shadow-sm">
-                                <FormControl>
-                                <Checkbox
-                                    checked={field.value}
-                                    onCheckedChange={field.onChange}
-                                />
-                                </FormControl>
-                                <div className="space-y-1 leading-none">
-                                <FormLabel className="flex items-center gap-1.5"><UsersIcon size={16} />¿La cita es para un familiar?</FormLabel>
-                                </div>
-                                <FormMessage />
-                            </FormItem>
-                            )}
-                          />
-
-                          {watchIsForFamilyMember && (
-                            <FormField
-                              control={form.control}
-                              name="familyMemberRelation"
-                              render={({ field }) => (
-                                <FormItem>
-                                  <FormLabel>Parentesco</FormLabel>
-                                  <Select onValueChange={field.onChange} value={field.value || ""}>
-                                    <FormControl>
-                                      <SelectTrigger>
-                                        <SelectValue placeholder="Seleccionar parentesco" />
-                                      </SelectTrigger>
-                                    </FormControl>
-                                    <SelectContent>
-                                      {FAMILY_RELATIONS.map(rel => (
-                                        <SelectItem key={rel} value={rel}>{rel}</SelectItem>
-                                      ))}
-                                    </SelectContent>
-                                  </Select>
-                                  <FormMessage />
-                                </FormItem>
-                              )}
-                            />
                           )}
-
-                    </>
-                 )}
-
-
-                {showPatientHistory && currentPatientForHistory && !watchIsWalkIn && (
-                  <div className="mt-4 space-y-2">
-                     <PatientHistoryPanel patient={currentPatientForHistory} />
-                     <AttendancePredictionTool patientId={currentPatientForHistory.id} />
-                  </div>
-                )}
-              </div>
-
-              
-              <div className="md:col-span-1 space-y-4 p-4 border rounded-lg shadow-sm bg-card">
-                 <h3 className="text-lg font-semibold flex items-center gap-2"><ConciergeBell /> Detalles de la Cita</h3>
-                <FormField
-                  control={form.control}
-                  name="locationId"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel className="flex items-center gap-1"><Building size={16}/>Sede de la Cita (Destino)</FormLabel>
-                      <Select onValueChange={(value) => { field.onChange(value); form.setValue('professionalOriginLocationId', SAME_LOCATION_AS_APPOINTMENT_VALUE); form.setValue('preferredProfessionalId', ANY_PROFESSIONAL_VALUE);}} value={field.value || ""} disabled={(user?.role === USER_ROLES.LOCATION_STAFF && !isAdminOrContador) || isLoadingServices || servicesList.length === 0}>
-                        <FormControl>
-                          <SelectTrigger><SelectValue placeholder="Seleccionar sede" /></SelectTrigger>
-                        </FormControl>
-                        <SelectContent>
-                          {locations.map(loc => (
-                            <SelectItem key={loc.id} value={loc.id}>{loc.name}</SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                <FormField
-                  control={form.control}
-                  name="serviceId"
-                  render={({ field }) => (
-                    <FormItem className="flex flex-col">
-                      <FormLabel>Servicio Principal</FormLabel>
-                      <Popover open={serviceSearchPopoverOpen} onOpenChange={setServiceSearchPopoverOpen}>
-                        <PopoverTrigger asChild>
-                          <FormControl>
-                            <Button
-                              variant="outline"
-                              role="combobox"
-                              className={cn(
-                                "w-full justify-between",
-                                !field.value && "text-muted-foreground"
-                              )}
-                              disabled={isLoadingServices || servicesList.length === 0}
-                            >
-                              {isLoadingServices ? "Cargando servicios..." : 
-                                field.value
-                                ? servicesList.find(
-                                    (service) => service.id === field.value
-                                  )?.name
-                                : (servicesList.length > 0 ? "Seleccionar servicio" : "No hay servicios")}
-                              <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-                            </Button>
-                          </FormControl>
-                        </PopoverTrigger>
-                        <PopoverContent className="w-[--radix-popover-trigger-width] p-0">
-                          <Command>
-                            <CommandInput
-                              placeholder="Buscar servicio..."
-                              value={serviceSearchTerm}
-                              onValueChange={setServiceSearchTerm}
-                            />
-                            <CommandList>
-                              <CommandEmpty>No se encontró servicio.</CommandEmpty>
-                              <CommandGroup>
-                                {filteredServices.slice(0, 4).map((service) => (
-                                  <CommandItem
-                                    value={service.name}
-                                    key={service.id}
-                                    onSelect={() => {
-                                      form.setValue("serviceId", service.id);
-                                      setServiceSearchPopoverOpen(false);
-                                      setServiceSearchTerm('');
-                                    }}
-                                  >
-                                    <Check
-                                      className={cn(
-                                        "mr-2 h-4 w-4",
-                                        service.id === field.value
-                                          ? "opacity-100"
-                                          : "opacity-0"
-                                      )}
-                                    />
-                                    {service.name}
-                                  </CommandItem>
-                                ))}
-                              </CommandGroup>
-                            </CommandList>
-                          </Command>
-                        </PopoverContent>
-                      </Popover>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <FormField
-                    control={form.control}
-                    name="appointmentDate"
-                    render={({ field }) => (
-                      <FormItem className="flex flex-col">
-                        <FormLabel className="flex items-center gap-1"><CalendarIcon size={16}/>Fecha de la Cita</FormLabel>
-                        <Popover>
-                          <PopoverTrigger asChild>
-                            <FormControl>
-                              <Button
-                                variant={"outline"}
-                                className={cn(
-                                  "pl-3 text-left font-normal",
-                                  !field.value && "text-muted-foreground"
-                                )}
-                                disabled={isLoadingServices || servicesList.length === 0}
-                              >
-                                {field.value ? (
-                                  format(field.value, "PPP", { locale: es })
-                                ) : (
-                                  <span>Seleccionar fecha</span>
-                                )}
-                                <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
-                              </Button>
-                            </FormControl>
-                          </PopoverTrigger>
-                          <PopoverContent className="w-auto p-0" align="start">
-                            <Calendar
-                              mode="single"
-                              selected={field.value}
-                              onSelect={field.onChange}
-                              disabled={(date) => date < startOfDay(new Date())} 
-                              initialFocus
-                            />
-                          </PopoverContent>
-                        </Popover>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                  <FormField
-                    control={form.control}
-                    name="appointmentTime"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel className="flex items-center gap-1"><ClockIcon size={16}/>Hora de la Cita</FormLabel>
-                        <Select onValueChange={field.onChange} value={field.value} disabled={isLoadingServices || servicesList.length === 0}>
-                          <FormControl>
-                            <SelectTrigger><SelectValue placeholder="Seleccionar hora" /></SelectTrigger>
-                          </FormControl>
-                          <SelectContent>
-                            {TIME_SLOTS.map(slot => (
-                              <SelectItem key={slot} value={slot}>{slot}</SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                </div>
-                
-                <div className="space-y-2">
-                  <h4 className="text-md font-semibold flex items-center gap-2"><Briefcase /> Profesional y Observaciones</h4>
-                  <FormField
-                      control={form.control}
-                      name="professionalOriginLocationId"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel className="flex items-center gap-1"><Shuffle size={14}/>Sede de Origen del Profesional</FormLabel>
-                          <Select
-                            onValueChange={(value) => {
-                              field.onChange(value);
-                              form.setValue('preferredProfessionalId', ANY_PROFESSIONAL_VALUE); // Reset professional selection
-                            }}
-                            value={field.value || SAME_LOCATION_AS_APPOINTMENT_VALUE}
-                            disabled={checkboxDisabledReason}
-                          >
-                            <FormControl>
-                              <SelectTrigger>
-                                <SelectValue placeholder="Seleccionar sede de origen" />
-                              </SelectTrigger>
-                            </FormControl>
-                            <SelectContent>
-                              <SelectItem value={SAME_LOCATION_AS_APPOINTMENT_VALUE}>
-                                Misma Sede de la Cita
-                              </SelectItem>
-                              {locations
-                                .filter(loc => loc.id !== watchLocationId) // Exclude the destination location
-                                .map(loc => (
-                                  <SelectItem key={loc.id} value={loc.id}>
-                                    {loc.name}
-                                  </SelectItem>
-                                ))}
-                            </SelectContent>
-                          </Select>
-                          <FormDescription className="text-xs">
-                            Para traslados temporales por una cita, elija una sede de origen distinta.
-                          </FormDescription>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-                  <FormField
-                    control={form.control}
-                    name="preferredProfessionalId"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Profesional Preferido (Opcional)</FormLabel>
-                        <Select
-                          onValueChange={(value) => field.onChange(value)}
-                          value={field.value || ANY_PROFESSIONAL_VALUE}
-                          disabled={isLoadingServices || servicesList.length === 0 || isLoadingAppointments }
-                        >
-                          <FormControl>
-                            <SelectTrigger>
-                                <SelectValue placeholder={
-                                    (isLoadingAppointments || isLoadingServices) ? "Cargando..." :
-                                    (availableProfessionalsForTimeSlot.length > 0) ? "Cualquier profesional disponible" :
-                                    "No hay profesionales disponibles"
-                                } />
-                            </SelectTrigger>
-                          </FormControl>
-                          <SelectContent>
-                            <SelectItem value={ANY_PROFESSIONAL_VALUE}>Cualquier profesional disponible</SelectItem>
-                            {availableProfessionalsForTimeSlot.map(prof => (
-                              <SelectItem key={prof.id} value={prof.id}>
-                                  {prof.firstName} {prof.lastName}
-                                  {prof.locationId !== watchLocationId && (
-                                    <span className="text-xs text-muted-foreground ml-1">
-                                      ({locations.find(l=>l.id===prof.locationId)?.name})
-                                    </span>
+                        />
+                        <FormField
+                          control={form.control}
+                          name="patientLastName"
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel>Apellido(s)</FormLabel>
+                              <FormControl><Input placeholder="Ej: Pérez" {...field} disabled={!!form.getValues("existingPatientId") || watchIsWalkIn} /></FormControl>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+                      </div>
+                      {!watchIsWalkIn && (
+                          <>
+                              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                <FormField
+                                  control={form.control}
+                                  name="patientPhone"
+                                  render={({ field }) => (
+                                    <FormItem>
+                                      <FormLabel>Teléfono (Opcional)</FormLabel>
+                                      <FormControl><Input
+                                        type="tel"
+                                        placeholder={(!!form.getValues("existingPatientId") && user?.role !== USER_ROLES.ADMIN) ? "Teléfono Restringido" : "Ej: 987654321"}
+                                        {...field}
+                                        value={field.value || ''}
+                                        disabled={!!form.getValues("existingPatientId") && user?.role !== USER_ROLES.ADMIN}
+                                      /></FormControl>
+                                      <FormMessage />
+                                    </FormItem>
                                   )}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                         {slotAvailabilityMessage && (
-                            <Alert variant={availableProfessionalsForTimeSlot.length > 0 ? "default" : "destructive"} className="mt-2 text-xs p-2">
-                              <AlertCircle className="h-4 w-4" />
-                              <AlertDescription>{slotAvailabilityMessage}</AlertDescription>
-                            </Alert>
-                          )}
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                  <FormField
-                    control={form.control}
-                    name="bookingObservations"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel className="flex items-center gap-1"><Edit3 size={16}/>Observaciones Adicionales (Opcional)</FormLabel>
-                        <FormControl>
-                          <Textarea
-                            placeholder="Ej: El paciente tiene movilidad reducida, etc."
-                            className="resize-none"
-                            {...field}
-                            value={field.value || ''}
-                            disabled={isLoadingServices || servicesList.length === 0}
-                          />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                </div>
+                                />
+                                <FormField
+                                  control={form.control}
+                                  name="patientAge"
+                                  render={({ field }) => (
+                                    <FormItem>
+                                      <FormLabel className="flex items-center gap-1"><UserRound size={16}/>Edad (Opcional)</FormLabel>
+                                      <FormControl><Input type="number" placeholder="Ej: 30" {...field} onChange={e => field.onChange(e.target.value === '' ? null : parseInt(e.target.value,10) || null)} disabled={!!form.getValues("existingPatientId")} value={field.value ?? ''}/></FormControl>
+                                      <FormMessage />
+                                    </FormItem>
+                                  )}
+                                />
+                              </div>
+                              <FormField
+                                  control={form.control}
+                                  name="isDiabetic"
+                                  render={({ field }) => (
+                                  <FormItem className="flex flex-row items-center space-x-3 space-y-0 rounded-md border p-3 shadow-sm h-fit">
+                                      <FormControl>
+                                      <Checkbox
+                                          checked={field.value}
+                                          onCheckedChange={field.onChange}
+                                          disabled={!!form.getValues("existingPatientId")}
+                                      />
+                                      </FormControl>
+                                      <div className="space-y-1 leading-none">
+                                      <FormLabel className={!!form.getValues("existingPatientId") ? "text-muted-foreground" : ""}>
+                                          ¿Paciente diabético?
+                                      </FormLabel>
+                                      </div>
+                                      <FormMessage />
+                                  </FormItem>
+                                  )}
+                                />
+                              <FormField
+                                  control={form.control}
+                                  name="isForFamilyMember"
+                                  render={({ field }) => (
+                                  <FormItem className="flex flex-row items-center space-x-3 space-y-0 rounded-md border p-3 shadow-sm">
+                                      <FormControl>
+                                      <Checkbox
+                                          checked={field.value}
+                                          onCheckedChange={field.onChange}
+                                      />
+                                      </FormControl>
+                                      <div className="space-y-1 leading-none">
+                                      <FormLabel className="flex items-center gap-1.5"><UsersIcon size={16} />¿La cita es para un familiar?</FormLabel>
+                                      </div>
+                                      <FormMessage />
+                                  </FormItem>
+                                  )}
+                                />
 
-                {!isLoadingServices && servicesList && servicesList.length > 0 && (
-                  <div className="space-y-3 pt-3 mt-3 border-t">
-                    <div className="flex justify-between items-center">
-                      <h4 className="text-md font-semibold flex items-center gap-2"><ShoppingBag/> Servicios Adicionales</h4>
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        onClick={() => appendAddedService({ serviceId: servicesList?.length ? servicesList[0].id : '', professionalId: NO_SELECTION_PLACEHOLDER, startTime: null, price: undefined })}
-                      >
-                        <PlusCircle className="mr-2 h-4 w-4" /> Agregar
-                      </Button>
-                    </div>
-                    {addedServiceFields.map((item, index) => (
-                      <div key={item.id} className="p-3 border rounded-md space-y-3 bg-muted/50 relative grid grid-cols-1 sm:grid-cols-2 gap-3">
-                         <Button type="button" variant="ghost" size="icon" className="absolute top-1 right-1 h-6 w-6" onClick={() => removeAddedService(index)}>
-                            <Trash2 className="h-4 w-4 text-destructive" />
-                          </Button>
-                        <FormField
-                          control={form.control}
-                          name={`addedServices.${index}.serviceId`}
-                          render={({ field }) => (
-                            <FormItem>
-                              <FormLabel className="text-xs">Servicio Adicional {index + 1}</FormLabel>
-                              <Select onValueChange={field.onChange} value={field.value || ''} disabled={!servicesList?.length}>
-                                <FormControl><SelectTrigger><SelectValue placeholder={servicesList?.length ? "Seleccionar servicio" : "No hay servicios"} /></SelectTrigger></FormControl>
-                                <SelectContent>
-                                   {!servicesList?.length && <SelectItem value="" disabled>No hay servicios</SelectItem>}
-                                   {servicesList?.map(s => <SelectItem key={`added-${s.id}-${index}`} value={s.id}>{s.name}</SelectItem>)}
-                                </SelectContent>
-                              </Select>
-                              <FormMessage />
-                            </FormItem>
-                          )}
-                        />
-                        <FormField
-                          control={form.control}
-                          name={`addedServices.${index}.professionalId`}
-                          render={({ field }) => (
-                            <FormItem>
-                              <FormLabel className="text-xs">Profesional (Opcional)</FormLabel>
-                              <Select onValueChange={(value) => field.onChange(value === NO_SELECTION_PLACEHOLDER ? null : value)} value={field.value || NO_SELECTION_PLACEHOLDER}>
-                               <FormControl><SelectTrigger><SelectValue placeholder="Mismo prof. / Cualquiera" /></SelectTrigger></FormControl>
-                                <SelectContent>
-                                  <SelectItem value={NO_SELECTION_PLACEHOLDER}>Mismo prof. / Cualquiera</SelectItem>
-                                  {availableProfessionalsForTimeSlot.map(p => <SelectItem key={`added-prof-${p.id}-${index}`} value={p.id}>{p.firstName} {p.lastName}</SelectItem>)}
-                                </SelectContent>
-                              </Select>
-                              <FormMessage />
-                            </FormItem>
-                          )}
-                        />
-                        <FormField
-                          control={form.control}
-                          name={`addedServices.${index}.startTime`}
-                          render={({ field }) => (
-                            <FormItem>
-                              <FormLabel className="text-xs">Hora de Inicio (Opcional)</FormLabel>
-                              <Select
-                                onValueChange={(value) => field.onChange(value === NO_SELECTION_PLACEHOLDER ? null : value)}
-                                value={field.value || NO_SELECTION_PLACEHOLDER}
-                              >
+                                {watchIsForFamilyMember && (
+                                  <FormField
+                                    control={form.control}
+                                    name="familyMemberRelation"
+                                    render={({ field }) => (
+                                      <FormItem>
+                                        <FormLabel>Parentesco</FormLabel>
+                                        <Select onValueChange={field.onChange} value={field.value || ""}>
+                                          <FormControl>
+                                            <SelectTrigger>
+                                              <SelectValue placeholder="Seleccionar parentesco" />
+                                            </SelectTrigger>
+                                          </FormControl>
+                                          <SelectContent>
+                                            {FAMILY_RELATIONS.map(rel => (
+                                              <SelectItem key={rel} value={rel}>{rel}</SelectItem>
+                                            ))}
+                                          </SelectContent>
+                                        </Select>
+                                        <FormMessage />
+                                      </FormItem>
+                                    )}
+                                  />
+                                )}
+
+                          </>
+                      )}
+
+
+                      {showPatientHistory && currentPatientForHistory && !watchIsWalkIn && (
+                        <div className="mt-4 space-y-2">
+                          <PatientHistoryPanel patient={currentPatientForHistory} />
+                          <AttendancePredictionTool patientId={currentPatientForHistory.id} />
+                        </div>
+                      )}
+                  </AccordionContent>
+                </AccordionItem>
+                
+                <AccordionItem value="item-2">
+                   <AccordionTrigger className="text-lg font-semibold"><ConciergeBell className="mr-2 h-5 w-5"/>Detalles de la Cita</AccordionTrigger>
+                   <AccordionContent className="space-y-4 pt-4">
+                      <FormField
+                        control={form.control}
+                        name="locationId"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel className="flex items-center gap-1"><Building size={16}/>Sede de la Cita (Destino)</FormLabel>
+                            <Select onValueChange={(value) => { field.onChange(value); form.setValue('professionalOriginLocationId', SAME_LOCATION_AS_APPOINTMENT_VALUE); form.setValue('preferredProfessionalId', ANY_PROFESSIONAL_VALUE);}} value={field.value || ""} disabled={(user?.role === USER_ROLES.LOCATION_STAFF && !isAdminOrContador) || isLoadingServices || servicesList.length === 0}>
+                              <FormControl>
+                                <SelectTrigger><SelectValue placeholder="Seleccionar sede" /></SelectTrigger>
+                              </FormControl>
+                              <SelectContent>
+                                {locations.map(loc => (
+                                  <SelectItem key={loc.id} value={loc.id}>{loc.name}</SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                      <FormField
+                        control={form.control}
+                        name="serviceId"
+                        render={({ field }) => (
+                          <FormItem className="flex flex-col">
+                            <FormLabel>Servicio Principal</FormLabel>
+                            <Popover open={serviceSearchPopoverOpen} onOpenChange={setServiceSearchPopoverOpen}>
+                              <PopoverTrigger asChild>
                                 <FormControl>
-                                  <SelectTrigger>
-                                    <SelectValue placeholder="Misma hora principal" />
-                                  </SelectTrigger>
+                                  <Button
+                                    variant="outline"
+                                    role="combobox"
+                                    className={cn(
+                                      "w-full justify-between",
+                                      !field.value && "text-muted-foreground"
+                                    )}
+                                    disabled={isLoadingServices || servicesList.length === 0}
+                                  >
+                                    {isLoadingServices ? "Cargando servicios..." : 
+                                      field.value
+                                      ? servicesList.find(
+                                          (service) => service.id === field.value
+                                        )?.name
+                                      : (servicesList.length > 0 ? "Seleccionar servicio" : "No hay servicios")}
+                                    <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                                  </Button>
+                                </FormControl>
+                              </PopoverTrigger>
+                              <PopoverContent className="w-[--radix-popover-trigger-width] p-0">
+                                <Command>
+                                  <CommandInput
+                                    placeholder="Buscar servicio..."
+                                    value={serviceSearchTerm}
+                                    onValueChange={setServiceSearchTerm}
+                                  />
+                                  <CommandList>
+                                    <CommandEmpty>No se encontró servicio.</CommandEmpty>
+                                    <CommandGroup>
+                                      {filteredServices.slice(0, 4).map((service) => (
+                                        <CommandItem
+                                          value={service.name}
+                                          key={service.id}
+                                          onSelect={() => {
+                                            form.setValue("serviceId", service.id);
+                                            setServiceSearchPopoverOpen(false);
+                                            setServiceSearchTerm('');
+                                          }}
+                                        >
+                                          <Check
+                                            className={cn(
+                                              "mr-2 h-4 w-4",
+                                              service.id === field.value
+                                                ? "opacity-100"
+                                                : "opacity-0"
+                                            )}
+                                          />
+                                          {service.name}
+                                        </CommandItem>
+                                      ))}
+                                    </CommandGroup>
+                                  </CommandList>
+                                </Command>
+                              </PopoverContent>
+                            </Popover>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <FormField
+                          control={form.control}
+                          name="appointmentDate"
+                          render={({ field }) => (
+                            <FormItem className="flex flex-col">
+                              <FormLabel className="flex items-center gap-1"><CalendarIcon size={16}/>Fecha de la Cita</FormLabel>
+                              <Popover>
+                                <PopoverTrigger asChild>
+                                  <FormControl>
+                                    <Button
+                                      variant={"outline"}
+                                      className={cn(
+                                        "pl-3 text-left font-normal",
+                                        !field.value && "text-muted-foreground"
+                                      )}
+                                      disabled={isLoadingServices || servicesList.length === 0}
+                                    >
+                                      {field.value ? (
+                                        format(field.value, "PPP", { locale: es })
+                                      ) : (
+                                        <span>Seleccionar fecha</span>
+                                      )}
+                                      <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
+                                    </Button>
+                                  </FormControl>
+                                </PopoverTrigger>
+                                <PopoverContent className="w-auto p-0" align="start">
+                                  <Calendar
+                                    mode="single"
+                                    selected={field.value}
+                                    onSelect={field.onChange}
+                                    disabled={(date) => date < startOfDay(new Date())} 
+                                    initialFocus
+                                  />
+                                </PopoverContent>
+                              </Popover>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+                        <FormField
+                          control={form.control}
+                          name="appointmentTime"
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel className="flex items-center gap-1"><ClockIcon size={16}/>Hora de la Cita</FormLabel>
+                              <Select onValueChange={field.onChange} value={field.value} disabled={isLoadingServices || servicesList.length === 0}>
+                                <FormControl>
+                                  <SelectTrigger><SelectValue placeholder="Seleccionar hora" /></SelectTrigger>
                                 </FormControl>
                                 <SelectContent>
-                                  <SelectItem value={NO_SELECTION_PLACEHOLDER}>Misma hora principal</SelectItem>
                                   {TIME_SLOTS.map(slot => (
-                                    <SelectItem key={`${slot}-${index}`} value={slot}>
-                                      {slot}
-                                    </SelectItem>
+                                    <SelectItem key={slot} value={slot}>{slot}</SelectItem>
                                   ))}
                                 </SelectContent>
                               </Select>
@@ -1042,13 +856,201 @@ export function AppointmentForm({
                           )}
                         />
                       </div>
-                    ))}
-                    <FormField control={form.control} name="addedServices" render={() => <FormMessage />} />
-                  </div>
+                      
+                      <div className="space-y-2">
+                        <h4 className="text-sm font-semibold flex items-center gap-2 pt-2"><Briefcase /> Profesional y Observaciones</h4>
+                        <FormField
+                            control={form.control}
+                            name="professionalOriginLocationId"
+                            render={({ field }) => (
+                              <FormItem>
+                                <FormLabel className="flex items-center gap-1 text-xs"><Shuffle size={14}/>Sede de Origen del Profesional</FormLabel>
+                                <Select
+                                  onValueChange={(value) => {
+                                    field.onChange(value);
+                                    form.setValue('preferredProfessionalId', ANY_PROFESSIONAL_VALUE); // Reset professional selection
+                                  }}
+                                  value={field.value || SAME_LOCATION_AS_APPOINTMENT_VALUE}
+                                  disabled={checkboxDisabledReason}
+                                >
+                                  <FormControl>
+                                    <SelectTrigger>
+                                      <SelectValue placeholder="Seleccionar sede de origen" />
+                                    </SelectTrigger>
+                                  </FormControl>
+                                  <SelectContent>
+                                    <SelectItem value={SAME_LOCATION_AS_APPOINTMENT_VALUE}>
+                                      Misma Sede de la Cita
+                                    </SelectItem>
+                                    {locations
+                                      .filter(loc => loc.id !== watchLocationId) // Exclude the destination location
+                                      .map(loc => (
+                                        <SelectItem key={loc.id} value={loc.id}>
+                                          {loc.name}
+                                        </SelectItem>
+                                      ))}
+                                  </SelectContent>
+                                </Select>
+                                <FormDescription className="text-xs">
+                                  Para traslados temporales por una cita, elija una sede de origen distinta.
+                                </FormDescription>
+                                <FormMessage />
+                              </FormItem>
+                            )}
+                          />
+                        <FormField
+                          control={form.control}
+                          name="preferredProfessionalId"
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel>Profesional Preferido (Opcional)</FormLabel>
+                              <Select
+                                onValueChange={(value) => field.onChange(value)}
+                                value={field.value || ANY_PROFESSIONAL_VALUE}
+                                disabled={isLoadingServices || servicesList.length === 0 || isLoadingAppointments }
+                              >
+                                <FormControl>
+                                  <SelectTrigger>
+                                      <SelectValue placeholder={
+                                          (isLoadingAppointments || isLoadingServices) ? "Cargando..." :
+                                          (availableProfessionalsForTimeSlot.length > 0) ? "Cualquier profesional disponible" :
+                                          "No hay profesionales disponibles"
+                                      } />
+                                  </SelectTrigger>
+                                </FormControl>
+                                <SelectContent>
+                                  <SelectItem value={ANY_PROFESSIONAL_VALUE}>Cualquier profesional disponible</SelectItem>
+                                  {availableProfessionalsForTimeSlot.map(prof => (
+                                    <SelectItem key={prof.id} value={prof.id}>
+                                        {prof.firstName} {prof.lastName}
+                                        {prof.locationId !== watchLocationId && (
+                                          <span className="text-xs text-muted-foreground ml-1">
+                                            ({locations.find(l=>l.id===prof.locationId)?.name})
+                                          </span>
+                                        )}
+                                    </SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                              {slotAvailabilityMessage && (
+                                  <Alert variant={availableProfessionalsForTimeSlot.length > 0 ? "default" : "destructive"} className="mt-2 text-xs p-2">
+                                    <AlertCircle className="h-4 w-4" />
+                                    <AlertDescription>{slotAvailabilityMessage}</AlertDescription>
+                                  </Alert>
+                                )}
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+                        <FormField
+                          control={form.control}
+                          name="bookingObservations"
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel className="flex items-center gap-1"><Edit3 size={16}/>Observaciones Adicionales (Opcional)</FormLabel>
+                              <FormControl>
+                                <Textarea
+                                  placeholder="Ej: El paciente tiene movilidad reducida, etc."
+                                  className="resize-none"
+                                  {...field}
+                                  value={field.value || ''}
+                                  disabled={isLoadingServices || servicesList.length === 0}
+                                />
+                              </FormControl>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+                      </div>
+                   </AccordionContent>
+                </AccordionItem>
+
+                {!isLoadingServices && servicesList && servicesList.length > 0 && (
+                  <AccordionItem value="item-3">
+                    <AccordionTrigger className="text-lg font-semibold"><ShoppingBag className="mr-2 h-5 w-5"/>Servicios Adicionales</AccordionTrigger>
+                    <AccordionContent className="space-y-4 pt-4">
+                        {addedServiceFields.map((item, index) => (
+                          <div key={item.id} className="p-3 border rounded-md space-y-3 bg-muted/50 relative grid grid-cols-1 sm:grid-cols-2 gap-3">
+                            <Button type="button" variant="ghost" size="icon" className="absolute top-1 right-1 h-6 w-6" onClick={() => removeAddedService(index)}>
+                                <Trash2 className="h-4 w-4 text-destructive" />
+                              </Button>
+                            <FormField
+                              control={form.control}
+                              name={`addedServices.${index}.serviceId`}
+                              render={({ field }) => (
+                                <FormItem>
+                                  <FormLabel className="text-xs">Servicio Adicional {index + 1}</FormLabel>
+                                  <Select onValueChange={field.onChange} value={field.value || ''} disabled={!servicesList?.length}>
+                                    <FormControl><SelectTrigger><SelectValue placeholder={servicesList?.length ? "Seleccionar servicio" : "No hay servicios"} /></SelectTrigger></FormControl>
+                                    <SelectContent>
+                                      {!servicesList?.length && <SelectItem value="" disabled>No hay servicios</SelectItem>}
+                                      {servicesList?.map(s => <SelectItem key={`added-${s.id}-${index}`} value={s.id}>{s.name}</SelectItem>)}
+                                    </SelectContent>
+                                  </Select>
+                                  <FormMessage />
+                                </FormItem>
+                              )}
+                            />
+                            <FormField
+                              control={form.control}
+                              name={`addedServices.${index}.professionalId`}
+                              render={({ field }) => (
+                                <FormItem>
+                                  <FormLabel className="text-xs">Profesional (Opcional)</FormLabel>
+                                  <Select onValueChange={(value) => field.onChange(value === NO_SELECTION_PLACEHOLDER ? null : value)} value={field.value || NO_SELECTION_PLACEHOLDER}>
+                                  <FormControl><SelectTrigger><SelectValue placeholder="Mismo prof. / Cualquiera" /></SelectTrigger></FormControl>
+                                    <SelectContent>
+                                      <SelectItem value={NO_SELECTION_PLACEHOLDER}>Mismo prof. / Cualquiera</SelectItem>
+                                      {availableProfessionalsForTimeSlot.map(p => <SelectItem key={`added-prof-${p.id}-${index}`} value={p.id}>{p.firstName} {p.lastName}</SelectItem>)}
+                                    </SelectContent>
+                                  </Select>
+                                  <FormMessage />
+                                </FormItem>
+                              )}
+                            />
+                            <FormField
+                              control={form.control}
+                              name={`addedServices.${index}.startTime`}
+                              render={({ field }) => (
+                                <FormItem>
+                                  <FormLabel className="text-xs">Hora de Inicio (Opcional)</FormLabel>
+                                  <Select
+                                    onValueChange={(value) => field.onChange(value === NO_SELECTION_PLACEHOLDER ? null : value)}
+                                    value={field.value || NO_SELECTION_PLACEHOLDER}
+                                  >
+                                    <FormControl>
+                                      <SelectTrigger>
+                                        <SelectValue placeholder="Misma hora principal" />
+                                      </SelectTrigger>
+                                    </FormControl>
+                                    <SelectContent>
+                                      <SelectItem value={NO_SELECTION_PLACEHOLDER}>Misma hora principal</SelectItem>
+                                      {TIME_SLOTS.map(slot => (
+                                        <SelectItem key={`${slot}-${index}`} value={slot}>
+                                          {slot}
+                                        </SelectItem>
+                                      ))}
+                                    </SelectContent>
+                                  </Select>
+                                  <FormMessage />
+                                </FormItem>
+                              )}
+                            />
+                          </div>
+                        ))}
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={() => appendAddedService({ serviceId: servicesList?.length ? servicesList[0].id : '', professionalId: NO_SELECTION_PLACEHOLDER, startTime: null, price: undefined })}
+                        >
+                          <PlusCircle className="mr-2 h-4 w-4" /> Agregar Servicio Adicional
+                        </Button>
+                        <FormField control={form.control} name="addedServices" render={() => <FormMessage />} />
+                    </AccordionContent>
+                  </AccordionItem>
                 )}
-
-
-              </div>
+               </Accordion>
             </form>
           </Form>
         </div>
