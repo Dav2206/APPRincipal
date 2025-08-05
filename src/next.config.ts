@@ -39,6 +39,10 @@ const nextConfig: NextConfig = {
       },
     ],
   },
+   generateBuildId: async () => {
+    // This will create a unique build id for each new build
+    return new Date().getTime().toString();
+  },
 };
 
 export default withPWA(nextConfig);
