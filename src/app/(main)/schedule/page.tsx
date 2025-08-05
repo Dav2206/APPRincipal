@@ -6,7 +6,7 @@ import type { Appointment, Professional, Location } from '@/types';
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useAuth } from '@/contexts/auth-provider';
 import { useAppState } from '@/contexts/app-state-provider';
-import { getAppointments, getProfessionals, getAppointmentById, getProfessionalAvailabilityForDate, getLocations } from '@/lib/data';
+import { getAppointments, getProfessionals, getAppointmentById, getProfessionalAvailabilityForDate, getLocations, getProfessionalById } from '@/lib/data';
 import { USER_ROLES, TIME_SLOTS, LocationId, APPOINTMENT_STATUS } from '@/lib/constants';
 import { DailyTimeline } from '@/components/schedule/daily-timeline';
 import { Button } from '@/components/ui/button';
@@ -88,40 +88,49 @@ export default function SchedulePage() {
     setIsLoading(true);
   
     try {
-      // Step 1: Fetch appointments and all professionals in parallel.
-      const [appointmentsResponse, allProfsResponse] = await Promise.all([
+      // Step 1: Fetch appointments and professionals for the current location in parallel.
+      const [appointmentsResponse, professionalsForLocationResponse] = await Promise.all([
         getAppointments({
           locationId: actualEffectiveLocationId,
           date: currentDate,
           statuses: [APPOINTMENT_STATUS.BOOKED, APPOINTMENT_STATUS.CONFIRMED, APPOINTMENT_STATUS.COMPLETED],
         }),
-        getProfessionals()
+        getProfessionals(actualEffectiveLocationId) 
       ]);
   
       const dailyAppointments = appointmentsResponse.appointments || [];
-      const systemProfs = allProfsResponse || [];
-      setAllSystemProfessionals(systemProfs);
+      const locationProfs = professionalsForLocationResponse || [];
+      const professionalsMap = new Map(locationProfs.map(p => [p.id, p]));
+  
+      // Step 2: Identify external professionals from appointments and fetch them if needed.
+      const externalProfIds = new Set<string>();
+      dailyAppointments.forEach(appt => {
+        if (appt.isExternalProfessional && appt.professionalId && !professionalsMap.has(appt.professionalId)) {
+          externalProfIds.add(appt.professionalId);
+        }
+      });
+  
+      if (externalProfIds.size > 0) {
+        const externalProfs = await Promise.all(
+          Array.from(externalProfIds).map(id => getProfessionalById(id))
+        );
+        externalProfs.forEach(prof => {
+          if (prof) professionalsMap.set(prof.id, prof);
+        });
+      }
+      
+      const allRelevantProfessionals = Array.from(professionalsMap.values());
+      setAllSystemProfessionals(allRelevantProfessionals);
       setAppointments(dailyAppointments.sort((a,b) => parseISO(a.appointmentDateTime).getTime() - parseISO(b.appointmentDateTime).getTime()));
   
-      // Step 2: Determine which professionals to display as columns in the timeline.
+      // Step 3: Determine which professionals to display as columns in the timeline.
       const professionalsForTimelineMap = new Map<string, Professional>();
   
-      // Add professionals based on their scheduled availability (base or override)
-      systemProfs.forEach(prof => {
+      allRelevantProfessionals.forEach(prof => {
         if (prof.isManager) return;
         const availability = getProfessionalAvailabilityForDate(prof, currentDate);
         if (availability?.isWorking && availability.workingLocationId === actualEffectiveLocationId) {
           professionalsForTimelineMap.set(prof.id, prof);
-        }
-      });
-  
-      // Add professionals who are external and have appointments at this location
-      dailyAppointments.forEach(appt => {
-        if (appt.isExternalProfessional && appt.professionalId && !professionalsForTimelineMap.has(appt.professionalId)) {
-          const externalProf = systemProfs.find(p => p.id === appt.professionalId);
-          if (externalProf && !externalProf.isManager) {
-            professionalsForTimelineMap.set(externalProf.id, externalProf);
-          }
         }
       });
       
