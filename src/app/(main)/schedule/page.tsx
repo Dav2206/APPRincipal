@@ -78,57 +78,71 @@ export default function SchedulePage() {
 
   const fetchData = useCallback(async () => {
     if (!user || !actualEffectiveLocationId) {
-      setIsLoading(false);
-      setAppointments([]);
-      setWorkingProfessionalsForTimeline([]);
-      setAllSystemProfessionals([]);
-      return;
+        setIsLoading(false);
+        setAppointments([]);
+        setWorkingProfessionalsForTimeline([]);
+        setAllSystemProfessionals([]);
+        return;
     }
-  
-    setIsLoading(true);
-  
-    try {
-      // Step 1: Fetch appointments and ALL system professionals in parallel.
-      const [appointmentsResponse, allProfsResponse] = await Promise.all([
-        getAppointments({
-          locationId: actualEffectiveLocationId,
-          date: currentDate,
-          statuses: [APPOINTMENT_STATUS.BOOKED, APPOINTMENT_STATUS.CONFIRMED, APPOINTMENT_STATUS.COMPLETED],
-        }),
-        getProfessionals() // Fetch all professionals to correctly check availability
-      ]);
-  
-      const dailyAppointments = appointmentsResponse.appointments || [];
-      const allProfessionals = allProfsResponse || [];
-      
-      // Step 2: Determine which professionals to display as columns in the timeline.
-      // This is the definitive list of who is working at the target location today.
-      const professionalsForTimeline = allProfessionals.filter(prof => {
-        if (prof.isManager) return false;
-        const availability = getProfessionalAvailabilityForDate(prof, currentDate);
-        // The key is to check if their authoritative working location for the day matches the location we are viewing.
-        return availability?.isWorking && availability.workingLocationId === actualEffectiveLocationId;
-      }).sort((a, b) => `${a.firstName} ${a.lastName}`.localeCompare(`${b.firstName} ${b.lastName}`));
 
-      // Step 3: Set all state at once to avoid partial renders.
-      setAllSystemProfessionals(allProfessionals); // We need all professionals for the "New Appointment" form
-      setAppointments(dailyAppointments.sort((a,b) => parseISO(a.appointmentDateTime).getTime() - parseISO(b.appointmentDateTime).getTime()));
-      setWorkingProfessionalsForTimeline(professionalsForTimeline);
-  
+    setIsLoading(true);
+
+    try {
+        const [appointmentsResponse, allProfsResponse] = await Promise.all([
+            getAppointments({
+                locationId: actualEffectiveLocationId,
+                date: currentDate,
+                statuses: [APPOINTMENT_STATUS.BOOKED, APPOINTMENT_STATUS.CONFIRMED, APPOINTMENT_STATUS.COMPLETED],
+            }),
+            getProfessionals() // Fetch all professionals to correctly check availability
+        ]);
+
+        const dailyAppointments = appointmentsResponse.appointments || [];
+        const allProfessionals = allProfsResponse || [];
+        setAllSystemProfessionals(allProfessionals);
+        setAppointments(dailyAppointments.sort((a,b) => parseISO(a.appointmentDateTime).getTime() - parseISO(b.appointmentDateTime).getTime()));
+
+        // --- Start of Corrected Logic ---
+        
+        // 1. Identify all professionals who have appointments at the target location today.
+        const professionalIdsFromAppointments = new Set<string>(
+            dailyAppointments.map(appt => appt.professionalId).filter((id): id is string => !!id)
+        );
+
+        // 2. Identify all professionals whose base location is the target location.
+        const localProfessionals = allProfessionals.filter(p => p.locationId === actualEffectiveLocationId);
+        localProfessionals.forEach(p => professionalIdsFromAppointments.add(p.id));
+
+        // 3. Create a consolidated list of all relevant professionals for the day.
+        const allRelevantProfessionalIds = Array.from(professionalIdsFromAppointments);
+        const allRelevantProfessionals = allProfessionals.filter(p => allRelevantProfessionalIds.includes(p.id));
+
+        // 4. Determine who is actually working from this consolidated list and should have a column.
+        const professionalsForTimeline = allRelevantProfessionals.filter(prof => {
+            if (prof.isManager) return false;
+            const availability = getProfessionalAvailabilityForDate(prof, currentDate);
+            // The professional should be shown if their work schedule for the day places them at the currently viewed location.
+            return availability?.isWorking && availability.workingLocationId === actualEffectiveLocationId;
+        }).sort((a, b) => `${a.firstName} ${a.lastName}`.localeCompare(`${b.firstName} ${b.lastName}`));
+        
+        // --- End of Corrected Logic ---
+        
+        setWorkingProfessionalsForTimeline(professionalsForTimeline);
+
     } catch (error) {
-      console.error("[SchedulePage] Error fetching schedule data:", error);
-      toast({
-        title: "Error al Cargar Agenda",
-        description: "No se pudieron obtener los datos de la agenda. Intente de nuevo.",
-        variant: "destructive",
-      });
-      setAppointments([]);
-      setWorkingProfessionalsForTimeline([]);
-      setAllSystemProfessionals([]);
+        console.error("[SchedulePage] Error fetching schedule data:", error);
+        toast({
+            title: "Error al Cargar Agenda",
+            description: "No se pudieron obtener los datos de la agenda. Intente de nuevo.",
+            variant: "destructive",
+        });
+        setAppointments([]);
+        setWorkingProfessionalsForTimeline([]);
+        setAllSystemProfessionals([]);
     } finally {
-      setIsLoading(false);
+        setIsLoading(false);
     }
-  }, [user, actualEffectiveLocationId, currentDate, toast]);
+}, [user, actualEffectiveLocationId, currentDate, toast]);
 
 
   useEffect(() => {
@@ -437,6 +451,7 @@ export default function SchedulePage() {
     </div>
   );
 }
+
 
 
 
