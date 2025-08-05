@@ -4,7 +4,7 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import type { Patient, Appointment } from '@/types';
 import { useAuth } from '@/contexts/auth-provider';
-import { getPatients, addPatient, findPatient, getAppointments, updatePatient, getPatientById } from '@/lib/data';
+import { getPatients, addPatient, findPatient, getAppointments, updatePatient, getPatientById, findPotentialDuplicatePatients, mergePatients } from '@/lib/data';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -31,14 +31,17 @@ import {
 } from '@/components/ui/dialog';
 import {
   AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
   AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
-  AlertDialogPortal,
-  AlertDialogOverlay,
-} from '@/components/ui/alert-dialog';
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
-import { PlusCircle, Edit2, Users, Search, Loader2, FileText, CalendarClock, ChevronsDown, AlertTriangle, CheckSquare, Square, UserRound, ZoomIn, ZoomOut, RefreshCw, XIcon } from 'lucide-react';
+import { PlusCircle, Edit2, Users, Search, Loader2, FileText, CalendarClock, ChevronsDown, AlertTriangle, CheckSquare, Square, UserRound, ZoomIn, ZoomOut, RefreshCw, XIcon, GitMerge, AlertCircleIcon } from 'lucide-react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { PatientFormSchema, type PatientFormData } from '@/lib/schemas';
@@ -51,6 +54,8 @@ import { USER_ROLES } from '@/lib/constants';
 import Image from 'next/image';
 import { cn } from '@/lib/utils';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
+import { Separator } from '@/components/ui/separator';
 
 const PATIENTS_PER_PAGE = 8; 
 
@@ -83,6 +88,14 @@ export default function PatientsPage() {
   const [isDragging, setIsDragging] = useState(false);
   const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
   const imageRef = React.useRef<HTMLImageElement>(null);
+  
+  // State for merging duplicates
+  const [isMergeModalOpen, setIsMergeModalOpen] = useState(false);
+  const [potentialDuplicates, setPotentialDuplicates] = useState<Patient[][]>([]);
+  const [isLoadingDuplicates, setIsLoadingDuplicates] = useState(false);
+  const [mergingGroup, setMergingGroup] = useState<Patient[] | null>(null);
+  const [primaryPatientId, setPrimaryPatientId] = useState<string | null>(null);
+  const [isMerging, setIsMerging] = useState(false);
 
 
   const form = useForm<PatientFormData>({
@@ -290,6 +303,46 @@ export default function PatientsPage() {
     setIsDragging(false);
      e.currentTarget.style.cursor = zoomLevel > 1 ? 'grab' : 'default';
   };
+  
+  // Merge Duplicates Handlers
+  const handleFindDuplicates = async () => {
+    setIsMergeModalOpen(true);
+    setIsLoadingDuplicates(true);
+    try {
+      const duplicates = await findPotentialDuplicatePatients();
+      setPotentialDuplicates(duplicates);
+    } catch (error) {
+      toast({ title: "Error", description: "No se pudo buscar duplicados.", variant: "destructive"});
+    } finally {
+      setIsLoadingDuplicates(false);
+    }
+  };
+
+  const handleStartMerge = (group: Patient[]) => {
+    setMergingGroup(group);
+    setPrimaryPatientId(group[0]?.id || null);
+  };
+
+  const handleConfirmMerge = async () => {
+    if (!mergingGroup || !primaryPatientId) return;
+    setIsMerging(true);
+    try {
+      const duplicateIds = mergingGroup.filter(p => p.id !== primaryPatientId).map(p => p.id);
+      await mergePatients(primaryPatientId, duplicateIds);
+      toast({ title: "Fusión Exitosa", description: "Los pacientes duplicados han sido fusionados." });
+      
+      // Reset state and refetch data
+      setMergingGroup(null);
+      setPrimaryPatientId(null);
+      setPotentialDuplicates(prev => prev.filter(g => g[0].firstName !== mergingGroup[0].firstName || g[0].lastName !== mergingGroup[0].lastName));
+      fetchPatientsData(1); // Refetch all patients
+    } catch (error) {
+      console.error("Merge error:", error);
+      toast({ title: "Error en la Fusión", description: "No se pudo completar la fusión.", variant: "destructive" });
+    } finally {
+      setIsMerging(false);
+    }
+  };
 
 
   const LoadingState = () => (
@@ -327,9 +380,16 @@ export default function PatientsPage() {
             <CardTitle className="text-2xl flex items-center gap-2"><Users className="text-primary"/> Gestión de Pacientes</CardTitle>
             <CardDescription>Ver, agregar o editar información de pacientes.</CardDescription>
           </div>
-          <Button onClick={handleAddPatient} className="w-full mt-4 md:mt-0 md:w-auto">
-            <PlusCircle className="mr-2 h-4 w-4" /> Agregar Paciente
-          </Button>
+          <div className="flex flex-col sm:flex-row gap-2 w-full md:w-auto">
+            {user?.role === USER_ROLES.ADMIN && (
+              <Button onClick={handleFindDuplicates} variant="outline">
+                <GitMerge className="mr-2 h-4 w-4" /> Buscar Duplicados
+              </Button>
+            )}
+            <Button onClick={handleAddPatient} className="w-full md:w-auto">
+              <PlusCircle className="mr-2 h-4 w-4" /> Agregar Paciente
+            </Button>
+          </div>
         </CardHeader>
         <CardContent>
           <div className="mb-4 flex flex-col sm:flex-row gap-4">
@@ -511,6 +571,89 @@ export default function PatientsPage() {
         </DialogContent>
       </Dialog>
 
+      <Dialog open={isMergeModalOpen} onOpenChange={setIsMergeModalOpen}>
+        <DialogContent className="max-w-3xl">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2"><GitMerge /> Fusionar Pacientes Duplicados</DialogTitle>
+            <DialogDescription>Se encontraron los siguientes grupos de pacientes con nombres idénticos. Revise y fusione los que correspondan a la misma persona.</DialogDescription>
+          </DialogHeader>
+          <div className="max-h-[60vh] overflow-y-auto p-1">
+            {isLoadingDuplicates && <div className="flex justify-center items-center h-40"><Loader2 className="h-10 w-10 animate-spin text-primary" /></div>}
+            {!isLoadingDuplicates && potentialDuplicates.length === 0 && (
+              <div className="text-center py-10">
+                <CheckCircle className="mx-auto h-12 w-12 text-green-500" />
+                <p className="mt-2 font-semibold">¡Excelente!</p>
+                <p className="text-muted-foreground">No se encontraron pacientes duplicados con nombres idénticos.</p>
+              </div>
+            )}
+            {!isLoadingDuplicates && potentialDuplicates.length > 0 && (
+              <div className="space-y-4">
+                {potentialDuplicates.map((group, index) => (
+                  <Card key={index} className="bg-muted/50">
+                    <CardHeader>
+                      <CardTitle className="text-lg">Grupo: {group[0].firstName} {group[0].lastName}</CardTitle>
+                      <CardDescription>{group.length} perfiles encontrados.</CardDescription>
+                    </CardHeader>
+                    <CardContent className="space-y-2">
+                       {group.map(p => (
+                         <div key={p.id} className="text-sm p-2 border rounded-md flex justify-between items-center">
+                            <div>
+                                <p><strong>ID:</strong> {p.id}</p>
+                                <p><strong>Tel:</strong> {p.phone || 'N/A'} - <strong>Edad:</strong> {p.age || 'N/A'}</p>
+                            </div>
+                         </div>
+                       ))}
+                    </CardContent>
+                    <CardFooter>
+                      <Button onClick={() => handleStartMerge(group)}>Revisar y Fusionar</Button>
+                    </CardFooter>
+                  </Card>
+                ))}
+              </div>
+            )}
+          </div>
+          <DialogFooter>
+            <DialogClose asChild><Button variant="outline">Cerrar</Button></DialogClose>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+      
+      <AlertDialog open={!!mergingGroup} onOpenChange={() => setMergingGroup(null)}>
+        <AlertDialogContent className="max-w-2xl">
+          <AlertDialogHeader>
+            <AlertDialogTitle>Confirmar Fusión</AlertDialogTitle>
+            <AlertDialogDescription>
+              Seleccione el perfil principal al que se transferirán todas las citas de los otros perfiles. Los perfiles no seleccionados serán eliminados permanentemente. Esta acción no se puede deshacer.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          
+          <RadioGroup value={primaryPatientId || ''} onValueChange={setPrimaryPatientId} className="my-4 space-y-2">
+            {mergingGroup?.map(p => (
+              <Label key={p.id} htmlFor={`patient-${p.id}`} className={cn("flex flex-col p-3 border rounded-md hover:bg-accent/50 transition-colors", primaryPatientId === p.id && "bg-accent border-primary ring-2 ring-primary")}>
+                <div className="flex items-center">
+                  <RadioGroupItem value={p.id} id={`patient-${p.id}`} />
+                  <div className="ml-3">
+                    <span className="font-semibold">{p.firstName} {p.lastName}</span>
+                    <div className="text-xs text-muted-foreground">
+                      <span>ID: {p.id}</span> | <span>Tel: {p.phone || 'N/A'}</span> | <span>Edad: {p.age || 'N/A'}</span>
+                      {p.notes && <p className="truncate">Notas: {p.notes}</p>}
+                    </div>
+                  </div>
+                </div>
+              </Label>
+            ))}
+          </RadioGroup>
+
+          <AlertDialogFooter>
+            <Button variant="ghost" onClick={() => setMergingGroup(null)} disabled={isMerging}>Cancelar</Button>
+            <Button onClick={handleConfirmMerge} disabled={!primaryPatientId || isMerging}>
+              {isMerging && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              Fusionar y Eliminar Duplicados
+            </Button>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
       <Dialog open={!!selectedImageForModal} onOpenChange={(open) => { if (!open) setSelectedImageForModal(null); }}>
         <DialogContent className="sm:max-w-4xl max-h-[90vh] flex flex-col p-0">
           <DialogHeader className="flex-row justify-between items-center p-2 border-b bg-muted/50">
@@ -563,4 +706,3 @@ export default function PatientsPage() {
     </div>
   );
 }
-

@@ -1,6 +1,4 @@
 
-
-
 // src/lib/data.ts
 import type { User, Professional, Patient, Service, Appointment, AppointmentFormData, ProfessionalFormData, AppointmentStatus, ServiceFormData, Contract, PeriodicReminder, ImportantNote, PeriodicReminderFormData, ImportantNoteFormData, AddedServiceItem, AppointmentUpdateFormData, Location } from '@/types';
 import { USER_ROLES, APPOINTMENT_STATUS, APPOINTMENT_STATUS_DISPLAY, TIME_SLOTS, DAYS_OF_WEEK, LOCATIONS_FALLBACK } from '@/lib/constants';
@@ -713,6 +711,7 @@ export async function findPatient(firstName: string, lastName: string): Promise<
   if (snapshot.empty) return null;
   return { id: snapshot.docs[0].id, ...convertDocumentData(snapshot.docs[0].data()) } as Patient;
 }
+
 // --- End Patients ---
 
 
@@ -1707,4 +1706,50 @@ export async function cleanupOrphanedTravelBlocks(): Promise<number> {
 
   return deletedCount;
 }
+
+export async function findPotentialDuplicatePatients(): Promise<Patient[][]> {
+  if (!firestore) return [];
+  const patientsCol = collection(firestore, 'pacientes');
+  const snapshot = await getDocs(patientsCol);
+  const allPatients = snapshot.docs.map(d => ({ ...d.data(), id: d.id } as Patient));
+
+  const patientGroups: { [key: string]: Patient[] } = {};
+
+  for (const p of allPatients) {
+    const normalizedName = `${(p.firstName || '').trim().toLowerCase()} ${(p.lastName || '').trim().toLowerCase()}`;
+    if (!patientGroups[normalizedName]) {
+      patientGroups[normalizedName] = [];
+    }
+    patientGroups[normalizedName].push(p);
+  }
+
+  return Object.values(patientGroups).filter(group => group.length > 1);
+}
+
+export async function mergePatients(primaryPatientId: string, duplicateIds: string[]): Promise<void> {
+  if (!firestore) throw new Error("Firestore not initialized.");
+
+  await runTransaction(firestore, async (transaction) => {
+    const appointmentsCol = collection(firestore, 'citas');
+    const patientsCol = collection(firestore, 'pacientes');
+
+    // 1. Re-assign appointments from duplicates to the primary patient
+    for (const duplicateId of duplicateIds) {
+      const appointmentsQuery = query(appointmentsCol, where('patientId', '==', duplicateId));
+      const appointmentsSnapshot = await getDocs(appointmentsQuery);
+      
+      appointmentsSnapshot.forEach(doc => {
+        transaction.update(doc.ref, { patientId: primaryPatientId });
+      });
+    }
+
+    // 2. Delete the duplicate patient documents
+    for (const duplicateId of duplicateIds) {
+      const patientRef = doc(patientsCol, duplicateId);
+      transaction.delete(patientRef);
+    }
+  });
+}
+
 // --- End Maintenance ---
+
