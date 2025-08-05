@@ -88,50 +88,30 @@ export default function SchedulePage() {
     setIsLoading(true);
   
     try {
-      // Step 1: Fetch appointments and base professionals for the current location in parallel.
-      const [appointmentsResponse, professionalsForLocationResponse] = await Promise.all([
+      // Step 1: Fetch appointments and ALL system professionals in parallel.
+      const [appointmentsResponse, allProfsResponse] = await Promise.all([
         getAppointments({
           locationId: actualEffectiveLocationId,
           date: currentDate,
           statuses: [APPOINTMENT_STATUS.BOOKED, APPOINTMENT_STATUS.CONFIRMED, APPOINTMENT_STATUS.COMPLETED],
         }),
-        getProfessionals(actualEffectiveLocationId)
+        getProfessionals() // Fetch all professionals to correctly check availability
       ]);
   
       const dailyAppointments = appointmentsResponse.appointments || [];
-      const locationProfs = professionalsForLocationResponse || [];
-      const professionalsMap = new Map(locationProfs.map(p => [p.id, p]));
-  
-      // Step 2: Identify external professionals from appointments and fetch them if they are not already in our map.
-      const externalProfIdsToFetch = new Set<string>();
-      dailyAppointments.forEach(appt => {
-        if (appt.isExternalProfessional && appt.professionalId && !professionalsMap.has(appt.professionalId)) {
-          externalProfIdsToFetch.add(appt.professionalId);
-        }
-      });
-  
-      if (externalProfIdsToFetch.size > 0) {
-        const externalProfs = await Promise.all(
-          Array.from(externalProfIdsToFetch).map(id => getProfessionalById(id))
-        );
-        externalProfs.forEach(prof => {
-          if (prof) professionalsMap.set(prof.id, prof);
-        });
-      }
+      const allProfessionals = allProfsResponse || [];
       
-      const allRelevantProfessionals = Array.from(professionalsMap.values());
-      
-      // Step 3: Determine which professionals to display as columns in the timeline.
+      // Step 2: Determine which professionals to display as columns in the timeline.
       // This is the definitive list of who is working at the target location today.
-      const professionalsForTimeline = allRelevantProfessionals.filter(prof => {
+      const professionalsForTimeline = allProfessionals.filter(prof => {
         if (prof.isManager) return false;
         const availability = getProfessionalAvailabilityForDate(prof, currentDate);
         // The key is to check if their authoritative working location for the day matches the location we are viewing.
         return availability?.isWorking && availability.workingLocationId === actualEffectiveLocationId;
       }).sort((a, b) => `${a.firstName} ${a.lastName}`.localeCompare(`${b.firstName} ${b.lastName}`));
 
-      // Step 4: Set all state at once to avoid partial renders.
-      setAllSystemProfessionals(allRelevantProfessionals);
+      // Step 3: Set all state at once to avoid partial renders.
+      setAllSystemProfessionals(allProfessionals); // We need all professionals for the "New Appointment" form
       setAppointments(dailyAppointments.sort((a,b) => parseISO(a.appointmentDateTime).getTime() - parseISO(b.appointmentDateTime).getTime()));
       setWorkingProfessionalsForTimeline(professionalsForTimeline);
   
@@ -248,7 +228,7 @@ export default function SchedulePage() {
 
   const handleMouseUp = (e: React.MouseEvent<HTMLDivElement>) => {
     setIsDragging(false);
-     e.currentTarget.style.cursor = zoomLevel > 1 ? 'grab' : 'default';
+     e.currentTarget.style.cursor = zoomLevel > 1 ? (isDragging ? 'grabbing' : 'grab') : 'default';
   };
 
   const LoadingState = () => (
@@ -457,5 +437,6 @@ export default function SchedulePage() {
     </div>
   );
 }
+
 
 
