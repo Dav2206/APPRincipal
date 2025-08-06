@@ -59,6 +59,30 @@ const whatsAppBotFlow = ai.defineFlow(
     outputSchema: WhatsAppOutputSchema,
   },
   async ({ message }) => {
+    
+    // Divide el mensaje en líneas y filtra las que estén vacías.
+    const lines = message.split('\n').filter(line => line.trim() !== '');
+
+    if (lines.length > 1) {
+      // Procesamiento por lotes si hay múltiples líneas
+      const results = await Promise.all(lines.map(line => processSingleAppointmentRequest(line)));
+      const summary = results.map((result, index) => `Línea ${index + 1}: ${result}`).join('\n');
+      return { reply: `Resumen del procesamiento por lotes:\n\n${summary}` };
+    } else {
+      // Procesamiento de una sola línea
+      const result = await processSingleAppointmentRequest(message);
+      return { reply: result };
+    }
+  }
+);
+
+
+/**
+ * Procesa una única línea de solicitud de cita.
+ * @param messageLine La línea de texto a procesar.
+ * @returns Un string con el resultado de la operación para esa línea.
+ */
+async function processSingleAppointmentRequest(messageLine: string): Promise<string> {
     // 1. Extraer la información clave del mensaje de texto
     const extractionPrompt = ai.definePrompt({
       name: 'extractAppointmentInfoFromWhatsAppPrompt',
@@ -78,20 +102,18 @@ const whatsAppBotFlow = ai.defineFlow(
     });
     
     const extractionResult = await extractionPrompt({
-        messageText: message,
+        messageText: messageLine,
         currentDate: format(new Date(), 'yyyy-MM-dd'),
     });
 
     if (!extractionResult.output) {
-      return { reply: 'Lo siento, no pude entender completamente la solicitud. Por favor, asegúrate de incluir nombre, servicio, fecha y hora.' };
+      return '❌ No se pudo entender la solicitud. Asegúrate de incluir nombre, servicio, fecha y hora.';
     }
     
     const { intent, patientName, requestedService, requestedDate, requestedTime } = extractionResult.output;
     
-    // Si la intención no es agendar, por ahora devolvemos un mensaje informativo.
-    // En el futuro, aquí se manejarían las otras intenciones.
     if (intent !== 'agendar' || !requestedService || !requestedDate || !requestedTime) {
-      return { reply: `He entendido que la intención es '${intent}' para el paciente '${patientName}'. La lógica para esta acción aún no está implementada.` };
+      return `He entendido que la intención es '${intent}' para el paciente '${patientName}'. La lógica para esta acción aún no está implementada.`;
     }
 
     // 2. Encontrar el servicio y su duración
@@ -99,7 +121,7 @@ const whatsAppBotFlow = ai.defineFlow(
     const service = services.find(s => s.name.toLowerCase().includes(requestedService.toLowerCase()));
     
     if (!service) {
-      return { reply: `No se encontró el servicio "${requestedService}". Servicios disponibles: ${services.map(s => s.name).join(', ')}.` };
+      return `❌ No se encontró el servicio "${requestedService}".`;
     }
 
     // 3. Verificar la disponibilidad
@@ -148,21 +170,12 @@ const whatsAppBotFlow = ai.defineFlow(
         preferredProfessionalId: availableProfessional.id,
       });
 
-      return {
-        reply: `✅ Cita agendada para ${firstName}!
-        
-Servicio: ${service.name}
-Profesional: ${availableProfessional.firstName}
-Fecha: ${format(appointmentDate, "EEEE, d 'de' MMMM", { locale: es })}
-Hora: ${format(appointmentDate, 'h:mm a')}`,
-      };
+      return `✅ Cita agendada para ${firstName} - ${format(appointmentDate, 'h:mm a')}.`;
     } else {
-      return {
-        reply: `❌ No hay disponibilidad para "${service.name}" en la fecha y hora solicitadas. Por favor, intenta con otro horario.`,
-      };
+      return `❌ No hay disponibilidad para "${service.name}" en la fecha y hora solicitadas para ${patientName}.`;
     }
-  }
-);
+}
+
 
 // Para hacer esto funcional, se necesitaría:
 // 1. Una cuenta de WhatsApp Business API.
