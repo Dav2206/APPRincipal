@@ -60,14 +60,15 @@ const dictationBotFlow = ai.defineFlow(
   },
   async ({ command, locationId, currentDate }) => {
     
-    const services = await getServices();
-    const serviceListForPrompt = services.map(s => `- "${s.name}" (abreviatura: ${s.name.substring(0,4).toLowerCase()})`).join('\n');
+    try {
+      const services = await getServices();
+      const serviceListForPrompt = services.map(s => `- "${s.name}" (abreviatura: ${s.name.substring(0,4).toLowerCase()})`).join('\n');
 
-    const extractionPrompt = ai.definePrompt({
-        name: 'extractInfoFromShorthandPrompt',
-        input: { schema: z.object({ command: z.string(), currentDate: z.string(), serviceList: z.string() }) },
-        output: { schema: ExtractedInfoSchema },
-        prompt: `Eres un asistente experto en agendamiento para una clínica podológica. Tu tarea es interpretar comandos de texto muy cortos. La fecha actual es {{currentDate}}.
+      const extractionPrompt = ai.definePrompt({
+          name: 'extractInfoFromShorthandPrompt',
+          input: { schema: z.object({ command: z.string(), currentDate: z.string(), serviceList: z.string() }) },
+          output: { schema: ExtractedInfoSchema },
+          prompt: `Eres un asistente experto en agendamiento para una clínica podológica. Tu tarea es interpretar comandos de texto muy cortos. La fecha actual es {{currentDate}}.
 
 Reglas de interpretación:
 1.  **Formato:** El comando suele ser \`[HORA] [NOMBRE PACIENTE] [SERVICIO]\`. Ejemplo: \`9 carlos sanchez podo\`.
@@ -84,34 +85,34 @@ Reglas de interpretación:
 6.  **Claridad:** Si el comando es ambiguo o no sigue el formato, marca \`isClear\` como \`false\`.
 
 **Comando a analizar:** "{{command}}"`,
-    });
-    
-    const { output: extractedInfo } = await extractionPrompt({ command, currentDate, serviceList: serviceListForPrompt });
-    
-    if (!extractedInfo || !extractedInfo.isClear || !extractedInfo.patientName || !extractedInfo.serviceShorthand || !extractedInfo.requestedDate || !extractedInfo.requestedTime) {
-      return { success: false, message: "No pude entender el comando. Por favor, usa un formato como '9 Carlos Sanchez podo'." };
-    }
+      });
+      
+      const { output: extractedInfo } = await extractionPrompt({ command, currentDate, serviceList: serviceListForPrompt });
+      
+      if (!extractedInfo || !extractedInfo.isClear || !extractedInfo.patientName || !extractedInfo.serviceShorthand || !extractedInfo.requestedDate || !extractedInfo.requestedTime) {
+        return { success: false, message: "No pude entender el comando. Por favor, usa un formato como '9 Carlos Sanchez podo'." };
+      }
 
-    const service = services.find(s => s.name.toLowerCase().includes(extractedInfo.serviceShorthand!.toLowerCase()) || s.name.substring(0,4).toLowerCase() === extractedInfo.serviceShorthand!.toLowerCase());
+      const service = services.find(s => s.name.toLowerCase().includes(extractedInfo.serviceShorthand!.toLowerCase()) || s.name.substring(0,4).toLowerCase() === extractedInfo.serviceShorthand!.toLowerCase());
 
-    if (!service) {
-        return { success: false, message: `No se encontró un servicio para la abreviatura "${extractedInfo.serviceShorthand}".` };
-    }
-    
-    const [firstName, ...lastNameParts] = extractedInfo.patientName.split(' ');
-    const appointmentDate = parse(`${extractedInfo.requestedDate} ${extractedInfo.requestedTime}`, 'yyyy-MM-dd HH:mm', new Date());
+      if (!service) {
+          return { success: false, message: `No se encontró un servicio para la abreviatura "${extractedInfo.serviceShorthand}".` };
+      }
+      
+      const [firstName, ...lastNameParts] = extractedInfo.patientName.split(' ');
+      const appointmentDate = parse(`${extractedInfo.requestedDate} ${extractedInfo.requestedTime}`, 'yyyy-MM-dd HH:mm', new Date());
 
-    const suggestedChanges = {
-        patientFirstName: firstName,
-        patientLastName: lastNameParts.join(' ') || ' ',
-        serviceId: service.id,
-        locationId: locationId,
-        appointmentDate: appointmentDate,
-        appointmentTime: extractedInfo.requestedTime,
-        preferredProfessionalId: null, // Dejamos que la lógica de negocio asigne uno aleatorio
-    };
+      const suggestedChanges = {
+          patientFirstName: firstName,
+          patientLastName: lastNameParts.join(' ') || ' ',
+          serviceId: service.id,
+          locationId: locationId,
+          appointmentDate: appointmentDate,
+          appointmentTime: extractedInfo.requestedTime,
+          preferredProfessionalId: null, // Dejamos que la lógica de negocio asigne uno aleatorio
+      };
 
-    const confirmationMessage = `He entendido la solicitud. Por favor, confirme los siguientes datos para la cita:
+      const confirmationMessage = `He entendido la solicitud. Por favor, confirme los siguientes datos para la cita:
 - Paciente: ${extractedInfo.patientName}
 - Servicio: ${service.name}
 - Fecha: ${format(appointmentDate, 'PPP', {locale: es})}
@@ -120,11 +121,19 @@ Reglas de interpretación:
 
 ¿Desea crear la cita con estos datos?`;
 
-    return { 
-      success: true, 
-      message: confirmationMessage,
-      confirmationRequired: true,
-      suggestedChanges,
-    };
+      return { 
+        success: true, 
+        message: confirmationMessage,
+        confirmationRequired: true,
+        suggestedChanges,
+      };
+    } catch (error: any) {
+        console.error("[dictationBotFlow] Error calling Genkit AI:", error);
+        // Devolver un mensaje de error amigable para el usuario final
+        return {
+            success: false,
+            message: "El servicio de IA no está disponible en este momento. Por favor, intente de nuevo más tarde."
+        };
+    }
   }
 );
