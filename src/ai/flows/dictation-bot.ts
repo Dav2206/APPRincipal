@@ -93,8 +93,25 @@ Reglas de interpretación:
         return { success: false, message: "No pude entender el comando. Por favor, usa un formato como '9 Carlos Sanchez podo'." };
       }
 
-      const service = services.find(s => s.name.toLowerCase().includes(extractedInfo.serviceShorthand!.toLowerCase()) || s.name.substring(0,4).toLowerCase() === extractedInfo.serviceShorthand!.toLowerCase());
+      // Lógica de búsqueda de servicio mejorada
+      const shorthand = extractedInfo.serviceShorthand.toLowerCase();
+      let service = null;
 
+      // 1. Búsqueda exacta (el caballo)
+      if (shorthand.includes('podo') || shorthand.includes('quiro')) {
+        service = services.find(s => s.name.toLowerCase() === 'podología' || s.name.toLowerCase() === 'quiropodia') || null;
+      }
+      
+      // 2. Búsqueda sin paréntesis
+      if (!service) {
+        service = services.find(s => s.name.toLowerCase().includes(shorthand) && !s.name.includes('(')) || null;
+      }
+
+      // 3. Búsqueda general como último recurso
+      if (!service) {
+        service = services.find(s => s.name.toLowerCase().includes(shorthand) || s.name.substring(0,4).toLowerCase() === shorthand) || null;
+      }
+      
       if (!service) {
           return { success: false, message: `No se encontró un servicio para la abreviatura "${extractedInfo.serviceShorthand}".` };
       }
@@ -129,10 +146,15 @@ Reglas de interpretación:
       };
     } catch (error: any) {
         console.error("[dictationBotFlow] Error calling Genkit AI:", error);
-        // Devolver un mensaje de error amigable para el usuario final
+        if (error.message && error.message.includes('503')) {
+             return {
+                success: false,
+                message: "El servicio de IA está sobrecargado en este momento. Por favor, intente de nuevo en unos segundos."
+            };
+        }
         return {
             success: false,
-            message: "El servicio de IA no está disponible en este momento. Por favor, intente de nuevo más tarde."
+            message: "Ocurrió un error inesperado al procesar el comando. Por favor, revise la consola para más detalles."
         };
     }
   }
