@@ -77,9 +77,9 @@ Reglas de interpretación:
 4.  **Fecha:** Si no se especifica una fecha, asume hoy (\`{{currentDate}}\`). Si dice "mañana", calcula la fecha correspondiente.
 5.  **Servicios y Abreviaturas:** El usuario usará abreviaturas. Mapea la abreviatura al servicio completo. Aquí tienes una lista de servicios y sus posibles abreviaturas para ayudarte:
     {{serviceList}}
-    - 'p', 'podo', 'pie' -> Quiropodia / Podología
+    - 'p', 'podo', 'pie', 'quiro' -> Quiropodia / Podología
     - 'm', 'mano', 'mani' -> Manicura
-6.  **Profesional:** Si se menciona "con [nombre]", extrae el nombre del profesional. Si no, déjalo en blanco.
+6.  **Profesional:** Si se menciona "con [nombre]", extrae el nombre del profesional.
 7.  **Claridad:** Si el comando es ambiguo o incompleto, marca \`isClear\` como \`false\`.
 
 **Comando a analizar:** "{{command}}"`,
@@ -99,7 +99,7 @@ Reglas de interpretación:
           let service: Service | null = null;
           
           if (sh.includes('podo') || sh.includes('quiro') || sh === 'p') {
-            service = services.find(s => s.name.toLowerCase() === 'podología' || s.name.toLowerCase() === 'quiropodia') || null;
+            service = services.find(s => s.name.toLowerCase().includes('podología') || s.name.toLowerCase().includes('quiropodia')) || null;
           } else if (sh.includes('mano') || sh.includes('mani') || sh === 'm') {
             service = services.find(s => s.name.toLowerCase().includes('manicura')) || null;
           } else {
@@ -172,3 +172,5 @@ Reglas de interpretación:
     }
   }
 );
+
+    
