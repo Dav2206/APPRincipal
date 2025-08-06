@@ -35,7 +35,7 @@ const DictationOutputSchema = z.object({
 const ExtractedInfoSchema = z.object({
     isClear: z.boolean().describe("¿El comando es claro y contiene suficiente información para actuar?"),
     patientName: z.string().optional().describe('El nombre completo del paciente.'),
-    serviceShorthand: z.string().optional().describe('La abreviatura del servicio (ej. "podo", "refle").'),
+    serviceShorthands: z.array(z.string()).optional().describe('Una lista de abreviaturas de los servicios solicitados (ej. ["podo", "refle"]).'),
     requestedDate: z.string().optional().describe('La fecha deseada en formato YYYY-MM-DD.'),
     requestedTime: z.string().optional().describe('La hora deseada en formato HH:mm (24 horas).'),
     professionalName: z.string().optional().describe('El nombre del profesional solicitado.'),
@@ -62,7 +62,7 @@ const dictationBotFlow = ai.defineFlow(
     
     try {
       const services = await getServices();
-      const serviceListForPrompt = services.map(s => `- "${s.name}" (abreviatura: ${s.name.substring(0,4).toLowerCase()})`).join('\n');
+      const serviceListForPrompt = services.map(s => `- "${s.name}" (abreviaturas posibles: ${s.name.substring(0,4).toLowerCase()}, ${s.name.split(' ')[0].toLowerCase()})`).join('\n');
 
       const extractionPrompt = ai.definePrompt({
           name: 'extractInfoFromShorthandPrompt',
@@ -71,70 +71,83 @@ const dictationBotFlow = ai.defineFlow(
           prompt: `Eres un asistente experto en agendamiento para una clínica podológica. Tu tarea es interpretar comandos de texto muy cortos. La fecha actual es {{currentDate}}.
 
 Reglas de interpretación:
-1.  **Formato:** El comando suele ser \`[HORA] [NOMBRE PACIENTE] [SERVICIO]\`. Ejemplo: \`9 carlos sanchez podo\`.
-2.  **Hora:**
-    -   Un número entre 9 y 12 se refiere a la mañana (9 AM, 10 AM, etc.).
-    -   Un número entre 1 y 8 se refiere a la tarde (1 PM, 2 PM, etc.). Debes convertirlo a formato 24h (1=13:00, 8=20:00).
-    -   Puede incluir media hora, como \`9 30\` o \`8 30\`.
-    -   La hora de fin de atención es a las 8:30 PM (20:30).
-3.  **Fecha:** Si no se especifica una fecha, asume que es para el día de hoy (\`{{currentDate}}\`). Si dice "mañana", calcula la fecha correspondiente.
-4.  **Servicio:** El usuario usará abreviaturas. Mapea la abreviatura al servicio completo. Aquí tienes una lista de servicios y sus posibles abreviaturas para ayudarte:
+1.  **Formato:** El comando suele ser \`[HORA] [NOMBRE PACIENTE] [SERVICIO 1] y [SERVICIO 2] con [PROFESIONAL]\`. Ejemplo: \`9 carlos sanchez podo y mano con maria\`.
+2.  **Servicios Múltiples:** El usuario puede pedir varios servicios usando "y" o "+". Extrae todas las abreviaturas en el array \`serviceShorthands\`. Ejemplo: "podo y mano" -> ["podo", "mano"].
+3.  **Hora:** Un número entre 9 y 12 se refiere a la mañana (9 AM). Un número entre 1 y 8 se refiere a la tarde, conviértelo a 24h (1=13:00, 8=20:00). Puede incluir media hora, como \`9 30\`. La hora de fin de atención es a las 8:30 PM (20:30).
+4.  **Fecha:** Si no se especifica una fecha, asume hoy (\`{{currentDate}}\`). Si dice "mañana", calcula la fecha correspondiente.
+5.  **Servicios y Abreviaturas:** El usuario usará abreviaturas. Mapea la abreviatura al servicio completo. Aquí tienes una lista de servicios y sus posibles abreviaturas para ayudarte:
     {{serviceList}}
-    Si el servicio es "podo", es "Quiropodia".
-5.  **Profesional:** Si no se menciona un nombre de profesional, déjalo en blanco.
-6.  **Claridad:** Si el comando es ambiguo o no sigue el formato, marca \`isClear\` como \`false\`.
+    - 'p', 'podo', 'pie' -> Quiropodia / Podología
+    - 'm', 'mano', 'mani' -> Manicura
+6.  **Profesional:** Si se menciona "con [nombre]", extrae el nombre del profesional. Si no, déjalo en blanco.
+7.  **Claridad:** Si el comando es ambiguo o incompleto, marca \`isClear\` como \`false\`.
 
 **Comando a analizar:** "{{command}}"`,
       });
       
       const { output: extractedInfo } = await extractionPrompt({ command, currentDate, serviceList: serviceListForPrompt });
       
-      if (!extractedInfo || !extractedInfo.isClear || !extractedInfo.patientName || !extractedInfo.serviceShorthand || !extractedInfo.requestedDate || !extractedInfo.requestedTime) {
-        return { success: false, message: "No pude entender el comando. Por favor, usa un formato como '9 Carlos Sanchez podo'." };
+      if (!extractedInfo || !extractedInfo.isClear || !extractedInfo.patientName || !extractedInfo.serviceShorthands || extractedInfo.serviceShorthands.length === 0 || !extractedInfo.requestedDate || !extractedInfo.requestedTime) {
+        return { success: false, message: "No pude entender el comando. Por favor, usa un formato como '9 Carlos Sanchez podo y mano'." };
       }
 
-      // Lógica de búsqueda de servicio mejorada
-      const shorthand = extractedInfo.serviceShorthand.toLowerCase();
-      let service = null;
+      const matchedServices: Service[] = [];
+      const problematicShorthands: string[] = [];
 
-      // 1. Búsqueda exacta (el caballo)
-      if (shorthand.includes('podo') || shorthand.includes('quiro')) {
-        service = services.find(s => s.name.toLowerCase() === 'podología' || s.name.toLowerCase() === 'quiropodia') || null;
-      }
-      
-      // 2. Búsqueda sin paréntesis
-      if (!service) {
-        service = services.find(s => s.name.toLowerCase().includes(shorthand) && !s.name.includes('(')) || null;
+      for (const shorthand of extractedInfo.serviceShorthands) {
+          const sh = shorthand.toLowerCase();
+          let service: Service | null = null;
+          
+          if (sh.includes('podo') || sh.includes('quiro') || sh === 'p') {
+            service = services.find(s => s.name.toLowerCase() === 'podología' || s.name.toLowerCase() === 'quiropodia') || null;
+          } else if (sh.includes('mano') || sh.includes('mani') || sh === 'm') {
+            service = services.find(s => s.name.toLowerCase().includes('manicura')) || null;
+          } else {
+             service = services.find(s => s.name.toLowerCase().includes(sh) || s.name.substring(0,4).toLowerCase() === sh) || null;
+          }
+
+          if (service) {
+            matchedServices.push(service);
+          } else {
+            problematicShorthands.push(shorthand);
+          }
       }
 
-      // 3. Búsqueda general como último recurso
-      if (!service) {
-        service = services.find(s => s.name.toLowerCase().includes(shorthand) || s.name.substring(0,4).toLowerCase() === shorthand) || null;
+      if (problematicShorthands.length > 0) {
+        return { success: false, message: `No se encontró ningún servicio para las abreviaturas: "${problematicShorthands.join(', ')}".` };
       }
-      
-      if (!service) {
-          return { success: false, message: `No se encontró un servicio para la abreviatura "${extractedInfo.serviceShorthand}".` };
+
+      if (matchedServices.length === 0) {
+          return { success: false, message: `No se encontró ningún servicio que coincida con lo solicitado.` };
       }
       
       const [firstName, ...lastNameParts] = extractedInfo.patientName.split(' ');
       const appointmentDate = parse(`${extractedInfo.requestedDate} ${extractedInfo.requestedTime}`, 'yyyy-MM-dd HH:mm', new Date());
 
+      const mainService = matchedServices[0];
+      const addedServices = matchedServices.slice(1).map(s => ({
+          serviceId: s.id,
+          professionalId: null, // Dejar que la lógica de negocio asigne o el usuario edite
+      }));
+
       const suggestedChanges = {
           patientFirstName: firstName,
           patientLastName: lastNameParts.join(' ') || ' ',
-          serviceId: service.id,
+          serviceId: mainService.id,
           locationId: locationId,
           appointmentDate: appointmentDate,
           appointmentTime: extractedInfo.requestedTime,
-          preferredProfessionalId: null, // Dejamos que la lógica de negocio asigne uno aleatorio
+          preferredProfessionalId: null,
+          addedServices: addedServices,
       };
 
       const confirmationMessage = `He entendido la solicitud. Por favor, confirme los siguientes datos para la cita:
 - Paciente: ${extractedInfo.patientName}
-- Servicio: ${service.name}
+- Servicio(s): ${matchedServices.map(s => s.name).join(', ')}
 - Fecha: ${format(appointmentDate, 'PPP', {locale: es})}
 - Hora: ${format(appointmentDate, 'p', {locale: es})}
 - Sede: (Se usará la sede actualmente seleccionada en la app)
+- Profesional: ${extractedInfo.professionalName || 'Cualquiera disponible'}
 
 ¿Desea crear la cita con estos datos?`;
 
