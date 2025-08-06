@@ -15,13 +15,13 @@ import { format, parse, startOfDay, addMinutes, areIntervalsOverlapping, parseIS
 import { es } from 'date-fns/locale';
 
 // Esquema de entrada: el comando de texto del usuario
-export const DictationInputSchema = z.object({
+const DictationInputSchema = z.object({
   command: z.string().describe('El comando de texto dado por el usuario para gestionar una cita.'),
 });
 export type DictationInput = z.infer<typeof DictationInputSchema>;
 
 // Esquema de salida: la respuesta que se mostrará al usuario
-export const DictationOutputSchema = z.object({
+const DictationOutputSchema = z.object({
   success: z.boolean().describe('Indica si la operación fue exitosa.'),
   message: z.string().describe('Un mensaje para el usuario resumiendo el resultado de la operación.'),
   confirmactionRequired: z.boolean().optional().describe('Indica si se necesita confirmación del usuario.'),
