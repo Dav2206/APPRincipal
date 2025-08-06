@@ -65,6 +65,9 @@ const whatsAppBotFlow = ai.defineFlow(
       input: { schema: z.object({ messageText: z.string(), currentDate: z.string() }) },
       output: { schema: ExtractedInfoSchema },
       prompt: `Analiza el siguiente mensaje de texto y extrae la información clave. La fecha actual es {{currentDate}}.
+      
+      **Regla importante**: Si el mensaje contiene un prefijo de chat como \`[9:45 a.m., 6/8/2025] Luisa Alvarado: \`, ignora por completo ese prefijo y analiza únicamente el comando real que viene después.
+
       - Determina la intención principal (intent): ¿es para 'agendar' una nueva cita, 'confirmar_llegada' de un paciente, 'confirmar_pago', una 'consulta' general u 'otro'?
       - Nombre del paciente (patientName).
       - Servicio solicitado (requestedService), si se menciona.
