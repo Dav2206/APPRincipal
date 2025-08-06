@@ -107,7 +107,7 @@ const dictationBotFlow = ai.defineFlow(
           *   Si la intención es **'agendar'**, procede directamente a crear la cita.
       
       Responde con un JSON que contenga el plan de acción.`,
-      model: ai.model('gemini-1.5-flash-latest'),
+      model: 'googleai/gemini-1.5-flash-latest',
       output: {
         schema: z.object({
             thoughts: z.string().describe("Tus pensamientos sobre cómo procesar el comando."),
