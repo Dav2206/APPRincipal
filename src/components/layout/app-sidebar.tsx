@@ -1,3 +1,4 @@
+
 "use client";
 
 import Link from 'next/link';
@@ -23,6 +24,7 @@ import {
   FileSpreadsheet,
   Bell,
   Terminal,
+  BrainCircuit,
 } from 'lucide-react';
 import { USER_ROLES } from '@/lib/constants';
 
@@ -38,6 +40,7 @@ const navItems = [
   { href: '/services', label: 'Servicios', icon: ClipboardList, roles: [USER_ROLES.ADMIN] }, 
   { href: '/finanzas', label: 'Finanzas', icon: Landmark, roles: [USER_ROLES.CONTADOR] },
   { href: '/reminders', label: 'Recordatorios', icon: Bell, roles: [USER_ROLES.ADMIN, USER_ROLES.CONTADOR] },
+  { href: '/dictation', label: 'Dictado IA', icon: BrainCircuit, roles: [USER_ROLES.ADMIN, USER_ROLES.CONTADOR, USER_ROLES.LOCATION_STAFF] },
   { href: '/test-function', label: 'Test Function', icon: Terminal, roles: [USER_ROLES.ADMIN] },
 ];
 
@@ -85,7 +88,7 @@ export function AppSidebar() {
                 finalIsActive = false;
               }
               
-              const specificExactMatchRoutes = ['/appointments', '/schedule', '/finanzas', '/services', '/registry', '/contracts', '/reminders', '/test-function'];
+              const specificExactMatchRoutes = ['/appointments', '/schedule', '/finanzas', '/services', '/registry', '/contracts', '/reminders', '/test-function', '/dictation'];
               if (specificExactMatchRoutes.includes(href)) {
                 finalIsActive = pathname === href || pathname.startsWith(`${href}/`);
               }
