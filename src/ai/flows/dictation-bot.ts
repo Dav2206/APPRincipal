@@ -101,7 +101,7 @@ Reglas de interpretación:
           if (sh.includes('podo') || sh.includes('quiro') || sh === 'p') {
             service = services.find(s => s.name.toLowerCase().includes('podología') || s.name.toLowerCase().includes('quiropodia')) || null;
           } else if (sh.includes('mano') || sh.includes('mani') || sh === 'm') {
-            service = services.find(s => s.name.toLowerCase().includes('manicura')) || null;
+            service = services.find(s => s.name.toLowerCase().includes('manicur')) || null; // Changed to 'manicur'
           } else {
              service = services.find(s => s.name.toLowerCase().includes(sh) || s.name.substring(0,4).toLowerCase() === sh) || null;
           }
@@ -172,5 +172,3 @@ Reglas de interpretación:
     }
   }
 );
-
-    
