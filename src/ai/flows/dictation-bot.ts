@@ -15,19 +15,19 @@ import { format, parse, startOfDay, addMinutes, areIntervalsOverlapping, parseIS
 import { es } from 'date-fns/locale';
 
 // Esquema de entrada: el comando de texto del usuario
+export type DictationInput = z.infer<typeof DictationInputSchema>;
 const DictationInputSchema = z.object({
   command: z.string().describe('El comando de texto dado por el usuario para gestionar una cita.'),
 });
-export type DictationInput = z.infer<typeof DictationInputSchema>;
 
 // Esquema de salida: la respuesta que se mostrará al usuario
+export type DictationOutput = z.infer<typeof DictationOutputSchema>;
 const DictationOutputSchema = z.object({
   success: z.boolean().describe('Indica si la operación fue exitosa.'),
   message: z.string().describe('Un mensaje para el usuario resumiendo el resultado de la operación.'),
-  confirmactionRequired: z.boolean().optional().describe('Indica si se necesita confirmación del usuario.'),
+  confirmationRequired: z.boolean().optional().describe('Indica si se necesita confirmación del usuario.'),
   suggestedChanges: z.any().optional().describe('Un objeto con los cambios sugeridos para que el usuario los confirme.'),
 });
-export type DictationOutput = z.infer<typeof DictationOutputSchema>;
 
 // Esquema para la extracción de la intención y entidades del comando
 const ExtractedInfoSchema = z.object({
@@ -107,7 +107,7 @@ const dictationBotFlow = ai.defineFlow(
           *   Si la intención es **'agendar'**, procede directamente a crear la cita.
       
       Responde con un JSON que contenga el plan de acción.`,
-      model: ai.model('googleai/gemini-2.0-flash'),
+      model: ai.model('gemini-1.5-flash-latest'),
       output: {
         schema: z.object({
             thoughts: z.string().describe("Tus pensamientos sobre cómo procesar el comando."),
@@ -160,21 +160,32 @@ const dictationBotFlow = ai.defineFlow(
         if (!service) {
             return { success: false, message: `Servicio "${requestedService}" no encontrado.` };
         }
-
-        // Simplificamos la lógica de agendamiento para el bot, asumiendo disponibilidad.
-        // Una implementación real debería verificar la disponibilidad del profesional.
-        const [firstName, ...lastNameParts] = patientName.split(' ');
         
-        await addAppointment({
+        const [firstName, ...lastNameParts] = patientName.split(' ');
+        const appointmentDate = parse(`${requestedDate} ${requestedTime}`, 'yyyy-MM-dd HH:mm', new Date());
+
+        const suggestedChanges = {
             patientFirstName: firstName,
             patientLastName: lastNameParts.join(' ') || ' ',
             serviceId: service.id,
             locationId: 'higuereta', // Hardcoded a sede principal por simplicidad del bot
-            appointmentDate: parse(`${requestedDate} ${requestedTime}`, 'yyyy-MM-dd HH:mm', new Date()),
+            appointmentDate: appointmentDate,
             appointmentTime: requestedTime,
-        });
+        };
 
-        return { success: true, message: `Cita agendada para ${patientName} - ${service.name} el ${requestedDate} a las ${requestedTime}.`};
+        const confirmationMessage = `Por favor, confirme los siguientes datos para la cita:
+- Paciente: ${patientName}
+- Servicio: ${service.name}
+- Fecha: ${format(appointmentDate, 'PPP', {locale: es})}
+- Hora: ${requestedTime}
+- Sede: Higuereta (predeterminado)`;
+
+        return { 
+          success: true, 
+          message: confirmationMessage,
+          confirmationRequired: true,
+          suggestedChanges,
+        };
     }
 
     return { success: false, message: `No pude entender el comando. Intenciones soportadas: agendar, reagendar, cancelar.` };

@@ -5,15 +5,19 @@ import React, { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Loader2, Send, Terminal } from 'lucide-react';
+import { Loader2, Send, Terminal, CheckCircle } from 'lucide-react';
 import { processDictation, type DictationOutput } from '@/ai/flows/dictation-bot';
+import { addAppointment } from '@/lib/data'; // Importar la función para ejecutar la acción
 import { Alert, AlertTitle, AlertDescription } from '@/components/ui/alert';
+import { useToast } from '@/hooks/use-toast';
 
 export default function DictationPage() {
-  const [command, setCommand] = useState('Reagendar la cita de Carlos Villagrán del 2024-08-06 para el 2024-08-07 a las 17:00');
+  const [command, setCommand] = useState('Agenda una quiropodia para el paciente Carlos Villagrán el 2024-08-15 a las 10:00.');
   const [response, setResponse] = useState<DictationOutput | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [isConfirming, setIsConfirming] = useState(false);
+  const { toast } = useToast();
 
   const handleProcessCommand = async () => {
     if (!command.trim()) {
@@ -28,6 +32,9 @@ export default function DictationPage() {
     try {
       const result = await processDictation({ command });
       setResponse(result);
+      if (!result.success) {
+        setError(result.message);
+      }
     } catch (err: any) {
       console.error("Error llamando a la función de dictado:", err);
       let errorMessage = "Ocurrió un error desconocido al procesar el comando.";
@@ -39,6 +46,35 @@ export default function DictationPage() {
       setIsLoading(false);
     }
   };
+
+  const handleConfirmAction = async () => {
+    if (!response || !response.suggestedChanges) {
+      setError("No hay acción que confirmar.");
+      return;
+    }
+    
+    setIsConfirming(true);
+    setError(null);
+
+    try {
+      // Aquí asumimos que la única acción confirmable por ahora es 'agendar'
+      await addAppointment(response.suggestedChanges);
+      toast({
+        title: "Cita Creada Exitosamente",
+        description: `La cita ha sido agendada según lo solicitado.`,
+      });
+      // Limpiar el estado después de la confirmación exitosa
+      setResponse(null);
+      setCommand('');
+
+    } catch (err: any) {
+        console.error("Error al confirmar y ejecutar la acción:", err);
+        setError(err.message || "No se pudo completar la acción. Intente de nuevo.");
+    } finally {
+        setIsConfirming(false);
+    }
+  };
+
 
   return (
     <div className="container mx-auto py-8 px-4 md:px-0 space-y-6">
@@ -66,13 +102,13 @@ export default function DictationPage() {
             />
           </div>
           
-          <Button onClick={handleProcessCommand} disabled={isLoading}>
+          <Button onClick={handleProcessCommand} disabled={isLoading || isConfirming}>
             {isLoading ? (
               <Loader2 className="mr-2 h-4 w-4 animate-spin" />
             ) : (
               <Send className="mr-2 h-4 w-4" />
             )}
-            Procesar Comando
+            Procesar Dictado
           </Button>
 
           {error && (
@@ -82,14 +118,22 @@ export default function DictationPage() {
             </Alert>
           )}
 
-          {response && (
-             <Alert variant={response.success ? "default" : "destructive"} className="mt-4">
-                <AlertTitle className="font-semibold">
-                    {response.success ? "Operación Exitosa" : "Operación Fallida"}
+          {response && response.success && (
+             <Alert variant={"default"} className="mt-4 bg-blue-50 border-blue-200">
+                <AlertTitle className="font-semibold text-blue-900">
+                    {response.confirmationRequired ? "Confirmación Requerida" : "Respuesta del Asistente"}
                 </AlertTitle>
-                <AlertDescription>
+                <AlertDescription className="text-blue-800">
                     <pre className="text-sm whitespace-pre-wrap font-mono">{response.message}</pre>
                 </AlertDescription>
+                {response.confirmationRequired && (
+                    <div className="mt-4">
+                        <Button onClick={handleConfirmAction} disabled={isConfirming}>
+                           {isConfirming ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <CheckCircle className="mr-2 h-4 w-4" />}
+                            Confirmar y Crear Cita
+                        </Button>
+                    </div>
+                )}
             </Alert>
           )}
         </CardContent>
