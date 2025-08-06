@@ -10,14 +10,16 @@
 
 import { ai } from '@/ai/genkit';
 import { z } from 'zod';
-import { getServices, addAppointment, getProfessionalAvailabilityForDate, getAppointments, getProfessionals, findPatient, updateAppointment } from '@/lib/data';
+import { getServices, addAppointment, findPatient, getProfessionalAvailabilityForDate, getAppointments, getProfessionals } from '@/lib/data';
 import { format, parse, startOfDay, addMinutes, areIntervalsOverlapping, parseISO, set } from 'date-fns';
 import { es } from 'date-fns/locale';
 
-// Esquema de entrada: el comando de texto del usuario
+// Esquema de entrada: el comando de texto del usuario y contexto adicional
 export type DictationInput = z.infer<typeof DictationInputSchema>;
 const DictationInputSchema = z.object({
   command: z.string().describe('El comando de texto dado por el usuario para gestionar una cita.'),
+  locationId: z.string().describe('El ID de la sede actualmente seleccionada en la aplicación.'),
+  currentDate: z.string().describe('La fecha actual en formato YYYY-MM-DD para resolver fechas relativas como "mañana".'),
 });
 
 // Esquema de salida: la respuesta que se mostrará al usuario
@@ -31,20 +33,18 @@ const DictationOutputSchema = z.object({
 
 // Esquema para la extracción de la intención y entidades del comando
 const ExtractedInfoSchema = z.object({
-  intent: z.enum(['agendar', 'reagendar', 'cancelar', 'consultar', 'otro'])
-    .describe('La intención principal del comando del usuario: agendar, reagendar, cancelar o consultar.'),
-  patientName: z.string().optional().describe('El nombre completo del paciente.'),
-  requestedService: z.string().optional().describe('El servicio que el paciente desea, por ejemplo, "quiropodia".'),
-  requestedDate: z.string().optional().describe('La fecha deseada en formato YYYY-MM-DD.'),
-  requestedTime: z.string().optional().describe('La hora deseada en formato HH:mm (24 horas).'),
-  newDate: z.string().optional().describe('La nueva fecha para un reagendamiento, en formato YYYY-MM-DD.'),
-  newTime: z.string().optional().describe('La nueva hora para un reagendamiento, en formato HH:mm (24 horas).'),
-});
+    isClear: z.boolean().describe("¿El comando es claro y contiene suficiente información para actuar?"),
+    patientName: z.string().optional().describe('El nombre completo del paciente.'),
+    serviceShorthand: z.string().optional().describe('La abreviatura del servicio (ej. "podo", "refle").'),
+    requestedDate: z.string().optional().describe('La fecha deseada en formato YYYY-MM-DD.'),
+    requestedTime: z.string().optional().describe('La hora deseada en formato HH:mm (24 horas).'),
+    professionalName: z.string().optional().describe('El nombre del profesional solicitado.'),
+}).describe("Información extraída del comando del usuario.");
 
 
 /**
  * Función principal que procesa un comando de dictado.
- * @param input El comando de texto del usuario.
+ * @param input El comando de texto del usuario y su contexto.
  * @returns Un objeto con el resultado de la operación.
  */
 export async function processDictation(input: DictationInput): Promise<DictationOutput> {
@@ -52,142 +52,80 @@ export async function processDictation(input: DictationInput): Promise<Dictation
 }
 
 
-const findAppointmentTool = ai.defineTool(
-  {
-    name: 'findAppointmentTool',
-    description: 'Busca una cita existente para un paciente en una fecha específica.',
-    inputSchema: z.object({
-        patientName: z.string().describe('Nombre del paciente'),
-        date: z.string().describe('Fecha de la cita en formato YYYY-MM-DD'),
-    }),
-    outputSchema: z.object({
-        id: z.string(),
-        patient: z.string(),
-        service: z.string(),
-        dateTime: z.string(),
-    }).array(),
-  },
-  async ({ patientName, date }) => {
-    console.log(`[Tool] Buscando citas para ${patientName} en fecha ${date}`);
-    const targetDate = parse(date, 'yyyy-MM-dd', new Date());
-    const { appointments } = await getAppointments({ date: targetDate });
-    const patientAppointments = appointments.filter(appt => 
-      `${appt.patient?.firstName} ${appt.patient?.lastName}`.toLowerCase().includes(patientName.toLowerCase())
-    );
-    return patientAppointments.map(appt => ({
-        id: appt.id,
-        patient: `${appt.patient?.firstName} ${appt.patient?.lastName}`,
-        service: appt.service?.name || 'Desconocido',
-        dateTime: appt.appointmentDateTime,
-    }));
-  }
-);
-
-
 const dictationBotFlow = ai.defineFlow(
   {
     name: 'dictationBotFlow',
     inputSchema: DictationInputSchema,
     outputSchema: DictationOutputSchema,
-    tools: [findAppointmentTool],
   },
-  async ({ command }) => {
+  async ({ command, locationId, currentDate }) => {
     
-    const llmResponse = await ai.generate({
-      prompt: `Analiza el siguiente comando de un administrador de clínica y decide qué acción tomar. La fecha actual es ${format(new Date(), 'yyyy-MM-dd')}.
+    const services = await getServices();
+    const serviceListForPrompt = services.map(s => `- "${s.name}" (abreviatura: ${s.name.substring(0,4).toLowerCase()})`).join('\n');
 
-      Comando: "${command}"
+    const extractionPrompt = ai.definePrompt({
+        name: 'extractInfoFromShorthandPrompt',
+        input: { schema: z.object({ command: z.string(), currentDate: z.string(), serviceList: z.string() }) },
+        output: { schema: ExtractedInfoSchema },
+        prompt: `Eres un asistente experto en agendamiento para una clínica podológica. Tu tarea es interpretar comandos de texto muy cortos. La fecha actual es {{currentDate}}.
 
-      1.  **Extrae la intención**: ¿Quiere 'agendar', 'reagendar' o 'cancelar' una cita?
-      2.  **Extrae las entidades**: Nombre del paciente, servicio, fecha y hora. Si es reagendar, extrae también la nueva fecha y hora.
-      3.  **Planifica los pasos**:
-          *   Si la intención es **'reagendar'** o **'cancelar'**, primero DEBES usar la herramienta \`findAppointmentTool\` para encontrar la cita existente.
-          *   Si no encuentras una cita única, responde que necesitas más detalles para identificar la cita.
-          *   Una vez identificada la cita, realiza la acción solicitada (reagendar o cancelar).
-          *   Si la intención es **'agendar'**, procede directamente a crear la cita.
-      
-      Responde con un JSON que contenga el plan de acción.`,
-      model: 'googleai/gemini-1.5-flash-latest',
-      output: {
-        schema: z.object({
-            thoughts: z.string().describe("Tus pensamientos sobre cómo procesar el comando."),
-            plan: z.string().describe("Una descripción paso a paso de lo que vas a hacer."),
-            extractedInfo: ExtractedInfoSchema,
-        })
-      }
+Reglas de interpretación:
+1.  **Formato:** El comando suele ser \`[HORA] [NOMBRE PACIENTE] [SERVICIO]\`. Ejemplo: \`9 carlos sanchez podo\`.
+2.  **Hora:**
+    -   Un número entre 9 y 12 se refiere a la mañana (9 AM, 10 AM, etc.).
+    -   Un número entre 1 y 8 se refiere a la tarde (1 PM, 2 PM, etc.). Debes convertirlo a formato 24h (1=13:00, 8=20:00).
+    -   Puede incluir media hora, como \`9 30\` o \`8 30\`.
+    -   La hora de fin de atención es a las 8:30 PM (20:30).
+3.  **Fecha:** Si no se especifica una fecha, asume que es para el día de hoy (\`{{currentDate}}\`). Si dice "mañana", calcula la fecha correspondiente.
+4.  **Servicio:** El usuario usará abreviaturas. Mapea la abreviatura al servicio completo. Aquí tienes una lista de servicios y sus posibles abreviaturas para ayudarte:
+    {{serviceList}}
+    Si el servicio es "podo", es "Quiropodia".
+5.  **Profesional:** Si no se menciona un nombre de profesional, déjalo en blanco.
+6.  **Claridad:** Si el comando es ambiguo o no sigue el formato, marca \`isClear\` como \`false\`.
+
+**Comando a analizar:** "{{command}}"`,
     });
-
-    const { plan, extractedInfo } = llmResponse.output!;
-
-    if (extractedInfo.intent === 'reagendar' || extractedInfo.intent === 'cancelar') {
-        if (!extractedInfo.patientName || !extractedInfo.requestedDate) {
-            return { success: false, message: "Para reagendar o cancelar, necesito el nombre del paciente y la fecha original de la cita."};
-        }
-
-        const foundAppointments = await findAppointmentTool({ patientName: extractedInfo.patientName, date: extractedInfo.requestedDate });
-        
-        if (foundAppointments.length === 0) {
-            return { success: false, message: `No se encontraron citas para "${extractedInfo.patientName}" en la fecha indicada.` };
-        }
-        if (foundAppointments.length > 1) {
-            return { success: false, message: `Se encontraron múltiples citas para "${extractedInfo.patientName}". Por favor, sea más específico.` };
-        }
-
-        const appointmentToChange = foundAppointments[0];
-        
-        if (extractedInfo.intent === 'cancelar') {
-            await updateAppointment(appointmentToChange.id, { status: 'cancelled_staff' });
-            return { success: true, message: `Cita cancelada exitosamente para ${appointmentToChange.patient} del ${format(parseISO(appointmentToChange.dateTime), 'PPP p', {locale: es})}.`};
-        }
-        
-        if (extractedInfo.intent === 'reagendar' && extractedInfo.newDate && extractedInfo.newTime) {
-            const newDateTime = parse(`${extractedInfo.newDate} ${extractedInfo.newTime}`, 'yyyy-MM-dd HH:mm', new Date());
-            await updateAppointment(appointmentToChange.id, { appointmentDate: newDateTime, appointmentTime: extractedInfo.newTime });
-            return { success: true, message: `Cita de ${appointmentToChange.patient} reagendada para el ${format(newDateTime, 'PPP p', {locale: es})}.`};
-        }
+    
+    const llmResponse = await extractionPrompt({ command, currentDate, serviceList: serviceListForPrompt });
+    const { extractedInfo } = llmResponse;
+    
+    if (!extractedInfo || !extractedInfo.isClear || !extractedInfo.patientName || !extractedInfo.serviceShorthand || !extractedInfo.requestedDate || !extractedInfo.requestedTime) {
+      return { success: false, message: "No pude entender el comando. Por favor, usa un formato como '9 Carlos Sanchez podo'." };
     }
 
+    const service = services.find(s => s.name.toLowerCase().includes(extractedInfo.serviceShorthand!.toLowerCase()) || s.name.substring(0,4).toLowerCase() === extractedInfo.serviceShorthand!.toLowerCase());
 
-    if(extractedInfo.intent === 'agendar') {
-        const { patientName, requestedService, requestedDate, requestedTime } = extractedInfo;
-        if (!patientName || !requestedService || !requestedDate || !requestedTime) {
-            return { success: false, message: "Para agendar, necesito al menos nombre, servicio, fecha y hora." };
-        }
-        
-        const services = await getServices();
-        const service = services.find(s => s.name.toLowerCase().includes(requestedService.toLowerCase()));
+    if (!service) {
+        return { success: false, message: `No se encontró un servicio para la abreviatura "${extractedInfo.serviceShorthand}".` };
+    }
+    
+    const [firstName, ...lastNameParts] = extractedInfo.patientName.split(' ');
+    const appointmentDate = parse(`${extractedInfo.requestedDate} ${extractedInfo.requestedTime}`, 'yyyy-MM-dd HH:mm', new Date());
 
-        if (!service) {
-            return { success: false, message: `Servicio "${requestedService}" no encontrado.` };
-        }
-        
-        const [firstName, ...lastNameParts] = patientName.split(' ');
-        const appointmentDate = parse(`${requestedDate} ${requestedTime}`, 'yyyy-MM-dd HH:mm', new Date());
+    const suggestedChanges = {
+        patientFirstName: firstName,
+        patientLastName: lastNameParts.join(' ') || ' ',
+        serviceId: service.id,
+        locationId: locationId,
+        appointmentDate: appointmentDate,
+        appointmentTime: extractedInfo.requestedTime,
+        preferredProfessionalId: null, // Dejamos que la lógica de negocio asigne uno aleatorio
+    };
 
-        const suggestedChanges = {
-            patientFirstName: firstName,
-            patientLastName: lastNameParts.join(' ') || ' ',
-            serviceId: service.id,
-            locationId: 'higuereta', // Hardcoded a sede principal por simplicidad del bot
-            appointmentDate: appointmentDate,
-            appointmentTime: requestedTime,
-        };
-
-        const confirmationMessage = `Por favor, confirme los siguientes datos para la cita:
-- Paciente: ${patientName}
+    const confirmationMessage = `He entendido la solicitud. Por favor, confirme los siguientes datos para la cita:
+- Paciente: ${extractedInfo.patientName}
 - Servicio: ${service.name}
 - Fecha: ${format(appointmentDate, 'PPP', {locale: es})}
-- Hora: ${requestedTime}
-- Sede: Higuereta (predeterminado)`;
+- Hora: ${format(appointmentDate, 'p', {locale: es})}
+- Sede: (Se usará la sede actualmente seleccionada en la app)
 
-        return { 
-          success: true, 
-          message: confirmationMessage,
-          confirmationRequired: true,
-          suggestedChanges,
-        };
-    }
+¿Desea crear la cita con estos datos?`;
 
-    return { success: false, message: `No pude entender el comando. Intenciones soportadas: agendar, reagendar, cancelar.` };
+    return { 
+      success: true, 
+      message: confirmationMessage,
+      confirmationRequired: true,
+      suggestedChanges,
+    };
   }
 );
