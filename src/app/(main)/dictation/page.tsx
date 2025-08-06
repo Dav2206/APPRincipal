@@ -10,18 +10,25 @@ import { processDictation, type DictationOutput } from '@/ai/flows/dictation-bot
 import { addAppointment } from '@/lib/data'; // Importar la función para ejecutar la acción
 import { Alert, AlertTitle, AlertDescription } from '@/components/ui/alert';
 import { useToast } from '@/hooks/use-toast';
+import { useAppState } from '@/contexts/app-state-provider';
+import { format } from 'date-fns';
 
 export default function DictationPage() {
-  const [command, setCommand] = useState('Agenda una quiropodia para el paciente Carlos Villagrán el 2024-08-15 a las 10:00.');
+  const [command, setCommand] = useState('9 carlos sanchez podo');
   const [response, setResponse] = useState<DictationOutput | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [isConfirming, setIsConfirming] = useState(false);
   const { toast } = useToast();
+  const { selectedLocationId } = useAppState();
 
   const handleProcessCommand = async () => {
     if (!command.trim()) {
       setError("Por favor, ingrese un comando.");
+      return;
+    }
+    if (!selectedLocationId || selectedLocationId === 'all') {
+      setError("Por favor, seleccione una sede específica desde el menú superior para usar el dictado.");
       return;
     }
 
@@ -30,7 +37,11 @@ export default function DictationPage() {
     setError(null);
 
     try {
-      const result = await processDictation({ command });
+      const result = await processDictation({ 
+        command,
+        locationId: selectedLocationId,
+        currentDate: format(new Date(), 'yyyy-MM-dd'),
+      });
       setResponse(result);
       if (!result.success) {
         setError(result.message);
@@ -57,13 +68,11 @@ export default function DictationPage() {
     setError(null);
 
     try {
-      // Aquí asumimos que la única acción confirmable por ahora es 'agendar'
       await addAppointment(response.suggestedChanges);
       toast({
         title: "Cita Creada Exitosamente",
         description: `La cita ha sido agendada según lo solicitado.`,
       });
-      // Limpiar el estado después de la confirmación exitosa
       setResponse(null);
       setCommand('');
 
@@ -82,10 +91,10 @@ export default function DictationPage() {
         <CardHeader>
           <CardTitle className="text-2xl flex items-center gap-2">
             <Terminal className="text-primary" />
-            Dictado IA
+            Dictado IA (Shorthand)
           </CardTitle>
           <CardDescription>
-            Escriba comandos en lenguaje natural para gestionar citas. La IA los interpretará y ejecutará los cambios.
+            Escriba comandos cortos para agendar citas rápidamente. La IA los interpretará y preparará la cita para su confirmación.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -97,8 +106,8 @@ export default function DictationPage() {
               id="command-input"
               value={command}
               onChange={(e) => setCommand(e.target.value)}
-              placeholder="Ej: Agendar quiropodia para Ana Torres mañana a las 3pm..."
-              className="max-w-lg min-h-[100px]"
+              placeholder="Ej: 9 30 ana torres podo..."
+              className="max-w-lg min-h-[100px] font-mono"
             />
           </div>
           
@@ -108,7 +117,7 @@ export default function DictationPage() {
             ) : (
               <Send className="mr-2 h-4 w-4" />
             )}
-            Procesar Dictado
+            Procesar Comando
           </Button>
 
           {error && (
@@ -140,20 +149,23 @@ export default function DictationPage() {
       </Card>
       <Card className="shadow-md">
         <CardHeader>
-            <CardTitle className="text-lg">Ejemplos de Comandos</CardTitle>
+            <CardTitle className="text-lg">Ejemplos de Comandos (Formato Corto)</CardTitle>
         </CardHeader>
-        <CardContent className="text-sm space-y-2 text-muted-foreground">
+        <CardContent className="text-sm space-y-2 text-muted-foreground font-mono">
             <p>
-                <strong className="text-foreground">Agendar:</strong> "Agenda una quiropodia para el paciente 'Juan Robles' el 2024-09-15 a las 11:00."
+                <strong className="text-foreground">Formato Básico:</strong> `[HORA] [NOMBRE PACIENTE] [SERVICIO]`
             </p>
             <p>
-                <strong className="text-foreground">Reagendar:</strong> "Reagenda la cita de 'Juan Robles' del 2024-09-15 para el 2024-09-16 a las 12:00."
+                <strong className="text-foreground">Ej:</strong> `9 carlos sanchez podo` (9 AM, Podología)
             </p>
              <p>
-                <strong className="text-foreground">Cancelar:</strong> "Cancela la cita de 'Juan Robles' del 2024-09-16."
+                <strong className="text-foreground">Ej:</strong> `3 30 ana torres refle` (3:30 PM, Reflexología)
+            </p>
+             <p>
+                <strong className="text-foreground">Ej:</strong> `5 sofia lopez podo mañana` (5 PM, Mañana)
             </p>
             <p className="text-xs italic mt-2">
-                Nota: Para reagendar o cancelar, el bot primero buscará una cita única para el paciente en la fecha original especificada.
+                Nota: Horas de 1 a 8 se asumen como PM (13:00 a 20:00).
             </p>
         </CardContent>
       </Card>

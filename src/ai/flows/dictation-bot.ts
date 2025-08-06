@@ -86,8 +86,7 @@ Reglas de interpretación:
 **Comando a analizar:** "{{command}}"`,
     });
     
-    const llmResponse = await extractionPrompt({ command, currentDate, serviceList: serviceListForPrompt });
-    const { extractedInfo } = llmResponse;
+    const { output: extractedInfo } = await extractionPrompt({ command, currentDate, serviceList: serviceListForPrompt });
     
     if (!extractedInfo || !extractedInfo.isClear || !extractedInfo.patientName || !extractedInfo.serviceShorthand || !extractedInfo.requestedDate || !extractedInfo.requestedTime) {
       return { success: false, message: "No pude entender el comando. Por favor, usa un formato como '9 Carlos Sanchez podo'." };
