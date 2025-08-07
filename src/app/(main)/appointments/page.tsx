@@ -4,7 +4,7 @@ import { AppointmentsDisplay } from '@/components/appointments/appointments-disp
 
 export default function AppointmentsPage() {
   return (
-    <div>
+    <div className="px-0 md:px-4">
       <AppointmentsDisplay />
     </div>
   );

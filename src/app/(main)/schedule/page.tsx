@@ -274,7 +274,7 @@ const fetchData = useCallback(async () => {
   
   if ((isAdminOrContador && !actualEffectiveLocationId) || (isAdminOrContador && adminSelectedLocation === 'all' && !locations.find(l=> l.id === actualEffectiveLocationId))) {
     return (
-       <div className="container mx-auto py-8 px-4 md:px-0 space-y-6">
+       <div className="container mx-auto py-8 px-0 md:px-4 space-y-6">
          <Card className="shadow-lg">
            <CardHeader>
              <CardTitle className="text-3xl flex items-center gap-2">
@@ -298,7 +298,7 @@ const fetchData = useCallback(async () => {
 
 
   return (
-    <div className="container mx-auto py-8 px-4 md:px-0 space-y-6">
+    <div className="space-y-6 px-0 md:px-4">
       <Card className="shadow-lg">
         <CardHeader>
           <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
@@ -449,9 +449,3 @@ const fetchData = useCallback(async () => {
     </div>
   );
 }
-
-
-
-
-
-

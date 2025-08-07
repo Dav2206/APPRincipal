@@ -192,7 +192,7 @@ export default function HistoryPage() {
   );
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 px-0 md:px-4">
       <Card className="shadow-md">
         <CardHeader>
           <CardTitle className="text-2xl flex items-center gap-2"><HistoryIcon className="text-primary"/> Historial de Citas</CardTitle>
