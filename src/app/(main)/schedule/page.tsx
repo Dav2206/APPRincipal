@@ -15,7 +15,7 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { format, addDays, subDays, startOfDay, isEqual, parseISO } from 'date-fns';
 import { es } from 'date-fns/locale';
-import { CalendarIcon, ChevronLeftIcon, ChevronRightIcon, AlertTriangle, Loader2, CalendarClock, PlusCircleIcon, UserXIcon, ZoomIn, ZoomOut, RefreshCw, XIcon } from 'lucide-react';
+import { CalendarIcon, ChevronLeft, ChevronRight, AlertTriangle, Loader2, CalendarClock, PlusCircleIcon, UserXIcon, ZoomIn, ZoomOut, RefreshCw, XIcon } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { AppointmentEditDialog } from '@/components/appointments/appointment-edit-dialog';
 import { AppointmentForm } from '@/components/appointments/appointment-form';
@@ -301,50 +301,54 @@ const fetchData = useCallback(async () => {
     <div className="container mx-auto py-8 px-4 md:px-0 space-y-6">
       <Card className="shadow-lg">
         <CardHeader>
-          <div className="flex flex-col md:flex-row justify-between items-center gap-4">
-            <div className='flex-grow'>
-              <CardTitle className="text-3xl flex items-center gap-2">
-                <CalendarClock className="text-primary" />
-                Agenda Horaria - {currentDate ? format(currentDate, "PPP", { locale: es }) : "Seleccione fecha"}
+          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+            <div className="flex-grow">
+              <CardTitle className="text-xl md:text-2xl flex items-center gap-2">
+                <CalendarClock className="text-primary h-6 w-6" />
+                <span>Agenda - {currentDate ? format(currentDate, "PPP", { locale: es }) : "Seleccione fecha"}</span>
               </CardTitle>
-              <CardDescription>
-                Vista de la agenda en formato de línea de tiempo por profesional (excluye Gerentes de Sede).
+              <CardDescription className="mt-1">
+                Vista de la agenda en formato de línea de tiempo por profesional.
               </CardDescription>
             </div>
-            <div className="flex items-center gap-2 w-full md:w-auto flex-wrap">
-              <Button variant="outline" size="icon" onClick={() => handleDateChange(subDays(currentDate, 1))}>
-                <ChevronLeftIcon className="h-4 w-4" />
+             {(user?.role === USER_ROLES.ADMIN || user?.role === USER_ROLES.LOCATION_STAFF || user?.role === USER_ROLES.CONTADOR) && (
+              <div className="flex-shrink-0">
+                <Button onClick={() => setIsNewAppointmentFormOpen(true)}>
+                  <PlusCircleIcon className="mr-2 h-4 w-4" /> Nueva Cita
+                </Button>
+              </div>
+            )}
+          </div>
+          <div className="mt-4 flex flex-col sm:flex-row gap-2 justify-between items-center">
+             <div className="flex items-center gap-1 rounded-lg border p-1 bg-muted/50 w-full sm:w-auto justify-center">
+              <Button variant="ghost" size="icon" onClick={() => handleDateChange(subDays(currentDate, 1))} className="h-8 w-8">
+                <ChevronLeft className="h-5 w-5" />
               </Button>
-              <Popover>
+               <Popover>
                 <PopoverTrigger asChild>
-                  <Button variant="outline" className={cn("w-full sm:w-[200px] justify-start text-left font-normal", !currentDate && "text-muted-foreground")}>
+                  <Button variant="ghost" className={cn("w-full justify-center text-center font-semibold text-sm h-8 px-2", !currentDate && "text-muted-foreground")}>
                     <CalendarIcon className="mr-2 h-4 w-4" />
-                    {currentDate ? format(currentDate, "PPP", { locale: es }) : "Seleccione fecha"}
+                    {currentDate ? format(currentDate, "d MMM", { locale: es }) : <span>Fecha</span>}
                   </Button>
                 </PopoverTrigger>
                 <PopoverContent className="w-auto p-0">
                   <Calendar mode="single" selected={currentDate} onSelect={handleDateChange} initialFocus />
                 </PopoverContent>
               </Popover>
-              <Button variant="outline" size="icon" onClick={() => handleDateChange(addDays(currentDate, 1))}>
-                <ChevronRightIcon className="h-4 w-4" />
+              <Button variant="ghost" size="icon" onClick={() => handleDateChange(addDays(currentDate, 1))} className="h-8 w-8">
+                <ChevronRight className="h-5 w-5" />
               </Button>
               <Button
-                variant={currentDate && isEqual(currentDate, startOfDay(new Date())) ? "secondary" : "outline"}
+                variant="ghost"
                 onClick={() => handleDateChange(new Date())}
-                className="hidden sm:inline-flex"
+                className={cn("h-8 px-3 text-sm", isEqual(currentDate, startOfDay(new Date())) ? 'text-primary font-bold' : 'text-muted-foreground')}
               >
                 Hoy
               </Button>
-               {(user?.role === USER_ROLES.ADMIN || user?.role === USER_ROLES.LOCATION_STAFF || user?.role === USER_ROLES.CONTADOR) && (
-                <Button onClick={() => setIsNewAppointmentFormOpen(true)} className="w-full sm:w-auto">
-                  <PlusCircleIcon className="mr-2 h-4 w-4" /> Nueva Cita
-                </Button>
-              )}
             </div>
+            <div className="text-xs text-muted-foreground text-center sm:text-right w-full sm:w-auto">
+             Viendo para: <span className="font-semibold">{displayLocationName}</span>
           </div>
-          <div className="mt-2 text-sm text-muted-foreground">
-             Viendo para: {displayLocationName}
           </div>
         </CardHeader>
         <CardContent>
@@ -445,6 +449,7 @@ const fetchData = useCallback(async () => {
     </div>
   );
 }
+
 
 
 
