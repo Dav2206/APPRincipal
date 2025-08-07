@@ -4,6 +4,7 @@ const withPWA = require('next-pwa')({
   dest: 'public',
   register: true,
   skipWaiting: true,
+  reloadOnOnline: true,
   disable: process.env.NODE_ENV === 'development',
 });
 
@@ -38,6 +39,16 @@ const nextConfig: NextConfig = {
       },
     ],
   },
+   generateBuildId: async () => {
+    // This will create a unique build id for each new build
+    return new Date().getTime().toString();
+  },
+  env: {
+    WHATSAPP_ACCESS_TOKEN: process.env.WHATSAPP_ACCESS_TOKEN,
+    WHATSAPP_PHONE_NUMBER_ID: process.env.WHATSAPP_PHONE_NUMBER_ID,
+    WHATSAPP_BUSINESS_ACCOUNT_ID: process.env.WHATSAPP_BUSINESS_ACCOUNT_ID,
+    WHATSAPP_WEBHOOK_VERIFY_TOKEN: process.env.WHATSAPP_WEBHOOK_VERIFY_TOKEN,
+  }
 };
 
 export default withPWA(nextConfig);
