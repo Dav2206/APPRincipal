@@ -25,6 +25,7 @@ import {
   Bell,
   Terminal,
   BrainCircuit,
+  TrendingUp,
 } from 'lucide-react';
 import { USER_ROLES } from '@/lib/constants';
 
@@ -37,6 +38,7 @@ const navItems = [
   { href: '/registry', label: 'Registro Diario', icon: FileText, roles: [USER_ROLES.LOCATION_STAFF, USER_ROLES.CONTADOR] },
   { href: '/professionals', label: 'Profesionales', icon: Briefcase, roles: [USER_ROLES.ADMIN, USER_ROLES.CONTADOR] },
   { href: '/contracts', label: 'Contratos', icon: FileSpreadsheet, roles: [USER_ROLES.ADMIN, USER_ROLES.CONTADOR] },
+  { href: '/percentages', label: 'Porcentajes', icon: TrendingUp, roles: [USER_ROLES.ADMIN, USER_ROLES.CONTADOR, USER_ROLES.LOCATION_STAFF] },
   { href: '/services', label: 'Servicios', icon: ClipboardList, roles: [USER_ROLES.ADMIN] }, 
   { href: '/finanzas', label: 'Finanzas', icon: Landmark, roles: [USER_ROLES.CONTADOR] },
   { href: '/reminders', label: 'Recordatorios', icon: Bell, roles: [USER_ROLES.ADMIN, USER_ROLES.CONTADOR] },
@@ -88,7 +90,7 @@ export function AppSidebar() {
                 finalIsActive = false;
               }
               
-              const specificExactMatchRoutes = ['/appointments', '/schedule', '/finanzas', '/services', '/registry', '/contracts', '/reminders', '/test-function', '/dictation'];
+              const specificExactMatchRoutes = ['/appointments', '/schedule', '/finanzas', '/services', '/registry', '/contracts', '/reminders', '/test-function', '/dictation', '/percentages'];
               if (specificExactMatchRoutes.includes(href)) {
                 finalIsActive = pathname === href || pathname.startsWith(`${href}/`);
               }
