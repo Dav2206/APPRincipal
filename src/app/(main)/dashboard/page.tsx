@@ -175,24 +175,35 @@ export default function DashboardPage() {
         
         // Fetch Total Revenue for Current Month (ONLY FOR CONTADOR)
         if (isContador) {
-          if (selectedLocationId === 'all') {
-            const allLocationsCompletedPromises = locations.map(loc => getAppointments({
-              statuses: [APPOINTMENT_STATUS.COMPLETED],
-              locationId: loc.id,
-              dateRange: { start: currentMonthStart, end: currentMonthEnd },
-            }));
-            const allLocationsCompletedResults = await Promise.all(allLocationsCompletedPromises);
-            totalRevenueMonthValue = allLocationsCompletedResults.reduce((totalSum, locationResults) => 
-              totalSum + (locationResults.appointments ? locationResults.appointments.reduce((locationSum, appt) => locationSum + (appt.amountPaid || 0), 0) : 0), 
-            0);
-          } else if (effectiveLocationId) {
-            const { appointments } = await getAppointments({
-              statuses: [APPOINTMENT_STATUS.COMPLETED],
-              locationId: effectiveLocationId,
-              dateRange: { start: currentMonthStart, end: currentMonthEnd },
-            });
-            totalRevenueMonthValue = appointments ? appointments.reduce((sum, appt) => sum + (appt.amountPaid || 0), 0) : 0;
-          }
+            const calculateTotalRevenue = (appointments: any[] | undefined) => {
+                if (!appointments) return 0;
+                return appointments.reduce((sum, appt) => {
+                    let total = appt.amountPaid || 0;
+                    if (appt.addedServices) {
+                        total += appt.addedServices.reduce((addedSum: number, as: { amountPaid: any; }) => addedSum + (as.amountPaid || 0), 0);
+                    }
+                    return sum + total;
+                }, 0);
+            };
+
+            if (selectedLocationId === 'all') {
+                const allLocationsCompletedPromises = locations.map(loc => getAppointments({
+                    statuses: [APPOINTMENT_STATUS.COMPLETED],
+                    locationId: loc.id,
+                    dateRange: { start: currentMonthStart, end: currentMonthEnd },
+                }));
+                const allLocationsCompletedResults = await Promise.all(allLocationsCompletedPromises);
+                totalRevenueMonthValue = allLocationsCompletedResults.reduce((totalSum, locationResults) => 
+                    totalSum + calculateTotalRevenue(locationResults.appointments), 
+                0);
+            } else if (effectiveLocationId) {
+                const { appointments } = await getAppointments({
+                    statuses: [APPOINTMENT_STATUS.COMPLETED],
+                    locationId: effectiveLocationId,
+                    dateRange: { start: currentMonthStart, end: currentMonthEnd },
+                });
+                totalRevenueMonthValue = calculateTotalRevenue(appointments);
+            }
         }
 
         // Fetch All Professionals for status checks and birthdays
