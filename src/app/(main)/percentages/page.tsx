@@ -62,55 +62,39 @@ export default function PercentagesPage() {
     const endDate = dayOfMonth <= 15 ? addDays(startOfMonth(today), 14) : endOfMonth(today);
 
     try {
-      const allProfessionals = await getProfessionals();
+      // Fetch only professionals whose base location is the one selected
+      const nativeProfessionals = await getProfessionals(effectiveLocationId);
+      
       const dateRange = { start: startDate, end: endDate };
       const allAppointmentsResponse = await getAppointments({ dateRange, statuses: [APPOINTMENT_STATUS.COMPLETED] });
       const allPeriodAppointments = allAppointmentsResponse.appointments || [];
 
-      const professionalsInSede = new Set<string>();
-      
-      // Determine professionals who worked at the location during the period
-      for (let day = startDate; day <= endDate; day = addDays(day, 1)) {
-        allProfessionals.forEach(prof => {
-          const availability = getProfessionalAvailabilityForDate(prof, day);
-          if (availability?.isWorking && availability.workingLocationId === effectiveLocationId) {
-            professionalsInSede.add(prof.id);
-          }
-        });
-      }
-
-      // Also add any external professionals who had an appointment at this location during the period
-      allPeriodAppointments.forEach(appt => {
-        if (appt.locationId === effectiveLocationId && appt.professionalId) {
-            professionalsInSede.add(appt.professionalId);
-        }
-      });
-
       const incomeMap = new Map<string, ProfessionalDailyIncome>();
       
+      // Initialize map for native professionals
+      nativeProfessionals.forEach(prof => {
+        incomeMap.set(prof.id, {
+          professionalId: prof.id,
+          professionalName: `${prof.firstName} ${prof.lastName}`,
+          totalIncome: 0,
+          appointmentCount: 0,
+          workedAtLocations: ''
+        });
+      });
+
       allPeriodAppointments.forEach(appt => {
         const profId = appt.professionalId;
-        if (profId && professionalsInSede.has(profId)) {
-          const profDetails = allProfessionals.find(p => p.id === profId);
-          if (profDetails) {
-            const entry = incomeMap.get(profId) || {
-              professionalId: profId,
-              professionalName: `${profDetails.firstName} ${profDetails.lastName}`,
-              totalIncome: 0,
-              appointmentCount: 0,
-              workedAtLocations: ''
-            };
-            
-            let appointmentIncome = appt.amountPaid || 0;
-            if(appt.addedServices) {
-                appointmentIncome += appt.addedServices.reduce((sum, as) => sum + (as.amountPaid || 0), 0);
-            }
-
-            entry.totalIncome += appointmentIncome;
-            entry.appointmentCount += 1;
-            
-            incomeMap.set(profId, entry);
+        // Check if the appointment's professional is in our list of native professionals
+        if (profId && incomeMap.has(profId)) {
+          const entry = incomeMap.get(profId)!;
+          
+          let appointmentIncome = appt.amountPaid || 0;
+          if (appt.addedServices) {
+              appointmentIncome += appt.addedServices.reduce((sum, as) => sum + (as.amountPaid || 0), 0);
           }
+
+          entry.totalIncome += appointmentIncome;
+          entry.appointmentCount += 1;
         }
       });
       
@@ -126,8 +110,9 @@ export default function PercentagesPage() {
                 .join(', ');
         });
 
-
-      const sortedReport = Array.from(incomeMap.values()).sort((a, b) => b.totalIncome - a.totalIncome);
+      // Filter out professionals who had no income in the period
+      const finalReportData = Array.from(incomeMap.values()).filter(item => item.appointmentCount > 0);
+      const sortedReport = finalReportData.sort((a, b) => b.totalIncome - a.totalIncome);
       setReportData(sortedReport);
 
     } catch (error) {
@@ -188,7 +173,7 @@ export default function PercentagesPage() {
                 Análisis de Ingresos por Profesional
               </CardTitle>
               <CardDescription>
-                Ingresos de la quincena actual de los profesionales que trabajaron en {displayLocationName}.
+                Ingresos de la quincena actual de los profesionales NATIVOS de {displayLocationName}.
               </CardDescription>
               <p className="text-sm font-semibold text-primary mt-2">{quincenaDescription}</p>
             </div>
@@ -205,7 +190,7 @@ export default function PercentagesPage() {
           ) : !effectiveLocationId ? (
             <NoDataCard title="Seleccione una Sede" message="Por favor, seleccione una sede específica desde el menú superior para ver el reporte." />
           ): reportData.length === 0 ? (
-            <NoDataCard title="Sin Datos" message={`No se encontraron ingresos para profesionales que hayan trabajado en ${displayLocationName} en esta quincena.`} />
+            <NoDataCard title="Sin Datos" message={`No se encontraron ingresos para los profesionales nativos de ${displayLocationName} en esta quincena.`} />
           ) : (
             <div className="rounded-md border">
               <Table>
@@ -239,4 +224,3 @@ export default function PercentagesPage() {
     </div>
   );
 }
-
