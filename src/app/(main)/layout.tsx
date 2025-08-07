@@ -44,7 +44,7 @@ export default function MainLayout({
       <AppHeader />
       <div className="flex flex-1"> {/* Container for sidebar and main content */}
         <AppSidebar />
-        <main className="flex-1 overflow-y-auto gap-4 p-4 md:gap-8 md:p-6 lg:p-8">
+        <main className="flex-1 overflow-y-auto md:gap-8 md:p-6 lg:p-8">
           {children}
         </main>
       </div>
