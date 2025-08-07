@@ -66,7 +66,12 @@ export default function PercentagesPage() {
       const nativeProfessionals = await getProfessionals(effectiveLocationId);
       
       const dateRange = { start: startDate, end: endDate };
-      const allAppointmentsResponse = await getAppointments({ dateRange, statuses: [APPOINTMENT_STATUS.COMPLETED] });
+      // Fetch only appointments from the selected location
+      const allAppointmentsResponse = await getAppointments({ 
+        dateRange, 
+        locationId: effectiveLocationId, 
+        statuses: [APPOINTMENT_STATUS.COMPLETED] 
+      });
       const allPeriodAppointments = allAppointmentsResponse.appointments || [];
 
       const incomeMap = new Map<string, ProfessionalDailyIncome>();
@@ -78,7 +83,7 @@ export default function PercentagesPage() {
           professionalName: `${prof.firstName} ${prof.lastName}`,
           totalIncome: 0,
           appointmentCount: 0,
-          workedAtLocations: ''
+          workedAtLocations: locations.find(l => l.id === effectiveLocationId)?.name || ''
         });
       });
 
@@ -97,20 +102,8 @@ export default function PercentagesPage() {
           entry.appointmentCount += 1;
         }
       });
-      
-       incomeMap.forEach(entry => {
-            const workedAtIds = new Set<LocationId>();
-            allPeriodAppointments.forEach(appt => {
-                if (appt.professionalId === entry.professionalId) {
-                    workedAtIds.add(appt.locationId);
-                }
-            });
-            entry.workedAtLocations = Array.from(workedAtIds)
-                .map(id => locations.find(l => l.id === id)?.name || id)
-                .join(', ');
-        });
 
-      // Filter out professionals who had no income in the period
+      // Filter out professionals who had no income in the period at this specific location
       const finalReportData = Array.from(incomeMap.values()).filter(item => item.appointmentCount > 0);
       const sortedReport = finalReportData.sort((a, b) => b.totalIncome - a.totalIncome);
       setReportData(sortedReport);
@@ -122,6 +115,7 @@ export default function PercentagesPage() {
       setIsLoading(false);
     }
   }, [effectiveLocationId, user, locations]);
+
 
   useEffect(() => {
     if (locations.length > 0) {
@@ -197,18 +191,14 @@ export default function PercentagesPage() {
                 <TableHeader>
                   <TableRow>
                     <TableHead>Profesional</TableHead>
-                    <TableHead>Sedes Trabajadas en el Periodo</TableHead>
-                    <TableHead className="text-center">Citas Completadas</TableHead>
-                    <TableHead className="text-right">Ingreso Total Quincenal (S/)</TableHead>
+                    <TableHead className="text-center">Citas Completadas en Sede</TableHead>
+                    <TableHead className="text-right">Ingreso Quincenal en Sede (S/)</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {reportData.map((item) => (
                     <TableRow key={item.professionalId}>
                       <TableCell className="font-medium">{item.professionalName}</TableCell>
-                      <TableCell className="text-xs text-muted-foreground">
-                        <Badge variant="outline">{item.workedAtLocations}</Badge>
-                      </TableCell>
                       <TableCell className="text-center">{item.appointmentCount}</TableCell>
                       <TableCell className="text-right font-semibold text-primary">
                         {item.totalIncome.toFixed(2)}
