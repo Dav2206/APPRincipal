@@ -243,14 +243,6 @@ export default function PercentagesPage() {
                     </TableRow>
                   ))}
                 </TableBody>
-                <TableFooter>
-                    <TableRow className="bg-muted/80 font-bold">
-                        <TableCell colSpan={3}>Total General de Profesionales Mostrados</TableCell>
-                        <TableCell className="text-right text-lg">
-                           S/ {totalGeneralIncome.toFixed(2)}
-                        </TableCell>
-                    </TableRow>
-                </TableFooter>
               </Table>
             </div>
           )}
