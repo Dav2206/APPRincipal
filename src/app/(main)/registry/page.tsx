@@ -328,8 +328,12 @@ export default function RegistryPage() {
             const contractStatusOnApptDate = getContractDisplayStatus(professionalForAppt.currentContract, parseISO(appt.appointmentDateTime));
             if (contractStatusOnApptDate === 'Activo' || contractStatusOnApptDate === 'Próximo a Vencer') {
                 const entry = biWeeklyReportMap.get(appt.professionalId);
-                if (entry) { 
-                    entry.biWeeklyEarnings += appt.amountPaid || 0;
+                if (entry) {
+                    let appointmentIncome = appt.amountPaid || 0;
+                    if (appt.addedServices) {
+                        appointmentIncome += appt.addedServices.reduce((sum, as) => sum + (as.amountPaid || 0), 0);
+                    }
+                    entry.biWeeklyEarnings += appointmentIncome;
                     biWeeklyReportMap.set(appt.professionalId, entry);
                 }
             }
