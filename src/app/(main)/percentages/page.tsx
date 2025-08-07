@@ -11,8 +11,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter }
 import { Button } from '@/components/ui/button';
 import { Calendar } from '@/components/ui/calendar';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow, TableFooter } from '@/components/ui/table';
-import { format, startOfDay, parseISO, isEqual, addDays, subDays } from 'date-fns';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { format, startOfDay, parseISO, isEqual, addDays, subDays, startOfMonth, endOfMonth, getDate } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { CalendarIcon, ChevronLeftIcon, ChevronRightIcon, AlertTriangle, Loader2, TrendingUp, DollarSign, Building } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -56,35 +56,39 @@ export default function PercentagesPage() {
     }
     setIsLoading(true);
 
+    const today = new Date();
+    const dayOfMonth = getDate(today);
+    const startDate = dayOfMonth <= 15 ? startOfMonth(today) : addDays(startOfMonth(today), 15);
+    const endDate = dayOfMonth <= 15 ? addDays(startOfMonth(today), 14) : endOfMonth(today);
+
     try {
-      // 1. Get all professionals and all completed appointments for the selected day across all locations
-      const [allProfessionals, allAppointmentsResponse] = await Promise.all([
-        getProfessionals(),
-        getAppointments({ date: currentDate, statuses: [APPOINTMENT_STATUS.COMPLETED] })
-      ]);
-      const allDailyAppointments = allAppointmentsResponse.appointments || [];
-      
-      // 2. Determine which professionals worked at the selected `effectiveLocationId` on `currentDate`
+      const allProfessionals = await getProfessionals();
+      const dateRange = { start: startDate, end: endDate };
+      const allAppointmentsResponse = await getAppointments({ dateRange, statuses: [APPOINTMENT_STATUS.COMPLETED] });
+      const allPeriodAppointments = allAppointmentsResponse.appointments || [];
+
       const professionalsInSede = new Set<string>();
-      allProfessionals.forEach(prof => {
-        const availability = getProfessionalAvailabilityForDate(prof, currentDate);
-        if (availability?.isWorking && availability.workingLocationId === effectiveLocationId) {
-          professionalsInSede.add(prof.id);
-        }
-      });
       
-      // Also add any external professionals who had an appointment at this location
-      allDailyAppointments.forEach(appt => {
+      // Determine professionals who worked at the location during the period
+      for (let day = startDate; day <= endDate; day = addDays(day, 1)) {
+        allProfessionals.forEach(prof => {
+          const availability = getProfessionalAvailabilityForDate(prof, day);
+          if (availability?.isWorking && availability.workingLocationId === effectiveLocationId) {
+            professionalsInSede.add(prof.id);
+          }
+        });
+      }
+
+      // Also add any external professionals who had an appointment at this location during the period
+      allPeriodAppointments.forEach(appt => {
         if (appt.locationId === effectiveLocationId && appt.professionalId) {
             professionalsInSede.add(appt.professionalId);
         }
       });
 
-
-      // 3. Calculate total income for those professionals from all their appointments
       const incomeMap = new Map<string, ProfessionalDailyIncome>();
       
-      allDailyAppointments.forEach(appt => {
+      allPeriodAppointments.forEach(appt => {
         const profId = appt.professionalId;
         if (profId && professionalsInSede.has(profId)) {
           const profDetails = allProfessionals.find(p => p.id === profId);
@@ -103,17 +107,16 @@ export default function PercentagesPage() {
             }
 
             entry.totalIncome += appointmentIncome;
-            entry.appointmentCount += 1; // Count each main appointment
+            entry.appointmentCount += 1;
             
             incomeMap.set(profId, entry);
           }
         }
       });
-
-      // 4. Determine where each professional worked
+      
        incomeMap.forEach(entry => {
             const workedAtIds = new Set<LocationId>();
-            allDailyAppointments.forEach(appt => {
+            allPeriodAppointments.forEach(appt => {
                 if (appt.professionalId === entry.professionalId) {
                     workedAtIds.add(appt.locationId);
                 }
@@ -122,6 +125,7 @@ export default function PercentagesPage() {
                 .map(id => locations.find(l => l.id === id)?.name || id)
                 .join(', ');
         });
+
 
       const sortedReport = Array.from(incomeMap.values()).sort((a, b) => b.totalIncome - a.totalIncome);
       setReportData(sortedReport);
@@ -132,7 +136,7 @@ export default function PercentagesPage() {
     } finally {
       setIsLoading(false);
     }
-  }, [currentDate, effectiveLocationId, user, locations]);
+  }, [effectiveLocationId, user, locations]);
 
   useEffect(() => {
     if (locations.length > 0) {
@@ -140,11 +144,6 @@ export default function PercentagesPage() {
     }
   }, [fetchDataForReport, locations]);
 
-  const handleDateChange = (date: Date | undefined) => {
-    if (date) {
-      setCurrentDate(startOfDay(date));
-    }
-  };
 
   const totalGeneralIncome = useMemo(() => {
     return reportData.reduce((sum, item) => sum + item.totalIncome, 0);
@@ -153,6 +152,13 @@ export default function PercentagesPage() {
   const displayLocationName = effectiveLocationId 
     ? (locations.find(l => l.id === effectiveLocationId)?.name || `Sede Desconocida`) 
     : 'No se ha seleccionado sede';
+
+    const today = new Date();
+    const dayOfMonth = getDate(today);
+    const quincenaDescription = dayOfMonth <= 15 
+        ? `Quincena del 1 al 15 de ${format(today, 'MMMM', {locale: es})}` 
+        : `Quincena del 16 al ${format(endOfMonth(today), 'd', {locale: es})} de ${format(today, 'MMMM', {locale: es})}`;
+
 
   const LoadingState = () => (
     <div className="flex flex-col items-center justify-center h-64">
@@ -182,27 +188,9 @@ export default function PercentagesPage() {
                 Análisis de Ingresos por Profesional
               </CardTitle>
               <CardDescription>
-                Ingresos totales del día de los profesionales que trabajaron en {displayLocationName}.
+                Ingresos de la quincena actual de los profesionales que trabajaron en {displayLocationName}.
               </CardDescription>
-            </div>
-            <div className="flex items-center gap-2 w-full md:w-auto">
-              <Button variant="outline" size="icon" onClick={() => handleDateChange(subDays(currentDate, 1))}>
-                <ChevronLeftIcon className="h-4 w-4" />
-              </Button>
-              <Popover>
-                <PopoverTrigger asChild>
-                  <Button variant="outline" className={cn("w-full md:w-[200px] justify-start text-left font-normal", !currentDate && "text-muted-foreground")}>
-                    <CalendarIcon className="mr-2 h-4 w-4" />
-                    {format(currentDate, "PPP", { locale: es })}
-                  </Button>
-                </PopoverTrigger>
-                <PopoverContent className="w-auto p-0">
-                  <Calendar mode="single" selected={currentDate} onSelect={handleDateChange} initialFocus />
-                </PopoverContent>
-              </Popover>
-              <Button variant="outline" size="icon" onClick={() => handleDateChange(addDays(currentDate, 1))}>
-                <ChevronRightIcon className="h-4 w-4" />
-              </Button>
+              <p className="text-sm font-semibold text-primary mt-2">{quincenaDescription}</p>
             </div>
           </div>
            {isAdminOrContador && (
@@ -217,16 +205,16 @@ export default function PercentagesPage() {
           ) : !effectiveLocationId ? (
             <NoDataCard title="Seleccione una Sede" message="Por favor, seleccione una sede específica desde el menú superior para ver el reporte." />
           ): reportData.length === 0 ? (
-            <NoDataCard title="Sin Datos" message={`No se encontraron ingresos para profesionales que hayan trabajado en ${displayLocationName} en esta fecha.`} />
+            <NoDataCard title="Sin Datos" message={`No se encontraron ingresos para profesionales que hayan trabajado en ${displayLocationName} en esta quincena.`} />
           ) : (
             <div className="rounded-md border">
               <Table>
                 <TableHeader>
                   <TableRow>
                     <TableHead>Profesional</TableHead>
-                    <TableHead>Sedes Trabajadas Hoy</TableHead>
+                    <TableHead>Sedes Trabajadas en el Periodo</TableHead>
                     <TableHead className="text-center">Citas Completadas</TableHead>
-                    <TableHead className="text-right">Ingreso Total del Día (S/)</TableHead>
+                    <TableHead className="text-right">Ingreso Total Quincenal (S/)</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -251,3 +239,4 @@ export default function PercentagesPage() {
     </div>
   );
 }
+
