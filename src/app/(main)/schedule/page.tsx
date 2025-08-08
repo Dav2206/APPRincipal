@@ -15,13 +15,15 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { format, addDays, subDays, startOfDay, isEqual, parseISO } from 'date-fns';
 import { es } from 'date-fns/locale';
-import { CalendarIcon, ChevronLeft, ChevronRight, AlertTriangle, Loader2, CalendarClock, PlusCircleIcon, UserXIcon, ZoomIn, ZoomOut, RefreshCw, XIcon } from 'lucide-react';
+import { CalendarIcon, ChevronLeft, ChevronRight, AlertTriangle, Loader2, CalendarClock, PlusCircleIcon, UserXIcon, ZoomIn, ZoomOut, RefreshCw, XIcon, MousePointerClick } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { AppointmentEditDialog } from '@/components/appointments/appointment-edit-dialog';
 import { AppointmentForm } from '@/components/appointments/appointment-form';
 import { useToast } from "@/hooks/use-toast";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogClose } from '@/components/ui/dialog';
 import Image from 'next/image';
+import { Switch } from '@/components/ui/switch';
+import { Label } from '@/components/ui/label';
 
 
 const timeSlotsForView = TIME_SLOTS.filter(slot => parseInt(slot.split(':')[0]) >= 9);
@@ -40,6 +42,7 @@ export default function SchedulePage() {
   const [selectedAppointmentForEdit, setSelectedAppointmentForEdit] = useState<Appointment | null>(null);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [isNewAppointmentFormOpen, setIsNewAppointmentFormOpen] = useState(false);
+  const [isDragDropEnabled, setIsDragDropEnabled] = useState(false);
 
   // State for image modal
   const [selectedImageForModal, setSelectedImageForModal] = useState<string | null>(null);
@@ -374,7 +377,7 @@ const fetchData = useCallback(async () => {
               </div>
             )}
           </div>
-          <div className="mt-4 flex flex-col sm:flex-row gap-2 justify-between items-center">
+          <div className="mt-4 flex flex-col sm:flex-row gap-4 justify-between items-center">
              <div className="flex items-center gap-1 rounded-lg border p-1 bg-muted/50 w-full sm:w-auto justify-center">
               <Button variant="ghost" size="icon" onClick={() => handleDateChange(subDays(currentDate, 1))} className="h-8 w-8">
                 <ChevronLeft className="h-5 w-5" />
@@ -401,6 +404,17 @@ const fetchData = useCallback(async () => {
                 Hoy
               </Button>
             </div>
+             <div className="flex items-center space-x-2">
+                <Switch
+                  id="drag-drop-switch"
+                  checked={isDragDropEnabled}
+                  onCheckedChange={setIsDragDropEnabled}
+                />
+                <Label htmlFor="drag-drop-switch" className="text-xs flex items-center gap-1">
+                  <MousePointerClick className="h-4 w-4" />
+                  Habilitar Arrastrar
+                </Label>
+              </div>
             <div className="text-xs text-muted-foreground text-center sm:text-right w-full sm:w-auto">
              Viendo para: <span className="font-semibold">{displayLocationName}</span>
           </div>
@@ -425,6 +439,7 @@ const fetchData = useCallback(async () => {
               onAppointmentDrop={handleAppointmentDrop}
               viewingLocationId={actualEffectiveLocationId!} 
               locations={locations}
+              isDragDropEnabled={isDragDropEnabled}
             />
           )}
         </CardContent>

@@ -22,6 +22,7 @@ interface DailyTimelineProps {
   onAppointmentDrop: (appointmentId: string, newProfessionalId: string) => Promise<boolean>;
   viewingLocationId: LocationId;
   locations: Location[];
+  isDragDropEnabled: boolean;
 }
 
 const stringToColor = (str: string): string => {
@@ -70,7 +71,7 @@ const isOverlapping = (blockA: RenderableServiceBlock, blockB: RenderableService
 };
 
 
-const DailyTimelineComponent = ({ professionals, appointments, timeSlots, onAppointmentClick, onAppointmentDrop, viewingLocationId, currentDate, locations }: DailyTimelineProps) => {
+const DailyTimelineComponent = ({ professionals, appointments, timeSlots, onAppointmentClick, onAppointmentDrop, viewingLocationId, currentDate, locations, isDragDropEnabled }: DailyTimelineProps) => {
   const [draggedAppointmentId, setDraggedAppointmentId] = useState<string | null>(null);
   const professionalColumnsRef = useRef<Record<string, HTMLDivElement | null>>({});
 
@@ -303,8 +304,8 @@ const DailyTimelineComponent = ({ professionals, appointments, timeSlots, onAppo
                   ref={(el) => professionalColumnsRef.current[prof.id] = el}
                   data-professional-id={prof.id}
                   className="min-w-[120px] md:min-w-[150px] border-r relative transition-colors duration-200"
-                  onDragOver={handleDragOver}
-                  onDrop={(e) => handleDrop(e, prof.id)}
+                  onDragOver={isDragDropEnabled ? handleDragOver : undefined}
+                  onDrop={isDragDropEnabled ? (e) => handleDrop(e, prof.id) : undefined}
                 >
                   <div className="sticky top-0 z-10 h-16 flex items-center justify-center font-semibold border-b bg-background p-2 text-sm truncate" title={`${prof.firstName} ${prof.lastName}`}>
                     {prof.firstName} {prof.lastName.split(' ')[0]}
@@ -383,13 +384,14 @@ const DailyTimelineComponent = ({ professionals, appointments, timeSlots, onAppo
                         <Tooltip key={block.id} delayDuration={100}>
                           <TooltipTrigger asChild>
                             <div
-                              draggable
-                              onDragStart={(e) => handleDragStart(e, block.originalAppointmentId)}
-                              onTouchStart={(e) => handleTouchStart(e, block.originalAppointmentId)}
-                              onTouchMove={handleTouchMove}
-                              onTouchEnd={handleTouchEnd}
+                              draggable={isDragDropEnabled}
+                              onDragStart={isDragDropEnabled ? (e) => handleDragStart(e, block.originalAppointmentId) : undefined}
+                              onTouchStart={isDragDropEnabled ? (e) => handleTouchStart(e, block.originalAppointmentId) : undefined}
+                              onTouchMove={isDragDropEnabled ? handleTouchMove : undefined}
+                              onTouchEnd={isDragDropEnabled ? handleTouchEnd : undefined}
                               className={cn(
-                                "absolute left-1 right-1 rounded-md p-1.5 shadow-md text-xs overflow-hidden cursor-pointer touch-none transition-all flex flex-col justify-start border",
+                                "absolute left-1 right-1 rounded-md p-1.5 shadow-md text-xs overflow-hidden transition-all flex flex-col justify-start border",
+                                isDragDropEnabled ? 'cursor-grab' : 'cursor-pointer',
                                 blockBgClass,
                                 blockTextClass,
                                 isBlockOverlapping ? "ring-2 ring-destructive border-destructive" : blockBorderColorClass
