@@ -440,7 +440,7 @@ export function AppointmentEditDialog({ appointment, isOpen, onOpenChange, onApp
         <form onSubmit={form.handleSubmit(onSubmitUpdate)} className="space-y-2 py-2 max-h-[70vh] overflow-y-auto pr-2">
           
            {/* -- Section: Estado y Horario -- */}
-          <div className="space-y-2 p-3 border rounded-lg bg-muted/30">
+          <div className="space-y-3 p-3 border rounded-lg bg-muted/30">
             <FormField
               control={form.control}
               name="status"
@@ -684,9 +684,6 @@ export function AppointmentEditDialog({ appointment, isOpen, onOpenChange, onApp
                  <div className="flex gap-2">
                     <Button variant="destructive" type="button" onClick={handleDelete} disabled={isDeleting}>
                       <XCircle className="mr-2 h-4 w-4" />Cancelar Cita
-                    </Button>
-                    <Button variant="outline" type="button" onClick={handleReprogram} disabled={isDeleting}>
-                      <RefreshCcw className="mr-2 h-4 w-4" />Reprogramar
                     </Button>
                  </div>
               )}
