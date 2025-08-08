@@ -2,6 +2,7 @@
 
 
 
+
 // This constant is now used as a fallback.
 export const LOCATIONS_FALLBACK = [
   { id: 'higuereta', name: 'Higuereta', paymentMethods: ['Efectivo', 'Yape/Plin Higuereta', 'Tarjeta Débito Higuereta'] },
@@ -40,7 +41,6 @@ export const APPOINTMENT_STATUS = {
   CONFIRMED: 'confirmed', // Client arrival confirmed
   COMPLETED: 'completed', // Service finished and paid
   CANCELLED_CLIENT: 'cancelled_client',
-  CANCELLED_STAFF: 'cancelled_staff',
   NO_SHOW: 'no_show',
 } as const;
 
@@ -50,8 +50,7 @@ export const APPOINTMENT_STATUS_DISPLAY: Record<AppointmentStatus, string> = {
   [APPOINTMENT_STATUS.BOOKED]: 'Reservado',
   [APPOINTMENT_STATUS.CONFIRMED]: 'Confirmado en Sede',
   [APPOINTMENT_STATUS.COMPLETED]: 'Completado',
-  [APPOINTMENT_STATUS.CANCELLED_CLIENT]: 'Cancelado (Cliente)',
-  [APPOINTMENT_STATUS.CANCELLED_STAFF]: 'Cancelado (Staff)',
+  [APPOINTMENT_STATUS.CANCELLED_CLIENT]: 'Cancelado',
   [APPOINTMENT_STATUS.NO_SHOW]: 'No se presentó',
 };
 

@@ -70,7 +70,7 @@ export default function HistoryPage() {
         getLocations(),
         getAppointments({
           locationId: effectiveLocationId,
-          statuses: [APPOINTMENT_STATUS.COMPLETED, APPOINTMENT_STATUS.CANCELLED_CLIENT, APPOINTMENT_STATUS.CANCELLED_STAFF, APPOINTMENT_STATUS.NO_SHOW],
+          statuses: [APPOINTMENT_STATUS.COMPLETED, APPOINTMENT_STATUS.CANCELLED_CLIENT, APPOINTMENT_STATUS.NO_SHOW],
         })
       ]);
 
