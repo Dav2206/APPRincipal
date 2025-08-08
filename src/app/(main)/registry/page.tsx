@@ -12,15 +12,24 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Button } from '@/components/ui/button';
 import { Calendar } from '@/components/ui/calendar';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow, TableCaption } from '@/components/ui/table';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow, TableCaption, TableFooter } from '@/components/ui/table';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { format, startOfDay, getMonth, getDate, startOfMonth, endOfMonth, addDays, getYear, subDays, setYear, setMonth, isSameDay, isAfter, subMonths, parseISO } from 'date-fns';
 import { es } from 'date-fns/locale';
-import { CalendarIcon, Loader2, AlertTriangle, FileText, DollarSign, ChevronLeft, ChevronRight, ListChecks, Landmark } from 'lucide-react';
+import { CalendarIcon, Loader2, AlertTriangle, FileText, DollarSign, ChevronLeft, ChevronRight, ListChecks, Landmark, User, XIcon, Building } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+  DialogClose,
+} from '@/components/ui/dialog';
 
 
 interface DailyActivityReportItem {
@@ -58,6 +67,19 @@ interface DailyTotalsByLocation {
     totalsByMethod: Record<PaymentMethod, number>;
 }
 
+// Para el modal de detalles
+interface ProfessionalDetails {
+  professionalId: string;
+  professionalName: string;
+  period: string;
+  details: {
+    serviceName: string;
+    locationName: string;
+    quantity: number;
+    totalValue: number;
+  }[];
+}
+
 
 type ReportItem = DailyActivityReportItem | BiWeeklyEarningsReportItem | GroupedBiWeeklyReportItem;
 type ReportType = 'daily' | 'biWeekly';
@@ -81,6 +103,11 @@ export default function RegistryPage() {
   const [reportType, setReportType] = useState<ReportType>('daily');
   const [allServices, setAllServices] = useState<Service[] | null>(null);
   const [locations, setLocations] = useState<Location[]>([]);
+  
+  // Para el modal de detalles del profesional
+  const [isDetailsModalOpen, setIsDetailsModalOpen] = useState(false);
+  const [selectedProfessionalForDetails, setSelectedProfessionalForDetails] = useState<ProfessionalDetails | null>(null);
+  const [rawAppointmentsForPeriod, setRawAppointmentsForPeriod] = useState<Appointment[]>([]);
 
 
   const [selectedYear, setSelectedYear] = useState<number>(getYear(new Date()));
@@ -148,7 +175,6 @@ export default function RegistryPage() {
       }
       setIsLoading(true);
 
-      // We fetch ALL professionals to ensure we can map names correctly, even for those from other locations.
       const allSystemProfessionals = await fetchProfessionalsForReportContext();
       
       let appointmentsForDateResponse: { appointments: Appointment[] };
@@ -167,6 +193,7 @@ export default function RegistryPage() {
       }
       
       const appointmentsForDate = appointmentsForDateResponse.appointments || [];
+      setRawAppointmentsForPeriod(appointmentsForDate);
 
       const dailyReportMap = new Map<string, Omit<DailyActivityReportItem, 'professionalName' | 'locationName' | 'type' > & { services: Map<string, { serviceName: string, count: number }> }>();
       const locationTotalsMap = new Map<LocationId, DailyTotalsByLocation>();
@@ -177,23 +204,25 @@ export default function RegistryPage() {
         }
 
         // --- Logic for Daily Totals by Payment Method ---
-        if (appt.amountPaid && appt.amountPaid > 0 && appt.paymentMethod) {
+        let totalAmountForLocation = 0;
+        if (appt.amountPaid && appt.amountPaid > 0) {
+            totalAmountForLocation += appt.amountPaid;
+        }
+        appt.addedServices?.forEach(added => {
+            if (added.amountPaid && added.amountPaid > 0) {
+                totalAmountForLocation += added.amountPaid;
+            }
+        });
+
+        if (totalAmountForLocation > 0 && appt.paymentMethod) {
             const locTotals = locationTotalsMap.get(appt.locationId) || {
                 locationId: appt.locationId,
                 locationName: locations.find(l => l.id === appt.locationId)?.name || 'Desconocida',
                 totalRevenue: 0,
                 totalsByMethod: {}
             };
-            locTotals.totalRevenue += appt.amountPaid;
-            locTotals.totalsByMethod[appt.paymentMethod] = (locTotals.totalsByMethod[appt.paymentMethod] || 0) + appt.amountPaid;
-            
-            // Also account for added services payments under the same main payment method
-            appt.addedServices?.forEach(added => {
-                if (added.amountPaid && added.amountPaid > 0) {
-                     locTotals.totalRevenue += added.amountPaid;
-                     locTotals.totalsByMethod[appt.paymentMethod!] = (locTotals.totalsByMethod[appt.paymentMethod!] || 0) + added.amountPaid;
-                }
-            });
+            locTotals.totalRevenue += totalAmountForLocation;
+            locTotals.totalsByMethod[appt.paymentMethod] = (locTotals.totalsByMethod[appt.paymentMethod] || 0) + totalAmountForLocation;
             locationTotalsMap.set(appt.locationId, locTotals);
         }
 
@@ -246,7 +275,7 @@ export default function RegistryPage() {
       setDailyTotalsByLocation(Array.from(locationTotalsMap.values()));
 
       const finalReport: DailyActivityReportItem[] = Array.from(dailyReportMap.values()).map(item => {
-        const professional = allSystemProfessionals.find(p => p.id === item.professionalId); // Search in all professionals
+        const professional = allSystemProfessionals.find(p => p.id === item.professionalId); 
         const location = locations.find(l => l.id === item.locationId);
         const servicesBreakdownArray = Array.from(item.services.values()).sort((a,b) => b.count - a.count);
         const totalServicesCount = servicesBreakdownArray.reduce((sum, s) => sum + s.count, 0);
@@ -315,6 +344,7 @@ export default function RegistryPage() {
       }
       
       const appointmentsForPeriod = appointmentsForPeriodResponse.appointments || [];
+      setRawAppointmentsForPeriod(appointmentsForPeriod);
 
       const biWeeklyReportMap = new Map<string, { professionalId: string, locationId: LocationId, biWeeklyEarnings: number }>();
 
@@ -572,6 +602,51 @@ export default function RegistryPage() {
     }
     return prevQYear < availableYearsForAdmin[availableYearsForAdmin.length-1];
   };
+  
+  const handleOpenDetailsModal = (professionalId: string, professionalName: string) => {
+    const period = reportType === 'daily'
+      ? `del ${format(selectedDate, "PPP", { locale: es })}`
+      : `de la ${getBiWeeklyPeriodDescription()}`;
+
+    const serviceMap = new Map<string, { serviceName: string; locationName: string; quantity: number; totalValue: number }>();
+
+    rawAppointmentsForPeriod.forEach(appt => {
+      // Process main service
+      if (appt.professionalId === professionalId) {
+        const key = `${appt.serviceId}-${appt.locationId}`;
+        const entry = serviceMap.get(key) || {
+          serviceName: appt.service?.name || 'Servicio Desconocido',
+          locationName: locations.find(l => l.id === appt.locationId)?.name || 'Sede Desc.',
+          quantity: 0,
+          totalValue: 0,
+        };
+        entry.quantity += 1;
+        entry.totalValue += appt.amountPaid || 0;
+        serviceMap.set(key, entry);
+      }
+
+      // Process added services
+      appt.addedServices?.forEach(added => {
+        const profId = added.professionalId || appt.professionalId;
+        if (profId === professionalId) {
+          const key = `${added.serviceId}-${appt.locationId}`;
+          const entry = serviceMap.get(key) || {
+            serviceName: allServices?.find(s => s.id === added.serviceId)?.name || 'Serv. Adicional Desc.',
+            locationName: locations.find(l => l.id === appt.locationId)?.name || 'Sede Desc.',
+            quantity: 0,
+            totalValue: 0,
+          };
+          entry.quantity += 1;
+          entry.totalValue += added.amountPaid || 0;
+          serviceMap.set(key, entry);
+        }
+      });
+    });
+
+    const details = Array.from(serviceMap.values());
+    setSelectedProfessionalForDetails({ professionalId, professionalName, period, details });
+    setIsDetailsModalOpen(true);
+  };
 
 
   const LoadingState = () => (
@@ -746,7 +821,11 @@ export default function RegistryPage() {
                       <React.Fragment key={`${group.locationId}-grouped-report-${index}`}>
                         {(group.professionals || []).map(item => (
                           <TableRow key={`${item.professionalId}-${group.locationId}-biWeekly-${index}`}>
-                            <TableCell className="font-medium">{item.professionalName}</TableCell>
+                            <TableCell className="font-medium">
+                               <Button variant="link" className="p-0 h-auto text-current" onClick={() => handleOpenDetailsModal(item.professionalId, item.professionalName)}>
+                                {item.professionalName}
+                               </Button>
+                            </TableCell>
                             <TableCell>{item.locationName}</TableCell>
                             <TableCell className="text-right">{(item.biWeeklyEarnings || 0).toFixed(2)}</TableCell>
                           </TableRow>
@@ -760,7 +839,11 @@ export default function RegistryPage() {
                   ) : (
                     (reportData as (DailyActivityReportItem | BiWeeklyEarningsReportItem)[]).map((item, idx) => (
                       <TableRow key={`${item.professionalId}-${(item as any).locationName || idx}-${item.type}-${idx}`}>
-                        <TableCell className="font-medium">{item.professionalName}</TableCell>
+                        <TableCell className="font-medium">
+                           <Button variant="link" className="p-0 h-auto text-current" onClick={() => handleOpenDetailsModal(item.professionalId, item.professionalName)}>
+                             {item.professionalName}
+                           </Button>
+                        </TableCell>
                         {(isAdminOrContador && adminSelectedLocation === 'all' && item.type !== 'biWeeklyGrouped') && <TableCell>{item.locationName}</TableCell>}
                         {item.type === 'daily' && (
                           <TableCell>
@@ -800,6 +883,60 @@ export default function RegistryPage() {
           )}
         </CardContent>
       </Card>
+      
+      {/* Details Modal */}
+      <Dialog open={isDetailsModalOpen} onOpenChange={setIsDetailsModalOpen}>
+        <DialogContent className="sm:max-w-xl">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <User size={20} />
+              Detalle de Servicios de {selectedProfessionalForDetails?.professionalName}
+            </DialogTitle>
+            <DialogDescription>
+              Mostrando el detalle de servicios realizados en el período {selectedProfessionalForDetails?.period}.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="max-h-[60vh] overflow-y-auto">
+            {selectedProfessionalForDetails && selectedProfessionalForDetails.details.length > 0 ? (
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Servicio</TableHead>
+                    <TableHead><Building size={14} className="inline-block mr-1"/>Sede</TableHead>
+                    <TableHead className="text-center">Cantidad</TableHead>
+                    <TableHead className="text-right">Valor Total (S/)</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {selectedProfessionalForDetails.details.map((detail, index) => (
+                    <TableRow key={index}>
+                      <TableCell className="font-medium">{detail.serviceName}</TableCell>
+                      <TableCell>{detail.locationName}</TableCell>
+                      <TableCell className="text-center">{detail.quantity}</TableCell>
+                      <TableCell className="text-right">{detail.totalValue.toFixed(2)}</TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+                <TableFooter>
+                  <TableRow className="font-bold">
+                    <TableCell colSpan={3}>Total General</TableCell>
+                    <TableCell className="text-right">
+                      S/ {selectedProfessionalForDetails.details.reduce((sum, d) => sum + d.totalValue, 0).toFixed(2)}
+                    </TableCell>
+                  </TableRow>
+                </TableFooter>
+              </Table>
+            ) : (
+              <p className="text-center text-muted-foreground py-8">No se encontraron detalles de servicios para este profesional en el período seleccionado.</p>
+            )}
+          </div>
+          <DialogFooter>
+            <DialogClose asChild>
+              <Button variant="outline">Cerrar</Button>
+            </DialogClose>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
