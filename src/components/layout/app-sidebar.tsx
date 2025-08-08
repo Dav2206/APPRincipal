@@ -38,7 +38,7 @@ const navItems = [
   { href: '/registry', label: 'Registro Diario', icon: FileText, roles: [USER_ROLES.LOCATION_STAFF, USER_ROLES.CONTADOR] },
   { href: '/professionals', label: 'Profesionales', icon: Briefcase, roles: [USER_ROLES.ADMIN, USER_ROLES.CONTADOR] },
   { href: '/contracts', label: 'Contratos', icon: FileSpreadsheet, roles: [USER_ROLES.ADMIN, USER_ROLES.CONTADOR] },
-  { href: '/percentages', label: 'Porcentajes', icon: TrendingUp, roles: [USER_ROLES.ADMIN, USER_ROLES.CONTADOR, USER_ROLES.LOCATION_STAFF] },
+  { href: '/percentages', label: 'Porcentajes', icon: TrendingUp, roles: [USER_ROLES.CONTADOR, USER_ROLES.LOCATION_STAFF] },
   { href: '/services', label: 'Servicios', icon: ClipboardList, roles: [USER_ROLES.ADMIN] }, 
   { href: '/finanzas', label: 'Finanzas', icon: Landmark, roles: [USER_ROLES.CONTADOR] },
   { href: '/reminders', label: 'Recordatorios', icon: Bell, roles: [USER_ROLES.ADMIN, USER_ROLES.CONTADOR] },
