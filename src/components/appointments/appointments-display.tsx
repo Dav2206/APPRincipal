@@ -6,7 +6,7 @@ import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useAuth } from '@/contexts/auth-provider';
 import { useAppState } from '@/contexts/app-state-provider';
 import { getAppointments, getProfessionals, getLocations } from '@/lib/data';
-import { USER_ROLES, LocationId } from '@/lib/constants';
+import { USER_ROLES, LocationId, APPOINTMENT_STATUS } from '@/lib/constants';
 import { AppointmentCard } from './appointment-card';
 import { AppointmentForm } from './appointment-form';
 import { Button } from '@/components/ui/button';
@@ -15,7 +15,7 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { format, addDays, subDays, startOfDay, isEqual, parseISO } from 'date-fns';
 import { es } from 'date-fns/locale';
-import { CalendarIcon, ChevronLeftIcon, ChevronRightIcon, PlusCircleIcon, AlertTriangle, Loader2, ZoomIn, ZoomOut, RefreshCw, XIcon } from 'lucide-react';
+import { CalendarIcon, ChevronLeftIcon, ChevronRightIcon, PlusCircleIcon, AlertTriangle, Loader2, ZoomIn, ZoomOut, RefreshCw, XIcon, DollarSign } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogClose } from '@/components/ui/dialog';
 import Image from 'next/image';
@@ -30,6 +30,7 @@ export function AppointmentsDisplay() {
   const [isLoading, setIsLoading] = useState(true);
   const [isLoadingProfessionals, setIsLoadingProfessionals] = useState(true);
   const [isFormOpen, setIsFormOpen] = useState(false);
+  const [filterPendingPayment, setFilterPendingPayment] = useState(false);
 
   // State for image modal
   const [selectedImageForModal, setSelectedImageForModal] = useState<string | null>(null);
@@ -107,6 +108,15 @@ export function AppointmentsDisplay() {
     return allSystemProfessionals.filter(p => p.locationId === effectiveLocationId);
   }, [allSystemProfessionals, effectiveLocationId]);
 
+  const filteredAppointments = useMemo(() => {
+    if (filterPendingPayment) {
+      return appointments.filter(
+        (appt) => appt.status === APPOINTMENT_STATUS.COMPLETED && (!appt.amountPaid || appt.amountPaid <= 0 || !appt.paymentMethod)
+      );
+    }
+    return appointments;
+  }, [appointments, filterPendingPayment]);
+
 
   const handleDateChange = (date: Date | undefined) => {
     if (date) {
@@ -180,9 +190,11 @@ export function AppointmentsDisplay() {
     <Card className="col-span-full mt-8 border-dashed border-2">
       <CardContent className="py-10 text-center">
         <AlertTriangle className="mx-auto h-12 w-12 text-muted-foreground mb-4" />
-        <h3 className="text-xl font-semibold mb-2">No hay citas programadas</h3>
+        <h3 className="text-xl font-semibold mb-2">{filterPendingPayment ? "No hay Citas con Pagos Pendientes" : "No hay citas programadas"}</h3>
         <p className="text-muted-foreground mb-4">
-          No se encontraron citas para {effectiveLocationId ? locations.find(l=>l.id === effectiveLocationId)?.name : 'todas las sedes'} en la fecha seleccionada.
+          {filterPendingPayment
+            ? "No se encontraron citas completadas sin pago registrado para la fecha seleccionada."
+            : `No se encontraron citas para ${effectiveLocationId ? locations.find(l => l.id === effectiveLocationId)?.name : 'todas las sedes'} en la fecha seleccionada.`}
         </p>
         {(user?.role === USER_ROLES.ADMIN || user?.role === USER_ROLES.LOCATION_STAFF || user?.role === USER_ROLES.CONTADOR) && (
           <Button onClick={() => setIsFormOpen(true)} disabled={isLoadingProfessionals && isFormOpen}>
@@ -243,19 +255,29 @@ export function AppointmentsDisplay() {
           )}
         </CardHeader>
         <CardContent>
-          {(user?.role === USER_ROLES.ADMIN || user?.role === USER_ROLES.LOCATION_STAFF || user?.role === USER_ROLES.CONTADOR) && (
-             <Button onClick={() => setIsFormOpen(true)} className="mb-6 w-full md:w-auto" disabled={isLoadingProfessionals && isFormOpen}>
-              {isLoadingProfessionals && isFormOpen ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <PlusCircleIcon className="mr-2 h-4 w-4" />}
-               Agendar Nueva Cita
+          <div className="flex flex-col md:flex-row gap-4 mb-6">
+            {(user?.role === USER_ROLES.ADMIN || user?.role === USER_ROLES.LOCATION_STAFF || user?.role === USER_ROLES.CONTADOR) && (
+              <Button onClick={() => setIsFormOpen(true)} className="w-full md:w-auto" disabled={isLoadingProfessionals && isFormOpen}>
+                {isLoadingProfessionals && isFormOpen ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <PlusCircleIcon className="mr-2 h-4 w-4" />}
+                Agendar Nueva Cita
+              </Button>
+            )}
+            <Button
+              onClick={() => setFilterPendingPayment(!filterPendingPayment)}
+              variant={filterPendingPayment ? "secondary" : "outline"}
+              className="w-full md:w-auto"
+            >
+              <DollarSign className="mr-2 h-4 w-4" />
+              {filterPendingPayment ? "Mostrar Todas las Citas" : "Ver Pagos Pendientes"}
             </Button>
-          )}
+          </div>
           {isLoading ? (
             <LoadingState />
-          ) : appointments.length === 0 ? (
+          ) : filteredAppointments.length === 0 ? (
             <NoAppointmentsCard />
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-              {appointments.map(appt => (
+              {filteredAppointments.map(appt => (
                 <AppointmentCard key={appt.id} appointment={appt} onUpdate={handleAppointmentUpdate} onImageClick={handleImageClick} />
               ))}
             </div>
