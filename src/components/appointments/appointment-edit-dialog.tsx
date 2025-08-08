@@ -498,7 +498,7 @@ export function AppointmentEditDialog({ appointment, isOpen, onOpenChange, onApp
                 </Select><FormMessage />
               </FormItem>
             )}/>
-            {(form.watch('status') === APPOINTMENT_STATUS.CONFIRMED || form.watch('status') === APPOINTMENT_STATUS.COMPLETED) && (
+            {(form.watch('status') === APPOINTMENT_STATUS.BOOKED || form.watch('status') === APPOINTMENT_STATUS.CONFIRMED || form.watch('status') === APPOINTMENT_STATUS.COMPLETED) && (
               <FormField control={form.control} name="professionalId" render={({ field }) => (
                 <FormItem>
                   <FormLabel>Profesional que Atendió</FormLabel>
