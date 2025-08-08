@@ -1,4 +1,3 @@
-
 "use client";
 
 import React, { useState } from 'react';
@@ -14,7 +13,7 @@ import { useAppState } from '@/contexts/app-state-provider';
 import { format } from 'date-fns';
 
 export default function DictationPage() {
-  const [command, setCommand] = useState('9 carlos sanchez podo');
+  const [command, setCommand] = useState('');
   const [response, setResponse] = useState<DictationOutput | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
