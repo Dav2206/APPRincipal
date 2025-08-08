@@ -19,6 +19,7 @@ interface DailyTimelineProps {
   timeSlots: string[];
   currentDate: Date;
   onAppointmentClick?: (appointment: Appointment, serviceId?: string) => void;
+  onAppointmentDrop: (appointmentId: string, newProfessionalId: string) => void;
   viewingLocationId: LocationId;
   locations: Location[];
 }
@@ -69,7 +70,7 @@ const isOverlapping = (blockA: RenderableServiceBlock, blockB: RenderableService
 };
 
 
-const DailyTimelineComponent = ({ professionals, appointments, timeSlots, onAppointmentClick, viewingLocationId, currentDate, locations }: DailyTimelineProps) => {
+const DailyTimelineComponent = ({ professionals, appointments, timeSlots, onAppointmentClick, onAppointmentDrop, viewingLocationId, currentDate, locations }: DailyTimelineProps) => {
   const allServiceBlocks: RenderableServiceBlock[] = [];
 
   const relevantAppointments = appointments;
@@ -188,6 +189,23 @@ const DailyTimelineComponent = ({ professionals, appointments, timeSlots, onAppo
 
   const totalTimelineHeight = (timeSlots.length * 30 * PIXELS_PER_MINUTE) + PIXELS_PER_MINUTE * 30;
 
+  const handleDragStart = (e: React.DragEvent<HTMLDivElement>, appointmentId: string) => {
+    e.dataTransfer.setData("appointmentId", appointmentId);
+  };
+  
+  const handleDragOver = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault(); // This is necessary to allow dropping
+  };
+  
+  const handleDrop = (e: React.DragEvent<HTMLDivElement>, newProfessionalId: string) => {
+    e.preventDefault();
+    const appointmentId = e.dataTransfer.getData("appointmentId");
+    if (appointmentId && newProfessionalId) {
+      onAppointmentDrop(appointmentId, newProfessionalId);
+    }
+  };
+
+
   return (
     <TooltipProvider>
       <ScrollArea className="w-full whitespace-nowrap rounded-md border">
@@ -228,7 +246,12 @@ const DailyTimelineComponent = ({ professionals, appointments, timeSlots, onAppo
               }
 
               return (
-                <div key={prof.id} className="min-w-[120px] md:min-w-[150px] border-r relative">
+                <div 
+                  key={prof.id} 
+                  className="min-w-[120px] md:min-w-[150px] border-r relative"
+                  onDragOver={handleDragOver}
+                  onDrop={(e) => handleDrop(e, prof.id)}
+                >
                   <div className="sticky top-0 z-10 h-16 flex items-center justify-center font-semibold border-b bg-background p-2 text-sm truncate" title={`${prof.firstName} ${prof.lastName}`}>
                     {prof.firstName} {prof.lastName.split(' ')[0]}
                     {overlappingServiceBlockIds.size > 0 && (
@@ -306,6 +329,8 @@ const DailyTimelineComponent = ({ professionals, appointments, timeSlots, onAppo
                         <Tooltip key={block.id} delayDuration={100}>
                           <TooltipTrigger asChild>
                             <div
+                              draggable
+                              onDragStart={(e) => handleDragStart(e, block.originalAppointmentId)}
                               className={cn(
                                 "absolute left-1 right-1 rounded-md p-1.5 shadow-md text-xs overflow-hidden cursor-pointer transition-all flex flex-col justify-start border",
                                 blockBgClass,

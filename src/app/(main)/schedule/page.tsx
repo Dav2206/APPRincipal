@@ -6,7 +6,7 @@ import type { Appointment, Professional, Location } from '@/types';
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useAuth } from '@/contexts/auth-provider';
 import { useAppState } from '@/contexts/app-state-provider';
-import { getAppointments, getProfessionals, getAppointmentById, getProfessionalAvailabilityForDate, getLocations, getProfessionalById } from '@/lib/data';
+import { getAppointments, getProfessionals, getAppointmentById, getProfessionalAvailabilityForDate, getLocations, getProfessionalById, updateAppointmentProfessional } from '@/lib/data';
 import { USER_ROLES, TIME_SLOTS, LocationId, APPOINTMENT_STATUS } from '@/lib/constants';
 import { DailyTimeline } from '@/components/schedule/daily-timeline';
 import { Button } from '@/components/ui/button';
@@ -190,6 +190,34 @@ const fetchData = useCallback(async () => {
       setIsEditModalOpen(true);
     }
   }, [toast]);
+  
+  const handleAppointmentDrop = useCallback(async (appointmentId: string, newProfessionalId: string) => {
+    const originalAppointment = appointments.find(a => a.id === appointmentId);
+    if (!originalAppointment || originalAppointment.professionalId === newProfessionalId) {
+        return; // No change needed
+    }
+
+    try {
+        const updatedAppointment = await updateAppointmentProfessional(appointmentId, newProfessionalId);
+        if (updatedAppointment) {
+            toast({
+                title: "Cita Reasignada",
+                description: `La cita de ${updatedAppointment.patient?.firstName || 'Paciente'} ha sido movida al profesional ${updatedAppointment.professional?.firstName || 'nuevo'}.`,
+            });
+            fetchData(); // Refreshes the timeline with the new data
+        } else {
+            throw new Error("La actualización no devolvió la cita actualizada.");
+        }
+    } catch (error) {
+        console.error("Error reassigning appointment:", error);
+        toast({
+            title: "Error al Reasignar",
+            description: "No se pudo cambiar el profesional de la cita.",
+            variant: "destructive",
+        });
+    }
+  }, [appointments, fetchData, toast]);
+
 
   const handleAppointmentUpdated = useCallback((updatedOrDeletedAppointment: Appointment | null | { id: string; _deleted: true }) => {
     fetchData(); 
@@ -367,6 +395,7 @@ const fetchData = useCallback(async () => {
               timeSlots={timeSlotsForView}
               currentDate={currentDate}
               onAppointmentClick={handleTimelineAppointmentClick}
+              onAppointmentDrop={handleAppointmentDrop}
               viewingLocationId={actualEffectiveLocationId!} 
               locations={locations}
             />

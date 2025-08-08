@@ -1342,7 +1342,6 @@ export async function updateAppointment(
 }
 
 
-
 export async function deleteAppointment(appointmentId: string): Promise<boolean> {
   console.log(`[data.ts] deleteAppointment. ID: ${appointmentId}`);
 
@@ -1377,6 +1376,19 @@ export async function deleteAppointment(appointmentId: string): Promise<boolean>
     console.error(`[data.ts] deleteAppointment (Firestore): Error deleting appointment ${appointmentId}:`, error);
     return false;
   }
+}
+
+export async function updateAppointmentProfessional(appointmentId: string, newProfessionalId: string): Promise<Appointment | undefined> {
+    if (!firestore) {
+        throw new Error("Firestore not initialized.");
+    }
+    const docRef = doc(firestore, 'citas', appointmentId);
+    await updateDoc(docRef, {
+        professionalId: newProfessionalId,
+        updatedAt: serverTimestamp(),
+    });
+
+    return getAppointmentById(appointmentId);
 }
 
 
@@ -1701,5 +1713,6 @@ export async function mergePatients(primaryPatientId: string, duplicateIds: stri
 }
 
 // --- End Maintenance ---
+
 
 
