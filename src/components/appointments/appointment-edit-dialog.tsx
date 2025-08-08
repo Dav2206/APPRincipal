@@ -387,39 +387,18 @@ export function AppointmentEditDialog({ appointment, isOpen, onOpenChange, onApp
   const handleDelete = async () => {
     setIsDeleting(true);
     try {
-      await updateAppointmentData(appointment.id, {
-        status: APPOINTMENT_STATUS.CANCELLED_CLIENT,
-      });
-      toast({ title: "Cita Cancelada", description: "La cita ha sido marcada como cancelada por el cliente." });
-      onAppointmentUpdated({ ...appointment, status: APPOINTMENT_STATUS.CANCELLED_CLIENT });
+      await deleteAppointmentData(appointment.id);
+      toast({ title: "Cita Eliminada", description: "La cita ha sido eliminada permanentemente." });
+      onAppointmentUpdated({ id: appointment.id, _deleted: true });
       setIsConfirmDeleteOpen(false);
       onOpenChange(false);
     } catch (error) {
-      console.error("Error cancelling appointment:", error);
-      toast({ title: "Error", description: "No se pudo cancelar la cita.", variant: "destructive" });
+      console.error("Error deleting appointment:", error);
+      toast({ title: "Error", description: "No se pudo eliminar la cita.", variant: "destructive" });
     } finally {
       setIsDeleting(false);
     }
   };
-
-  const handleReprogram = async () => {
-    setIsDeleting(true); // Re-use deleting state for loading indicator
-    try {
-      await updateAppointmentData(appointment.id, {
-        status: APPOINTMENT_STATUS.BOOKED,
-        professionalId: null, // Un-assign professional
-      });
-      toast({ title: "Cita Lista para Reprogramar", description: "La cita ha vuelto al estado 'Reservado' y sin profesional. Puede moverla en la agenda." });
-      onAppointmentUpdated({ ...appointment, status: APPOINTMENT_STATUS.BOOKED, professionalId: null });
-      setIsConfirmDeleteOpen(false);
-      onOpenChange(false);
-    } catch (error) {
-      console.error("Error setting appointment to reprogram:", error);
-      toast({ title: "Error", description: "No se pudo preparar la cita para reprogramar.", variant: "destructive" });
-    } finally {
-      setIsDeleting(false);
-    }
-  }
 
 
   if (!isOpen) return null;
@@ -681,11 +660,28 @@ export function AppointmentEditDialog({ appointment, isOpen, onOpenChange, onApp
           <DialogFooter className="pt-4 flex flex-col sm:flex-row sm:justify-between sm:items-center gap-2">
             <div>
               {user && (user.role === USER_ROLES.ADMIN || user.role === USER_ROLES.LOCATION_STAFF) && (
-                 <div className="flex gap-2">
-                    <Button variant="destructive" type="button" onClick={handleDelete} disabled={isDeleting}>
-                      <XCircle className="mr-2 h-4 w-4" />Cancelar Cita
+                <AlertDialog open={isConfirmDeleteOpen} onOpenChange={setIsConfirmDeleteOpen}>
+                  <AlertDialogTrigger asChild>
+                    <Button variant="destructive" type="button">
+                      <Trash2 className="mr-2 h-4 w-4" />Eliminar Cita
                     </Button>
-                 </div>
+                  </AlertDialogTrigger>
+                  <AlertDialogContent>
+                    <AlertDialogHeader>
+                      <AlertDialogTitle>¿Está seguro?</AlertDialogTitle>
+                      <AlertDialogDescription>
+                        Esta acción eliminará permanentemente la cita de la base de datos. No se puede deshacer.
+                      </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                      <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                      <AlertDialogAction onClick={handleDelete} disabled={isDeleting} className={buttonVariants({ variant: "destructive" })}>
+                        {isDeleting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                        Sí, eliminar
+                      </AlertDialogAction>
+                    </AlertDialogFooter>
+                  </AlertDialogContent>
+                </AlertDialog>
               )}
             </div>
             <div className="flex flex-col-reverse sm:flex-row sm:justify-end sm:space-x-2">
