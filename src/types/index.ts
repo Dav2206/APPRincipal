@@ -1,4 +1,5 @@
 
+
 import type { LocationId, UserRole, PaymentMethod, AppointmentStatus, DayOfWeekId } from '../lib/constants';
 
 export interface BaseEntity {
@@ -174,7 +175,11 @@ export type AppointmentUpdateFormData = {
   appointmentTime?: string;
   actualArrivalTime?: string | null;
   professionalId?: string | null;
-  durationMinutes?: number | null;
+  duration?: {
+    hours: number;
+    minutes: number;
+  };
+  durationMinutes?: number | null; // This will be calculated from duration
   paymentMethod?: PaymentMethod | null;
   amountPaid?: number | null;
   staffNotes?: string | null;

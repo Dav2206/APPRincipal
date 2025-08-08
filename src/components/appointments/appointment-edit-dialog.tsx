@@ -259,7 +259,10 @@ export function AppointmentEditDialog({ appointment, isOpen, onOpenChange, onApp
         appointmentTime: format(appointmentDateTime, 'HH:mm'),
         actualArrivalTime: appointment.actualArrivalTime || undefined,
         professionalId: appointment.professionalId || NO_SELECTION_PLACEHOLDER,
-        durationMinutes: initialDurationMinutes,
+        duration: {
+          hours: Math.floor(initialDurationMinutes / 60),
+          minutes: initialDurationMinutes % 60,
+        },
         paymentMethod: appointment.paymentMethod || undefined,
         amountPaid: appointment.amountPaid ?? undefined,
         staffNotes: appointment.staffNotes || '',
@@ -346,13 +349,14 @@ export function AppointmentEditDialog({ appointment, isOpen, onOpenChange, onApp
           return;
       }
 
+      const totalDurationMinutes = (data.duration?.hours ?? 0) * 60 + (data.duration?.minutes ?? 0);
 
       const updatedData: Partial<Appointment> & { attachedPhotos?: { url: string }[] } = {
         ...data,
         appointmentDateTime: formatISO(finalDateObject),
         serviceId: finalServiceId,
         professionalId: data.professionalId === NO_SELECTION_PLACEHOLDER ? null : data.professionalId,
-        durationMinutes: data.durationMinutes,
+        durationMinutes: totalDurationMinutes,
         amountPaid: data.amountPaid,
         actualArrivalTime: data.actualArrivalTime || null,
         attachedPhotos: (data.attachedPhotos || []).filter(p => p && p.url),
@@ -383,22 +387,39 @@ export function AppointmentEditDialog({ appointment, isOpen, onOpenChange, onApp
   const handleDelete = async () => {
     setIsDeleting(true);
     try {
-      const success = await deleteAppointmentData(appointment.id);
-      if (success) {
-        toast({ title: "Cita Eliminada", description: "La cita ha sido eliminada exitosamente." });
-        onAppointmentUpdated({ id: appointment.id, _deleted: true }); 
-        setIsConfirmDeleteOpen(false);
-        onOpenChange(false); 
-      } else {
-        toast({ title: "Error", description: "No se pudo eliminar la cita.", variant: "destructive" });
-      }
+      await updateAppointmentData(appointment.id, {
+        status: APPOINTMENT_STATUS.CANCELLED_CLIENT,
+      });
+      toast({ title: "Cita Cancelada", description: "La cita ha sido marcada como cancelada por el cliente." });
+      onAppointmentUpdated({ ...appointment, status: APPOINTMENT_STATUS.CANCELLED_CLIENT });
+      setIsConfirmDeleteOpen(false);
+      onOpenChange(false);
     } catch (error) {
-      console.error("Error deleting appointment:", error);
-      toast({ title: "Error Inesperado", description: "Ocurrió un error al eliminar la cita.", variant: "destructive" });
+      console.error("Error cancelling appointment:", error);
+      toast({ title: "Error", description: "No se pudo cancelar la cita.", variant: "destructive" });
     } finally {
       setIsDeleting(false);
     }
   };
+
+  const handleReprogram = async () => {
+    setIsDeleting(true); // Re-use deleting state for loading indicator
+    try {
+      await updateAppointmentData(appointment.id, {
+        status: APPOINTMENT_STATUS.BOOKED,
+        professionalId: null, // Un-assign professional
+      });
+      toast({ title: "Cita Lista para Reprogramar", description: "La cita ha vuelto al estado 'Reservado' y sin profesional. Puede moverla en la agenda." });
+      onAppointmentUpdated({ ...appointment, status: APPOINTMENT_STATUS.BOOKED, professionalId: null });
+      setIsConfirmDeleteOpen(false);
+      onOpenChange(false);
+    } catch (error) {
+      console.error("Error setting appointment to reprogram:", error);
+      toast({ title: "Error", description: "No se pudo preparar la cita para reprogramar.", variant: "destructive" });
+    } finally {
+      setIsDeleting(false);
+    }
+  }
 
 
   if (!isOpen) return null;
@@ -416,10 +437,10 @@ export function AppointmentEditDialog({ appointment, isOpen, onOpenChange, onApp
           </DialogDescription>
         </DialogHeader>
         <Form {...form}>
-        <form onSubmit={form.handleSubmit(onSubmitUpdate)} className="space-y-4 py-4 max-h-[70vh] overflow-y-auto pr-2">
+        <form onSubmit={form.handleSubmit(onSubmitUpdate)} className="space-y-2 py-2 max-h-[70vh] overflow-y-auto pr-2">
           
            {/* -- Section: Estado y Horario -- */}
-          <div className="space-y-4 p-4 border rounded-lg bg-muted/30">
+          <div className="space-y-2 p-3 border rounded-lg bg-muted/30">
             <FormField
               control={form.control}
               name="status"
@@ -440,15 +461,15 @@ export function AppointmentEditDialog({ appointment, isOpen, onOpenChange, onApp
                 </FormItem>
               )}
             />
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <FormField
                 control={form.control}
                 name="appointmentDate"
                 render={({ field }) => (
                   <FormItem className="flex flex-col">
-                    <FormLabel className="flex items-center gap-1"><CalendarIconLucide size={16}/>Fecha de la Cita</FormLabel>
+                    <FormLabel className="flex items-center gap-1 text-xs"><CalendarIconLucide size={14}/>Fecha de la Cita</FormLabel>
                     <Popover><PopoverTrigger asChild><FormControl>
-                      <Button variant="outline" className={cn("pl-3 text-left font-normal", !field.value && "text-muted-foreground")}>
+                      <Button variant="outline" className={cn("pl-3 text-left font-normal h-9", !field.value && "text-muted-foreground")}>
                         {field.value ? format(field.value, "PPP", { locale: es }) : <span>Seleccionar fecha</span>}
                         <CalendarIconLucide className="ml-auto h-4 w-4 opacity-50" />
                       </Button>
@@ -463,26 +484,49 @@ export function AppointmentEditDialog({ appointment, isOpen, onOpenChange, onApp
                 name="appointmentTime"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel className="flex items-center gap-1"><Clock size={16}/>Hora de la Cita</FormLabel>
+                    <FormLabel className="flex items-center gap-1 text-xs"><Clock size={14}/>Hora de la Cita</FormLabel>
                      <FormControl>
-                      <Input id="appointmentTime" type="time" {...field} value={field.value || ''} />
+                      <Input id="appointmentTime" type="time" {...field} value={field.value || ''} className="h-9"/>
                     </FormControl>
                     <FormMessage />
                   </FormItem>
                 )}
               />
             </div>
-             <FormField
-                control={form.control}
-                name="durationMinutes"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel className="flex items-center gap-1"><Clock size={16}/>Duración del servicio (minutos)</FormLabel>
-                    <FormControl><Input type="number" {...field} value={field.value ?? ''} onChange={e => field.onChange(parseInt(e.target.value, 10) || 0)} /></FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
+             
+             {form.watch('status') === APPOINTMENT_STATUS.COMPLETED && (
+                <div>
+                    <FormLabel className="flex items-center gap-1 text-xs"><Clock size={14}/>Duración Real del Servicio</FormLabel>
+                    <div className="grid grid-cols-2 gap-3 mt-1">
+                    <FormField
+                        control={form.control}
+                        name="duration.hours"
+                        render={({ field }) => (
+                        <FormItem>
+                            <FormLabel className="text-xs text-muted-foreground">Horas</FormLabel>
+                            <FormControl><Input className="h-9" type="number" placeholder="Ej: 1" {...field} onChange={e => field.onChange(parseInt(e.target.value,10) || 0)} /></FormControl>
+                            <FormMessage />
+                        </FormItem>
+                        )}
+                    />
+                    <FormField
+                        control={form.control}
+                        name="duration.minutes"
+                        render={({ field }) => (
+                        <FormItem>
+                            <FormLabel className="text-xs text-muted-foreground">Minutos</FormLabel>
+                            <FormControl><Input className="h-9" type="number" placeholder="Ej: 30" {...field} onChange={e => field.onChange(parseInt(e.target.value,10) || 0)} /></FormControl>
+                            <FormMessage />
+                        </FormItem>
+                        )}
+                    />
+                    </div>
+                    {form.formState.errors.duration?.root?.message && (
+                        <p className="text-sm font-medium text-destructive mt-1">{form.formState.errors.duration.root.message}</p>
+                    )}
+                </div>
+             )}
+
              {form.watch('status') === APPOINTMENT_STATUS.CONFIRMED && (
               <FormField control={form.control} name="actualArrivalTime" render={({ field }) => (
                   <FormItem>
@@ -494,7 +538,7 @@ export function AppointmentEditDialog({ appointment, isOpen, onOpenChange, onApp
           </div>
           
           {/* -- Section: Detalles del Servicio -- */}
-          <div className="space-y-4 p-4 border rounded-lg bg-muted/30">
+          <div className="space-y-3 p-3 border rounded-lg bg-muted/30">
              <FormField control={form.control} name="serviceId" render={({ field }) => (
               <FormItem>
                 <FormLabel className="flex items-center gap-1"><ConciergeBell size={16}/>Servicio Principal</FormLabel>
@@ -536,8 +580,8 @@ export function AppointmentEditDialog({ appointment, isOpen, onOpenChange, onApp
 
           {/* -- Section: Pago (si está completado) -- */}
           {form.watch('status') === APPOINTMENT_STATUS.COMPLETED && (
-            <div className="space-y-4 p-4 border rounded-lg bg-muted/30">
-               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div className="space-y-3 p-3 border rounded-lg bg-muted/30">
+               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <FormField control={form.control} name="paymentMethod" render={({ field }) => (
                   <FormItem><FormLabel className="flex items-center gap-1"><DollarSign size={16}/>Método de Pago</FormLabel>
                      <Select onValueChange={field.onChange} value={field.value || undefined}><FormControl><SelectTrigger><SelectValue placeholder="Seleccionar" /></SelectTrigger></FormControl>
@@ -557,7 +601,7 @@ export function AppointmentEditDialog({ appointment, isOpen, onOpenChange, onApp
           )}
 
           {/* -- Section: Notas y Fotos -- */}
-          <div className="space-y-4 p-4 border rounded-lg bg-muted/30">
+          <div className="space-y-3 p-3 border rounded-lg bg-muted/30">
             <FormField control={form.control} name="staffNotes" render={({ field }) => (
               <FormItem><FormLabel className="flex items-center gap-1"><Edit size={16}/>Notas del Staff (Internas)</FormLabel>
                 <FormControl><Textarea placeholder="Añadir observaciones sobre la cita..." {...field} value={field.value || ''} /></FormControl><FormMessage/>
@@ -590,7 +634,7 @@ export function AppointmentEditDialog({ appointment, isOpen, onOpenChange, onApp
           
            {/* -- Section: Servicios Adicionales -- */}
            {(form.watch('status') === APPOINTMENT_STATUS.CONFIRMED || form.watch('status') === APPOINTMENT_STATUS.COMPLETED) && !isLoadingServices && allServices && (
-             <div className="space-y-4 p-4 border rounded-lg bg-muted/30">
+             <div className="space-y-3 p-3 border rounded-lg bg-muted/30">
               <div className="flex justify-between items-center"><h4 className="text-md font-semibold flex items-center gap-2"><ShoppingBag/> Servicios Adicionales</h4>
                 <Button type="button" size="sm" variant="outline" onClick={() => appendAddedService({ serviceId: allServices?.length ? allServices[0].id : DEFAULT_SERVICE_ID_PLACEHOLDER, professionalId: NO_SELECTION_PLACEHOLDER, amountPaid: undefined, startTime: undefined })}><PlusCircle className="mr-2 h-4 w-4" /> Agregar</Button>
               </div>
@@ -634,30 +678,21 @@ export function AppointmentEditDialog({ appointment, isOpen, onOpenChange, onApp
            )}
 
 
-          <DialogFooter className="pt-6 flex flex-col sm:flex-row sm:justify-between sm:items-center gap-2">
+          <DialogFooter className="pt-4 flex flex-col sm:flex-row sm:justify-between sm:items-center gap-2">
             <div>
-              {user && user.role === USER_ROLES.ADMIN && (
-                <AlertDialog open={isConfirmDeleteOpen} onOpenChange={setIsConfirmDeleteOpen}>
-                  <AlertDialogTrigger asChild>
-                    <Button variant="destructive" type="button" className="w-full sm:w-auto" disabled={isDeleting}>
-                      {isDeleting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}<Trash2 className="mr-2 h-4 w-4" />Eliminar Cita
+              {user && (user.role === USER_ROLES.ADMIN || user.role === USER_ROLES.LOCATION_STAFF) && (
+                 <div className="flex gap-2">
+                    <Button variant="destructive" type="button" onClick={handleDelete} disabled={isDeleting}>
+                      <XCircle className="mr-2 h-4 w-4" />Cancelar Cita
                     </Button>
-                  </AlertDialogTrigger>
-                  <AlertDialogContent>
-                    <AlertDialogHeader><AlertDialogTitle>¿Confirmar Eliminación?</AlertDialogTitle>
-                      <AlertDialogDescription>¿Estás seguro? Esta acción no se puede deshacer.</AlertDialogDescription>
-                    </AlertDialogHeader>
-                    <AlertDialogFooter><AlertDialogCancel>Cancelar</AlertDialogCancel>
-                      <AlertDialogAction onClick={handleDelete} className={buttonVariants({ variant: "destructive" })} disabled={isDeleting}>
-                        {isDeleting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}Eliminar
-                      </AlertDialogAction>
-                    </AlertDialogFooter>
-                  </AlertDialogContent>
-                </AlertDialog>
+                    <Button variant="outline" type="button" onClick={handleReprogram} disabled={isDeleting}>
+                      <RefreshCcw className="mr-2 h-4 w-4" />Reprogramar
+                    </Button>
+                 </div>
               )}
             </div>
             <div className="flex flex-col-reverse sm:flex-row sm:justify-end sm:space-x-2">
-              <DialogClose asChild><Button type="button" variant="outline" className="w-full sm:w-auto">Cancelar</Button></DialogClose>
+              <DialogClose asChild><Button type="button" variant="outline" className="w-full sm:w-auto">Cerrar</Button></DialogClose>
               <Button type="submit" className="w-full sm:w-auto" disabled={isSubmittingForm || isUploadingImage || isLoadingServices || isDeleting}>
                 {(isSubmittingForm || isUploadingImage || isLoadingServices || isDeleting) && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                 Guardar Cambios

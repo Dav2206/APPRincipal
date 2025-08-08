@@ -1,4 +1,5 @@
 
+
 import { z } from 'zod';
 import { TIME_SLOTS, APPOINTMENT_STATUS_DISPLAY, DAYS_OF_WEEK } from '@/lib/constants';
 import type { DayOfWeekId, LocationId } from '@/lib/constants';
@@ -163,7 +164,13 @@ export const AppointmentUpdateSchema = z.object({
   appointmentTime: z.string().regex(/^([01]\d|2[0-3]):([0-5]\d)$/, "Hora inválida. Use formato HH:MM.").optional(),
   actualArrivalTime: z.string().optional().nullable(),
   professionalId: z.string().optional().nullable(),
-  durationMinutes: z.coerce.number().int().min(0, "La duración debe ser un número positivo o cero.").optional().nullable(),
+  duration: z.object({
+    hours: z.coerce.number().int().min(0, "Horas no pueden ser negativas.").default(0),
+    minutes: z.coerce.number().int().min(0, "Minutos no pueden ser negativos.").default(30),
+  }).refine(data => (data.hours * 60 + data.minutes) > 0, {
+    message: "La duración total debe ser mayor a 0 minutos.",
+    path: ["root"],
+  }).optional(),
   paymentMethod: z.string().min(1, { message: "El método de pago es requerido si se completa." }).optional().nullable(),
   amountPaid: z.coerce.number().min(0, "El monto pagado no puede ser negativo.").optional().nullable(),
   staffNotes: z.string().optional().nullable(),
