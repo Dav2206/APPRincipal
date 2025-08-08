@@ -3,7 +3,7 @@
 "use client";
 
 import type { Appointment, Professional, LocationId, Service, AddedServiceItem, Location } from '@/types';
-import React from 'react';
+import React, { useState, useRef } from 'react';
 import { parseISO, getHours, getMinutes, addMinutes, format, setMinutes, setHours, startOfDay } from 'date-fns';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { ScrollArea, ScrollBar } from '@/components/ui/scroll-area';
@@ -71,6 +71,9 @@ const isOverlapping = (blockA: RenderableServiceBlock, blockB: RenderableService
 
 
 const DailyTimelineComponent = ({ professionals, appointments, timeSlots, onAppointmentClick, onAppointmentDrop, viewingLocationId, currentDate, locations }: DailyTimelineProps) => {
+  const [draggedAppointmentId, setDraggedAppointmentId] = useState<string | null>(null);
+  const professionalColumnsRef = useRef<Record<string, HTMLDivElement | null>>({});
+
   const allServiceBlocks: RenderableServiceBlock[] = [];
 
   const relevantAppointments = appointments;
@@ -205,6 +208,55 @@ const DailyTimelineComponent = ({ professionals, appointments, timeSlots, onAppo
     }
   };
 
+  // --- Touch Event Handlers ---
+  const handleTouchStart = (e: React.TouchEvent<HTMLDivElement>, appointmentId: string) => {
+    setDraggedAppointmentId(appointmentId);
+    // Optional: Create a ghost element for visual feedback
+  };
+
+  const handleTouchMove = (e: React.TouchEvent<HTMLDivElement>) => {
+    if (!draggedAppointmentId) return;
+    const touch = e.touches[0];
+    const targetElement = document.elementFromPoint(touch.clientX, touch.clientY);
+    
+    // Reset all column styles
+    Object.values(professionalColumnsRef.current).forEach(col => {
+      if (col) col.style.backgroundColor = '';
+    });
+
+    if (targetElement) {
+      const professionalColumn = targetElement.closest('[data-professional-id]');
+      if (professionalColumn) {
+        // Highlight the column we are hovering over
+        (professionalColumn as HTMLDivElement).style.backgroundColor = 'hsl(var(--accent) / 0.2)';
+      }
+    }
+  };
+
+  const handleTouchEnd = (e: React.TouchEvent<HTMLDivElement>) => {
+    if (!draggedAppointmentId) return;
+
+    // Reset all column styles
+    Object.values(professionalColumnsRef.current).forEach(col => {
+      if (col) col.style.backgroundColor = '';
+    });
+
+    const touch = e.changedTouches[0];
+    const targetElement = document.elementFromPoint(touch.clientX, touch.clientY);
+
+    if (targetElement) {
+      const professionalColumn = targetElement.closest('[data-professional-id]');
+      if (professionalColumn) {
+        const newProfessionalId = professionalColumn.getAttribute('data-professional-id');
+        if (newProfessionalId) {
+          onAppointmentDrop(draggedAppointmentId, newProfessionalId);
+        }
+      }
+    }
+    setDraggedAppointmentId(null);
+  };
+
+
 
   return (
     <TooltipProvider>
@@ -247,8 +299,10 @@ const DailyTimelineComponent = ({ professionals, appointments, timeSlots, onAppo
 
               return (
                 <div 
-                  key={prof.id} 
-                  className="min-w-[120px] md:min-w-[150px] border-r relative"
+                  key={prof.id}
+                  ref={(el) => professionalColumnsRef.current[prof.id] = el}
+                  data-professional-id={prof.id}
+                  className="min-w-[120px] md:min-w-[150px] border-r relative transition-colors duration-200"
                   onDragOver={handleDragOver}
                   onDrop={(e) => handleDrop(e, prof.id)}
                 >
@@ -331,8 +385,11 @@ const DailyTimelineComponent = ({ professionals, appointments, timeSlots, onAppo
                             <div
                               draggable
                               onDragStart={(e) => handleDragStart(e, block.originalAppointmentId)}
+                              onTouchStart={(e) => handleTouchStart(e, block.originalAppointmentId)}
+                              onTouchMove={handleTouchMove}
+                              onTouchEnd={handleTouchEnd}
                               className={cn(
-                                "absolute left-1 right-1 rounded-md p-1.5 shadow-md text-xs overflow-hidden cursor-pointer transition-all flex flex-col justify-start border",
+                                "absolute left-1 right-1 rounded-md p-1.5 shadow-md text-xs overflow-hidden cursor-pointer touch-none transition-all flex flex-col justify-start border",
                                 blockBgClass,
                                 blockTextClass,
                                 isBlockOverlapping ? "ring-2 ring-destructive border-destructive" : blockBorderColorClass
