@@ -363,7 +363,7 @@ const fetchData = useCallback(async () => {
             <div className="flex-grow">
               <CardTitle className="text-xl md:text-2xl flex items-center gap-2">
                 <CalendarClock className="text-primary h-6 w-6" />
-                <span>Agenda - {currentDate ? format(currentDate, "PPP", { locale: es }) : "Seleccione fecha"}</span>
+                <span>Agenda - {currentDate ? format(currentDate, "EEEE, PPP", { locale: es }) : "Seleccione fecha"}</span>
               </CardTitle>
               <CardDescription className="mt-1">
                 Vista de la agenda en formato de línea de tiempo por profesional.
