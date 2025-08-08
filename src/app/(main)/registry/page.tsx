@@ -303,19 +303,19 @@ export default function RegistryPage() {
     };
 
     const generateBiWeeklyReport = async () => {
-      if (!user || !allServices || allServices.length === 0 || locations.length === 0) { 
-         setIsLoading(false);
-         return;
+      if (!user || !allServices || allServices.length === 0 || locations.length === 0) {
+        setIsLoading(false);
+        return;
       }
       setIsLoading(true);
 
       const profContext = isAdminOrContador ? (adminSelectedLocation === 'all' ? 'all' : effectiveLocationId) : user?.locationId;
       const professionalsListRaw = await fetchProfessionalsForReportContext(profContext);
-      
+
       const baseDate = setMonth(setYear(new Date(), selectedYear), selectedMonth);
       const startDate = selectedQuincena === 1 ? startOfMonth(baseDate) : addDays(startOfMonth(baseDate), 15);
       const endDate = selectedQuincena === 1 ? addDays(startOfMonth(baseDate), 14) : endOfMonth(baseDate);
-      
+
       const professionalsList = professionalsListRaw.filter(prof => {
         const contractStatus = getContractDisplayStatus(prof.currentContract, endDate);
         return contractStatus === 'Activo' || contractStatus === 'Próximo a Vencer';
@@ -323,11 +323,11 @@ export default function RegistryPage() {
 
       let appointmentsForPeriodResponse: { appointments: Appointment[] };
       if (isAdminOrContador && adminSelectedLocation === 'all') {
-         const promises = locations.map(loc =>
+        const promises = locations.map(loc =>
           getAppointments({
             locationId: loc.id,
             statuses: [APPOINTMENT_STATUS.COMPLETED],
-            dateRange: {start: startDate, end: endDate}
+            dateRange: { start: startDate, end: endDate }
           })
         );
         const results = await Promise.all(promises);
@@ -335,39 +335,52 @@ export default function RegistryPage() {
         appointmentsForPeriodResponse = { appointments: flatAppointments };
       } else if (effectiveLocationId) {
         appointmentsForPeriodResponse = await getAppointments({
-            locationId: effectiveLocationId,
-            statuses: [APPOINTMENT_STATUS.COMPLETED],
-            dateRange: {start: startDate, end: endDate}
+          locationId: effectiveLocationId,
+          statuses: [APPOINTMENT_STATUS.COMPLETED],
+          dateRange: { start: startDate, end: endDate }
         });
       } else {
-         appointmentsForPeriodResponse = { appointments: [] };
+        appointmentsForPeriodResponse = { appointments: [] };
       }
-      
+
       const appointmentsForPeriod = appointmentsForPeriodResponse.appointments || [];
       setRawAppointmentsForPeriod(appointmentsForPeriod);
 
       const biWeeklyReportMap = new Map<string, { professionalId: string, locationId: LocationId, biWeeklyEarnings: number }>();
 
       professionalsList.forEach(prof => {
-         biWeeklyReportMap.set(prof.id, { professionalId: prof.id, locationId: prof.locationId, biWeeklyEarnings: 0 });
+        biWeeklyReportMap.set(prof.id, { professionalId: prof.id, locationId: prof.locationId, biWeeklyEarnings: 0 });
       });
-      
+
       appointmentsForPeriod.forEach(appt => {
-        const professionalForAppt = professionalsListRaw.find(p => p.id === appt.professionalId); 
-        if (appt.professionalId && professionalForAppt && appt.status === APPOINTMENT_STATUS.COMPLETED) {
+        if (appt.status !== APPOINTMENT_STATUS.COMPLETED) return;
+
+        // Process main service income
+        if (appt.professionalId && biWeeklyReportMap.has(appt.professionalId)) {
+          const professionalForAppt = professionalsListRaw.find(p => p.id === appt.professionalId);
+          if (professionalForAppt) {
             const contractStatusOnApptDate = getContractDisplayStatus(professionalForAppt.currentContract, parseISO(appt.appointmentDateTime));
             if (contractStatusOnApptDate === 'Activo' || contractStatusOnApptDate === 'Próximo a Vencer') {
-                const entry = biWeeklyReportMap.get(appt.professionalId);
-                if (entry) {
-                    let appointmentIncome = appt.amountPaid || 0;
-                    if (appt.addedServices) {
-                        appointmentIncome += appt.addedServices.reduce((sum, as) => sum + (as.amountPaid || 0), 0);
-                    }
-                    entry.biWeeklyEarnings += appointmentIncome;
-                    biWeeklyReportMap.set(appt.professionalId, entry);
-                }
+              const entry = biWeeklyReportMap.get(appt.professionalId)!;
+              entry.biWeeklyEarnings += appt.amountPaid || 0;
             }
+          }
         }
+
+        // Process added services income
+        appt.addedServices?.forEach(addedService => {
+          const profId = addedService.professionalId || appt.professionalId;
+          if (profId && biWeeklyReportMap.has(profId)) {
+            const professionalForAppt = professionalsListRaw.find(p => p.id === profId);
+            if (professionalForAppt) {
+              const contractStatusOnApptDate = getContractDisplayStatus(professionalForAppt.currentContract, parseISO(appt.appointmentDateTime));
+              if (contractStatusOnApptDate === 'Activo' || contractStatusOnApptDate === 'Próximo a Vencer') {
+                const entry = biWeeklyReportMap.get(profId)!;
+                entry.biWeeklyEarnings += addedService.amountPaid || 0;
+              }
+            }
+          }
+        });
       });
       
       if (isAdminOrContador && adminSelectedLocation === 'all') {
