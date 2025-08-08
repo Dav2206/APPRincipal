@@ -472,6 +472,17 @@ export function AppointmentEditDialog({ appointment, isOpen, onOpenChange, onApp
                 )}
               />
             </div>
+             <FormField
+                control={form.control}
+                name="durationMinutes"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel className="flex items-center gap-1"><Clock size={16}/>Duración del servicio (minutos)</FormLabel>
+                    <FormControl><Input type="number" {...field} value={field.value ?? ''} onChange={e => field.onChange(parseInt(e.target.value, 10) || 0)} /></FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
              {form.watch('status') === APPOINTMENT_STATUS.CONFIRMED && (
               <FormField control={form.control} name="actualArrivalTime" render={({ field }) => (
                   <FormItem>
