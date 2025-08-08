@@ -233,22 +233,6 @@ export default function PercentagesPage() {
                     </TableRow>
                   ))}
                 </TableBody>
-                <TableFooter>
-                  <TableRow>
-                    <TableCell colSpan={4}>
-                      <div className="flex flex-col items-end text-sm p-2">
-                          <p>
-                            <span className="font-semibold">Total en {displayLocationName}: </span>
-                            <span className="font-bold text-primary">S/ {totalIncomeInSede.toFixed(2)}</span>
-                          </p>
-                          <p className="mt-1">
-                            <span className="font-semibold">Total General de estos Profesionales: </span>
-                            <span className="font-bold text-lg">S/ {totalIncomeGeneral.toFixed(2)}</span>
-                          </p>
-                      </div>
-                    </TableCell>
-                  </TableRow>
-                </TableFooter>
               </Table>
             </div>
           )}
