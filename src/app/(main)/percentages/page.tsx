@@ -14,23 +14,26 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { format, startOfDay, parseISO, isEqual, addDays, subDays, startOfMonth, endOfMonth, getDate } from 'date-fns';
 import { es } from 'date-fns/locale';
-import { CalendarIcon, ChevronLeftIcon, ChevronRightIcon, AlertTriangle, Loader2, TrendingUp, DollarSign, Building } from 'lucide-react';
+import { CalendarIcon, ChevronLeftIcon, ChevronRightIcon, AlertTriangle, Loader2, TrendingUp, DollarSign, Building, Info } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Badge } from '@/components/ui/badge';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 
-interface ProfessionalDailyIncome {
+
+interface ProfessionalIncomeReport {
   professionalId: string;
   professionalName: string;
-  totalIncome: number;
-  appointmentCount: number;
-  workedAtLocations: string;
+  incomeInSelectedLocation: number;
+  appointmentsInSelectedLocation: number;
+  totalIncomeAllLocations: number;
+  totalAppointmentsAllLocations: number;
 }
+
 
 export default function PercentagesPage() {
   const { user } = useAuth();
   const { selectedLocationId } = useAppState();
-  const [reportData, setReportData] = useState<ProfessionalDailyIncome[]>([]);
-  const [currentDate, setCurrentDate] = useState<Date>(startOfDay(new Date()));
+  const [reportData, setReportData] = useState<ProfessionalIncomeReport[]>([]);
   const [locations, setLocations] = useState<Location[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
@@ -65,47 +68,52 @@ export default function PercentagesPage() {
       // Fetch only professionals whose base location is the one selected
       const nativeProfessionals = await getProfessionals(effectiveLocationId);
       
+      // Fetch appointments from ALL locations to calculate total income
       const dateRange = { start: startDate, end: endDate };
-      // Fetch only appointments from the selected location
       const allAppointmentsResponse = await getAppointments({ 
         dateRange, 
-        locationId: effectiveLocationId, 
         statuses: [APPOINTMENT_STATUS.COMPLETED] 
       });
       const allPeriodAppointments = allAppointmentsResponse.appointments || [];
 
-      const incomeMap = new Map<string, ProfessionalDailyIncome>();
+      const incomeMap = new Map<string, ProfessionalIncomeReport>();
       
-      // Initialize map for native professionals
+      // Initialize map for native professionals of the selected location
       nativeProfessionals.forEach(prof => {
         incomeMap.set(prof.id, {
           professionalId: prof.id,
           professionalName: `${prof.firstName} ${prof.lastName}`,
-          totalIncome: 0,
-          appointmentCount: 0,
-          workedAtLocations: locations.find(l => l.id === effectiveLocationId)?.name || ''
+          incomeInSelectedLocation: 0,
+          appointmentsInSelectedLocation: 0,
+          totalIncomeAllLocations: 0,
+          totalAppointmentsAllLocations: 0
         });
       });
 
+      // Iterate through all appointments from all locations to calculate totals
       allPeriodAppointments.forEach(appt => {
         const profId = appt.professionalId;
-        // Check if the appointment's professional is in our list of native professionals
+        
+        // Check if the appointment's professional is one of the native professionals we are tracking
         if (profId && incomeMap.has(profId)) {
           const entry = incomeMap.get(profId)!;
           
-          let appointmentIncome = appt.amountPaid || 0;
-          if (appt.addedServices) {
-              appointmentIncome += appt.addedServices.reduce((sum, as) => sum + (as.amountPaid || 0), 0);
-          }
+          let appointmentIncome = (appt.amountPaid || 0) + (appt.addedServices || []).reduce((sum, as) => sum + (as.amountPaid || 0), 0);
 
-          entry.totalIncome += appointmentIncome;
-          entry.appointmentCount += 1;
+          // Add to total income across all locations
+          entry.totalIncomeAllLocations += appointmentIncome;
+          entry.totalAppointmentsAllLocations += 1;
+
+          // Add to income in the selected location ONLY if the appointment was there
+          if (appt.locationId === effectiveLocationId) {
+            entry.incomeInSelectedLocation += appointmentIncome;
+            entry.appointmentsInSelectedLocation += 1;
+          }
         }
       });
 
-      // Filter out professionals who had no income in the period at this specific location
-      const finalReportData = Array.from(incomeMap.values()).filter(item => item.appointmentCount > 0);
-      const sortedReport = finalReportData.sort((a, b) => b.totalIncome - a.totalIncome);
+      const finalReportData = Array.from(incomeMap.values()).filter(item => item.totalAppointmentsAllLocations > 0);
+      const sortedReport = finalReportData.sort((a, b) => b.totalIncomeAllLocations - a.totalIncomeAllLocations);
       setReportData(sortedReport);
 
     } catch (error) {
@@ -124,9 +132,14 @@ export default function PercentagesPage() {
   }, [fetchDataForReport, locations]);
 
 
-  const totalGeneralIncome = useMemo(() => {
-    return reportData.reduce((sum, item) => sum + item.totalIncome, 0);
+  const totalIncomeInSede = useMemo(() => {
+    return reportData.reduce((sum, item) => sum + item.incomeInSelectedLocation, 0);
   }, [reportData]);
+  
+  const totalIncomeGeneral = useMemo(() => {
+    return reportData.reduce((sum, item) => sum + item.totalIncomeAllLocations, 0);
+  }, [reportData]);
+
 
   const displayLocationName = effectiveLocationId 
     ? (locations.find(l => l.id === effectiveLocationId)?.name || `Sede Desconocida`) 
@@ -167,7 +180,17 @@ export default function PercentagesPage() {
                 Análisis de Ingresos por Profesional
               </CardTitle>
               <CardDescription>
-                Ingresos de la quincena actual de los profesionales NATIVOS de {displayLocationName}.
+                Ingresos de los profesionales NATIVOS de {displayLocationName} durante la quincena actual.
+                 <TooltipProvider>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Info className="inline-block ml-2 h-4 w-4 text-muted-foreground cursor-help" />
+                    </TooltipTrigger>
+                    <TooltipContent>
+                      <p>Este reporte muestra el rendimiento de los profesionales cuya sede base es la seleccionada, <br/> detallando sus ingresos en esta sede y su total en todas las sedes.</p>
+                    </TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
               </CardDescription>
               <p className="text-sm font-semibold text-primary mt-2">{quincenaDescription}</p>
             </div>
@@ -191,21 +214,37 @@ export default function PercentagesPage() {
                 <TableHeader>
                   <TableRow>
                     <TableHead>Profesional</TableHead>
-                    <TableHead className="text-center">Citas Completadas en Sede</TableHead>
-                    <TableHead className="text-right">Ingreso Quincenal en Sede (S/)</TableHead>
+                    <TableHead className="text-center">Citas en Sede Actual</TableHead>
+                    <TableHead className="text-right">Ingreso en Sede Actual (S/)</TableHead>
+                    <TableHead className="text-right font-bold">Ingreso Total Quincenal (S/)</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {reportData.map((item) => (
                     <TableRow key={item.professionalId}>
                       <TableCell className="font-medium">{item.professionalName}</TableCell>
-                      <TableCell className="text-center">{item.appointmentCount}</TableCell>
+                      <TableCell className="text-center">{item.appointmentsInSelectedLocation}</TableCell>
                       <TableCell className="text-right font-semibold text-primary">
-                        {item.totalIncome.toFixed(2)}
+                        {item.incomeInSelectedLocation.toFixed(2)}
+                      </TableCell>
+                       <TableCell className="text-right font-bold text-lg">
+                        {item.totalIncomeAllLocations.toFixed(2)}
                       </TableCell>
                     </TableRow>
                   ))}
                 </TableBody>
+                 <CardFooter className="p-2 justify-end bg-muted/50">
+                    <div className="flex flex-col items-end text-sm">
+                      <p>
+                        <span className="font-semibold">Total en {displayLocationName}: </span>
+                        <span className="font-bold text-primary">S/ {totalIncomeInSede.toFixed(2)}</span>
+                      </p>
+                       <p className="mt-1">
+                        <span className="font-semibold">Total General de estos Profesionales: </span>
+                         <span className="font-bold text-lg">S/ {totalIncomeGeneral.toFixed(2)}</span>
+                      </p>
+                    </div>
+                </CardFooter>
               </Table>
             </div>
           )}
@@ -214,3 +253,4 @@ export default function PercentagesPage() {
     </div>
   );
 }
+
