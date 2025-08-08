@@ -19,7 +19,7 @@ interface DailyTimelineProps {
   timeSlots: string[];
   currentDate: Date;
   onAppointmentClick?: (appointment: Appointment, serviceId?: string) => void;
-  onAppointmentDrop: (appointmentId: string, newProfessionalId: string) => void;
+  onAppointmentDrop: (appointmentId: string, newProfessionalId: string) => Promise<boolean>;
   viewingLocationId: LocationId;
   locations: Location[];
 }

@@ -1388,7 +1388,8 @@ export async function updateAppointmentProfessional(appointmentId: string, newPr
         updatedAt: serverTimestamp(),
     });
 
-    return getAppointmentById(appointmentId);
+    const updatedAppointment = await getAppointmentById(appointmentId);
+    return updatedAppointment;
 }
 
 
@@ -1713,6 +1714,7 @@ export async function mergePatients(primaryPatientId: string, duplicateIds: stri
 }
 
 // --- End Maintenance ---
+
 
 
 

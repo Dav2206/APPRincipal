@@ -191,32 +191,59 @@ const fetchData = useCallback(async () => {
     }
   }, [toast]);
   
-  const handleAppointmentDrop = useCallback(async (appointmentId: string, newProfessionalId: string) => {
+  const handleAppointmentDrop = useCallback(async (appointmentId: string, newProfessionalId: string): Promise<boolean> => {
     const originalAppointment = appointments.find(a => a.id === appointmentId);
     if (!originalAppointment || originalAppointment.professionalId === newProfessionalId) {
-        return; // No change needed
+        return false;
     }
 
+    const oldProfessionalId = originalAppointment.professionalId;
+    const newProfessional = allSystemProfessionals.find(p => p.id === newProfessionalId);
+
+    // Optimistic UI Update
+    setAppointments(prevAppointments =>
+      prevAppointments.map(appt =>
+        appt.id === appointmentId
+          ? { ...appt, professionalId: newProfessionalId, professional: newProfessional }
+          : appt
+      )
+    );
+
     try {
-        const updatedAppointment = await updateAppointmentProfessional(appointmentId, newProfessionalId);
-        if (updatedAppointment) {
+        const updatedAppointmentFromServer = await updateAppointmentProfessional(appointmentId, newProfessionalId);
+        if (updatedAppointmentFromServer) {
+            // Replace the local appointment with the one from the server for consistency
+            setAppointments(prevAppointments =>
+              prevAppointments.map(appt =>
+                appt.id === appointmentId ? updatedAppointmentFromServer : appt
+              )
+            );
             toast({
                 title: "Cita Reasignada",
-                description: `La cita de ${updatedAppointment.patient?.firstName || 'Paciente'} ha sido movida al profesional ${updatedAppointment.professional?.firstName || 'nuevo'}.`,
+                description: `La cita ha sido movida a ${newProfessional?.firstName || 'nuevo profesional'}.`,
             });
-            fetchData(); // Refreshes the timeline with the new data
+            return true;
         } else {
             throw new Error("La actualización no devolvió la cita actualizada.");
         }
     } catch (error) {
         console.error("Error reassigning appointment:", error);
+        // Revert Optimistic UI Update on failure
+        setAppointments(prevAppointments =>
+          prevAppointments.map(appt =>
+            appt.id === appointmentId
+              ? { ...appt, professionalId: oldProfessionalId, professional: allSystemProfessionals.find(p => p.id === oldProfessionalId) }
+              : appt
+          )
+        );
         toast({
             title: "Error al Reasignar",
-            description: "No se pudo cambiar el profesional de la cita.",
+            description: "No se pudo cambiar el profesional. La cita ha sido restaurada.",
             variant: "destructive",
         });
+        return false;
     }
-  }, [appointments, fetchData, toast]);
+  }, [appointments, allSystemProfessionals, toast]);
 
 
   const handleAppointmentUpdated = useCallback((updatedOrDeletedAppointment: Appointment | null | { id: string; _deleted: true }) => {
