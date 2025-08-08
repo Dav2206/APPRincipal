@@ -11,7 +11,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter }
 import { Button } from '@/components/ui/button';
 import { Calendar } from '@/components/ui/calendar';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow, TableFooter } from '@/components/ui/table';
 import { format, startOfDay, parseISO, isEqual, addDays, subDays, startOfMonth, endOfMonth, getDate } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { CalendarIcon, ChevronLeftIcon, ChevronRightIcon, AlertTriangle, Loader2, TrendingUp, DollarSign, Building, Info } from 'lucide-react';
@@ -233,18 +233,22 @@ export default function PercentagesPage() {
                     </TableRow>
                   ))}
                 </TableBody>
-                 <CardFooter className="p-2 justify-end bg-muted/50">
-                    <div className="flex flex-col items-end text-sm">
-                      <p>
-                        <span className="font-semibold">Total en {displayLocationName}: </span>
-                        <span className="font-bold text-primary">S/ {totalIncomeInSede.toFixed(2)}</span>
-                      </p>
-                       <p className="mt-1">
-                        <span className="font-semibold">Total General de estos Profesionales: </span>
-                         <span className="font-bold text-lg">S/ {totalIncomeGeneral.toFixed(2)}</span>
-                      </p>
-                    </div>
-                </CardFooter>
+                <TableFooter>
+                  <TableRow>
+                    <TableCell colSpan={4}>
+                      <div className="flex flex-col items-end text-sm p-2">
+                          <p>
+                            <span className="font-semibold">Total en {displayLocationName}: </span>
+                            <span className="font-bold text-primary">S/ {totalIncomeInSede.toFixed(2)}</span>
+                          </p>
+                          <p className="mt-1">
+                            <span className="font-semibold">Total General de estos Profesionales: </span>
+                            <span className="font-bold text-lg">S/ {totalIncomeGeneral.toFixed(2)}</span>
+                          </p>
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                </TableFooter>
               </Table>
             </div>
           )}
@@ -253,4 +257,3 @@ export default function PercentagesPage() {
     </div>
   );
 }
-
