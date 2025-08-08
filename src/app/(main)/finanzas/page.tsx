@@ -138,7 +138,7 @@ export default function FinancesPage() {
         const reportMap = new Map<LocationId, ReportRow>();
 
         appointments.forEach(appt => {
-          if (!appt.paymentMethod || !appt.amountPaid || appt.amountPaid <= 0) return;
+          if (!appt.paymentMethod) return;
 
           const locationName = locations.find(l => l.id === appt.locationId)?.name || 'Desconocida';
           let entry = reportMap.get(appt.locationId) || {
@@ -150,8 +150,21 @@ export default function FinancesPage() {
           
           const basePaymentType = appt.paymentMethod.split(' - ')[0].trim();
 
-          entry.totalsByMethod[basePaymentType] = (entry.totalsByMethod[basePaymentType] || 0) + appt.amountPaid;
-          entry.locationTotal += appt.amountPaid;
+          // Sum main service amount
+          if (appt.amountPaid && appt.amountPaid > 0) {
+            entry.totalsByMethod[basePaymentType] = (entry.totalsByMethod[basePaymentType] || 0) + appt.amountPaid;
+            entry.locationTotal += appt.amountPaid;
+          }
+          
+          // Sum added services amounts
+          if (appt.addedServices) {
+            for (const addedSvc of appt.addedServices) {
+              if (addedSvc.amountPaid && addedSvc.amountPaid > 0) {
+                entry.totalsByMethod[basePaymentType] = (entry.totalsByMethod[basePaymentType] || 0) + addedSvc.amountPaid;
+                entry.locationTotal += addedSvc.amountPaid;
+              }
+            }
+          }
 
           reportMap.set(appt.locationId, entry);
         });
