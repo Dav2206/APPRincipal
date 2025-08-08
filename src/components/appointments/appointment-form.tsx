@@ -425,8 +425,8 @@ export function AppointmentForm({
         existingPatientId: null,
         bookingObservations: '',
         addedServices: [],
-        isForFamilyMember: false,
-        familyMemberRelation: null,
+                 isForFamilyMember: false,
+                 familyMemberRelation: null,
       });
       setCurrentPatientForHistory(null);
       setShowPatientHistory(false);
@@ -841,16 +841,14 @@ export function AppointmentForm({
                           render={({ field }) => (
                             <FormItem>
                               <FormLabel className="flex items-center gap-1"><ClockIcon size={16}/>Hora de la Cita</FormLabel>
-                              <Select onValueChange={field.onChange} value={field.value} disabled={isLoadingServices || servicesList.length === 0}>
-                                <FormControl>
-                                  <SelectTrigger><SelectValue placeholder="Seleccionar hora" /></SelectTrigger>
-                                </FormControl>
-                                <SelectContent>
-                                  {TIME_SLOTS.map(slot => (
-                                    <SelectItem key={slot} value={slot}>{slot}</SelectItem>
-                                  ))}
-                                </SelectContent>
-                              </Select>
+                              <FormControl>
+                                <Input
+                                  type="time"
+                                  {...field}
+                                  value={field.value || ''}
+                                  disabled={isLoadingServices || servicesList.length === 0}
+                                />
+                              </FormControl>
                               <FormMessage />
                             </FormItem>
                           )}

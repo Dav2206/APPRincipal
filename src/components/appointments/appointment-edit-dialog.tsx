@@ -464,7 +464,9 @@ export function AppointmentEditDialog({ appointment, isOpen, onOpenChange, onApp
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel className="flex items-center gap-1"><Clock size={16}/>Hora de la Cita</FormLabel>
-                    <Input id="actualArrivalTime" type="time" {...field} value={field.value || ''} />
+                     <FormControl>
+                      <Input id="appointmentTime" type="time" {...field} value={field.value || ''} />
+                    </FormControl>
                     <FormMessage />
                   </FormItem>
                 )}
