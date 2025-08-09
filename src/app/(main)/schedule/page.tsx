@@ -80,12 +80,12 @@ export default function SchedulePage() {
   }, [user, isAdminOrContador, adminSelectedLocation, locations]);
 
 
-const fetchData = useCallback(async () => {
+const fetchData = useCallback(async (isBackgroundFetch = false) => {
     if (!user || !actualEffectiveLocationId) {
-        setIsLoading(false);
+        if(!isBackgroundFetch) setIsLoading(false);
         return;
     }
-    setIsLoading(true);
+    if(!isBackgroundFetch) setIsLoading(true);
 
     try {
         const [appointmentsResponse, allProfsResponse] = await Promise.all([
@@ -138,7 +138,7 @@ const fetchData = useCallback(async () => {
         setAppointments([]);
         setWorkingProfessionalsForTimeline([]);
     } finally {
-        setIsLoading(false);
+        if(!isBackgroundFetch) setIsLoading(false);
     }
 }, [user, actualEffectiveLocationId, currentDate, toast]);
 
@@ -262,18 +262,18 @@ const fetchData = useCallback(async () => {
     if (updatedOrDeletedAppointment && (updatedOrDeletedAppointment as any)._deleted === true) {
       setAppointments(prev => prev.filter(a => a.id !== (updatedOrDeletedAppointment as any).id));
     } else if (updatedOrDeletedAppointment) {
+      const updatedAppt = updatedOrDeletedAppointment as Appointment;
       setAppointments(prev => {
-        const updatedAppt = updatedOrDeletedAppointment as Appointment;
         const exists = prev.some(a => a.id === updatedAppt.id);
         const newAppointments = exists
-          ? prev.map(a => a.id === updatedAppt.id ? updatedAppt : a)
+          ? prev.map(a => (a.id === updatedAppt.id ? updatedAppt : a))
           : [...prev, updatedAppt];
         return newAppointments.sort((a,b) => parseISO(a.appointmentDateTime).getTime() - parseISO(b.appointmentDateTime).getTime());
       });
     }
 
-    // Optional: refetch in the background to ensure consistency, without showing a loader.
-    fetchData().catch(error => console.error("Background refetch failed:", error));
+    // Call fetchData with a flag to indicate it's a background sync, so no loading spinner is shown
+    fetchData(true).catch(error => console.error("Background refetch failed:", error));
     
     setIsEditModalOpen(false);
     setSelectedAppointmentForEdit(null);
