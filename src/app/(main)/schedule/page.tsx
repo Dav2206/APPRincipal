@@ -43,7 +43,7 @@ export default function SchedulePage() {
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [isNewAppointmentFormOpen, setIsNewAppointmentFormOpen] = useState(false);
   const [isDragDropEnabled, setIsDragDropEnabled] = useState(false);
-  const [isBasicMode, setIsBasicMode] = useState(false);
+  const [isBasicMode, setIsBasicMode] = useState(true);
 
   // State for image modal
   const [selectedImageForModal, setSelectedImageForModal] = useState<string | null>(null);
