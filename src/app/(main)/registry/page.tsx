@@ -249,6 +249,7 @@ export default function RegistryPage() {
         }
 
         appt.addedServices?.forEach(added => {
+          // CORRECTED LOGIC: If added.professionalId is null/undefined, use the main appointment's professionalId.
           const professionalIdForAddedService = added.professionalId || appt.professionalId;
           if (professionalIdForAddedService) {
             const reportEntryAdded = dailyReportMap.get(professionalIdForAddedService) || {
