@@ -6,7 +6,7 @@ import type { Appointment, Service, AppointmentStatus, Professional, Location } 
 import { PAYMENT_METHODS, USER_ROLES, APPOINTMENT_STATUS_DISPLAY, TIME_SLOTS, APPOINTMENT_STATUS } from '@/lib/constants';
 import { format, parseISO, setHours, setMinutes, formatISO } from 'date-fns';
 import { es } from 'date-fns/locale';
-import { CameraIcon, Loader2, PlusCircle, Trash2, ShoppingBag, ConciergeBell, Clock, CalendarIcon as CalendarIconLucide, XCircle, RefreshCcw, DollarSign, Edit, Info, Shuffle } from 'lucide-react';
+import { CameraIcon, Loader2, PlusCircle, Trash2, ShoppingBag, ConciergeBell, Clock, CalendarIcon as CalendarIconLucide, XCircle, RefreshCcw, DollarSign, Edit, Info, Shuffle, StethoscopeIcon } from 'lucide-react';
 import { useAuth } from '@/contexts/auth-provider';
 import {
   Dialog,
@@ -519,34 +519,44 @@ export function AppointmentEditDialog({ appointment, isOpen, onOpenChange, onApp
           
           {/* -- Section: Detalles del Servicio -- */}
           <div className="space-y-3 p-3 border rounded-lg bg-muted/30">
-             <FormField control={form.control} name="serviceId" render={({ field }) => (
-              <FormItem>
-                <FormLabel className="flex items-center gap-1"><ConciergeBell size={16}/>Servicio Principal</FormLabel>
-                <Select
-                  onValueChange={field.onChange} value={field.value === DEFAULT_SERVICE_ID_PLACEHOLDER && allServices && allServices.length > 0 ? allServices[0].id : field.value}
-                  disabled={isLoadingServices || (allServices && !allServices.length)}
-                >
-                  <FormControl><SelectTrigger><SelectValue placeholder={isLoadingServices ? "Cargando..." : "Seleccionar servicio"} /></SelectTrigger></FormControl>
-                  <SelectContent>
-                    {allServices && allServices.map(s => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}
-                  </SelectContent>
-                </Select><FormMessage />
-              </FormItem>
-            )}/>
-            {(form.watch('status') === APPOINTMENT_STATUS.BOOKED || form.watch('status') === APPOINTMENT_STATUS.CONFIRMED || form.watch('status') === APPOINTMENT_STATUS.COMPLETED) && (
-              <FormField control={form.control} name="professionalId" render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Profesional que Atendió</FormLabel>
-                  <Select onValueChange={field.onChange} value={field.value || NO_SELECTION_PLACEHOLDER}>
-                    <FormControl><SelectTrigger><SelectValue placeholder="Seleccionar profesional" /></SelectTrigger></FormControl>
-                    <SelectContent>
-                      <SelectItem value={NO_SELECTION_PLACEHOLDER}>Sin asignar / Como estaba</SelectItem>
-                      {availableProfessionals.map(p => <SelectItem key={p.id} value={p.id}>{p.firstName} {p.lastName}</SelectItem>)}
-                    </SelectContent>
-                  </Select><FormMessage/>
-                </FormItem>
-              )}/>
+            {form.watch('status') === APPOINTMENT_STATUS.COMPLETED ? (
+                 <div className="space-y-1 text-sm">
+                    <p className="flex items-center gap-2"><ConciergeBell size={16}/> <strong>Servicio:</strong> {appointment.service?.name || 'No especificado'}</p>
+                    <p className="flex items-center gap-2"><StethoscopeIcon size={16}/> <strong>Profesional:</strong> {appointment.professional?.firstName || ''} {appointment.professional?.lastName || 'No asignado'}</p>
+                 </div>
+            ) : (
+                <>
+                    <FormField control={form.control} name="serviceId" render={({ field }) => (
+                    <FormItem>
+                        <FormLabel className="flex items-center gap-1"><ConciergeBell size={16}/>Servicio Principal</FormLabel>
+                        <Select
+                        onValueChange={field.onChange} value={field.value === DEFAULT_SERVICE_ID_PLACEHOLDER && allServices && allServices.length > 0 ? allServices[0].id : field.value}
+                        disabled={isLoadingServices || (allServices && !allServices.length)}
+                        >
+                        <FormControl><SelectTrigger><SelectValue placeholder={isLoadingServices ? "Cargando..." : "Seleccionar servicio"} /></SelectTrigger></FormControl>
+                        <SelectContent>
+                            {allServices && allServices.map(s => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}
+                        </SelectContent>
+                        </Select><FormMessage />
+                    </FormItem>
+                    )}/>
+                    {(form.watch('status') === APPOINTMENT_STATUS.BOOKED || form.watch('status') === APPOINTMENT_STATUS.CONFIRMED || form.watch('status') === APPOINTMENT_STATUS.COMPLETED) && (
+                    <FormField control={form.control} name="professionalId" render={({ field }) => (
+                        <FormItem>
+                        <FormLabel>Profesional que Atendió</FormLabel>
+                        <Select onValueChange={field.onChange} value={field.value || NO_SELECTION_PLACEHOLDER}>
+                            <FormControl><SelectTrigger><SelectValue placeholder="Seleccionar profesional" /></SelectTrigger></FormControl>
+                            <SelectContent>
+                            <SelectItem value={NO_SELECTION_PLACEHOLDER}>Sin asignar / Como estaba</SelectItem>
+                            {availableProfessionals.map(p => <SelectItem key={p.id} value={p.id}>{p.firstName} {p.lastName}</SelectItem>)}
+                            </SelectContent>
+                        </Select><FormMessage/>
+                        </FormItem>
+                    )}/>
+                    )}
+                </>
             )}
+
             {appointment.isExternalProfessional && (
                  <Alert variant="default" className="bg-orange-50 border-orange-200 text-orange-800">
                     <Shuffle className="h-4 w-4 !text-orange-800" />
