@@ -171,28 +171,36 @@ const fetchData = useCallback(async () => {
     }
   };
 
-  const handleTimelineAppointmentClick = useCallback(async (appointment: Appointment) => {
-    if (appointment.isTravelBlock) {
+  const handleTimelineAppointmentClick = useCallback((appointment: Appointment) => {
+    if (appointment.isTravelBlock) return;
+    if (!appointment || !appointment.id || appointment.id.startsWith('travel-')) {
+      console.error("[SchedulePage] Invalid appointment object or travel block passed to handleTimelineAppointmentClick");
       return;
     }
-    try {
-      if (!appointment || !appointment.id || appointment.id.startsWith('travel-')) {
-        console.error("[SchedulePage] Invalid appointment object or travel block passed to handleTimelineAppointmentClick");
-        return;
+
+    // Optimistic UI: Open the modal immediately with the data we have.
+    setSelectedAppointmentForEdit(appointment);
+    setIsEditModalOpen(true);
+    
+    // Asynchronously fetch full details and update the modal content if it's still open.
+    getAppointmentById(appointment.id).then(fullAppointmentDetails => {
+      if (fullAppointmentDetails) {
+        // Check if the modal is still open for this appointment
+        setSelectedAppointmentForEdit(currentSelected => 
+            currentSelected && currentSelected.id === appointment.id ? fullAppointmentDetails : currentSelected
+        );
       }
-      const fullAppointmentDetails = await getAppointmentById(appointment.id);
-      setSelectedAppointmentForEdit(fullAppointmentDetails || appointment);
-      setIsEditModalOpen(true);
-    } catch (error) {
-      console.error("[SchedulePage] Error fetching appointment details for edit:", error);
+    }).catch(error => {
+      console.error("[SchedulePage] Error fetching full appointment details in background:", error);
+      // The modal is already open with partial data, which is better than nothing.
+      // We could show a subtle error inside the modal if needed.
       toast({
-        title: "Error",
-        description: "No se pudieron cargar los detalles completos de la cita.",
-        variant: "destructive",
+        title: "No se pudieron cargar todos los detalles",
+        description: "Se muestran los datos básicos de la cita. Algunas funciones pueden estar limitadas.",
+        variant: "default",
+        duration: 5000,
       });
-      setSelectedAppointmentForEdit(appointment);
-      setIsEditModalOpen(true);
-    }
+    });
   }, [toast]);
   
   const handleAppointmentDrop = useCallback(async (appointmentId: string, newProfessionalId: string): Promise<boolean> => {
@@ -533,3 +541,4 @@ const fetchData = useCallback(async () => {
     </div>
   );
 }
+
