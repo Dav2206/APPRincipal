@@ -176,7 +176,7 @@ export default function RegistryPage() {
       }
       setIsLoading(true);
 
-      const allSystemProfessionals = await fetchProfessionalsForReportContext();
+      const allSystemProfessionals = await getProfessionals(undefined);
       
       let appointmentsForDateResponse: { appointments: Appointment[] };
       if (isAdminOrContador && adminSelectedLocation === 'all') {
@@ -228,48 +228,35 @@ export default function RegistryPage() {
         }
 
         // --- Logic for Professional Activity Breakdown ---
-        if (appt.professionalId) {
-          const professionalIdPrincipal = appt.professionalId;
-          const reportEntryPrincipal = dailyReportMap.get(professionalIdPrincipal) || {
-            professionalId: professionalIdPrincipal,
-            locationId: appt.locationId, 
-            totalRevenue: 0,
-            services: new Map<string, { serviceName: string, count: number }>(),
-          };
+        const processService = (serviceId: string, professionalId: string | null | undefined, amount: number | null | undefined, locationId: LocationId) => {
+             if (!professionalId) return; // Do not process if no professional is assigned
 
-          const mainServiceName = allServices.find(s => s.id === appt.serviceId)?.name || 'Servicio Principal Desc.';
-          const mainServiceEntry = reportEntryPrincipal.services.get(appt.serviceId) || { serviceName: mainServiceName, count: 0 };
-          mainServiceEntry.count += 1;
-          reportEntryPrincipal.services.set(appt.serviceId, mainServiceEntry);
-
-          if (typeof appt.amountPaid === 'number' && appt.amountPaid > 0) {
-            reportEntryPrincipal.totalRevenue += appt.amountPaid;
-          }
-
-          dailyReportMap.set(professionalIdPrincipal, reportEntryPrincipal);
-        }
-
-        appt.addedServices?.forEach(added => {
-          const professionalIdForAddedService = added.professionalId || appt.professionalId;
-          if (professionalIdForAddedService) {
-            const reportEntryAdded = dailyReportMap.get(professionalIdForAddedService) || {
-              professionalId: professionalIdForAddedService,
-              locationId: appt.locationId, 
-              totalRevenue: 0,
-              services: new Map<string, { serviceName: string, count: number }>(),
+             const reportEntry = dailyReportMap.get(professionalId) || {
+                professionalId: professionalId,
+                locationId: locationId, 
+                totalRevenue: 0,
+                services: new Map<string, { serviceName: string, count: number }>(),
             };
 
-            const addedServiceName = allServices.find(s => s.id === added.serviceId)?.name || 'Servicio Adicional Desc.';
-            const addedServiceEntry = reportEntryAdded.services.get(added.serviceId) || { serviceName: addedServiceName, count: 0 };
-            addedServiceEntry.count += 1;
-            reportEntryAdded.services.set(added.serviceId, addedServiceEntry);
-
-            if (typeof added.amountPaid === 'number' && added.amountPaid > 0) {
-              reportEntryAdded.totalRevenue += added.amountPaid;
+            const serviceName = allServices.find(s => s.id === serviceId)?.name || 'Servicio Desc.';
+            const serviceEntry = reportEntry.services.get(serviceId) || { serviceName: serviceName, count: 0 };
+            serviceEntry.count += 1;
+            reportEntry.services.set(serviceId, serviceEntry);
+            
+            if (typeof amount === 'number' && amount > 0) {
+                reportEntry.totalRevenue += amount;
             }
 
-            dailyReportMap.set(professionalIdForAddedService, reportEntryAdded);
-          }
+            dailyReportMap.set(professionalId, reportEntry);
+        }
+
+        // Process main service
+        processService(appt.serviceId, appt.professionalId, appt.amountPaid, appt.locationId);
+        
+        // Process added services
+        appt.addedServices?.forEach(added => {
+            const professionalForAdded = added.professionalId || appt.professionalId;
+            processService(added.serviceId, professionalForAdded, added.amountPaid, appt.locationId);
         });
       });
 
@@ -951,3 +938,5 @@ export default function RegistryPage() {
     </div>
   );
 }
+
+    
