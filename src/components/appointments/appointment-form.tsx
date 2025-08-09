@@ -384,16 +384,25 @@ export function AppointmentForm({
         return;
     }
     
-    const validAddedServices = (data.addedServices || []).map(as => ({
-      ...as,
-      serviceId: as.serviceId === DEFAULT_SERVICE_ID_PLACEHOLDER && servicesList.length > 0 ? servicesList[0].id : as.serviceId,
-      professionalId: as.professionalId === NO_SELECTION_PLACEHOLDER ? null : as.professionalId,
-    })).filter(as => as.serviceId && as.serviceId !== DEFAULT_SERVICE_ID_PLACEHOLDER);
+    // Explicitly set the professional for added services if "Mismo prof" is selected
+    const mainProfessionalId = data.preferredProfessionalId === ANY_PROFESSIONAL_VALUE ? null : data.preferredProfessionalId;
+    
+    const validAddedServices = (data.addedServices || []).map(as => {
+      const professionalForAddedService = as.professionalId === NO_SELECTION_PLACEHOLDER 
+        ? mainProfessionalId // Inherit from main appointment
+        : as.professionalId;
+        
+      return {
+        ...as,
+        serviceId: as.serviceId === DEFAULT_SERVICE_ID_PLACEHOLDER && servicesList.length > 0 ? servicesList[0].id : as.serviceId,
+        professionalId: professionalForAddedService,
+      };
+    }).filter(as => as.serviceId && as.serviceId !== DEFAULT_SERVICE_ID_PLACEHOLDER);
 
     try {
       const submitData: FormSchemaType & { isExternalProfessional?: boolean; externalProfessionalOriginLocationId?: LocationId | null; addedServices?: FormSchemaType['addedServices'] } = {
         ...data,
-        preferredProfessionalId: data.preferredProfessionalId === ANY_PROFESSIONAL_VALUE ? null : data.preferredProfessionalId,
+        preferredProfessionalId: mainProfessionalId,
         patientPhone: (data.existingPatientId && user?.role !== USER_ROLES.ADMIN) ? undefined : data.patientPhone,
         isDiabetic: data.isDiabetic || false,
         patientAge: data.patientAge === 0 ? null : data.patientAge, 
@@ -1018,9 +1027,9 @@ export function AppointmentForm({
                                 <FormItem>
                                   <FormLabel className="text-xs">Profesional (Opcional)</FormLabel>
                                   <Select onValueChange={(value) => field.onChange(value === NO_SELECTION_PLACEHOLDER ? null : value)} value={field.value || NO_SELECTION_PLACEHOLDER}>
-                                  <FormControl><SelectTrigger><SelectValue placeholder="Mismo prof. / Cualquiera" /></SelectTrigger></FormControl>
+                                  <FormControl><SelectTrigger><SelectValue placeholder="Mismo prof." /></SelectTrigger></FormControl>
                                     <SelectContent>
-                                      <SelectItem value={NO_SELECTION_PLACEHOLDER}>Mismo prof. / Cualquiera</SelectItem>
+                                      <SelectItem value={NO_SELECTION_PLACEHOLDER}>Mismo prof. principal</SelectItem>
                                       {availableProfessionalsForTimeSlot.map(p => <SelectItem key={`added-prof-${p.id}-${index}`} value={p.id}>{p.firstName} {p.lastName}</SelectItem>)}
                                     </SelectContent>
                                   </Select>

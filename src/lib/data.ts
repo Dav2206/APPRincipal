@@ -966,7 +966,8 @@ export async function addAppointment(data: AppointmentFormData): Promise<Appoint
 
     const proposedStartTime = parse(`${format(data.appointmentDate, 'yyyy-MM-dd')} ${data.appointmentTime}`, 'yyyy-MM-dd HH:mm', new Date());
     
-    let professionalIdToAssign: string | null = data.preferredProfessionalId === '_any_professional_placeholder_' ? null : data.preferredProfessionalId;
+    let professionalIdToAssign: string | null = data.preferredProfessionalId;
+    
     let isExternalProfessional = false;
     let externalProfessionalOriginLocationId: LocationId | null = null;
     
@@ -1056,7 +1057,7 @@ export async function addAppointment(data: AppointmentFormData): Promise<Appoint
       attachedPhotos: [],
       addedServices: (data.addedServices || []).map((as) => ({
         serviceId: as.serviceId!,
-        professionalId: as.professionalId === '_no_selection_placeholder_' ? null : (as.professionalId || null),
+        professionalId: as.professionalId || professionalIdToAssign, // Inherit if null
         amountPaid: null,
         startTime: as.startTime ?? null,
       })),
@@ -1714,6 +1715,7 @@ export async function mergePatients(primaryPatientId: string, duplicateIds: stri
 }
 
 // --- End Maintenance ---
+
 
 
 
