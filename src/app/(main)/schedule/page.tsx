@@ -259,7 +259,22 @@ const fetchData = useCallback(async () => {
 
 
   const handleAppointmentUpdated = useCallback((updatedOrDeletedAppointment: Appointment | null | { id: string; _deleted: true }) => {
-    fetchData(); 
+    if (updatedOrDeletedAppointment && (updatedOrDeletedAppointment as any)._deleted === true) {
+      setAppointments(prev => prev.filter(a => a.id !== (updatedOrDeletedAppointment as any).id));
+    } else if (updatedOrDeletedAppointment) {
+      setAppointments(prev => {
+        const updatedAppt = updatedOrDeletedAppointment as Appointment;
+        const exists = prev.some(a => a.id === updatedAppt.id);
+        const newAppointments = exists
+          ? prev.map(a => a.id === updatedAppt.id ? updatedAppt : a)
+          : [...prev, updatedAppt];
+        return newAppointments.sort((a,b) => parseISO(a.appointmentDateTime).getTime() - parseISO(b.appointmentDateTime).getTime());
+      });
+    }
+
+    // Optional: refetch in the background to ensure consistency, without showing a loader.
+    fetchData().catch(error => console.error("Background refetch failed:", error));
+    
     setIsEditModalOpen(false);
     setSelectedAppointmentForEdit(null);
   }, [fetchData]);
@@ -541,4 +556,3 @@ const fetchData = useCallback(async () => {
     </div>
   );
 }
-
