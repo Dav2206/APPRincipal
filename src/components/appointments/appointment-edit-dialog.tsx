@@ -344,13 +344,15 @@ export function AppointmentEditDialog({ appointment, isOpen, onOpenChange, onApp
     let finalServiceId = data.serviceId === DEFAULT_SERVICE_ID_PLACEHOLDER ? (allServices?.[0]?.id || '') : data.serviceId;
 
     const totalDurationMinutes = (data.duration?.hours ?? 0) * 60 + (data.duration?.minutes ?? 0);
+    const professionalIdForAppointment = data.professionalId === NO_SELECTION_PLACEHOLDER ? appointment.professionalId : data.professionalId;
+
 
     const optimisticAppointment: Appointment = {
       ...appointment, // Start with the original appointment data
       status: data.status,
       appointmentDateTime: formatISO(finalDateObject),
       serviceId: finalServiceId!,
-      professionalId: data.professionalId === NO_SELECTION_PLACEHOLDER ? null : data.professionalId,
+      professionalId: professionalIdForAppointment,
       durationMinutes: totalDurationMinutes,
       amountPaid: data.amountPaid,
       paymentMethod: data.paymentMethod,
@@ -360,7 +362,7 @@ export function AppointmentEditDialog({ appointment, isOpen, onOpenChange, onApp
       addedServices: (data.addedServices || []).map(as => ({
         ...as,
         serviceId: as.serviceId!,
-        professionalId: (as.professionalId === NO_SELECTION_PLACEHOLDER || !as.professionalId) ? appointment.professionalId : as.professionalId,
+        professionalId: (as.professionalId === NO_SELECTION_PLACEHOLDER || !as.professionalId) ? professionalIdForAppointment : as.professionalId,
       })),
     };
 

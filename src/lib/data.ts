@@ -1255,18 +1255,26 @@ export async function updateAppointment(
     }
   }
 
+  // Correction for Added Services Professional ID Inheritance
   if (firestoreUpdateData.addedServices) {
+    const mainProfId = firestoreUpdateData.professionalId === '_no_selection_placeholder_' 
+      ? oldAppointmentData.professionalId 
+      : firestoreUpdateData.professionalId || oldAppointmentData.professionalId;
+    
     firestoreUpdateData.addedServices = firestoreUpdateData.addedServices.map((as: any) => {
-        const cleanedService: any = {};
-        for (const key in as) {
-            if (as[key] !== undefined) cleanedService[key] = as[key];
-             else cleanedService[key] = null;
-        }
-        delete cleanedService.service;
-        delete cleanedService.professional;
-        return cleanedService;
+      const cleanedService: any = {};
+      for (const key in as) {
+        if (as[key] !== undefined) cleanedService[key] = as[key];
+      }
+      if (cleanedService.professionalId === '_no_selection_placeholder_' || cleanedService.professionalId === undefined || cleanedService.professionalId === null) {
+        cleanedService.professionalId = mainProfId;
+      }
+      delete cleanedService.service;
+      delete cleanedService.professional;
+      return cleanedService;
     });
   }
+
   
   if (data.appointmentDate && data.appointmentTime) {
       const [hours, minutes] = data.appointmentTime.split(':').map(Number);
@@ -1715,6 +1723,7 @@ export async function mergePatients(primaryPatientId: string, duplicateIds: stri
 }
 
 // --- End Maintenance ---
+
 
 
 
