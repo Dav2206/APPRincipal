@@ -891,9 +891,9 @@ export function AppointmentForm({
                         />
                       </div>
                       
-                      {!isBasicMode && (
-                        <div className="space-y-2">
-                          <h4 className="text-sm font-semibold flex items-center gap-2 pt-2"><Briefcase /> Profesional y Observaciones</h4>
+                      <div className="space-y-2">
+                        <h4 className="text-sm font-semibold flex items-center gap-2 pt-2"><Briefcase /> Profesional y Observaciones</h4>
+                        {!isBasicMode && (
                           <FormField
                               control={form.control}
                               name="professionalOriginLocationId"
@@ -933,50 +933,52 @@ export function AppointmentForm({
                                 </FormItem>
                               )}
                             />
-                          <FormField
-                            control={form.control}
-                            name="preferredProfessionalId"
-                            render={({ field }) => (
-                              <FormItem>
-                                <FormLabel>Profesional Preferido (Opcional)</FormLabel>
-                                <Select
-                                  onValueChange={(value) => field.onChange(value)}
-                                  value={field.value || ANY_PROFESSIONAL_VALUE}
-                                  disabled={isLoadingServices || servicesList.length === 0 || isLoadingAppointments }
-                                >
-                                  <FormControl>
-                                    <SelectTrigger>
-                                        <SelectValue placeholder={
-                                            (isLoadingAppointments || isLoadingServices) ? "Cargando..." :
-                                            (availableProfessionalsForTimeSlot.length > 0) ? "Cualquier profesional disponible" :
-                                            "No hay profesionales disponibles"
-                                        } />
-                                    </SelectTrigger>
-                                  </FormControl>
-                                  <SelectContent>
-                                    <SelectItem value={ANY_PROFESSIONAL_VALUE}>Cualquier profesional disponible</SelectItem>
-                                    {availableProfessionalsForTimeSlot.map(prof => (
-                                      <SelectItem key={prof.id} value={prof.id}>
-                                          {prof.firstName} {prof.lastName}
-                                          {prof.locationId !== watchLocationId && (
-                                            <span className="text-xs text-muted-foreground ml-1">
-                                              ({locations.find(l=>l.id===prof.locationId)?.name})
-                                            </span>
-                                          )}
-                                      </SelectItem>
-                                    ))}
-                                  </SelectContent>
-                                </Select>
-                                {slotAvailabilityMessage && (
-                                    <Alert variant={availableProfessionalsForTimeSlot.length > 0 ? "default" : "destructive"} className="mt-2 text-xs p-2">
-                                      <AlertCircle className="h-4 w-4" />
-                                      <AlertDescription>{slotAvailabilityMessage}</AlertDescription>
-                                    </Alert>
-                                  )}
-                                <FormMessage />
-                              </FormItem>
-                            )}
-                          />
+                        )}
+                        <FormField
+                          control={form.control}
+                          name="preferredProfessionalId"
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel>Profesional Preferido (Opcional)</FormLabel>
+                              <Select
+                                onValueChange={(value) => field.onChange(value)}
+                                value={field.value || ANY_PROFESSIONAL_VALUE}
+                                disabled={isLoadingServices || servicesList.length === 0 || isLoadingAppointments }
+                              >
+                                <FormControl>
+                                  <SelectTrigger>
+                                      <SelectValue placeholder={
+                                          (isLoadingAppointments || isLoadingServices) ? "Cargando..." :
+                                          (availableProfessionalsForTimeSlot.length > 0) ? "Cualquier profesional disponible" :
+                                          "No hay profesionales disponibles"
+                                      } />
+                                  </SelectTrigger>
+                                </FormControl>
+                                <SelectContent>
+                                  <SelectItem value={ANY_PROFESSIONAL_VALUE}>Cualquier profesional disponible</SelectItem>
+                                  {availableProfessionalsForTimeSlot.map(prof => (
+                                    <SelectItem key={prof.id} value={prof.id}>
+                                        {prof.firstName} {prof.lastName}
+                                        {prof.locationId !== watchLocationId && (
+                                          <span className="text-xs text-muted-foreground ml-1">
+                                            ({locations.find(l=>l.id===prof.locationId)?.name})
+                                          </span>
+                                        )}
+                                    </SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                              {slotAvailabilityMessage && (
+                                  <Alert variant={availableProfessionalsForTimeSlot.length > 0 ? "default" : "destructive"} className="mt-2 text-xs p-2">
+                                    <AlertCircle className="h-4 w-4" />
+                                    <AlertDescription>{slotAvailabilityMessage}</AlertDescription>
+                                  </Alert>
+                                )}
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+                        {!isBasicMode && (
                           <FormField
                             control={form.control}
                             name="bookingObservations"
@@ -996,8 +998,8 @@ export function AppointmentForm({
                               </FormItem>
                             )}
                           />
-                        </div>
-                      )}
+                        )}
+                      </div>
                    </AccordionContent>
                 </AccordionItem>
 
