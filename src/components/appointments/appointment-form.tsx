@@ -1,4 +1,5 @@
 
+
 "use client";
 
 import React, { useState, useEffect, useMemo } from 'react';
@@ -42,6 +43,7 @@ interface AppointmentFormProps {
   defaultDate?: Date;
   allProfessionals: Professional[];
   currentLocationProfessionals: Professional[];
+  isBasicMode?: boolean;
 }
 
 const ANY_PROFESSIONAL_VALUE = "_any_professional_placeholder_";
@@ -58,6 +60,7 @@ export function AppointmentForm({
   initialData,
   defaultDate,
   allProfessionals: allSystemProfessionals,
+  isBasicMode = false,
 }: AppointmentFormProps) {
   const { user } = useAuth();
   const { selectedLocationId: adminSelectedLocation } = useAppState();
@@ -471,6 +474,9 @@ export function AppointmentForm({
         service.name.toLowerCase().includes(serviceSearchTerm.toLowerCase())
       )
     : servicesList;
+    
+  const accordionItemsToShow = isBasicMode ? ['item-2'] : ['item-1', 'item-2', 'item-3'];
+
 
   return (
     <Dialog open={isOpen} onOpenChange={(open) => {
@@ -506,7 +512,7 @@ export function AppointmentForm({
         <DialogHeader>
           <DialogTitle className="text-2xl flex items-center gap-2">
             <CalendarIcon className="text-primary"/>
-            Agendar Nueva Cita
+            {isBasicMode ? 'Nueva Cita (Modo Básico)' : 'Agendar Nueva Cita'}
           </DialogTitle>
           <DialogDescription>
             Complete los detalles para la nueva cita.
@@ -516,8 +522,9 @@ export function AppointmentForm({
         <div className="flex-grow overflow-y-auto pr-2 -mr-2"> 
           <Form {...form}>
             <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-0">
-               <Accordion type="multiple" defaultValue={['item-1', 'item-2']} className="w-full">
+               <Accordion type="multiple" defaultValue={accordionItemsToShow} className="w-full">
 
+                {!isBasicMode && (
                 <AccordionItem value="item-1">
                   <AccordionTrigger className="text-lg font-semibold"><UserPlus className="mr-2 h-5 w-5"/>Información del Paciente</AccordionTrigger>
                   <AccordionContent className="space-y-4 pt-4">
@@ -702,10 +709,37 @@ export function AppointmentForm({
                       )}
                   </AccordionContent>
                 </AccordionItem>
+                )}
                 
                 <AccordionItem value="item-2">
                    <AccordionTrigger className="text-lg font-semibold"><ConciergeBell className="mr-2 h-5 w-5"/>Detalles de la Cita</AccordionTrigger>
                    <AccordionContent className="space-y-4 pt-4">
+                      {isBasicMode && (
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <FormField
+                          control={form.control}
+                          name="patientFirstName"
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel>Nombre(s)</FormLabel>
+                              <FormControl><Input placeholder="Ej: Juan" {...field} /></FormControl>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+                        <FormField
+                          control={form.control}
+                          name="patientLastName"
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel>Apellido(s)</FormLabel>
+                              <FormControl><Input placeholder="Ej: Pérez" {...field} /></FormControl>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+                      </div>
+                      )}
                       <FormField
                         control={form.control}
                         name="locationId"
@@ -857,6 +891,7 @@ export function AppointmentForm({
                       
                       <div className="space-y-2">
                         <h4 className="text-sm font-semibold flex items-center gap-2 pt-2"><Briefcase /> Profesional y Observaciones</h4>
+                        {!isBasicMode && (
                         <FormField
                             control={form.control}
                             name="professionalOriginLocationId"
@@ -896,6 +931,7 @@ export function AppointmentForm({
                               </FormItem>
                             )}
                           />
+                        )}
                         <FormField
                           control={form.control}
                           name="preferredProfessionalId"
@@ -940,6 +976,7 @@ export function AppointmentForm({
                             </FormItem>
                           )}
                         />
+                        {!isBasicMode && (
                         <FormField
                           control={form.control}
                           name="bookingObservations"
@@ -959,11 +996,12 @@ export function AppointmentForm({
                             </FormItem>
                           )}
                         />
+                        )}
                       </div>
                    </AccordionContent>
                 </AccordionItem>
 
-                {!isLoadingServices && servicesList && servicesList.length > 0 && (
+                {!isBasicMode && !isLoadingServices && servicesList && servicesList.length > 0 && (
                   <AccordionItem value="item-3">
                     <AccordionTrigger className="text-lg font-semibold"><ShoppingBag className="mr-2 h-5 w-5"/>Servicios Adicionales</AccordionTrigger>
                     <AccordionContent className="space-y-4 pt-4">

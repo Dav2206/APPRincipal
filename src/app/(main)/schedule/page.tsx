@@ -15,7 +15,7 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { format, addDays, subDays, startOfDay, isEqual, parseISO } from 'date-fns';
 import { es } from 'date-fns/locale';
-import { CalendarIcon, ChevronLeft, ChevronRight, AlertTriangle, Loader2, CalendarClock, PlusCircleIcon, UserXIcon, ZoomIn, ZoomOut, RefreshCw, XIcon, MousePointerClick } from 'lucide-react';
+import { CalendarIcon, ChevronLeft, ChevronRight, AlertTriangle, Loader2, CalendarClock, PlusCircleIcon, UserXIcon, ZoomIn, ZoomOut, RefreshCw, XIcon, MousePointerClick, Zap } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { AppointmentEditDialog } from '@/components/appointments/appointment-edit-dialog';
 import { AppointmentForm } from '@/components/appointments/appointment-form';
@@ -43,6 +43,7 @@ export default function SchedulePage() {
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [isNewAppointmentFormOpen, setIsNewAppointmentFormOpen] = useState(false);
   const [isDragDropEnabled, setIsDragDropEnabled] = useState(false);
+  const [isBasicMode, setIsBasicMode] = useState(false);
 
   // State for image modal
   const [selectedImageForModal, setSelectedImageForModal] = useState<string | null>(null);
@@ -412,7 +413,18 @@ const fetchData = useCallback(async () => {
                 />
                 <Label htmlFor="drag-drop-switch" className="text-xs flex items-center gap-1">
                   <MousePointerClick className="h-4 w-4" />
-                  Habilitar Arrastrar
+                  Habilitar Arrastre
+                </Label>
+              </div>
+              <div className="flex items-center space-x-2">
+                <Switch
+                  id="basic-mode-switch"
+                  checked={isBasicMode}
+                  onCheckedChange={setIsBasicMode}
+                />
+                <Label htmlFor="basic-mode-switch" className="text-xs flex items-center gap-1">
+                  <Zap className="h-4 w-4" />
+                  Modo Básico
                 </Label>
               </div>
             <div className="text-xs text-muted-foreground text-center sm:text-right w-full sm:w-auto">
@@ -466,6 +478,7 @@ const fetchData = useCallback(async () => {
           defaultDate={currentDate}
           allProfessionals={allSystemProfessionals} 
           currentLocationProfessionals={allSystemProfessionals.filter(p => p.locationId === actualEffectiveLocationId)}
+          isBasicMode={isBasicMode}
         />
       )}
 
