@@ -72,7 +72,6 @@ export function AppointmentEditDialog({ appointment, isOpen, onOpenChange, onApp
   const [locations, setLocations] = useState<Location[]>([]);
   const [isLoadingServices, setIsLoadingServices] = useState(true);
   const [isUploadingImage, setIsUploadingImage] = useState(false);
-  const [isSubmittingForm, setIsSubmittingForm] = useState(false);
   const [isConfirmDeleteOpen, setIsConfirmDeleteOpen] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -332,55 +331,55 @@ export function AppointmentEditDialog({ appointment, isOpen, onOpenChange, onApp
         toast({ title: "Error", description: "No hay servicios disponibles o no se ha seleccionado uno.", variant: "destructive" });
         return;
     }
-    setIsSubmittingForm(true);
+
+    // Immediately close the dialog and optimistically update the UI
+    onOpenChange(false);
+    
+    // Construct the optimistic update data
+    const datePart = data.appointmentDate || parseISO(appointment.appointmentDateTime);
+    const timePart = data.appointmentTime || format(parseISO(appointment.appointmentDateTime), 'HH:mm');
+    const [hours, minutes] = timePart.split(':').map(Number);
+    const finalDateObject = setMinutes(setHours(datePart, hours), minutes);
+
+    let finalServiceId = data.serviceId === DEFAULT_SERVICE_ID_PLACEHOLDER ? (allServices?.[0]?.id || '') : data.serviceId;
+
+    const totalDurationMinutes = (data.duration?.hours ?? 0) * 60 + (data.duration?.minutes ?? 0);
+
+    const optimisticAppointment: Appointment = {
+      ...appointment, // Start with the original appointment data
+      status: data.status,
+      appointmentDateTime: formatISO(finalDateObject),
+      serviceId: finalServiceId!,
+      professionalId: data.professionalId === NO_SELECTION_PLACEHOLDER ? null : data.professionalId,
+      durationMinutes: totalDurationMinutes,
+      amountPaid: data.amountPaid,
+      paymentMethod: data.paymentMethod,
+      actualArrivalTime: data.actualArrivalTime || null,
+      staffNotes: data.staffNotes || '',
+      attachedPhotos: (data.attachedPhotos || []).map(p => p.url).filter((url): url is string => !!url),
+      addedServices: (data.addedServices || []).map(as => ({
+        ...as,
+        serviceId: as.serviceId!,
+        professionalId: as.professionalId === NO_SELECTION_PLACEHOLDER ? null : as.professionalId,
+      })),
+    };
+
+    onAppointmentUpdated(optimisticAppointment);
+    toast({ title: "Actualizando Cita...", description: "Los cambios se están guardando en segundo plano." });
+
+    // Perform the actual update in the background
     try {
-      const datePart = data.appointmentDate || parseISO(appointment.appointmentDateTime);
-      const timePart = data.appointmentTime || format(parseISO(appointment.appointmentDateTime), 'HH:mm');
-
-      const [hours, minutes] = timePart.split(':').map(Number);
-      const finalDateObject = setMinutes(setHours(datePart, hours), minutes);
-
-      let finalServiceId = data.serviceId;
-      if (data.serviceId === DEFAULT_SERVICE_ID_PLACEHOLDER && allServices?.length) {
-          finalServiceId = allServices[0].id;
-      } else if (data.serviceId === DEFAULT_SERVICE_ID_PLACEHOLDER) {
-          toast({ title: "Error", description: "Servicio principal es requerido.", variant: "destructive" });
-          setIsSubmittingForm(false);
-          return;
-      }
-
-      const totalDurationMinutes = (data.duration?.hours ?? 0) * 60 + (data.duration?.minutes ?? 0);
-
-      const updatedData: Partial<Appointment> & { attachedPhotos?: { url: string }[] } = {
-        ...data,
-        appointmentDateTime: formatISO(finalDateObject),
-        serviceId: finalServiceId,
-        professionalId: data.professionalId === NO_SELECTION_PLACEHOLDER ? null : data.professionalId,
-        durationMinutes: totalDurationMinutes,
-        amountPaid: data.amountPaid,
-        actualArrivalTime: data.actualArrivalTime || null,
-        attachedPhotos: (data.attachedPhotos || []).filter(p => p && p.url),
-        addedServices: data.addedServices?.map(as => ({
-          ...as,
-          serviceId: as.serviceId === DEFAULT_SERVICE_ID_PLACEHOLDER && allServices?.length ? allServices[0].id : as.serviceId,
-          professionalId: as.professionalId === NO_SELECTION_PLACEHOLDER ? null : as.professionalId, 
-          amountPaid: as.amountPaid,
-        })).filter(as => as.serviceId && as.serviceId !== DEFAULT_SERVICE_ID_PLACEHOLDER),
-      };
-
-      const result = await updateAppointmentData(appointment.id, updatedData, appointment.attachedPhotos || []);
+      const result = await updateAppointmentData(appointment.id, data, appointment.attachedPhotos?.map(url => ({url})) || []);
       if (result) {
-        onAppointmentUpdated(result);
         toast({ title: "Cita Actualizada", description: "Los detalles de la cita han sido actualizados." });
-        onOpenChange(false);
+        onAppointmentUpdated(result); // Send the final data from server to sync UI state
       } else {
-        toast({ title: "Error", description: "No se pudo actualizar la cita.", variant: "destructive" });
+        throw new Error("La actualización no devolvió un resultado.");
       }
     } catch (error) {
-      console.error("Error updating appointment:", error);
-      toast({ title: "Error", description: "Ocurrió un error inesperado.", variant: "destructive" });
-    } finally {
-      setIsSubmittingForm(false);
+      console.error("Error updating appointment in background:", error);
+      toast({ title: "Error al Guardar", description: "No se pudo actualizar la cita. Por favor, recargue la página.", variant: "destructive" });
+      onAppointmentUpdated(appointment); // Revert to original data on failure
     }
   };
 
@@ -686,8 +685,8 @@ export function AppointmentEditDialog({ appointment, isOpen, onOpenChange, onApp
             </div>
             <div className="flex flex-col-reverse sm:flex-row sm:justify-end sm:space-x-2">
               <DialogClose asChild><Button type="button" variant="outline" className="w-full sm:w-auto">Cerrar</Button></DialogClose>
-              <Button type="submit" className="w-full sm:w-auto" disabled={isSubmittingForm || isUploadingImage || isLoadingServices || isDeleting}>
-                {(isSubmittingForm || isUploadingImage || isLoadingServices || isDeleting) && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              <Button type="submit" className="w-full sm:w-auto" disabled={isUploadingImage || isLoadingServices || isDeleting}>
+                {(isUploadingImage || isLoadingServices || isDeleting) && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                 Guardar Cambios
               </Button>
             </div>
