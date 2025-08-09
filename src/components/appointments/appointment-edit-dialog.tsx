@@ -439,6 +439,7 @@ export function AppointmentEditDialog({ appointment, isOpen, onOpenChange, onApp
                 </FormItem>
               )}
             />
+            {form.watch('status') !== APPOINTMENT_STATUS.COMPLETED && (
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <FormField
                 control={form.control}
@@ -471,6 +472,7 @@ export function AppointmentEditDialog({ appointment, isOpen, onOpenChange, onApp
                 )}
               />
             </div>
+            )}
              
              {form.watch('status') === APPOINTMENT_STATUS.COMPLETED && (
                 <div>
