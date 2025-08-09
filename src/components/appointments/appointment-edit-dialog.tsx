@@ -320,7 +320,7 @@ export function AppointmentEditDialog({ appointment, isOpen, onOpenChange, onApp
     }
       
     // For already uploaded photos, we just remove it from the form state.
-    // The actual deletion from storage happens in the onSubmit function by comparing the original and final lists.
+    // The actual deletion from storage happens in the onSubmitUpdate function by comparing the original and final lists.
     removeAttachedPhoto(index);
     toast({ title: "Imagen marcada para eliminación", description: "La imagen se eliminará de Firebase Storage al guardar los cambios."});
   };
@@ -360,7 +360,7 @@ export function AppointmentEditDialog({ appointment, isOpen, onOpenChange, onApp
       addedServices: (data.addedServices || []).map(as => ({
         ...as,
         serviceId: as.serviceId!,
-        professionalId: as.professionalId === NO_SELECTION_PLACEHOLDER ? null : as.professionalId,
+        professionalId: (as.professionalId === NO_SELECTION_PLACEHOLDER || !as.professionalId) ? appointment.professionalId : as.professionalId,
       })),
     };
 
