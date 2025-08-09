@@ -16,7 +16,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow, TableCap
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { format, startOfDay, getMonth, getDate, startOfMonth, endOfMonth, addDays, getYear, subDays, setYear, setMonth, isSameDay, isAfter, subMonths, parseISO } from 'date-fns';
 import { es } from 'date-fns/locale';
-import { CalendarIcon, Loader2, AlertTriangle, FileText, DollarSign, ChevronLeft, ChevronRight, ListChecks, Landmark, User, XIcon, Building } from 'lucide-react';
+import { CalendarIcon, Loader2, AlertTriangle, FileText, DollarSign, ChevronLeft, ChevronRight, ListChecks, Landmark, User, XIcon, Building, Clock, UserSquare } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -73,9 +73,10 @@ interface ProfessionalDetails {
   professionalName: string;
   period: string;
   details: {
+    appointmentDateTime: string;
+    patientName: string;
     serviceName: string;
     locationName: string;
-    quantity: number;
     totalValue: number;
   }[];
 }
@@ -621,42 +622,37 @@ export default function RegistryPage() {
       ? `del ${format(selectedDate, "PPP", { locale: es })}`
       : `de la ${getBiWeeklyPeriodDescription()}`;
 
-    const serviceMap = new Map<string, { serviceName: string; locationName: string; quantity: number; totalValue: number }>();
+    const details: ProfessionalDetails['details'] = [];
 
     rawAppointmentsForPeriod.forEach(appt => {
       // Process main service
       if (appt.professionalId === professionalId) {
-        const key = `${appt.serviceId}-${appt.locationId}`;
-        const entry = serviceMap.get(key) || {
-          serviceName: appt.service?.name || 'Servicio Desconocido',
+        details.push({
+          appointmentDateTime: appt.appointmentDateTime,
+          patientName: `${appt.patient?.firstName || ''} ${appt.patient?.lastName || 'Paciente'}`.trim(),
+          serviceName: appt.service?.name || 'Servicio Desc.',
           locationName: locations.find(l => l.id === appt.locationId)?.name || 'Sede Desc.',
-          quantity: 0,
-          totalValue: 0,
-        };
-        entry.quantity += 1;
-        entry.totalValue += appt.amountPaid || 0;
-        serviceMap.set(key, entry);
+          totalValue: appt.amountPaid || 0,
+        });
       }
 
       // Process added services
       appt.addedServices?.forEach(added => {
         const profId = added.professionalId || appt.professionalId;
         if (profId === professionalId) {
-          const key = `${added.serviceId}-${appt.locationId}`;
-          const entry = serviceMap.get(key) || {
-            serviceName: allServices?.find(s => s.id === added.serviceId)?.name || 'Serv. Adicional Desc.',
+          details.push({
+            appointmentDateTime: appt.appointmentDateTime, // Use main appointment time
+            patientName: `${appt.patient?.firstName || ''} ${appt.patient?.lastName || 'Paciente'}`.trim(),
+            serviceName: `(Adicional) ${allServices?.find(s => s.id === added.serviceId)?.name || 'Serv. Adicional Desc.'}`,
             locationName: locations.find(l => l.id === appt.locationId)?.name || 'Sede Desc.',
-            quantity: 0,
-            totalValue: 0,
-          };
-          entry.quantity += 1;
-          entry.totalValue += added.amountPaid || 0;
-          serviceMap.set(key, entry);
+            totalValue: added.amountPaid || 0,
+          });
         }
       });
     });
 
-    const details = Array.from(serviceMap.values());
+    details.sort((a,b) => parseISO(a.appointmentDateTime).getTime() - parseISO(b.appointmentDateTime).getTime());
+
     setSelectedProfessionalForDetails({ professionalId, professionalName, period, details });
     setIsDetailsModalOpen(true);
   };
@@ -899,14 +895,14 @@ export default function RegistryPage() {
       
       {/* Details Modal */}
       <Dialog open={isDetailsModalOpen} onOpenChange={setIsDetailsModalOpen}>
-        <DialogContent className="sm:max-w-xl">
+        <DialogContent className="sm:max-w-3xl">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
-              <User size={20} />
-              Detalle de Servicios de {selectedProfessionalForDetails?.professionalName}
+              <ListChecks size={20} />
+              Detalle de Citas de {selectedProfessionalForDetails?.professionalName}
             </DialogTitle>
             <DialogDescription>
-              Mostrando el detalle de servicios realizados en el período {selectedProfessionalForDetails?.period}.
+              Mostrando el detalle de citas completadas en el período {selectedProfessionalForDetails?.period}.
             </DialogDescription>
           </DialogHeader>
           <div className="max-h-[60vh] overflow-y-auto">
@@ -914,33 +910,35 @@ export default function RegistryPage() {
               <Table>
                 <TableHeader>
                   <TableRow>
+                    <TableHead><CalendarIcon size={14} className="inline-block mr-1"/>Fecha y Hora</TableHead>
+                    <TableHead><UserSquare size={14} className="inline-block mr-1"/>Paciente</TableHead>
                     <TableHead>Servicio</TableHead>
                     <TableHead><Building size={14} className="inline-block mr-1"/>Sede</TableHead>
-                    <TableHead className="text-center">Cantidad</TableHead>
-                    <TableHead className="text-right">Valor Total (S/)</TableHead>
+                    <TableHead className="text-right">Valor (S/)</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {selectedProfessionalForDetails.details.map((detail, index) => (
                     <TableRow key={index}>
-                      <TableCell className="font-medium">{detail.serviceName}</TableCell>
+                      <TableCell className="text-xs">{format(parseISO(detail.appointmentDateTime), "dd/MM/yy HH:mm", { locale: es })}</TableCell>
+                      <TableCell>{detail.patientName}</TableCell>
+                      <TableCell>{detail.serviceName}</TableCell>
                       <TableCell>{detail.locationName}</TableCell>
-                      <TableCell className="text-center">{detail.quantity}</TableCell>
-                      <TableCell className="text-right">{detail.totalValue.toFixed(2)}</TableCell>
+                      <TableCell className="text-right font-medium">{detail.totalValue.toFixed(2)}</TableCell>
                     </TableRow>
                   ))}
                 </TableBody>
                 <TableFooter>
-                  <TableRow className="font-bold">
-                    <TableCell colSpan={3}>Total General</TableCell>
-                    <TableCell className="text-right">
+                  <TableRow className="font-bold bg-muted/50">
+                    <TableCell colSpan={4}>Total General</TableCell>
+                    <TableCell className="text-right text-lg">
                       S/ {selectedProfessionalForDetails.details.reduce((sum, d) => sum + d.totalValue, 0).toFixed(2)}
                     </TableCell>
                   </TableRow>
                 </TableFooter>
               </Table>
             ) : (
-              <p className="text-center text-muted-foreground py-8">No se encontraron detalles de servicios para este profesional en el período seleccionado.</p>
+              <p className="text-center text-muted-foreground py-8">No se encontraron detalles de citas para este profesional en el período seleccionado.</p>
             )}
           </div>
           <DialogFooter>
