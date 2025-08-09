@@ -560,7 +560,7 @@ export function AppointmentEditDialog({ appointment, isOpen, onOpenChange, onApp
 
           {/* -- Section: Pago (si está completado) -- */}
           {form.watch('status') === APPOINTMENT_STATUS.COMPLETED && (
-            <div className="space-y-3 p-3 border rounded-lg bg-muted/30">
+            <div className="space-y-3 p-3 border rounded-lg bg-destructive/10 border-destructive/20">
                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <FormField control={form.control} name="paymentMethod" render={({ field }) => (
                   <FormItem><FormLabel className="flex items-center gap-1"><DollarSign size={16}/>Método de Pago</FormLabel>
