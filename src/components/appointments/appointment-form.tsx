@@ -740,26 +740,28 @@ export function AppointmentForm({
                         />
                       </div>
                       )}
-                      <FormField
-                        control={form.control}
-                        name="locationId"
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel className="flex items-center gap-1"><Building size={16}/>Sede de la Cita (Destino)</FormLabel>
-                            <Select onValueChange={(value) => { field.onChange(value); form.setValue('professionalOriginLocationId', SAME_LOCATION_AS_APPOINTMENT_VALUE); form.setValue('preferredProfessionalId', ANY_PROFESSIONAL_VALUE);}} value={field.value || ""} disabled={(user?.role === USER_ROLES.LOCATION_STAFF && !isAdminOrContador) || isLoadingServices || servicesList.length === 0}>
-                              <FormControl>
-                                <SelectTrigger><SelectValue placeholder="Seleccionar sede" /></SelectTrigger>
-                              </FormControl>
-                              <SelectContent>
-                                {locations.map(loc => (
-                                  <SelectItem key={loc.id} value={loc.id}>{loc.name}</SelectItem>
-                                ))}
-                              </SelectContent>
-                            </Select>
-                            <FormMessage />
-                          </FormItem>
-                        )}
-                      />
+                      {!isBasicMode && (
+                        <FormField
+                          control={form.control}
+                          name="locationId"
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel className="flex items-center gap-1"><Building size={16}/>Sede de la Cita (Destino)</FormLabel>
+                              <Select onValueChange={(value) => { field.onChange(value); form.setValue('professionalOriginLocationId', SAME_LOCATION_AS_APPOINTMENT_VALUE); form.setValue('preferredProfessionalId', ANY_PROFESSIONAL_VALUE);}} value={field.value || ""} disabled={(user?.role === USER_ROLES.LOCATION_STAFF && !isAdminOrContador) || isLoadingServices || servicesList.length === 0}>
+                                <FormControl>
+                                  <SelectTrigger><SelectValue placeholder="Seleccionar sede" /></SelectTrigger>
+                                </FormControl>
+                                <SelectContent>
+                                  {locations.map(loc => (
+                                    <SelectItem key={loc.id} value={loc.id}>{loc.name}</SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+                      )}
                       <FormField
                         control={form.control}
                         name="serviceId"
@@ -889,115 +891,113 @@ export function AppointmentForm({
                         />
                       </div>
                       
-                      <div className="space-y-2">
-                        <h4 className="text-sm font-semibold flex items-center gap-2 pt-2"><Briefcase /> Profesional y Observaciones</h4>
-                        {!isBasicMode && (
-                        <FormField
+                      {!isBasicMode && (
+                        <div className="space-y-2">
+                          <h4 className="text-sm font-semibold flex items-center gap-2 pt-2"><Briefcase /> Profesional y Observaciones</h4>
+                          <FormField
+                              control={form.control}
+                              name="professionalOriginLocationId"
+                              render={({ field }) => (
+                                <FormItem>
+                                  <FormLabel className="flex items-center gap-1 text-xs"><Shuffle size={14}/>Sede de Origen del Profesional</FormLabel>
+                                  <Select
+                                    onValueChange={(value) => {
+                                      field.onChange(value);
+                                      form.setValue('preferredProfessionalId', ANY_PROFESSIONAL_VALUE); // Reset professional selection
+                                    }}
+                                    value={field.value || SAME_LOCATION_AS_APPOINTMENT_VALUE}
+                                    disabled={checkboxDisabledReason}
+                                  >
+                                    <FormControl>
+                                      <SelectTrigger>
+                                        <SelectValue placeholder="Seleccionar sede de origen" />
+                                      </SelectTrigger>
+                                    </FormControl>
+                                    <SelectContent>
+                                      <SelectItem value={SAME_LOCATION_AS_APPOINTMENT_VALUE}>
+                                        Misma Sede de la Cita
+                                      </SelectItem>
+                                      {locations
+                                        .filter(loc => loc.id !== watchLocationId) // Exclude the destination location
+                                        .map(loc => (
+                                          <SelectItem key={loc.id} value={loc.id}>
+                                            {loc.name}
+                                          </SelectItem>
+                                        ))}
+                                    </SelectContent>
+                                  </Select>
+                                  <FormDescription className="text-xs">
+                                    Para traslados temporales por una cita, elija una sede de origen distinta.
+                                  </FormDescription>
+                                  <FormMessage />
+                                </FormItem>
+                              )}
+                            />
+                          <FormField
                             control={form.control}
-                            name="professionalOriginLocationId"
+                            name="preferredProfessionalId"
                             render={({ field }) => (
                               <FormItem>
-                                <FormLabel className="flex items-center gap-1 text-xs"><Shuffle size={14}/>Sede de Origen del Profesional</FormLabel>
+                                <FormLabel>Profesional Preferido (Opcional)</FormLabel>
                                 <Select
-                                  onValueChange={(value) => {
-                                    field.onChange(value);
-                                    form.setValue('preferredProfessionalId', ANY_PROFESSIONAL_VALUE); // Reset professional selection
-                                  }}
-                                  value={field.value || SAME_LOCATION_AS_APPOINTMENT_VALUE}
-                                  disabled={checkboxDisabledReason}
+                                  onValueChange={(value) => field.onChange(value)}
+                                  value={field.value || ANY_PROFESSIONAL_VALUE}
+                                  disabled={isLoadingServices || servicesList.length === 0 || isLoadingAppointments }
                                 >
                                   <FormControl>
                                     <SelectTrigger>
-                                      <SelectValue placeholder="Seleccionar sede de origen" />
+                                        <SelectValue placeholder={
+                                            (isLoadingAppointments || isLoadingServices) ? "Cargando..." :
+                                            (availableProfessionalsForTimeSlot.length > 0) ? "Cualquier profesional disponible" :
+                                            "No hay profesionales disponibles"
+                                        } />
                                     </SelectTrigger>
                                   </FormControl>
                                   <SelectContent>
-                                    <SelectItem value={SAME_LOCATION_AS_APPOINTMENT_VALUE}>
-                                      Misma Sede de la Cita
-                                    </SelectItem>
-                                    {locations
-                                      .filter(loc => loc.id !== watchLocationId) // Exclude the destination location
-                                      .map(loc => (
-                                        <SelectItem key={loc.id} value={loc.id}>
-                                          {loc.name}
-                                        </SelectItem>
-                                      ))}
+                                    <SelectItem value={ANY_PROFESSIONAL_VALUE}>Cualquier profesional disponible</SelectItem>
+                                    {availableProfessionalsForTimeSlot.map(prof => (
+                                      <SelectItem key={prof.id} value={prof.id}>
+                                          {prof.firstName} {prof.lastName}
+                                          {prof.locationId !== watchLocationId && (
+                                            <span className="text-xs text-muted-foreground ml-1">
+                                              ({locations.find(l=>l.id===prof.locationId)?.name})
+                                            </span>
+                                          )}
+                                      </SelectItem>
+                                    ))}
                                   </SelectContent>
                                 </Select>
-                                <FormDescription className="text-xs">
-                                  Para traslados temporales por una cita, elija una sede de origen distinta.
-                                </FormDescription>
+                                {slotAvailabilityMessage && (
+                                    <Alert variant={availableProfessionalsForTimeSlot.length > 0 ? "default" : "destructive"} className="mt-2 text-xs p-2">
+                                      <AlertCircle className="h-4 w-4" />
+                                      <AlertDescription>{slotAvailabilityMessage}</AlertDescription>
+                                    </Alert>
+                                  )}
                                 <FormMessage />
                               </FormItem>
                             )}
                           />
-                        )}
-                        <FormField
-                          control={form.control}
-                          name="preferredProfessionalId"
-                          render={({ field }) => (
-                            <FormItem>
-                              <FormLabel>Profesional Preferido (Opcional)</FormLabel>
-                              <Select
-                                onValueChange={(value) => field.onChange(value)}
-                                value={field.value || ANY_PROFESSIONAL_VALUE}
-                                disabled={isLoadingServices || servicesList.length === 0 || isLoadingAppointments }
-                              >
+                          <FormField
+                            control={form.control}
+                            name="bookingObservations"
+                            render={({ field }) => (
+                              <FormItem>
+                                <FormLabel className="flex items-center gap-1"><Edit3 size={16}/>Observaciones Adicionales (Opcional)</FormLabel>
                                 <FormControl>
-                                  <SelectTrigger>
-                                      <SelectValue placeholder={
-                                          (isLoadingAppointments || isLoadingServices) ? "Cargando..." :
-                                          (availableProfessionalsForTimeSlot.length > 0) ? "Cualquier profesional disponible" :
-                                          "No hay profesionales disponibles"
-                                      } />
-                                  </SelectTrigger>
+                                  <Textarea
+                                    placeholder="Ej: El paciente tiene movilidad reducida, etc."
+                                    className="resize-none"
+                                    {...field}
+                                    value={field.value || ''}
+                                    disabled={isLoadingServices || servicesList.length === 0}
+                                  />
                                 </FormControl>
-                                <SelectContent>
-                                  <SelectItem value={ANY_PROFESSIONAL_VALUE}>Cualquier profesional disponible</SelectItem>
-                                  {availableProfessionalsForTimeSlot.map(prof => (
-                                    <SelectItem key={prof.id} value={prof.id}>
-                                        {prof.firstName} {prof.lastName}
-                                        {prof.locationId !== watchLocationId && (
-                                          <span className="text-xs text-muted-foreground ml-1">
-                                            ({locations.find(l=>l.id===prof.locationId)?.name})
-                                          </span>
-                                        )}
-                                    </SelectItem>
-                                  ))}
-                                </SelectContent>
-                              </Select>
-                              {slotAvailabilityMessage && (
-                                  <Alert variant={availableProfessionalsForTimeSlot.length > 0 ? "default" : "destructive"} className="mt-2 text-xs p-2">
-                                    <AlertCircle className="h-4 w-4" />
-                                    <AlertDescription>{slotAvailabilityMessage}</AlertDescription>
-                                  </Alert>
-                                )}
-                              <FormMessage />
-                            </FormItem>
-                          )}
-                        />
-                        {!isBasicMode && (
-                        <FormField
-                          control={form.control}
-                          name="bookingObservations"
-                          render={({ field }) => (
-                            <FormItem>
-                              <FormLabel className="flex items-center gap-1"><Edit3 size={16}/>Observaciones Adicionales (Opcional)</FormLabel>
-                              <FormControl>
-                                <Textarea
-                                  placeholder="Ej: El paciente tiene movilidad reducida, etc."
-                                  className="resize-none"
-                                  {...field}
-                                  value={field.value || ''}
-                                  disabled={isLoadingServices || servicesList.length === 0}
-                                />
-                              </FormControl>
-                              <FormMessage />
-                            </FormItem>
-                          )}
-                        />
-                        )}
-                      </div>
+                                <FormMessage />
+                              </FormItem>
+                            )}
+                          />
+                        </div>
+                      )}
                    </AccordionContent>
                 </AccordionItem>
 
