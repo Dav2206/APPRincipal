@@ -488,60 +488,64 @@ export default function DashboardPage() {
             icon={<Briefcase className="h-8 w-8 mb-2 text-accent" />}
           />
         )}
-         {installPromptEvent && (
-          <Card>
-            <CardHeader>
-              <Download className="h-8 w-8 mb-2 text-primary" />
-              <CardTitle>Instalar Aplicación</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <p className="text-sm text-muted-foreground mb-4">
-                Instale la aplicación en su dispositivo para un acceso más rápido y una experiencia nativa.
-              </p>
-              <Button onClick={handleInstallClick} className="w-full">
-                Instalar Ahora
-              </Button>
-            </CardContent>
-          </Card>
-        )}
-         {isAdmin && (
-           <Card>
-            <CardHeader>
-              <Trash2 className="h-8 w-8 mb-2 text-destructive" />
-              <CardTitle>Mantenimiento</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <p className="text-sm text-muted-foreground mb-4">
-                Elimina los bloques de viaje que ya no están vinculados a ninguna cita principal.
-              </p>
-                <AlertDialog>
-                  <AlertDialogTrigger asChild>
-                    <Button variant="destructive" className="w-full" disabled={isCleaningBlocks}>
-                      {isCleaningBlocks && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                      Limpiar Bloqueos Huérfanos
-                    </Button>
-                  </AlertDialogTrigger>
-                  <AlertDialogContent>
-                    <AlertDialogHeader>
-                      <AlertDialogTitle>¿Confirmar Limpieza?</AlertDialogTitle>
-                      <AlertDialogDescription>
-                        Esta acción buscará y eliminará permanentemente todos los bloques de viaje que no tengan una cita principal válida. Esta operación no se puede deshacer.
-                      </AlertDialogDescription>
-                    </AlertDialogHeader>
-                    <AlertDialogFooter>
-                      <AlertDialogCancel>Cancelar</AlertDialogCancel>
-                      <AlertDialogAction onClick={handleCleanup} disabled={isCleaningBlocks}>
-                        {isCleaningBlocks && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                        Sí, limpiar ahora
-                      </AlertDialogAction>
-                    </AlertDialogFooter>
-                  </AlertDialogContent>
-                </AlertDialog>
-            </CardContent>
-           </Card>
-        )}
       </div>
 
+      {(installPromptEvent || isAdmin) && (
+        <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4 pt-4">
+           {installPromptEvent && (
+              <Card>
+                <CardHeader>
+                  <Download className="h-8 w-8 mb-2 text-primary" />
+                  <CardTitle>Instalar Aplicación</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <p className="text-sm text-muted-foreground mb-4">
+                    Instale la aplicación en su dispositivo para un acceso más rápido y una experiencia nativa.
+                  </p>
+                  <Button onClick={handleInstallClick} className="w-full">
+                    Instalar Ahora
+                  </Button>
+                </CardContent>
+              </Card>
+            )}
+            {isAdmin && (
+              <Card>
+                <CardHeader>
+                  <Trash2 className="h-8 w-8 mb-2 text-destructive" />
+                  <CardTitle>Mantenimiento</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <p className="text-sm text-muted-foreground mb-4">
+                    Elimina los bloques de viaje que ya no están vinculados a ninguna cita principal.
+                  </p>
+                    <AlertDialog>
+                      <AlertDialogTrigger asChild>
+                        <Button variant="destructive" className="w-full" disabled={isCleaningBlocks}>
+                          {isCleaningBlocks && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                          Limpiar Bloqueos Huérfanos
+                        </Button>
+                      </AlertDialogTrigger>
+                      <AlertDialogContent>
+                        <AlertDialogHeader>
+                          <AlertDialogTitle>¿Confirmar Limpieza?</AlertDialogTitle>
+                          <AlertDialogDescription>
+                            Esta acción buscará y eliminará permanentemente todos los bloques de viaje que no tengan una cita principal válida. Esta operación no se puede deshacer.
+                          </AlertDialogDescription>
+                        </AlertDialogHeader>
+                        <AlertDialogFooter>
+                          <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                          <AlertDialogAction onClick={handleCleanup} disabled={isCleaningBlocks}>
+                            {isCleaningBlocks && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                            Sí, limpiar ahora
+                          </AlertDialogAction>
+                        </AlertDialogFooter>
+                      </AlertDialogContent>
+                    </AlertDialog>
+                </CardContent>
+              </Card>
+            )}
+        </div>
+      )}
     </div>
   );
 }
