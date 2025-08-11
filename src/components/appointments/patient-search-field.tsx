@@ -14,12 +14,12 @@ import { useAuth } from '@/contexts/auth-provider';
 import { USER_ROLES } from '@/lib/constants';
 
 interface PatientSearchFieldProps {
-  onPatientSelect: (patient: Patient | null) => void; // null for new patient
+  onPatientSelect: (patient: Patient | null) => void;
   selectedPatientId?: string | null;
-  onClear?: () => void; // Callback when explicitly clearing selection
+  disabled?: boolean;
 }
 
-export function PatientSearchField({ onPatientSelect, selectedPatientId, onClear }: PatientSearchFieldProps) {
+export function PatientSearchField({ onPatientSelect, selectedPatientId, disabled }: PatientSearchFieldProps) {
   const { user } = useAuth();
   const [patients, setPatients] = useState<Patient[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
@@ -45,19 +45,12 @@ export function PatientSearchField({ onPatientSelect, selectedPatientId, onClear
   }, [selectedPatientId, patients]);
 
 
-  const handleSelect = (patient: Patient | "new-patient" | "clear-selection") => {
+  const handleSelect = (patient: Patient | "new-patient") => {
     if (patient === "new-patient") {
       setSelectedPatient(null);
       onPatientSelect(null);
       setSearchTerm('');
-    } else if (patient === "clear-selection") {
-      setSelectedPatient(null);
-      setSearchTerm('');
-      onPatientSelect(null); 
-      if (onClear) onClear();
-    }
-    
-    else {
+    } else {
       setSelectedPatient(patient as Patient);
       onPatientSelect(patient as Patient);
       setSearchTerm(`${(patient as Patient).firstName} ${(patient as Patient).lastName}`);
@@ -66,7 +59,7 @@ export function PatientSearchField({ onPatientSelect, selectedPatientId, onClear
   };
   
 
-  const filteredPatients = searchTerm
+  const filteredPatients = popoverOpen && searchTerm
     ? patients.filter(p =>
         `${p.firstName} ${p.lastName}`.toLowerCase().includes(searchTerm.toLowerCase()) ||
         (user?.role === USER_ROLES.ADMIN && p.phone && p.phone.includes(searchTerm)) // Only search by phone if admin
@@ -81,10 +74,11 @@ export function PatientSearchField({ onPatientSelect, selectedPatientId, onClear
           role="combobox"
           aria-expanded={popoverOpen}
           className="w-full justify-between"
+          disabled={disabled}
         >
           {selectedPatient
             ? `${selectedPatient.firstName} ${selectedPatient.lastName}`
-            : "Seleccionar paciente existente o nuevo"}
+            : "Seleccionar paciente existente"}
           <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
         </Button>
       </PopoverTrigger>
@@ -107,7 +101,7 @@ export function PatientSearchField({ onPatientSelect, selectedPatientId, onClear
                   className="cursor-pointer"
                 >
                   <UserPlus className={cn("mr-2 h-4 w-4")} />
-                  Agregar nuevo cliente
+                  Limpiar selección (Registrar como nuevo)
               </CommandItem>
               {filteredPatients.slice(0, 5).map((patient) => (
                 <CommandItem
@@ -126,16 +120,6 @@ export function PatientSearchField({ onPatientSelect, selectedPatientId, onClear
                 </CommandItem>
               ))}
             </CommandGroup>
-            {selectedPatient && (
-               <CommandItem 
-                  key="clear-selection-option"
-                  value="clear-selection-option-value" // Needs a unique string value
-                  onSelect={() => handleSelect("clear-selection")} 
-                  className="cursor-pointer text-destructive"
-                >
-                  Limpiar selección (Registrar como nuevo)
-                </CommandItem>
-            )}
           </CommandList>
         </Command>
       </PopoverContent>

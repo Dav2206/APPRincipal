@@ -484,190 +484,6 @@ export function AppointmentForm({
       )
     : servicesList;
     
-  const PatientInfoSection = () => (
-    <>
-      <FormField
-        control={form.control}
-        name="isWalkIn"
-        render={({ field }) => (
-          <FormItem className="flex flex-row items-center space-x-3 space-y-0 rounded-md border p-3 shadow-sm bg-amber-50 border-amber-200">
-            <FormControl>
-              <Checkbox
-                checked={field.value}
-                onCheckedChange={field.onChange}
-              />
-            </FormControl>
-            <div className="space-y-1 leading-none">
-              <FormLabel className="flex items-center gap-1.5"><Footprints size={16} />Cliente de Paso (Sin Registro)</FormLabel>
-              <FormDescription className="text-xs">
-                Marcar para clientes no habituales sin registrar sus datos.
-              </FormDescription>
-            </div>
-            <FormMessage />
-          </FormItem>
-        )}
-      />
-
-      <FormField
-        control={form.control}
-        name="existingPatientId"
-        render={({ field }) => (
-          <FormItem>
-            <FormLabel>Paciente Registrado</FormLabel>
-            <PatientSearchField
-              onPatientSelect={handlePatientSelect}
-              selectedPatientId={field.value}
-              onClear={() => { 
-                form.setValue('existingPatientId', null);
-                form.setValue('patientFirstName', '');
-                form.setValue('patientLastName', '');
-                form.setValue('patientPhone', '');
-                form.setValue('patientAge', null);
-                form.setValue('isDiabetic', false);
-                setCurrentPatientForHistory(null);
-                setShowPatientHistory(false);
-              }}
-              disabled={watchIsWalkIn}
-            />
-            <FormMessage />
-          </FormItem>
-        )}
-      />
-
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-        <FormField
-          control={form.control}
-          name="patientFirstName"
-          render={({ field }) => (
-            <FormItem>
-              <FormLabel>Nombre(s)</FormLabel>
-              <FormControl><Input placeholder="Ej: Juan" {...field} disabled={!!form.getValues("existingPatientId") || watchIsWalkIn} /></FormControl>
-              <FormMessage />
-            </FormItem>
-          )}
-        />
-        <FormField
-          control={form.control}
-          name="patientLastName"
-          render={({ field }) => (
-            <FormItem>
-              <FormLabel>Apellido(s)</FormLabel>
-              <FormControl><Input placeholder="Ej: Pérez" {...field} disabled={!!form.getValues("existingPatientId") || watchIsWalkIn} /></FormControl>
-              <FormMessage />
-            </FormItem>
-          )}
-        />
-      </div>
-      {!watchIsWalkIn && (
-          <>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <FormField
-                  control={form.control}
-                  name="patientPhone"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Teléfono (Opcional)</FormLabel>
-                      <FormControl><Input
-                        type="tel"
-                        placeholder={(!!form.getValues("existingPatientId") && user?.role !== USER_ROLES.ADMIN) ? "Teléfono Restringido" : "Ej: 987654321"}
-                        {...field}
-                        value={field.value || ''}
-                        disabled={!!form.getValues("existingPatientId") && user?.role !== USER_ROLES.ADMIN}
-                      /></FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                <FormField
-                  control={form.control}
-                  name="patientAge"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel className="flex items-center gap-1"><UserRound size={16}/>Edad (Opcional)</FormLabel>
-                      <FormControl><Input type="number" placeholder="Ej: 30" {...field} onChange={e => field.onChange(e.target.value === '' ? null : parseInt(e.target.value,10) || null)} disabled={!!form.getValues("existingPatientId")} value={field.value ?? ''}/></FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-              </div>
-              <FormField
-                  control={form.control}
-                  name="isDiabetic"
-                  render={({ field }) => (
-                  <FormItem className="flex flex-row items-center space-x-3 space-y-0 rounded-md border p-3 shadow-sm h-fit">
-                      <FormControl>
-                      <Checkbox
-                          checked={field.value}
-                          onCheckedChange={field.onChange}
-                          disabled={!!form.getValues("existingPatientId")}
-                      />
-                      </FormControl>
-                      <div className="space-y-1 leading-none">
-                      <FormLabel className={!!form.getValues("existingPatientId") ? "text-muted-foreground" : ""}>
-                          ¿Paciente diabético?
-                      </FormLabel>
-                      </div>
-                      <FormMessage />
-                  </FormItem>
-                  )}
-                />
-              <FormField
-                  control={form.control}
-                  name="isForFamilyMember"
-                  render={({ field }) => (
-                  <FormItem className="flex flex-row items-center space-x-3 space-y-0 rounded-md border p-3 shadow-sm">
-                      <FormControl>
-                      <Checkbox
-                          checked={field.value}
-                          onCheckedChange={field.onChange}
-                      />
-                      </FormControl>
-                      <div className="space-y-1 leading-none">
-                      <FormLabel className="flex items-center gap-1.5"><UsersIcon size={16} />¿La cita es para un familiar?</FormLabel>
-                      </div>
-                      <FormMessage />
-                  </FormItem>
-                  )}
-                />
-
-                {watchIsForFamilyMember && (
-                  <FormField
-                    control={form.control}
-                    name="familyMemberRelation"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Parentesco</FormLabel>
-                        <Select onValueChange={field.onChange} value={field.value || ""}>
-                          <FormControl>
-                            <SelectTrigger>
-                              <SelectValue placeholder="Seleccionar parentesco" />
-                            </SelectTrigger>
-                          </FormControl>
-                          <SelectContent>
-                            {FAMILY_RELATIONS.map(rel => (
-                              <SelectItem key={rel} value={rel}>{rel}</SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                )}
-
-          </>
-      )}
-
-
-      {showPatientHistory && currentPatientForHistory && !watchIsWalkIn && (
-        <div className="mt-4 space-y-2">
-          <PatientHistoryPanel patient={currentPatientForHistory} />
-          <AttendancePredictionTool patientId={currentPatientForHistory.id} />
-        </div>
-      )}
-    </>
-  );
-
   return (
     <Dialog open={isOpen} onOpenChange={(open) => {
       if (!open) {
@@ -718,7 +534,177 @@ export function AppointmentForm({
                 <AccordionItem value="item-1">
                   <AccordionTrigger className="text-lg font-semibold"><UserPlus className="mr-2 h-5 w-5"/>Información del Paciente</AccordionTrigger>
                   <AccordionContent className="space-y-4 pt-4">
-                    <PatientInfoSection />
+                    
+                    <FormField
+                      control={form.control}
+                      name="isWalkIn"
+                      render={({ field }) => (
+                        <FormItem className="flex flex-row items-center space-x-3 space-y-0 rounded-md border p-3 shadow-sm bg-amber-50 border-amber-200">
+                          <FormControl>
+                            <Checkbox
+                              checked={field.value}
+                              onCheckedChange={field.onChange}
+                            />
+                          </FormControl>
+                          <div className="space-y-1 leading-none">
+                            <FormLabel className="flex items-center gap-1.5"><Footprints size={16} />Cliente de Paso (Sin Registro)</FormLabel>
+                            <FormDescription className="text-xs">
+                              Marcar para clientes no habituales sin registrar sus datos.
+                            </FormDescription>
+                          </div>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+
+                    <FormField
+                      control={form.control}
+                      name="existingPatientId"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Paciente Registrado</FormLabel>
+                          <PatientSearchField
+                            onPatientSelect={handlePatientSelect}
+                            selectedPatientId={field.value}
+                            disabled={watchIsWalkIn}
+                          />
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      <FormField
+                        control={form.control}
+                        name="patientFirstName"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Nombre(s)</FormLabel>
+                            <FormControl><Input placeholder="Ej: Juan" {...field} disabled={!!form.getValues("existingPatientId") || watchIsWalkIn} /></FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                      <FormField
+                        control={form.control}
+                        name="patientLastName"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Apellido(s)</FormLabel>
+                            <FormControl><Input placeholder="Ej: Pérez" {...field} disabled={!!form.getValues("existingPatientId") || watchIsWalkIn} /></FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                    </div>
+                    {!watchIsWalkIn && (
+                        <>
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                              <FormField
+                                control={form.control}
+                                name="patientPhone"
+                                render={({ field }) => (
+                                  <FormItem>
+                                    <FormLabel>Teléfono (Opcional)</FormLabel>
+                                    <FormControl><Input
+                                      type="tel"
+                                      placeholder={(!!form.getValues("existingPatientId") && user?.role !== USER_ROLES.ADMIN) ? "Teléfono Restringido" : "Ej: 987654321"}
+                                      {...field}
+                                      value={field.value || ''}
+                                      disabled={!!form.getValues("existingPatientId") && user?.role !== USER_ROLES.ADMIN}
+                                    /></FormControl>
+                                    <FormMessage />
+                                  </FormItem>
+                                )}
+                              />
+                              <FormField
+                                control={form.control}
+                                name="patientAge"
+                                render={({ field }) => (
+                                  <FormItem>
+                                    <FormLabel className="flex items-center gap-1"><UserRound size={16}/>Edad (Opcional)</FormLabel>
+                                    <FormControl><Input type="number" placeholder="Ej: 30" {...field} onChange={e => field.onChange(e.target.value === '' ? null : parseInt(e.target.value,10) || null)} disabled={!!form.getValues("existingPatientId")} value={field.value ?? ''}/></FormControl>
+                                    <FormMessage />
+                                  </FormItem>
+                                )}
+                              />
+                            </div>
+                            <FormField
+                                control={form.control}
+                                name="isDiabetic"
+                                render={({ field }) => (
+                                <FormItem className="flex flex-row items-center space-x-3 space-y-0 rounded-md border p-3 shadow-sm h-fit">
+                                    <FormControl>
+                                    <Checkbox
+                                        checked={field.value}
+                                        onCheckedChange={field.onChange}
+                                        disabled={!!form.getValues("existingPatientId")}
+                                    />
+                                    </FormControl>
+                                    <div className="space-y-1 leading-none">
+                                    <FormLabel className={!!form.getValues("existingPatientId") ? "text-muted-foreground" : ""}>
+                                        ¿Paciente diabético?
+                                    </FormLabel>
+                                    </div>
+                                    <FormMessage />
+                                </FormItem>
+                                )}
+                              />
+                            <FormField
+                                control={form.control}
+                                name="isForFamilyMember"
+                                render={({ field }) => (
+                                <FormItem className="flex flex-row items-center space-x-3 space-y-0 rounded-md border p-3 shadow-sm">
+                                    <FormControl>
+                                    <Checkbox
+                                        checked={field.value}
+                                        onCheckedChange={field.onChange}
+                                    />
+                                    </FormControl>
+                                    <div className="space-y-1 leading-none">
+                                    <FormLabel className="flex items-center gap-1.5"><UsersIcon size={16} />¿La cita es para un familiar?</FormLabel>
+                                    </div>
+                                    <FormMessage />
+                                </FormItem>
+                                )}
+                              />
+
+                              {watchIsForFamilyMember && (
+                                <FormField
+                                  control={form.control}
+                                  name="familyMemberRelation"
+                                  render={({ field }) => (
+                                    <FormItem>
+                                      <FormLabel>Parentesco</FormLabel>
+                                      <Select onValueChange={field.onChange} value={field.value || ""}>
+                                        <FormControl>
+                                          <SelectTrigger>
+                                            <SelectValue placeholder="Seleccionar parentesco" />
+                                          </SelectTrigger>
+                                        </FormControl>
+                                        <SelectContent>
+                                          {FAMILY_RELATIONS.map(rel => (
+                                            <SelectItem key={rel} value={rel}>{rel}</SelectItem>
+                                          ))}
+                                        </SelectContent>
+                                      </Select>
+                                      <FormMessage />
+                                    </FormItem>
+                                  )}
+                                />
+                              )}
+
+                        </>
+                    )}
+
+
+                    {showPatientHistory && currentPatientForHistory && !watchIsWalkIn && (
+                      <div className="mt-4 space-y-2">
+                        <PatientHistoryPanel patient={currentPatientForHistory} />
+                        <AttendancePredictionTool patientId={currentPatientForHistory.id} />
+                      </div>
+                    )}
+                    
                   </AccordionContent>
                 </AccordionItem>
                 )}
@@ -728,7 +714,68 @@ export function AppointmentForm({
                    <AccordionContent className="space-y-4 pt-4">
                       {isBasicMode && (
                         <div className="space-y-4">
-                           <PatientInfoSection />
+                           <FormField
+                              control={form.control}
+                              name="isWalkIn"
+                              render={({ field }) => (
+                                <FormItem className="flex flex-row items-center space-x-3 space-y-0 rounded-md border p-3 shadow-sm bg-amber-50 border-amber-200">
+                                  <FormControl>
+                                    <Checkbox
+                                      checked={field.value}
+                                      onCheckedChange={field.onChange}
+                                    />
+                                  </FormControl>
+                                  <div className="space-y-1 leading-none">
+                                    <FormLabel className="flex items-center gap-1.5"><Footprints size={16} />Cliente de Paso (Sin Registro)</FormLabel>
+                                    <FormDescription className="text-xs">
+                                      Marcar para clientes no habituales sin registrar sus datos.
+                                    </FormDescription>
+                                  </div>
+                                  <FormMessage />
+                                </FormItem>
+                              )}
+                            />
+
+                            <FormField
+                              control={form.control}
+                              name="existingPatientId"
+                              render={({ field }) => (
+                                <FormItem>
+                                  <FormLabel>Paciente Registrado</FormLabel>
+                                  <PatientSearchField
+                                    onPatientSelect={handlePatientSelect}
+                                    selectedPatientId={field.value}
+                                    disabled={watchIsWalkIn}
+                                  />
+                                  <FormMessage />
+                                </FormItem>
+                              )}
+                            />
+                            
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                              <FormField
+                                control={form.control}
+                                name="patientFirstName"
+                                render={({ field }) => (
+                                  <FormItem>
+                                    <FormLabel>Nombre(s)</FormLabel>
+                                    <FormControl><Input placeholder="Ej: Juan" {...field} disabled={!!form.getValues("existingPatientId") || watchIsWalkIn} /></FormControl>
+                                    <FormMessage />
+                                  </FormItem>
+                                )}
+                              />
+                              <FormField
+                                control={form.control}
+                                name="patientLastName"
+                                render={({ field }) => (
+                                  <FormItem>
+                                    <FormLabel>Apellido(s)</FormLabel>
+                                    <FormControl><Input placeholder="Ej: Pérez" {...field} disabled={!!form.getValues("existingPatientId") || watchIsWalkIn} /></FormControl>
+                                    <FormMessage />
+                                  </FormItem>
+                                )}
+                              />
+                            </div>
                         </div>
                       )}
                       {!isBasicMode && (
