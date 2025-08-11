@@ -1206,7 +1206,13 @@ export async function updateAppointment(
     }
   });
 
-  // Photo handling logic remains the same
+  // Handle duration separately
+  if (data.duration) {
+    appointmentToUpdate.durationMinutes = (data.duration.hours || 0) * 60 + (data.duration.minutes || 0);
+    delete appointmentToUpdate.duration; // Remove the object from the update data
+  }
+
+  // Photo handling logic
   if (data.attachedPhotos !== undefined) {
     const newPhotoDataUris = (data.attachedPhotos || []).map(p => p && p.url).filter(url => url && url.startsWith('data:image/'));
     const existingPhotoUrlsFromForm = (data.attachedPhotos || []).map(p => p && p.url).filter(url => url && (url.startsWith('http') || url.startsWith('gs://')));
@@ -1290,7 +1296,7 @@ export async function updateAppointment(
   // New logic to determine if the appointment is now external
   const allServicesList = await getServices();
   const mainService = allServicesList.find(s => s.id === (data.serviceId || oldAppointmentData.serviceId));
-  let totalDuration = mainService?.defaultDuration || 0;
+  let totalDuration = firestoreUpdateData.durationMinutes || mainService?.defaultDuration || 0;
   if(data.addedServices) {
       data.addedServices.forEach(as => {
           const addedSvcInfo = allServicesList.find(s => s.id === as.serviceId);
@@ -1723,6 +1729,7 @@ export async function mergePatients(primaryPatientId: string, duplicateIds: stri
 }
 
 // --- End Maintenance ---
+
 
 
 
