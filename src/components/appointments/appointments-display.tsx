@@ -182,7 +182,7 @@ export function AppointmentsDisplay() {
 
   const handleMouseUp = (e: React.MouseEvent<HTMLDivElement>) => {
     setIsDragging(false);
-     e.currentTarget.style.cursor = zoomLevel > 1 ? 'grab' : 'default';
+     e.currentTarget.style.cursor = zoomLevel > 1 ? (isDragging ? 'grabbing' : 'grab') : 'default';
   };
 
 

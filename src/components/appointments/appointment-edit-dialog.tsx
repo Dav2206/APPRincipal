@@ -585,7 +585,7 @@ export function AppointmentEditDialog({ appointment, isOpen, onOpenChange, onApp
                 )}/>
                 <FormField control={form.control} name="amountPaid" render={({ field }) => (
                   <FormItem><FormLabel>Monto Pagado (S/)</FormLabel>
-                    <FormControl><Input type="number" step="0.01" {...field} value={field.value || ''} onChange={e => field.onChange(parseFloat(e.target.value) || undefined)} /></FormControl><FormMessage/>
+                    <FormControl><Input type="number" step="0.01" {...field} value={field.value ?? ""} onChange={e => field.onChange(parseFloat(e.target.value) || undefined)} /></FormControl><FormMessage/>
                   </FormItem>
                 )}/>
               </div>
