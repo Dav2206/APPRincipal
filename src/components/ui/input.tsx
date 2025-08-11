@@ -4,11 +4,7 @@ import * as React from "react"
 import { cn } from "@/lib/utils"
 
 const Input = React.forwardRef<HTMLInputElement, React.ComponentProps<"input">>(
-  ({ className, type, value, ...props }, ref) => {
-    // Si value es null o undefined, usa defaultValue para un campo no controlado.
-    // Si value es una cadena (incluyendo una vacía), se trata como un campo controlado.
-    const hasValueProp = value !== null && value !== undefined;
-    
+  ({ className, type, ...props }, ref) => {
     return (
       <input
         type={type}
@@ -17,8 +13,6 @@ const Input = React.forwardRef<HTMLInputElement, React.ComponentProps<"input">>(
           className
         )}
         ref={ref}
-        value={hasValueProp ? value : undefined}
-        defaultValue={hasValueProp ? undefined : ""}
         {...props}
       />
     )
