@@ -1,4 +1,5 @@
 
+
 "use client";
 
 import type { Patient, Appointment, AppointmentStatus } from '@/types';
@@ -198,7 +199,7 @@ const PatientHistoryPanelComponent = ({ patient, onImageClick }: PatientHistoryP
                     <li key={appt.id} className="p-2 border-b last:border-b-0 text-xs">
                       <div className="flex justify-between items-center">
                         <span>{format(parseISO(appt.appointmentDateTime), "dd/MM/yy HH:mm", { locale: es })} - {appt.service?.name}</span>
-                        <Badge variant={appt.status === APPOINTMENT_STATUS.COMPLETED ? 'default' : 'destructive'} className={cn('capitalize text-xs', APPOINTMENT_STATUS_DISPLAY[appt.status as AppointmentStatus] === APPOINTMENT_STATUS_DISPLAY.completado ? 'bg-green-600 text-white' : '')}>
+                        <Badge variant={appt.status === APPOINTMENT_STATUS.COMPLETED ? 'default' : 'destructive'} className={cn('capitalize text-xs', APPOINTMENT_STATUS_DISPLAY[appt.status as AppointmentStatus] === APPOINTMENT_STATUS_DISPLAY.Completado ? 'bg-green-600 text-white' : '')}>
                           {APPOINTMENT_STATUS_DISPLAY[appt.status as AppointmentStatus] || appt.status}
                         </Badge>
                       </div>
