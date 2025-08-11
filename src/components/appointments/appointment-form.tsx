@@ -333,23 +333,24 @@ export function AppointmentForm({
     ]);
 
 
-  useEffect(() => {
-    async function fetchAndSetPatientForHistory(patientId: string) {
-      const patient = await getPatientById(patientId);
-      setCurrentPatientForHistory(patient || null);
-      setShowPatientHistory(!!patient);
-      if (patient) {
+  const fetchAndSetPatientForHistory = useCallback(async (patientId: string) => {
+    const patient = await getPatientById(patientId);
+    setCurrentPatientForHistory(patient || null);
+    setShowPatientHistory(!!patient);
+    if (patient) {
         form.setValue('isDiabetic', patient.isDiabetic || false);
         form.setValue('patientAge', patient.age ?? null);
-      }
     }
+  }, [form]);
+
+  useEffect(() => {
     if (watchExistingPatientId) {
       fetchAndSetPatientForHistory(watchExistingPatientId);
     } else {
       setCurrentPatientForHistory(null);
       setShowPatientHistory(false);
     }
-  }, [watchExistingPatientId]);
+  }, [watchExistingPatientId, fetchAndSetPatientForHistory]);
 
 
   const handlePatientSelect = (patient: Patient | null) => {
@@ -711,6 +712,24 @@ export function AppointmentForm({
                    <AccordionContent className="space-y-4 pt-4">
                       {isBasicMode && (
                         <div className="space-y-4">
+                           <FormField
+                            control={form.control}
+                            name="isWalkIn"
+                            render={({ field }) => (
+                                <FormItem className="flex flex-row items-center space-x-3 space-y-0 rounded-md border p-3 shadow-sm bg-amber-50 border-amber-200">
+                                <FormControl>
+                                    <Checkbox
+                                    checked={field.value}
+                                    onCheckedChange={field.onChange}
+                                    />
+                                </FormControl>
+                                <div className="space-y-1 leading-none">
+                                    <FormLabel className="flex items-center gap-1.5"><Footprints size={16} />Cliente de Paso (Sin Registro)</FormLabel>
+                                </div>
+                                <FormMessage />
+                                </FormItem>
+                            )}
+                            />
                             <FormField
                               control={form.control}
                               name="existingPatientId"
