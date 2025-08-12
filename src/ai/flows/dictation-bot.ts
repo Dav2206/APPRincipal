@@ -72,15 +72,16 @@ const dictationBotFlow = ai.defineFlow(
 
 Reglas de interpretación:
 1.  **Formato:** El comando suele ser \`[HORA] [NOMBRE PACIENTE] [SERVICIO 1] y [SERVICIO 2] con [PROFESIONAL]\`. Ejemplo: \`9 carlos sanchez podo y mano con maria\`.
-2.  **Servicios Múltiples:** El usuario puede pedir varios servicios usando "y" o "+". Extrae todas las abreviaturas en el array \`serviceShorthands\`. Ejemplo: "podo y mano" -> ["podo", "mano"].
-3.  **Hora:** Un número entre 9 y 12 se refiere a la mañana (9 AM). Un número entre 1 y 8 se refiere a la tarde, conviértelo a 24h (1=13:00, 8=20:00). Puede incluir media hora, como \`9 30\`. La hora de fin de atención es a las 8:30 PM (20:30).
-4.  **Fecha:** Si no se especifica una fecha, asume hoy (\`{{currentDate}}\`). Si dice "mañana", calcula la fecha correspondiente.
-5.  **Servicios y Abreviaturas:** El usuario usará abreviaturas. Mapea la abreviatura al servicio completo. Aquí tienes una lista de servicios y sus posibles abreviaturas para ayudarte:
+2.  **Paciente Sin Cita:** Si el comando incluye "sin cita", "de paso" o "walk in", el nombre del paciente es "Cliente de Paso". No intentes extraer un nombre real.
+3.  **Servicios Múltiples:** El usuario puede pedir varios servicios usando "y" o "+". Extrae todas las abreviaturas en el array \`serviceShorthands\`. Ejemplo: "podo y mano" -> ["podo", "mano"].
+4.  **Hora:** Un número entre 9 y 12 se refiere a la mañana (9 AM). Un número entre 1 y 8 se refiere a la tarde, conviértelo a 24h (1=13:00, 8=20:00). Puede incluir media hora, como \`9 30\`. La palabra "ahora" se refiere a la hora actual. La hora de fin de atención es a las 8:30 PM (20:30).
+5.  **Fecha:** Si no se especifica una fecha, asume hoy (\`{{currentDate}}\`). Si dice "mañana", calcula la fecha correspondiente.
+6.  **Servicios y Abreviaturas:** El usuario usará abreviaturas. Mapea la abreviatura al servicio completo. Aquí tienes una lista de servicios y sus posibles abreviaturas para ayudarte:
     {{serviceList}}
     - 'p', 'podo', 'pie', 'quiro' -> Quiropodia / Podología
     - 'm', 'mano', 'mani' -> Manicura
-6.  **Profesional:** Si se menciona "con [nombre]", extrae el nombre del profesional.
-7.  **Claridad:** Si el comando es ambiguo o incompleto, marca \`isClear\` como \`false\`.
+7.  **Profesional:** Si se menciona "con [nombre]", extrae el nombre del profesional.
+8.  **Claridad:** Si el comando es ambiguo o incompleto (ej. falta servicio o paciente), marca \`isClear\` como \`false\`.
 
 **Comando a analizar:** "{{command}}"`,
       });
@@ -129,6 +130,8 @@ Reglas de interpretación:
           serviceId: s.id,
           professionalId: null, // Dejar que la lógica de negocio asigne o el usuario edite
       }));
+      
+      const isWalkIn = extractedInfo.patientName.toLowerCase() === 'cliente de paso';
 
       const suggestedChanges = {
           patientFirstName: firstName,
@@ -137,12 +140,13 @@ Reglas de interpretación:
           locationId: locationId,
           appointmentDate: appointmentDate,
           appointmentTime: extractedInfo.requestedTime,
-          preferredProfessionalId: null,
+          preferredProfessionalId: null, // This will be handled by the logic that finds an available professional.
           addedServices: addedServices,
+          isWalkIn: isWalkIn, // Mark as walk-in patient
       };
 
       const confirmationMessage = `He entendido la solicitud. Por favor, confirme los siguientes datos para la cita:
-- Paciente: ${extractedInfo.patientName}
+- Paciente: ${extractedInfo.patientName} ${isWalkIn ? "(Sin Cita)" : ""}
 - Servicio(s): ${matchedServices.map(s => s.name).join(', ')}
 - Fecha: ${format(appointmentDate, 'PPP', {locale: es})}
 - Hora: ${format(appointmentDate, 'p', {locale: es})}
@@ -172,3 +176,5 @@ Reglas de interpretación:
     }
   }
 );
+
+    
