@@ -56,28 +56,49 @@ export default function HistoryPage() {
 
   useEffect(() => {
     async function loadBaseData() {
-      if (!user || !effectiveLocationId) {
+      if (!user) {
         setIsLoading(false);
         return;
       };
-      
+
       setIsLoading(true);
       setCurrentPage(1); 
       setDisplayedAppointments([]); 
 
-      const [patientsData, locationsData, baseHistoryResult] = await Promise.all([
-        getPatients(),
-        getLocations(),
-        getAppointments({
-          locationId: effectiveLocationId,
-          statuses: [APPOINTMENT_STATUS.COMPLETED, APPOINTMENT_STATUS.CANCELLED_CLIENT, APPOINTMENT_STATUS.NO_SHOW],
-        })
-      ]);
+      try {
+        const [patientsData, locationsData] = await Promise.all([
+          getPatients(),
+          getLocations(),
+        ]);
+        
+        setAllPatients(patientsData.patients);
+        setLocations(locationsData);
 
-      setAllPatients(patientsData.patients);
-      setLocations(locationsData);
-      setAllLocationHistory((baseHistoryResult.appointments || []).sort((a, b) => parseISO(b.appointmentDateTime).getTime() - parseISO(a.appointmentDateTime).getTime()));
-      setIsLoading(false);
+        let baseHistoryResult: { appointments: Appointment[] };
+
+        if (effectiveLocationId) {
+            baseHistoryResult = await getAppointments({
+                locationId: effectiveLocationId,
+                statuses: [APPOINTMENT_STATUS.COMPLETED, APPOINTMENT_STATUS.CANCELLED_CLIENT, APPOINTMENT_STATUS.NO_SHOW],
+            });
+        } else { // This handles the case where admin selects "All"
+            const allAppointmentsPromises = locations.map(loc => getAppointments({
+                locationId: loc.id,
+                statuses: [APPOINTMENT_STATUS.COMPLETED, APPOINTMENT_STATUS.CANCELLED_CLIENT, APPOINTMENT_STATUS.NO_SHOW],
+            }));
+            const results = await Promise.all(allAppointmentsPromises);
+            const allAppointments = results.flatMap(res => res.appointments);
+            baseHistoryResult = { appointments: allAppointments };
+        }
+
+        setAllLocationHistory((baseHistoryResult.appointments || []).sort((a, b) => parseISO(b.appointmentDateTime).getTime() - parseISO(a.appointmentDateTime).getTime()));
+
+      } catch (error) {
+        console.error("Failed to load history data:", error);
+        setAllLocationHistory([]);
+      } finally {
+        setIsLoading(false);
+      }
     }
     loadBaseData();
   }, [user, effectiveLocationId]);
