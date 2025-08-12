@@ -14,7 +14,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow, TableFoo
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { format, startOfMonth, endOfMonth, getYear, getMonth, setYear, setMonth } from 'date-fns';
 import { es } from 'date-fns/locale';
-import { Landmark, Loader2, AlertTriangle, ListPlus, Trash2, Filter, PlusCircle } from 'lucide-react';
+import { Landmark, Loader2, AlertTriangle, ListPlus, Trash2, Filter, PlusCircle, Pencil } from 'lucide-react';
 import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
 import { useRouter } from 'next/navigation';
@@ -56,6 +56,8 @@ export default function FinancesPage() {
   const [hasChanges, setHasChanges] = useState(false);
   const [completedAppointments, setCompletedAppointments] = useState<Appointment[]>([]);
   const [locationFilter, setLocationFilter] = useState<LocationId | 'all'>(ALL_LOCATIONS_FILTER);
+  
+  const [editingMethod, setEditingMethod] = useState<{ locationId: LocationId; oldName: string; newName: string; } | null>(null);
 
 
   useEffect(() => {
@@ -241,6 +243,41 @@ export default function FinancesPage() {
     toast({ title: "Método Eliminado", description: `"${methodToRemove}" ha sido eliminado de la sede. Recuerde guardar los cambios.` });
   }, [completedAppointments, toast]);
 
+  const handleStartEditing = (locationId: LocationId, oldName: string) => {
+    setEditingMethod({ locationId, oldName, newName: oldName });
+  };
+
+  const handleCancelEditing = () => {
+    setEditingMethod(null);
+  };
+
+  const handleSaveMethodEdit = () => {
+    if (!editingMethod) return;
+
+    const { locationId, oldName, newName } = editingMethod;
+    const trimmedNewName = newName.trim();
+
+    if (!trimmedNewName) {
+      toast({ title: "Nombre inválido", description: "El nombre no puede estar vacío.", variant: "destructive" });
+      return;
+    }
+
+    const currentMethods = paymentMethodsByLocation[locationId] || [];
+    if (trimmedNewName.toLowerCase() !== oldName.toLowerCase() && currentMethods.some(m => m.toLowerCase() === trimmedNewName.toLowerCase())) {
+        toast({ title: "Nombre Duplicado", description: `"${trimmedNewName}" ya existe para esta sede.`, variant: "destructive" });
+        return;
+    }
+
+    setPaymentMethodsByLocation(prev => {
+      const updatedMethods = (prev[locationId] || []).map(m => m === oldName ? trimmedNewName : m);
+      return { ...prev, [locationId]: updatedMethods };
+    });
+    
+    setHasChanges(true);
+    toast({ title: "Nombre Actualizado", description: `"${oldName}" ha sido renombrado a "${trimmedNewName}". Recuerde guardar los cambios.` });
+    setEditingMethod(null);
+  };
+
   const handleSaveAllChanges = async () => {
     setIsSaving(true);
     try {
@@ -369,7 +406,7 @@ export default function FinancesPage() {
         <CardHeader>
             <CardTitle>Gestión de Métodos de Pago por Sede</CardTitle>
             <CardDescription>
-                Añada o elimine los métodos de pago para cada una de sus sedes.
+                Añada, edite o elimine los métodos de pago para cada una de sus sedes.
             </CardDescription>
             <div className="pt-4">
               <Label htmlFor="location-filter">Filtrar por Sede</Label>
@@ -413,19 +450,42 @@ export default function FinancesPage() {
                         <div className="flex flex-wrap gap-2">
                           {(paymentMethodsByLocation[location.id] || []).map(method => (
                             <div key={method} className="flex items-center space-x-2 bg-muted/60 p-2 rounded-md">
-                                <Label htmlFor={`${location.id}-${method}`} className="text-sm">
-                                    {method}
-                                </Label>
-                                <Button
-                                  variant="ghost"
-                                  size="icon"
-                                  className="h-6 w-6 text-destructive hover:bg-destructive/10"
-                                  onClick={() => handleRemoveMethod(location.id, method as PaymentMethod)}
-                                  disabled={completedAppointments.some(a => a.locationId === location.id && a.paymentMethod === method)}
-                                  title={completedAppointments.some(a => a.locationId === location.id && a.paymentMethod === method) ? "Este método está en uso y no puede ser eliminado." : "Eliminar método"}
-                                >
-                                  <Trash2 size={14} />
-                                </Button>
+                                {editingMethod?.locationId === location.id && editingMethod?.oldName === method ? (
+                                  <div className="flex items-center gap-1">
+                                    <Input 
+                                        value={editingMethod.newName}
+                                        onChange={(e) => setEditingMethod({...editingMethod, newName: e.target.value})}
+                                        className="h-7 text-sm"
+                                    />
+                                    <Button size="icon" className="h-7 w-7" onClick={handleSaveMethodEdit}><Check size={16}/></Button>
+                                    <Button size="icon" variant="ghost" className="h-7 w-7" onClick={handleCancelEditing}><X size={16}/></Button>
+                                  </div>
+                                ) : (
+                                  <>
+                                    <Label htmlFor={`${location.id}-${method}`} className="text-sm">
+                                        {method}
+                                    </Label>
+                                    <Button
+                                      variant="ghost"
+                                      size="icon"
+                                      className="h-6 w-6 text-blue-600 hover:bg-blue-500/10"
+                                      onClick={() => handleStartEditing(location.id, method)}
+                                      title="Editar nombre"
+                                    >
+                                      <Pencil size={14} />
+                                    </Button>
+                                    <Button
+                                      variant="ghost"
+                                      size="icon"
+                                      className="h-6 w-6 text-destructive hover:bg-destructive/10"
+                                      onClick={() => handleRemoveMethod(location.id, method as PaymentMethod)}
+                                      disabled={completedAppointments.some(a => a.locationId === location.id && a.paymentMethod === method)}
+                                      title={completedAppointments.some(a => a.locationId === location.id && a.paymentMethod === method) ? "Este método está en uso y no puede ser eliminado." : "Eliminar método"}
+                                    >
+                                      <Trash2 size={14} />
+                                    </Button>
+                                  </>
+                                )}
                             </div>
                           ))}
                         </div>
@@ -447,3 +507,5 @@ export default function FinancesPage() {
     </div>
   );
 }
+
+    
