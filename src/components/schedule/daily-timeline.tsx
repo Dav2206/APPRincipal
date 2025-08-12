@@ -7,7 +7,7 @@ import React, { useState, useRef } from 'react';
 import { parseISO, getHours, getMinutes, addMinutes, format, setMinutes, setHours, startOfDay } from 'date-fns';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { ScrollArea, ScrollBar } from '@/components/ui/scroll-area';
-import { User, Clock, AlertTriangle, Shuffle, Navigation, ShoppingBag } from 'lucide-react';
+import { User, Clock, AlertTriangle, Shuffle, Navigation, ShoppingBag, DollarSign } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { APPOINTMENT_STATUS } from '@/lib/constants';
 import { Badge } from '@/components/ui/badge';
@@ -413,7 +413,17 @@ const DailyTimelineComponent = ({ professionals, appointments, timeSlots, onAppo
                                     <AlertTriangle className="h-3 w-3 text-destructive-foreground bg-destructive rounded-full p-px shrink-0 ml-1" />
                                   )}
                                 </div>
-                                {block.isMainService && <p className="truncate text-[10px] leading-tight opacity-90">{block.serviceName}</p>}
+                                {block.isMainService && 
+                                  <div className='flex items-center gap-1'>
+                                      <p className="truncate text-[10px] leading-tight opacity-90">{block.serviceName}</p>
+                                      {(block.originalAppointmentData.status === APPOINTMENT_STATUS.COMPLETED && block.originalAppointmentData.amountPaid) ? (
+                                        <div className='flex items-center gap-0.5 text-teal-800'>
+                                          <DollarSign size={10}/>
+                                          <p className='text-[10px] font-semibold'>{block.originalAppointmentData.amountPaid.toFixed(2)}</p>
+                                        </div>
+                                      ) : null}
+                                  </div>
+                                }
                                 
                                 {block.durationMinutes > (block.isMainService && block.originalAppointmentData.addedServices && block.originalAppointmentData.addedServices.length > 0 ? 15 : 30) && (
                                   <p className="text-[10px] leading-tight opacity-80 mt-0.5">
