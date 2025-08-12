@@ -32,12 +32,14 @@ export type WhatsAppOutput = z.infer<typeof WhatsAppOutputSchema>;
 
 // Esquema para la extracción de datos del mensaje
 const ExtractedInfoSchema = z.object({
-  intent: z.enum(['agendar', 'confirmar_llegada', 'confirmar_pago', 'consulta', 'otro'])
-    .describe('La intención del mensaje del usuario. Por ejemplo, si el mensaje es "Ya llegó el cliente Juan", la intención es "confirmar_llegada". Si es "Quiero una cita", es "agendar".'),
-  patientName: z.string().describe('El nombre completo del paciente.'),
-  requestedService: z.string().describe('El servicio que el paciente desea, por ejemplo, "quiropodia".').optional(),
+  intent: z.enum(['agendar', 'reprogramar', 'confirmar_llegada', 'confirmar_pago', 'consulta', 'otro'])
+    .describe('La intención del mensaje del usuario. Por ejemplo, "reprograma 6pm" -> reprogramar. "Llegó" -> confirmar_llegada.'),
+  patientName: z.string().describe('El nombre completo del paciente.').optional(),
+  patientPhone: z.string().describe('El número de teléfono del paciente, si se menciona.').optional(),
+  requestedService: z.string().describe('El servicio que el paciente desea, ej. "quiropodia", "uñero", "corte de uñas".').optional(),
   requestedDate: z.string().describe('La fecha deseada en formato YYYY-MM-DD.').optional(),
   requestedTime: z.string().describe('La hora deseada en formato HH:mm (24 horas).').optional(),
+  professionalName: z.string().describe('El nombre del profesional solicitado, si se menciona.').optional(),
 });
 
 
@@ -93,22 +95,25 @@ async function processSingleAppointmentRequest(messageLine: string): Promise<str
       **Reglas de Interpretación Avanzadas**:
       1.  **Ignorar Prefijo:** Ignora completamente prefijos de chat como \`[9:45 a.m., 6/8/2025] Luisa Alvarado: \` y analiza solo el comando real.
       2.  **Intención (intent):** Determina la intención principal:
-          - 'agendar': Si el mensaje busca crear una cita. (Ej: "11.30am Nicole Delgado, P", "Sin cita pie leydi y liz").
-          - 'confirmar_llegada': Si indica que un cliente ha llegado o está en camino. (Ej: "Ya llegó el cliente Juan", "En camino").
-          - 'confirmar_pago': Si contiene montos de dinero y nombres. (Ej: "50 heiddy , Isabel 55 y 20 de propina", "115 de victoria").
-          - 'consulta': Si es una pregunta o una confirmación de estado. (Ej: "Atiende victoria", "No llega", "Narda tenia cita a las 7 Dice").
+          - 'agendar': Si el mensaje busca crear una cita. (Ej: "11.30am Nicole Delgado, P", "Pie sin cita, est atendiendo Judith").
+          - 'reprogramar': Si contiene la palabra "reprograma". (Ej: "reprograma 6pm").
+          - 'confirmar_llegada': Si indica que un cliente ha llegado, está en camino, o que no llega. (Ej: "Llegó", "en camino", "No llega").
+          - 'confirmar_pago': Si contiene montos de dinero y nombres. (Ej: "50 heiddy , Isabel 55 y 20 de propina", "115 de victoria", "Judith 15 Cassi 50").
+          - 'consulta': Si es una pregunta o una confirmación de estado. (Ej: "Atiende victoria", "Quien sube?").
           - 'otro': Para otros casos como saludos, links, o mensajes no relacionados. (Ej: "Buenos días", "Ok").
       3.  **Nombre Paciente (patientName):**
           - Extrae el nombre completo. Si contiene paréntesis como "Eliana Yoshika(esposo)", el nombre del paciente es "Eliana Yoshika (esposo)".
-          - Si dice "Sin cita", "Din cita", o similar, el nombre es "Cliente de Paso".
-          - Para casos como "Sin cita 2 pies victoria y isabel", el nombre del paciente también es "Cliente de Paso", pero indica múltiples servicios/profesionales.
-      4.  **Servicio (requestedService):**
+          - Si dice "Sin cita", "Din cita", o similar, el nombre es "Cliente de Paso". En estos casos, el nombre real podría estar en la misma línea o en una posterior.
+      4.  **Teléfono (patientPhone):** Si se menciona un número de 9 dígitos, extráelo.
+      5.  **Servicio (requestedService):**
           - "P", "podo", "pie" significan "quiropodia".
-          - "M" o "mano" significan "manicura".
+          - "M", "mano", "manicure" significan "manicura".
+          - "Tx", "tratamiento", "revisión", "curación", "limpieza", "uñero", "férula" son tipos de servicios podológicos. Extráelos.
           - Si hay varios como "P+M", "podo + férula", extrae el primero como principal ("quiropodia").
           - Si faltara el servicio (ej. "10 30 Jeff cortéz"), el campo debe quedar vacío.
-      5.  **Fecha (requestedDate):** Si no se especifica (ej. "mañana"), asume la fecha actual ({{currentDate}}).
-      6.  **Hora (requestedTime):** Extrae la hora en formato HH:mm (24h). "1.30pm" es "13:30". "9" es "09:00". Si dice "ahora" o es un mensaje de "Sin cita" sin hora, usa la hora actual.
+      6.  **Profesional (professionalName):** Si se menciona "con [nombre]" o "atiende [nombre]", extrae el nombre del profesional.
+      7.  **Fecha (requestedDate):** Si no se especifica (ej. "mañana"), asume la fecha actual ({{currentDate}}).
+      8.  **Hora (requestedTime):** Extrae la hora en formato HH:mm (24h). "1.30pm" es "13:30". "9" es "09:00". Si dice "ahora" o es un mensaje de "Sin cita" sin hora, usa la hora actual.
 
       Mensaje a analizar: """{{messageText}}"""`,
     });
@@ -122,16 +127,23 @@ async function processSingleAppointmentRequest(messageLine: string): Promise<str
       return '❌ No se pudo entender la solicitud. Asegúrate de incluir nombre, servicio, fecha y hora.';
     }
     
-    const { intent, patientName, requestedService, requestedDate, requestedTime } = extractionResult.output;
+    const { intent, patientName, patientPhone, requestedService, requestedDate, requestedTime, professionalName } = extractionResult.output;
     
-    if (intent !== 'agendar' || !requestedService || !requestedDate || !requestedTime) {
-      return `He entendido que la intención es '${intent}' para el paciente '${patientName}'. La lógica para esta acción aún no está implementada.`;
+    if (intent !== 'agendar' || !requestedService || !requestedDate || !requestedTime || !patientName) {
+      return `He entendido que la intención es '${intent}' ${patientName ? `para '${patientName}'` : ''}. La lógica para esta acción aún no está implementada o la información es incompleta.`;
     }
 
     // 2. Encontrar el servicio y su duración
     const services = await getServices();
-    const service = services.find(s => s.name.toLowerCase().includes(requestedService.toLowerCase()));
+    let service = services.find(s => s.name.toLowerCase().includes(requestedService.toLowerCase()));
     
+    if (!service) {
+      // Fallback para servicios podológicos
+      if (['podo', 'pie', 'quiro', 'uñero', 'curación', 'revisión', 'tratamiento', 'limpieza'].some(term => requestedService.toLowerCase().includes(term))) {
+        service = services.find(s => s.name.toLowerCase().includes('quiropodia') || s.name.toLowerCase().includes('podología'));
+      }
+    }
+
     if (!service) {
       return `❌ No se encontró el servicio "${requestedService}".`;
     }
@@ -142,7 +154,12 @@ async function processSingleAppointmentRequest(messageLine: string): Promise<str
     const appointmentsForDay = await getAppointments({ date: appointmentDate });
 
     let availableProfessional = null;
-    for (const prof of professionals) {
+    
+    const candidates = professionalName 
+      ? professionals.filter(p => `${p.firstName} ${p.lastName}`.toLowerCase().includes(professionalName.toLowerCase()))
+      : professionals;
+
+    for (const prof of candidates) {
       if (prof.isManager) continue;
 
       const availability = getProfessionalAvailabilityForDate(prof, appointmentDate);
@@ -175,6 +192,7 @@ async function processSingleAppointmentRequest(messageLine: string): Promise<str
       await addAppointment({
         patientFirstName: firstName,
         patientLastName: lastName || 'Apellido', // Fallback
+        patientPhone: patientPhone,
         locationId: availableProfessional.locationId,
         serviceId: service.id,
         appointmentDate,
@@ -182,9 +200,9 @@ async function processSingleAppointmentRequest(messageLine: string): Promise<str
         preferredProfessionalId: availableProfessional.id,
       });
 
-      return `✅ Cita agendada para ${firstName} - ${format(appointmentDate, 'h:mm a')}.`;
+      return `✅ Cita agendada para ${firstName} - ${format(appointmentDate, 'h:mm a')} con ${availableProfessional.firstName}.`;
     } else {
-      return `❌ No hay disponibilidad para "${service.name}" en la fecha y hora solicitadas para ${patientName}.`;
+      return `❌ No hay disponibilidad para "${service.name}" ${professionalName ? `con ${professionalName}`: ''} en la fecha y hora solicitadas para ${patientName}.`;
     }
 }
 
@@ -195,5 +213,6 @@ async function processSingleAppointmentRequest(messageLine: string): Promise<str
 // 3. Este webhook recibiría los mensajes de Meta/WhatsApp y llamaría a `handleWhatsAppMessage`.
 // 4. El webhook usaría la API de WhatsApp para enviar la `reply` de vuelta al grupo o usuario.
 
+    
 
     
