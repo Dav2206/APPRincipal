@@ -239,3 +239,17 @@ export interface ImportantNoteFormData {
   title: string;
   content: string;
 }
+
+export interface ProfessionalDetails {
+  professionalId: string;
+  professionalName: string;
+  period: string;
+  details: {
+    appointmentDateTime: string;
+    patientName: string;
+    serviceName: string;
+    locationName: string;
+    totalValue: number;
+    paymentMethod?: string | null;
+  }[];
+}

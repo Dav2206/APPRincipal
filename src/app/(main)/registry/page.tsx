@@ -16,7 +16,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow, TableCap
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { format, startOfDay, getMonth, getDate, startOfMonth, endOfMonth, addDays, getYear, subDays, setYear, setMonth, isSameDay, isAfter, subMonths, parseISO } from 'date-fns';
 import { es } from 'date-fns/locale';
-import { CalendarIcon, Loader2, AlertTriangle, FileText, DollarSign, ChevronLeft, ChevronRight, ListChecks, Landmark, User, XIcon, Building, Clock, UserSquare } from 'lucide-react';
+import { CalendarIcon, Loader2, AlertTriangle, FileText, DollarSign, ChevronLeft, ChevronRight, ListChecks, Landmark, User, XIcon, Building, Clock, UserSquare, CreditCard } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -78,6 +78,7 @@ interface ProfessionalDetails {
     serviceName: string;
     locationName: string;
     totalValue: number;
+    paymentMethod?: string | null;
   }[];
 }
 
@@ -620,6 +621,7 @@ export default function RegistryPage() {
           serviceName: appt.service?.name || 'Servicio Desc.',
           locationName: locations.find(l => l.id === appt.locationId)?.name || 'Sede Desc.',
           totalValue: appt.amountPaid || 0,
+          paymentMethod: appt.paymentMethod,
         });
       }
 
@@ -633,6 +635,7 @@ export default function RegistryPage() {
             serviceName: `(Adicional) ${allServices?.find(s => s.id === added.serviceId)?.name || 'Serv. Adicional Desc.'}`,
             locationName: locations.find(l => l.id === appt.locationId)?.name || 'Sede Desc.',
             totalValue: added.amountPaid || 0,
+            paymentMethod: appt.paymentMethod, // Inherit payment method from main appointment
           });
         }
       });
@@ -882,7 +885,7 @@ export default function RegistryPage() {
       
       {/* Details Modal */}
       <Dialog open={isDetailsModalOpen} onOpenChange={setIsDetailsModalOpen}>
-        <DialogContent className="sm:max-w-3xl">
+        <DialogContent className="sm:max-w-4xl">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <ListChecks size={20} />
@@ -901,6 +904,7 @@ export default function RegistryPage() {
                     <TableHead><UserSquare size={14} className="inline-block mr-1"/>Paciente</TableHead>
                     <TableHead>Servicio</TableHead>
                     <TableHead><Building size={14} className="inline-block mr-1"/>Sede</TableHead>
+                    <TableHead><CreditCard size={14} className="inline-block mr-1"/>Método de Pago</TableHead>
                     <TableHead className="text-right">Valor (S/)</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -911,13 +915,14 @@ export default function RegistryPage() {
                       <TableCell>{detail.patientName}</TableCell>
                       <TableCell>{detail.serviceName}</TableCell>
                       <TableCell>{detail.locationName}</TableCell>
+                      <TableCell>{detail.paymentMethod || 'N/A'}</TableCell>
                       <TableCell className="text-right font-medium">{detail.totalValue.toFixed(2)}</TableCell>
                     </TableRow>
                   ))}
                 </TableBody>
                 <TableFooter>
                   <TableRow className="font-bold bg-muted/50">
-                    <TableCell colSpan={4}>Total General</TableCell>
+                    <TableCell colSpan={5}>Total General</TableCell>
                     <TableCell className="text-right text-lg">
                       S/ {selectedProfessionalForDetails.details.reduce((sum, d) => sum + d.totalValue, 0).toFixed(2)}
                     </TableCell>
@@ -938,5 +943,3 @@ export default function RegistryPage() {
     </div>
   );
 }
-
-    
