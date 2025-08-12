@@ -107,11 +107,9 @@ const fetchData = useCallback(async (isBackgroundFetch = false) => {
 
         // Rule 1: Add professionals whose base location is the current view and are scheduled to work
         allProfessionals.forEach(prof => {
-            if (prof.locationId === actualEffectiveLocationId) {
-                const availability = getProfessionalAvailabilityForDate(prof, currentDate);
-                if (availability?.isWorking) {
-                    professionalIdsInSchedule.add(prof.id);
-                }
+            const availability = getProfessionalAvailabilityForDate(prof, currentDate);
+            if(availability?.isWorking && availability.workingLocationId === actualEffectiveLocationId) {
+                professionalIdsInSchedule.add(prof.id);
             }
         });
 

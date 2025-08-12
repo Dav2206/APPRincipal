@@ -95,23 +95,23 @@ async function processSingleAppointmentRequest(messageLine: string): Promise<str
       **Reglas de Interpretación Avanzadas**:
       1.  **Ignorar Prefijo:** Ignora completamente prefijos de chat como \`[9:45 a.m., 6/8/2025] Luisa Alvarado: \` y analiza solo el comando real.
       2.  **Intención (intent):** Determina la intención principal:
-          - 'agendar': Si el mensaje busca crear una cita. (Ej: "11.30am Nicole Delgado, P", "Pie sin cita, est atendiendo Judith").
-          - 'reprogramar': Si contiene la palabra "reprograma". (Ej: "reprograma 6pm").
-          - 'confirmar_llegada': Si indica que un cliente ha llegado, está en camino, o que no llega. (Ej: "Llegó", "en camino", "No llega").
+          - 'agendar': Si el mensaje busca crear una cita. (Ej: "11.30am Nicole Delgado, P", "Pie sin cita, est atendiendo Judith", "12 Silvia Barrueto podo( San Antonio sube)").
+          - 'reprogramar': Si contiene "reprograma" o "adelanta". (Ej: "reprograma 6pm", "adelanta 4pm").
+          - 'confirmar_llegada': Si indica que un cliente ha llegado, está en camino, o que no llega. (Ej: "Llegó", "en camino", "No llega", "Llegaron", "Llegó recién").
           - 'confirmar_pago': Si contiene montos de dinero y nombres. (Ej: "50 heiddy , Isabel 55 y 20 de propina", "115 de victoria", "Judith 15 Cassi 50").
-          - 'consulta': Si es una pregunta o una confirmación de estado. (Ej: "Atiende victoria", "Quien sube?").
-          - 'otro': Para otros casos como saludos, links, o mensajes no relacionados. (Ej: "Buenos días", "Ok").
+          - 'consulta': Si es una pregunta o una confirmación de estado. (Ej: "Atiende victoria", "Quien sube?", "Sube de San Antonio").
+          - 'otro': Para otros casos como saludos, links, o mensajes no relacionados. (Ej: "Buenos días", "Ok", "https://vt.tiktok.com/ZSS7cUxbw/").
       3.  **Nombre Paciente (patientName):**
-          - Extrae el nombre completo. Si contiene paréntesis como "Eliana Yoshika(esposo)", el nombre del paciente es "Eliana Yoshika (esposo)".
-          - Si dice "Sin cita", "Din cita", o similar, el nombre es "Cliente de Paso". En estos casos, el nombre real podría estar en la misma línea o en una posterior.
-      4.  **Teléfono (patientPhone):** Si se menciona un número de 9 dígitos, extráelo.
+          - Extrae el nombre completo. Si contiene paréntesis como "Eliana Yoshika(esposo)" o "Silvia Barrueto podo( San Antonio sube)", el nombre del paciente es el que está antes del paréntesis.
+          - Si dice "Sin cita", "Din cita", o similar, el nombre es "Cliente de Paso". En estos casos, el nombre real podría estar en la misma línea o en una posterior (ej. "Pie sin cita\nMarta Sampen").
+      4.  **Teléfono (patientPhone):** Si se menciona un número de 9 dígitos, extráelo. (ej. "Marta Sampen\n994213947").
       5.  **Servicio (requestedService):**
           - "P", "podo", "pie" significan "quiropodia".
           - "M", "mano", "manicure" significan "manicura".
           - "Tx", "tratamiento", "revisión", "curación", "limpieza", "uñero", "férula" son tipos de servicios podológicos. Extráelos.
-          - Si hay varios como "P+M", "podo + férula", extrae el primero como principal ("quiropodia").
+          - Si hay varios como "P+M", "podo + férula", "P+M+2 uñas acrilicas", extrae el primero como principal ("quiropodia", "manicura").
           - Si faltara el servicio (ej. "10 30 Jeff cortéz"), el campo debe quedar vacío.
-      6.  **Profesional (professionalName):** Si se menciona "con [nombre]" o "atiende [nombre]", extrae el nombre del profesional.
+      6.  **Profesional (professionalName):** Si se menciona "con [nombre]", "atiende [nombre]" o el nombre de un profesional aparece al final, extrae el nombre.
       7.  **Fecha (requestedDate):** Si no se especifica (ej. "mañana"), asume la fecha actual ({{currentDate}}).
       8.  **Hora (requestedTime):** Extrae la hora en formato HH:mm (24h). "1.30pm" es "13:30". "9" es "09:00". Si dice "ahora" o es un mensaje de "Sin cita" sin hora, usa la hora actual.
 

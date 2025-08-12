@@ -865,7 +865,7 @@ async function populateAppointmentDetails(appointments: Appointment[]): Promise<
             apptData.addedServices = apptData.addedServices.map(as => {
                 const serviceDetail = allServicesFromDb.find(s => s.id === as.serviceId);
                 const profDetail = as.professionalId ? allProfessionalsFromDb.find(p => p.id === as.professionalId) : undefined;
-                return {...as, service: serviceDetail ? {...serviceDetail} : undefined, professional: profDetail ? {...profDetail} : undefined };
+                return {...as, service: serviceDetail, professional: profDetail };
             });
         }
 
@@ -1729,6 +1729,7 @@ export async function mergePatients(primaryPatientId: string, duplicateIds: stri
 }
 
 // --- End Maintenance ---
+
 
 
 
