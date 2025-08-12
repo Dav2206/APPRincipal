@@ -573,21 +573,39 @@ export function AppointmentEditDialog({ appointment, isOpen, onOpenChange, onApp
           {/* -- Section: Pago (si está completado) -- */}
           {form.watch('status') === APPOINTMENT_STATUS.COMPLETED && (
             <div className="space-y-3 p-3 border rounded-lg bg-destructive/10 border-destructive/20">
-               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <FormField control={form.control} name="paymentMethod" render={({ field }) => (
-                  <FormItem><FormLabel className="flex items-center gap-1"><DollarSign size={16}/>Método de Pago</FormLabel>
-                     <Select onValueChange={field.onChange} value={field.value || undefined}><FormControl><SelectTrigger><SelectValue placeholder="Seleccionar" /></SelectTrigger></FormControl>
-                      <SelectContent>
-                        {paymentMethodsForLocation.map(method => (<SelectItem key={method} value={method}>{method}</SelectItem>))}
-                      </SelectContent>
-                    </Select><FormMessage/>
-                  </FormItem>
-                )}/>
+              <FormField control={form.control} name="paymentMethod" render={({ field }) => (
+                <FormItem><FormLabel className="flex items-center gap-1"><DollarSign size={16}/>Método de Pago General</FormLabel>
+                  <Select onValueChange={field.onChange} value={field.value || undefined}><FormControl><SelectTrigger><SelectValue placeholder="Seleccionar" /></SelectTrigger></FormControl>
+                  <SelectContent>
+                    {paymentMethodsForLocation.map(method => (<SelectItem key={method} value={method}>{method}</SelectItem>))}
+                  </SelectContent>
+                  </Select><FormMessage/>
+                </FormItem>
+              )}/>
+
+              <div className="space-y-2">
                 <FormField control={form.control} name="amountPaid" render={({ field }) => (
-                  <FormItem><FormLabel>Monto Pagado (S/)</FormLabel>
+                  <FormItem><FormLabel className="text-sm">Monto Servicio Principal (S/)</FormLabel>
                     <FormControl><Input type="number" step="0.01" {...field} value={field.value ?? ""} onChange={e => field.onChange(parseFloat(e.target.value) || undefined)} /></FormControl><FormMessage/>
                   </FormItem>
                 )}/>
+                {addedServiceFields.map((item, index) => {
+                  const serviceName = allServices?.find(s => s.id === item.serviceId)?.name || `Servicio Adicional ${index + 1}`;
+                  return (
+                    <FormField
+                      key={item.id}
+                      control={form.control}
+                      name={`addedServices.${index}.amountPaid`}
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel className="text-sm">Monto {serviceName} (S/)</FormLabel>
+                          <FormControl><Input type="number" step="0.01" {...field} value={field.value ?? ""} onChange={e => field.onChange(parseFloat(e.target.value) || undefined)}/></FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                  );
+                })}
               </div>
             </div>
           )}
