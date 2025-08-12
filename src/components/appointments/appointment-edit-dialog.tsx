@@ -104,6 +104,18 @@ export function AppointmentEditDialog({ appointment, isOpen, onOpenChange, onApp
     control: form.control,
     name: "attachedPhotos",
   });
+
+  const watchedAmountPaid = form.watch('amountPaid');
+  const watchedAddedServices = form.watch('addedServices');
+
+  const totalAmount = useMemo(() => {
+    const mainAmount = Number(watchedAmountPaid) || 0;
+    const addedServicesAmount = (watchedAddedServices || []).reduce(
+      (sum, service) => sum + (Number(service.amountPaid) || 0),
+      0
+    );
+    return mainAmount + addedServicesAmount;
+  }, [watchedAmountPaid, watchedAddedServices]);
   
   const stopCameraStream = useCallback(() => {
     if (streamRef.current) {
@@ -585,7 +597,7 @@ export function AppointmentEditDialog({ appointment, isOpen, onOpenChange, onApp
 
               <div className="space-y-2">
                 <FormField control={form.control} name="amountPaid" render={({ field }) => (
-                  <FormItem><FormLabel className="text-sm">Monto Servicio Principal (S/)</FormLabel>
+                  <FormItem><FormLabel className="text-sm">Monto {appointment.service?.name} (S/)</FormLabel>
                     <FormControl><Input type="number" step="0.01" {...field} value={field.value ?? ""} onChange={e => field.onChange(parseFloat(e.target.value) || undefined)} /></FormControl><FormMessage/>
                   </FormItem>
                 )}/>
@@ -606,6 +618,11 @@ export function AppointmentEditDialog({ appointment, isOpen, onOpenChange, onApp
                     />
                   );
                 })}
+              </div>
+              <Separator />
+              <div className="flex justify-end items-center gap-4 pt-1">
+                <span className="text-sm font-medium">Total Pagado:</span>
+                <span className="text-lg font-bold">S/ {totalAmount.toFixed(2)}</span>
               </div>
             </div>
           )}
@@ -758,3 +775,4 @@ export function AppointmentEditDialog({ appointment, isOpen, onOpenChange, onApp
     </>
   );
 }
+
