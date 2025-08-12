@@ -90,19 +90,27 @@ async function processSingleAppointmentRequest(messageLine: string): Promise<str
       output: { schema: ExtractedInfoSchema },
       prompt: `Analiza el siguiente mensaje de texto y extrae la información clave. La fecha actual es {{currentDate}}.
       
-      **Reglas Importantes**:
-      1.  **Ignorar Prefijo:** Si el mensaje contiene un prefijo de chat como \`[9:45 a.m., 6/8/2025] Luisa Alvarado: \`, ignora por completo ese prefijo y analiza únicamente el comando real que viene después.
+      **Reglas de Interpretación Avanzadas**:
+      1.  **Ignorar Prefijo:** Ignora completamente prefijos de chat como \`[9:45 a.m., 6/8/2025] Luisa Alvarado: \` y analiza solo el comando real.
       2.  **Intención (intent):** Determina la intención principal:
-          - 'agendar': Si el mensaje busca crear una cita. (Ej: "11.30am Nicole Delgado, P")
-          - 'confirmar_llegada': Si indica que un cliente ha llegado. (Ej: "Sin cita 2 pies victoria y isabel")
-          - 'confirmar_pago': Si contiene montos de dinero y nombres. (Ej: "50 heiddy , Isabel 55 y 20 de propina")
-          - 'consulta' o 'otro': Para otros casos.
-      3.  **Nombre Paciente (patientName):** Extrae el nombre completo. Si contiene paréntesis como "Eliana Yoshika(esposo)", el nombre del paciente es "Eliana Yoshika (esposo)". Si dice "Sin cita", el nombre es "Cliente de Paso".
-      4.  **Servicio (requestedService):** Extrae el servicio. "P" o "podo" significan "quiropodia". "M" significa "manicura". Si hay varios como "P+M", extrae el primero como principal.
-      5.  **Fecha (requestedDate):** Si mencionan "mañana" o un día de la semana, conviértelo a YYYY-MM-DD. Si no, asume hoy.
-      6.  **Hora (requestedTime):** Extrae la hora en formato HH:mm (24h). "1.30pm" es "13:30". "9" es "09:00".
+          - 'agendar': Si el mensaje busca crear una cita. (Ej: "11.30am Nicole Delgado, P", "Sin cita pie leydi y liz").
+          - 'confirmar_llegada': Si indica que un cliente ha llegado o está en camino. (Ej: "Ya llegó el cliente Juan", "En camino").
+          - 'confirmar_pago': Si contiene montos de dinero y nombres. (Ej: "50 heiddy , Isabel 55 y 20 de propina", "115 de victoria").
+          - 'consulta': Si es una pregunta o una confirmación de estado. (Ej: "Atiende victoria", "No llega", "Narda tenia cita a las 7 Dice").
+          - 'otro': Para otros casos como saludos, links, o mensajes no relacionados. (Ej: "Buenos días", "Ok").
+      3.  **Nombre Paciente (patientName):**
+          - Extrae el nombre completo. Si contiene paréntesis como "Eliana Yoshika(esposo)", el nombre del paciente es "Eliana Yoshika (esposo)".
+          - Si dice "Sin cita", "Din cita", o similar, el nombre es "Cliente de Paso".
+          - Para casos como "Sin cita 2 pies victoria y isabel", el nombre del paciente también es "Cliente de Paso", pero indica múltiples servicios/profesionales.
+      4.  **Servicio (requestedService):**
+          - "P", "podo", "pie" significan "quiropodia".
+          - "M" o "mano" significan "manicura".
+          - Si hay varios como "P+M", "podo + férula", extrae el primero como principal ("quiropodia").
+          - Si faltara el servicio (ej. "10 30 Jeff cortéz"), el campo debe quedar vacío.
+      5.  **Fecha (requestedDate):** Si no se especifica (ej. "mañana"), asume la fecha actual ({{currentDate}}).
+      6.  **Hora (requestedTime):** Extrae la hora en formato HH:mm (24h). "1.30pm" es "13:30". "9" es "09:00". Si dice "ahora" o es un mensaje de "Sin cita" sin hora, usa la hora actual.
 
-      Mensaje: """{{messageText}}"""`,
+      Mensaje a analizar: """{{messageText}}"""`,
     });
     
     const extractionResult = await extractionPrompt({
@@ -186,3 +194,6 @@ async function processSingleAppointmentRequest(messageLine: string): Promise<str
 // 2. Un servidor separado (como una Firebase Function) para ser el webhook.
 // 3. Este webhook recibiría los mensajes de Meta/WhatsApp y llamaría a `handleWhatsAppMessage`.
 // 4. El webhook usaría la API de WhatsApp para enviar la `reply` de vuelta al grupo o usuario.
+
+
+    
