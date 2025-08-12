@@ -74,6 +74,7 @@ const isOverlapping = (blockA: RenderableServiceBlock, blockB: RenderableService
 const DailyTimelineComponent = ({ professionals, appointments, timeSlots, onAppointmentClick, onAppointmentDrop, viewingLocationId, currentDate, locations, isDragDropEnabled }: DailyTimelineProps) => {
   const [draggedAppointmentId, setDraggedAppointmentId] = useState<string | null>(null);
   const professionalColumnsRef = useRef<Record<string, HTMLDivElement | null>>({});
+  const scrollAreaRef = useRef<HTMLDivElement>(null);
 
   const allServiceBlocks: RenderableServiceBlock[] = [];
 
@@ -211,8 +212,11 @@ const DailyTimelineComponent = ({ professionals, appointments, timeSlots, onAppo
 
   // --- Touch Event Handlers ---
   const handleTouchStart = (e: React.TouchEvent<HTMLDivElement>, appointmentId: string) => {
+    if (scrollAreaRef.current) {
+      const viewport = scrollAreaRef.current.querySelector<HTMLDivElement>('div[style*="overflow"]');
+      if (viewport) viewport.style.overflowX = 'hidden';
+    }
     setDraggedAppointmentId(appointmentId);
-    // Optional: Create a ghost element for visual feedback
   };
 
   const handleTouchMove = (e: React.TouchEvent<HTMLDivElement>) => {
@@ -237,7 +241,11 @@ const DailyTimelineComponent = ({ professionals, appointments, timeSlots, onAppo
   const handleTouchEnd = (e: React.TouchEvent<HTMLDivElement>) => {
     if (!draggedAppointmentId) return;
 
-    // Reset all column styles
+    if (scrollAreaRef.current) {
+      const viewport = scrollAreaRef.current.querySelector<HTMLDivElement>('div[style*="overflow"]');
+      if (viewport) viewport.style.overflowX = 'auto';
+    }
+
     Object.values(professionalColumnsRef.current).forEach(col => {
       if (col) col.style.backgroundColor = '';
     });
@@ -261,7 +269,7 @@ const DailyTimelineComponent = ({ professionals, appointments, timeSlots, onAppo
 
   return (
     <TooltipProvider>
-      <ScrollArea className="w-full whitespace-nowrap rounded-md border">
+      <ScrollArea ref={scrollAreaRef} className="w-full whitespace-nowrap rounded-md border">
         <div className="flex relative">
           <div className="sticky left-0 z-20 bg-background border-r">
             <div className="h-16 flex items-center justify-center font-semibold border-b px-2 text-sm">Hora</div>
