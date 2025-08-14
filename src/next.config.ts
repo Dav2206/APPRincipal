@@ -1,11 +1,14 @@
 
 import type {NextConfig} from 'next';
+
+const isDevelopment = process.env.NODE_ENV === 'development';
+
 const withPWA = require('next-pwa')({
   dest: 'public',
   register: true,
   skipWaiting: true,
   reloadOnOnline: true,
-  disable: process.env.NODE_ENV === 'development',
+  disable: isDevelopment,
 });
 
 
@@ -45,4 +48,4 @@ const nextConfig: NextConfig = {
   },
 };
 
-export default withPWA(nextConfig);
+export default isDevelopment ? nextConfig : withPWA(nextConfig);
