@@ -419,7 +419,7 @@ export function AppointmentEditDialog({ appointment, isOpen, onOpenChange, onApp
   return (
     <>
     <Dialog open={isOpen} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-xl">
+      <DialogContent onPointerDownOutside={(e) => e.preventDefault()} className="sm:max-w-xl">
         <DialogHeader>
           <DialogTitle>Actualizar Cita</DialogTitle>
           <DialogDescription>
@@ -746,7 +746,7 @@ export function AppointmentEditDialog({ appointment, isOpen, onOpenChange, onApp
     </Dialog>
 
     <Dialog open={isCameraModalOpen} onOpenChange={(isOpen) => { if (!isOpen) stopCameraStream(); setIsCameraModalOpen(isOpen); }}>
-        <DialogContent>
+        <DialogContent onPointerDownOutside={(e) => e.preventDefault()}>
             <DialogHeader>
                 <DialogTitle>Tomar Foto</DialogTitle>
                 <DialogDescription>Apunta con la cámara y captura una imagen.</DialogDescription>
@@ -775,4 +775,3 @@ export function AppointmentEditDialog({ appointment, isOpen, onOpenChange, onApp
     </>
   );
 }
-

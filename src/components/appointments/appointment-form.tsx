@@ -511,7 +511,7 @@ export function AppointmentForm({
       }
       onOpenChange(open);
     }}>
-      <DialogContent className="sm:max-w-xl max-h-[90vh] flex flex-col">
+      <DialogContent onPointerDownOutside={(e) => e.preventDefault()} className="sm:max-w-xl max-h-[90vh] flex flex-col">
         <DialogHeader>
           <DialogTitle className="text-2xl flex items-center gap-2">
             <CalendarIcon className="text-primary"/>
