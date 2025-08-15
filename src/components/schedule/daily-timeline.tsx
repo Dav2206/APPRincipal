@@ -7,7 +7,7 @@ import React, { useState, useRef } from 'react';
 import { parseISO, getHours, getMinutes, addMinutes, format, setMinutes, setHours, startOfDay } from 'date-fns';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { ScrollArea, ScrollBar } from '@/components/ui/scroll-area';
-import { User, Clock, AlertTriangle, Shuffle, Navigation, ShoppingBag, DollarSign } from 'lucide-react';
+import { User, Clock, AlertTriangle, Shuffle, Navigation, ShoppingBag, DollarSign, CreditCard, Smartphone, Coins } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { APPOINTMENT_STATUS } from '@/lib/constants';
 import { Badge } from '@/components/ui/badge';
@@ -68,6 +68,21 @@ const isOverlapping = (blockA: RenderableServiceBlock, blockB: RenderableService
     console.error("[DailyTimeline] Error in isOverlapping with service blocks:", blockA, blockB, error);
     return false;
   }
+};
+
+const PaymentMethodIcon = ({ method }: { method?: string | null }) => {
+    if (!method) return null;
+    const methodLower = method.toLowerCase();
+    if (methodLower.includes('yape') || methodLower.includes('plin')) {
+        return <Smartphone size={10} className="inline-block" title={`Pago con ${method}`} />;
+    }
+    if (methodLower.includes('tarjeta')) {
+        return <CreditCard size={10} className="inline-block" title={`Pago con ${method}`} />;
+    }
+    if (methodLower.includes('efectivo')) {
+        return <Coins size={10} className="inline-block" title="Pago en Efectivo" />;
+    }
+    return <DollarSign size={10} className="inline-block" title={`Pago: ${method}`}/>;
 };
 
 
@@ -422,12 +437,12 @@ const DailyTimelineComponent = ({ professionals, appointments, timeSlots, onAppo
                                   )}
                                 </div>
                                 {block.isMainService && 
-                                  <div className='flex items-center gap-1'>
+                                  <div className='flex items-center gap-1 flex-wrap'>
                                       <p className="truncate text-[10px] leading-tight opacity-90">{block.serviceName}</p>
-                                      {(block.originalAppointmentData.status === APPOINTMENT_STATUS.COMPLETED && block.originalAppointmentData.amountPaid) ? (
+                                      {(block.originalAppointmentData.status === APPOINTMENT_STATUS.COMPLETED && (block.originalAppointmentData.amountPaid || 0) > 0) ? (
                                         <div className='flex items-center gap-0.5 text-teal-800'>
-                                          <DollarSign size={10}/>
-                                          <p className='text-[10px] font-semibold'>{block.originalAppointmentData.amountPaid.toFixed(2)}</p>
+                                          <PaymentMethodIcon method={block.originalAppointmentData.paymentMethod} />
+                                          <p className='text-[10px] font-semibold'>{block.originalAppointmentData.amountPaid!.toFixed(2)}</p>
                                         </div>
                                       ) : null}
                                   </div>
