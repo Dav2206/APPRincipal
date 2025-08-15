@@ -76,7 +76,7 @@ const PaymentMethodIcon = ({ method }: { method?: string | null }) => {
     if (methodLower.includes('yape') || methodLower.includes('plin')) {
         return <Smartphone size={10} className="inline-block" title={`Pago con ${method}`} />;
     }
-    if (methodLower.includes('tarjeta')) {
+    if (methodLower.includes('tarjeta') || methodLower.includes('visa')) {
         return <CreditCard size={10} className="inline-block" title={`Pago con ${method}`} />;
     }
     if (methodLower.includes('efectivo')) {
