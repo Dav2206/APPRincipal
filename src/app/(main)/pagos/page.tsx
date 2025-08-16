@@ -383,11 +383,11 @@ export default function PaymentsPage() {
     if (!reminderToDelete) return;
     try {
       await deletePeriodicReminderData(reminderToDelete.id);
-      toast({ title: "Recordatorio Eliminado", description: `"${reminderToDelete.title}" ha sido eliminado.` });
+      toast({ title: "Pago Eliminado", description: `"${reminderToDelete.title}" ha sido eliminado.` });
       setReminderToDelete(null);
       fetchReminders();
     } catch (error) {
-      toast({ title: "Error", description: "No se pudo eliminar el recordatorio.", variant: "destructive" });
+      toast({ title: "Error", description: "No se pudo eliminar el pago.", variant: "destructive" });
     }
   };
 
@@ -395,10 +395,10 @@ export default function PaymentsPage() {
     const newStatus = reminder.status === 'pending' ? 'paid' : 'pending';
     try {
       await updatePeriodicReminder(reminder.id, { ...reminder, status: newStatus, dueDate: reminder.dueDate, category: reminder.category || 'otros' });
-      toast({ title: "Estado Actualizado", description: `El recordatorio "${reminder.title}" ahora está ${newStatus === 'paid' ? 'pagado' : 'pendiente'}.` });
+      toast({ title: "Estado Actualizado", description: `El pago "${reminder.title}" ahora está ${newStatus === 'paid' ? 'pagado' : 'pendiente'}.` });
       fetchReminders();
     } catch (error) {
-      toast({ title: "Error", description: "No se pudo actualizar el estado del recordatorio.", variant: "destructive" });
+      toast({ title: "Error", description: "No se pudo actualizar el estado del pago.", variant: "destructive" });
     }
   };
 
@@ -406,15 +406,15 @@ export default function PaymentsPage() {
     try {
       if (editingReminder) {
         await updatePeriodicReminder(editingReminder.id, { ...data, id: editingReminder.id, dueDate: format(data.dueDate, "yyyy-MM-dd") });
-        toast({ title: "Recordatorio Actualizado", description: `"${data.title}" ha sido actualizado.` });
+        toast({ title: "Pago Actualizado", description: `"${data.title}" ha sido actualizado.` });
       } else {
         await addPeriodicReminder({ ...data, dueDate: format(data.dueDate, "yyyy-MM-dd") });
-        toast({ title: "Recordatorio Añadido", description: `"${data.title}" ha sido añadido.` });
+        toast({ title: "Pago Añadido", description: `"${data.title}" ha sido añadido.` });
       }
       setIsReminderFormOpen(false);
       fetchReminders();
     } catch (error) {
-      toast({ title: "Error", description: "No se pudo guardar el recordatorio.", variant: "destructive" });
+      toast({ title: "Error", description: "No se pudo guardar el pago.", variant: "destructive" });
     }
   };
   
@@ -457,7 +457,7 @@ export default function PaymentsPage() {
        <Tabs defaultValue="payroll" className="w-full">
         <TabsList className="grid w-full grid-cols-2">
           <TabsTrigger value="payroll">Pagos al Personal</TabsTrigger>
-          <TabsTrigger value="expenses">Gastos Operativos (Recordatorios)</TabsTrigger>
+          <TabsTrigger value="expenses">Gastos Operativos</TabsTrigger>
         </TabsList>
         <TabsContent value="payroll">
           <Card>
@@ -543,13 +543,13 @@ export default function PaymentsPage() {
             <CardHeader>
                 <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
                   <div>
-                    <CardTitle>Gastos Operativos y Recordatorios</CardTitle>
+                    <CardTitle>Gastos Operativos</CardTitle>
                     <CardDescription>
                         Configure y dé seguimiento a los pagos recurrentes de la empresa.
                     </CardDescription>
                   </div>
                    <Button onClick={handleAddReminder}>
-                      <PlusCircle className="mr-2 h-4 w-4" /> Añadir Recordatorio
+                      <PlusCircle className="mr-2 h-4 w-4" /> Añadir Pago/Gasto
                   </Button>
                 </div>
                  <div className="mt-4 flex items-center gap-2 flex-wrap border-t pt-4">
@@ -562,13 +562,13 @@ export default function PaymentsPage() {
                  {isLoadingReminders ? (
                     <div className="flex justify-center items-center h-40">
                     <Loader2 className="h-8 w-8 animate-spin text-primary" />
-                    <p className="ml-2 text-muted-foreground">Cargando recordatorios...</p>
+                    <p className="ml-2 text-muted-foreground">Cargando pagos...</p>
                     </div>
                 ) : reminders.length === 0 ? (
                     <div className="p-6 border rounded-lg bg-secondary/30 text-center">
                     <ShieldAlert className="h-10 w-10 text-muted-foreground mx-auto mb-2" />
                     <p className="text-muted-foreground">
-                        No hay recordatorios periódicos configurados. ¡Añade el primero!
+                        No hay pagos o gastos configurados. ¡Añade el primero!
                     </p>
                     </div>
                 ) : (
@@ -622,7 +622,7 @@ export default function PaymentsPage() {
                                     <AlertDialogHeader>
                                         <AlertDialogTitle>¿Confirmar Eliminación?</AlertDialogTitle>
                                         <AlertDialogDescription>
-                                        Esta acción no se puede deshacer. ¿Estás seguro de que quieres eliminar el recordatorio "{reminderToDelete?.title}"?
+                                        Esta acción no se puede deshacer. ¿Estás seguro de que quieres eliminar el pago "{reminderToDelete?.title}"?
                                         </AlertDialogDescription>
                                     </AlertDialogHeader>
                                     <AlertDialogFooter>
@@ -723,7 +723,7 @@ export default function PaymentsPage() {
       <Dialog open={isReminderFormOpen} onOpenChange={setIsReminderFormOpen}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle>{editingReminder ? 'Editar' : 'Añadir'} Recordatorio</DialogTitle>
+            <DialogTitle>{editingReminder ? 'Editar' : 'Añadir'} Pago/Gasto</DialogTitle>
           </DialogHeader>
           <Form {...reminderForm}>
             <form onSubmit={reminderForm.handleSubmit(onSubmitReminderForm)} className="space-y-4 py-2 max-h-[70vh] overflow-y-auto pr-2">
@@ -832,7 +832,7 @@ export default function PaymentsPage() {
                 <DialogClose asChild><Button type="button" variant="outline">Cancelar</Button></DialogClose>
                 <Button type="submit" disabled={reminderForm.formState.isSubmitting}>
                   {reminderForm.formState.isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                  {editingReminder ? 'Guardar Cambios' : 'Añadir Recordatorio'}
+                  {editingReminder ? 'Guardar Cambios' : 'Añadir Pago'}
                 </Button>
               </DialogFooter>
             </form>
@@ -842,4 +842,3 @@ export default function PaymentsPage() {
     </div>
   );
 }
-
