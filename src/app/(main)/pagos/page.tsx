@@ -118,7 +118,7 @@ export default function PaymentsPage() {
 
 
   useEffect(() => {
-    if (!isLoading && (!user || (user.role !== USER_ROLES.ADMIN && user.role !== USER_ROLES.CONTADOR))) {
+    if (!isLoading && (!user || user.role !== USER_ROLES.CONTADOR)) {
       router.replace('/dashboard');
     }
   }, [user, isLoading, router]);
@@ -307,7 +307,7 @@ export default function PaymentsPage() {
 
     // --- Reminder Handlers ---
   const fetchReminders = useCallback(async () => {
-    if (!user || (user.role !== USER_ROLES.ADMIN && user.role !== USER_ROLES.CONTADOR)) return;
+    if (!user || (user.role !== USER_ROLES.CONTADOR)) return;
     setIsLoadingReminders(true);
     try {
       const data = await getPeriodicReminders();
@@ -436,7 +436,7 @@ export default function PaymentsPage() {
   };
 
   
-  if (isLoading || !user || (user.role !== USER_ROLES.ADMIN && user.role !== USER_ROLES.CONTADOR)) {
+  if (isLoading || !user || user.role !== USER_ROLES.CONTADOR) {
     return (
       <div className="flex h-screen items-center justify-center">
         <Loader2 className="h-12 w-12 animate-spin text-primary" />
