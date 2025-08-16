@@ -26,26 +26,7 @@ import { cn } from '@/lib/utils';
 import { Badge } from '@/components/ui/badge';
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogClose } from '@/components/ui/dialog';
-
-
-// --- Mock Data Structures (to be replaced with real data fetching) ---
-type ExpenseType = 'insumo' | 'servicio' | 'impuesto';
-interface Expense {
-  id: string;
-  type: ExpenseType;
-  date: Date;
-  description: string;
-  amount: number;
-}
-
-const getExpenseTypeLabel = (type: ExpenseType) => {
-  switch (type) {
-    case 'insumo': return 'Insumo';
-    case 'servicio': return 'Servicio';
-    case 'impuesto': return 'Impuesto';
-    default: return 'Gasto';
-  }
-};
+import Link from 'next/link';
 
 
 const currentSystemYear = getYear(new Date());
@@ -83,14 +64,6 @@ export default function PaymentsPage() {
   const [locations, setLocations] = useState<Location[]>([]);
   const [editingSalary, setEditingSalary] = useState<{ id: string; value: string } | null>(null);
   const [editingCommission, setEditingCommission] = useState<{ prof: PayrollData; rate: string; deductible: string; } | null>(null);
-
-
-  // --- State for General Expenses ---
-  const [expenses, setExpenses] = useState<Expense[]>([]);
-  const [expenseType, setExpenseType] = useState<ExpenseType>('insumo');
-  const [expenseDate, setExpenseDate] = useState<Date>(new Date());
-  const [expenseDescription, setExpenseDescription] = useState('');
-  const [expenseAmount, setExpenseAmount] = useState('');
 
 
   useEffect(() => {
@@ -131,20 +104,20 @@ export default function PaymentsPage() {
         const incomeByProfessional: Record<string, number> = {};
 
         appointments.forEach(appt => {
-          // 1. Atribuir el ingreso del servicio principal
-          if (appt.professionalId && appt.amountPaid && appt.amountPaid > 0) {
-            incomeByProfessional[appt.professionalId] = (incomeByProfessional[appt.professionalId] || 0) + appt.amountPaid;
-          }
-
-          // 2. Atribuir los ingresos de los servicios adicionales
-          appt.addedServices?.forEach(addedService => {
-            if (addedService.amountPaid && addedService.amountPaid > 0) {
-              // Asignar al profesional del servicio adicional, o al principal si no está especificado.
-              const profIdForAddedService = addedService.professionalId || appt.professionalId;
-              if (profIdForAddedService) {
-                incomeByProfessional[profIdForAddedService] = (incomeByProfessional[profIdForAddedService] || 0) + addedService.amountPaid;
+          const processIncomeForProfessional = (profId: string | null | undefined, amount: number | null | undefined) => {
+              if (profId && amount && amount > 0) {
+                  incomeByProfessional[profId] = (incomeByProfessional[profId] || 0) + amount;
               }
-            }
+          };
+
+          // Atribuir el ingreso del servicio principal
+          processIncomeForProfessional(appt.professionalId, appt.amountPaid);
+          
+          // Atribuir los ingresos de los servicios adicionales
+          appt.addedServices?.forEach(addedService => {
+              // El ingreso se atribuye al profesional del servicio adicional, o al principal si no está especificado.
+              const profIdForAddedService = addedService.professionalId || appt.professionalId;
+              processIncomeForProfessional(profIdForAddedService, addedService.amountPaid);
           });
         });
 
@@ -184,27 +157,6 @@ export default function PaymentsPage() {
     calculatePayroll();
   }, [calculatePayroll]);
 
-
-  const handleAddExpense = () => {
-    if (!expenseDescription || !expenseAmount || !expenseDate) {
-      toast({ title: "Datos incompletos", description: "Por favor, complete todos los campos del gasto.", variant: "destructive" });
-      return;
-    }
-    
-    const newExpense: Expense = {
-      id: `exp_${Date.now()}`,
-      type: expenseType,
-      date: expenseDate,
-      description: expenseDescription,
-      amount: parseFloat(expenseAmount),
-    };
-
-    setExpenses(prev => [...prev, newExpense].sort((a,b) => b.date.getTime() - a.date.getTime()));
-    toast({ title: "Gasto Registrado (Simulación)", description: `Se ha añadido "${expenseDescription}" a la lista.` });
-
-    setExpenseDescription('');
-    setExpenseAmount('');
-  };
 
   const handleSalaryEdit = (profId: string, currentSalary: number) => {
     setEditingSalary({ id: profId, value: (currentSalary * 2).toString() }); // Edit the full monthly salary
@@ -254,7 +206,7 @@ export default function PaymentsPage() {
 
     try {
       await updateProfessional(editingCommission.prof.professionalId, { 
-        commissionRate: newRate / 100,
+        commissionRate: newRate, // Schema expects number between 0-100
         commissionDeductible: newDeductible
       });
       toast({ title: "Comisión Actualizada", description: `Los parámetros de comisión para ${editingCommission.prof.professionalName} han sido actualizados.` });
@@ -306,12 +258,6 @@ export default function PaymentsPage() {
   };
 
   
-  const totalExpenses = useMemo(() => expenses.reduce((sum, exp) => sum + exp.amount, 0), [expenses]);
-  const totalInsumos = useMemo(() => expenses.filter(e => e.type === 'insumo').reduce((sum, exp) => sum + exp.amount, 0), [expenses]);
-  const totalServicios = useMemo(() => expenses.filter(e => e.type === 'servicio').reduce((sum, exp) => sum + exp.amount, 0), [expenses]);
-  const totalImpuestos = useMemo(() => expenses.filter(e => e.type === 'impuesto').reduce((sum, exp) => sum + exp.amount, 0), [expenses]);
-
-
   if (isLoading || !user || (user.role !== USER_ROLES.ADMIN && user.role !== USER_ROLES.CONTADOR)) {
     return (
       <div className="flex h-screen items-center justify-center">
@@ -326,202 +272,90 @@ export default function PaymentsPage() {
         <CardHeader>
           <CardTitle className="text-3xl flex items-center gap-2">
             <CreditCard className="text-primary" />
-            Módulo de Pagos y Egresos
+            Módulo de Pagos
           </CardTitle>
           <CardDescription>
-            Registro y gestión de egresos, planillas y pagos a proveedores.
+            Cálculo de planilla para el personal y gestión de egresos de la empresa.
           </CardDescription>
         </CardHeader>
       </Card>
       
-      <Tabs defaultValue="salaries" className="w-full">
-        <TabsList className="grid w-full grid-cols-3">
-          <TabsTrigger value="salaries"><Users className="mr-2 h-4 w-4"/>Sueldos y Comisiones</TabsTrigger>
-          <TabsTrigger value="expenses"><DollarSign className="mr-2 h-4 w-4"/>Gastos Operativos</TabsTrigger>
-          <TabsTrigger value="report" disabled><List className="mr-2 h-4 w-4"/>Reporte Mensual</TabsTrigger>
-        </TabsList>
-        
-        <TabsContent value="salaries">
-            <Card>
-              <CardHeader>
-                <CardTitle>Pagos al Personal</CardTitle>
-                <CardDescription>
-                  Visualización de los pagos a profesionales, incluyendo sueldo base y comisiones por producción quincenal.
-                </CardDescription>
-                 <div className="mt-4 flex items-center gap-2 flex-wrap">
-                    <Button variant="outline" size="icon" onClick={() => navigateQuincena('prev')} disabled={isPrevQuincenaDisabled()}><ChevronLeft className="h-4 w-4" /></Button>
-                    <Select value={String(selectedYear)} onValueChange={(val) => {setSelectedYear(Number(val));}}><SelectTrigger className="w-[100px]"><SelectValue /></SelectTrigger><SelectContent>{availableYears.map(y => <SelectItem key={y} value={String(y)}>{y}</SelectItem>)}</SelectContent></Select>
-                    <Select value={String(selectedMonth)} onValueChange={(val) => {setSelectedMonth(Number(val));}}><SelectTrigger className="w-[150px]"><SelectValue /></SelectTrigger><SelectContent>{months.map(m => <SelectItem key={m.value} value={String(m.value)}>{m.label}</SelectItem>)}</SelectContent></Select>
-                    <Select value={String(selectedQuincena)} onValueChange={(val) => {setSelectedQuincena(Number(val) as 1 | 2);}}><SelectTrigger className="w-[150px]"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="1">1ra Quincena</SelectItem><SelectItem value="2">2da Quincena</SelectItem></SelectContent></Select>
-                    <Button variant="outline" size="icon" onClick={() => navigateQuincena('next')} disabled={isNextQuincenaDisabled()}><ChevronRight className="h-4 w-4" /></Button>
-                </div>
-              </CardHeader>
-              <CardContent>
-                {isLoadingPayroll ? (
-                   <div className="flex justify-center items-center h-40"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>
-                ) : payrollData.length > 0 ? (
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Profesional</TableHead>
-                        <TableHead>Sede Base</TableHead>
-                        <TableHead className="text-right">Producción (S/)</TableHead>
-                        <TableHead className="text-right">Sueldo Base Quincenal (S/)</TableHead>
-                        <TableHead className="text-right">Comisión (S/)</TableHead>
-                        <TableHead className="text-right font-bold">Total a Pagar (S/)</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {payrollData.map(item => (
-                        <TableRow key={item.professionalId}>
-                          <TableCell className="font-medium">{item.professionalName}</TableCell>
-                          <TableCell>{item.locationName}</TableCell>
-                          <TableCell className="text-right">{item.totalIncome.toFixed(2)}</TableCell>
-                          <TableCell className="text-right cursor-pointer" onDoubleClick={() => handleSalaryEdit(item.professionalId, item.baseSalary)}>
-                            {editingSalary?.id === item.professionalId ? (
-                              <div className="flex gap-1 justify-end items-center">
-                                <Input
-                                  type="number"
-                                  value={editingSalary.value}
-                                  onChange={(e) => setEditingSalary({ ...editingSalary, value: e.target.value })}
-                                  onKeyDown={(e) => { if(e.key === 'Enter') handleSaveSalary(); if(e.key === 'Escape') setEditingSalary(null); }}
-                                  className="w-24 h-8 text-right"
-                                  autoFocus
-                                />
-                                <Button size="icon" className="h-8 w-8" onClick={handleSaveSalary}><Check size={16}/></Button>
-                              </div>
-                            ) : (
-                              <span>{item.baseSalary.toFixed(2)}</span>
-                            )}
-                          </TableCell>
-                          <TableCell className="text-right text-green-600 font-semibold cursor-pointer" onDoubleClick={() => handleCommissionEdit(item)}>
-                              {item.commission.toFixed(2)}
-                          </TableCell>
-                          <TableCell className="text-right font-bold text-lg">{item.totalPayment.toFixed(2)}</TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                ) : (
-                  <div className="p-8 border rounded-lg bg-secondary/30 text-center">
-                    <AlertTriangle className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
-                    <h3 className="text-xl font-semibold">No hay datos de planilla</h3>
-                    <p className="text-muted-foreground mt-2">
-                        No se encontró actividad o profesionales activos para el período seleccionado.
-                    </p>
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-        </TabsContent>
-
-        <TabsContent value="expenses">
-            <Card>
-              <CardHeader>
-                <CardTitle>Registro de Gastos Operativos</CardTitle>
-                <CardDescription>
-                  Registre aquí los egresos por insumos, servicios (luz, agua, alquiler) e impuestos.
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-6">
-                  {/* --- Formulario para añadir gastos --- */}
-                  <div className="p-4 border rounded-lg space-y-4">
-                     <h4 className="font-semibold text-lg">Nuevo Gasto</h4>
-                      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                        <div className="space-y-2">
-                          <Label htmlFor="expense-type">Tipo de Gasto</Label>
-                          <Select value={expenseType} onValueChange={(v) => setExpenseType(v as ExpenseType)}>
-                            <SelectTrigger id="expense-type"><SelectValue/></SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="insumo"><ShoppingCart className="mr-2 h-4 w-4"/>Insumos</SelectItem>
-                              <SelectItem value="servicio"><Lightbulb className="mr-2 h-4 w-4"/>Servicios</SelectItem>
-                              <SelectItem value="impuesto"><LandmarkIcon className="mr-2 h-4 w-4"/>Impuestos</SelectItem>
-                            </SelectContent>
-                          </Select>
+      <Card>
+        <CardHeader>
+          <CardTitle>Pagos al Personal</CardTitle>
+          <CardDescription>
+            Visualización de los pagos a profesionales, incluyendo sueldo base y comisiones por producción quincenal.
+          </CardDescription>
+           <div className="mt-4 flex items-center gap-2 flex-wrap">
+              <Button variant="outline" size="icon" onClick={() => navigateQuincena('prev')} disabled={isPrevQuincenaDisabled()}><ChevronLeft className="h-4 w-4" /></Button>
+              <Select value={String(selectedYear)} onValueChange={(val) => {setSelectedYear(Number(val));}}><SelectTrigger className="w-[100px]"><SelectValue /></SelectTrigger><SelectContent>{availableYears.map(y => <SelectItem key={y} value={String(y)}>{y}</SelectItem>)}</SelectContent></Select>
+              <Select value={String(selectedMonth)} onValueChange={(val) => {setSelectedMonth(Number(val));}}><SelectTrigger className="w-[150px]"><SelectValue /></SelectTrigger><SelectContent>{months.map(m => <SelectItem key={m.value} value={String(m.value)}>{m.label}</SelectItem>)}</SelectContent></Select>
+              <Select value={String(selectedQuincena)} onValueChange={(val) => {setSelectedQuincena(Number(val) as 1 | 2);}}><SelectTrigger className="w-[150px]"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="1">1ra Quincena</SelectItem><SelectItem value="2">2da Quincena</SelectItem></SelectContent></Select>
+              <Button variant="outline" size="icon" onClick={() => navigateQuincena('next')} disabled={isNextQuincenaDisabled()}><ChevronRight className="h-4 w-4" /></Button>
+          </div>
+        </CardHeader>
+        <CardContent>
+          {isLoadingPayroll ? (
+             <div className="flex justify-center items-center h-40"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>
+          ) : payrollData.length > 0 ? (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Profesional</TableHead>
+                  <TableHead>Sede Base</TableHead>
+                  <TableHead className="text-right">Producción (S/)</TableHead>
+                  <TableHead className="text-right">Sueldo Base Quincenal (S/)</TableHead>
+                  <TableHead className="text-right">Comisión (S/)</TableHead>
+                  <TableHead className="text-right font-bold">Total a Pagar (S/)</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {payrollData.map(item => (
+                  <TableRow key={item.professionalId}>
+                    <TableCell className="font-medium">{item.professionalName}</TableCell>
+                    <TableCell>{item.locationName}</TableCell>
+                    <TableCell className="text-right">{item.totalIncome.toFixed(2)}</TableCell>
+                    <TableCell className="text-right cursor-pointer" onDoubleClick={() => handleSalaryEdit(item.professionalId, item.baseSalary)}>
+                      {editingSalary?.id === item.professionalId ? (
+                        <div className="flex gap-1 justify-end items-center">
+                          <Input
+                            type="number"
+                            value={editingSalary.value}
+                            onChange={(e) => setEditingSalary({ ...editingSalary, value: e.target.value })}
+                            onKeyDown={(e) => { if(e.key === 'Enter') handleSaveSalary(); if(e.key === 'Escape') setEditingSalary(null); }}
+                            className="w-24 h-8 text-right"
+                            autoFocus
+                          />
+                          <Button size="icon" className="h-8 w-8" onClick={handleSaveSalary}><Check size={16}/></Button>
                         </div>
-                        <div className="space-y-2">
-                          <Label htmlFor="expense-date">Fecha</Label>
-                          <Popover>
-                            <PopoverTrigger asChild>
-                              <Button variant="outline" id="expense-date" className={cn("w-full justify-start text-left font-normal", !expenseDate && "text-muted-foreground")}>
-                                <CalendarIcon className="mr-2 h-4 w-4" />
-                                {expenseDate ? format(expenseDate, "PPP", { locale: es }) : <span>Seleccionar fecha</span>}
-                              </Button>
-                            </PopoverTrigger>
-                            <PopoverContent className="w-auto p-0"><Calendar mode="single" selected={expenseDate} onSelect={(d) => setExpenseDate(d || new Date())} /></PopoverContent>
-                          </Popover>
-                        </div>
-                        <div className="space-y-2">
-                            <Label htmlFor="expense-amount">Monto (S/)</Label>
-                            <Input id="expense-amount" type="number" placeholder="Ej: 150.00" value={expenseAmount} onChange={(e) => setExpenseAmount(e.target.value)} />
-                        </div>
-                         <div className="space-y-2 col-span-full md:col-span-1">
-                          <Label htmlFor="expense-description">Descripción</Label>
-                          <Input id="expense-description" placeholder="Ej: Compra de algodones" value={expenseDescription} onChange={(e) => setExpenseDescription(e.target.value)} />
-                        </div>
-                      </div>
-                      <div className="flex justify-end">
-                        <Button onClick={handleAddExpense}><PlusCircle className="mr-2 h-4 w-4"/>Añadir Gasto</Button>
-                      </div>
-                      <Alert variant="default" className="mt-4 bg-blue-50 border-blue-200 text-blue-800">
-                          <AlertTriangle className="h-4 w-4 !text-blue-800" />
-                          <AlertTitle className="text-blue-900 text-sm">Nota sobre la Persistencia</AlertTitle>
-                          <AlertDescription className="text-xs">
-                              Nota: El registro de gastos es una simulación visual. Los datos se reiniciarán al recargar la página.
-                          </AlertDescription>
-                      </Alert>
-                  </div>
-
-                  {/* --- Tabla de Gastos Registrados --- */}
-                  <div className="p-4 border rounded-lg">
-                     <h4 className="font-semibold text-lg mb-2">Historial de Gastos del Mes</h4>
-                     {expenses.length > 0 ? (
-                        <Table>
-                          <TableHeader>
-                            <TableRow>
-                              <TableHead>Fecha</TableHead>
-                              <TableHead>Tipo</TableHead>
-                              <TableHead>Descripción</TableHead>
-                              <TableHead className="text-right">Monto (S/)</TableHead>
-                            </TableRow>
-                          </TableHeader>
-                          <TableBody>
-                            {expenses.map(exp => (
-                              <TableRow key={exp.id}>
-                                <TableCell>{format(exp.date, "dd/MM/yyyy")}</TableCell>
-                                <TableCell><Badge variant="outline">{getExpenseTypeLabel(exp.type)}</Badge></TableCell>
-                                <TableCell className="font-medium">{exp.description}</TableCell>
-                                <TableCell className="text-right">{exp.amount.toFixed(2)}</TableCell>
-                              </TableRow>
-                            ))}
-                          </TableBody>
-                          <TableFooterComponent>
-                            <TableRow className="font-bold">
-                                <TableCell colSpan={3}>Total Insumos</TableCell>
-                                <TableCell className="text-right">S/ {totalInsumos.toFixed(2)}</TableCell>
-                            </TableRow>
-                            <TableRow className="font-bold">
-                                <TableCell colSpan={3}>Total Servicios</TableCell>
-                                <TableCell className="text-right">S/ {totalServicios.toFixed(2)}</TableCell>
-                            </TableRow>
-                            <TableRow className="font-bold">
-                                <TableCell colSpan={3}>Total Impuestos</TableCell>
-                                <TableCell className="text-right">S/ {totalImpuestos.toFixed(2)}</TableCell>
-                            </TableRow>
-                             <TableRow className="text-base bg-muted/80">
-                                <TableCell colSpan={3} className="font-extrabold">Total Egresos Registrados</TableCell>
-                                <TableCell className="text-right font-extrabold">S/ {totalExpenses.toFixed(2)}</TableCell>
-                            </TableRow>
-                          </TableFooterComponent>
-                        </Table>
-                     ) : (
-                        <p className="text-center text-muted-foreground py-4">No hay gastos registrados para este período.</p>
-                     )}
-                  </div>
-              </CardContent>
-            </Card>
-        </TabsContent>
-      </Tabs>
+                      ) : (
+                        <span>{item.baseSalary.toFixed(2)}</span>
+                      )}
+                    </TableCell>
+                    <TableCell className="text-right text-green-600 font-semibold cursor-pointer" onDoubleClick={() => handleCommissionEdit(item)}>
+                        {item.commission.toFixed(2)}
+                    </TableCell>
+                    <TableCell className="text-right font-bold text-lg">{item.totalPayment.toFixed(2)}</TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          ) : (
+            <div className="p-8 border rounded-lg bg-secondary/30 text-center">
+              <AlertTriangle className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
+              <h3 className="text-xl font-semibold">No hay datos de planilla</h3>
+              <p className="text-muted-foreground mt-2">
+                  No se encontró actividad o profesionales activos para el período seleccionado.
+              </p>
+            </div>
+          )}
+        </CardContent>
+         <CardFooter className="flex-col items-start gap-2 text-xs text-muted-foreground">
+            <p><span className="font-semibold">Producción:</span> Suma de todos los servicios (principales y adicionales) realizados por el profesional en la quincena.</p>
+            <p><span className="font-semibold">Comisión:</span> Se calcula como `(Producción - Deducible) * Tasa`. El deducible y la tasa son configurables por profesional.</p>
+            <p><span className="font-semibold">Edición Rápida:</span> Haga doble clic en "Sueldo Base" o "Comisión" para editar los valores del profesional.</p>
+          </CardFooter>
+      </Card>
       
       {editingCommission && (
         <Dialog open={!!editingCommission} onOpenChange={() => setEditingCommission(null)}>
