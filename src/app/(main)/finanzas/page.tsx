@@ -1,4 +1,5 @@
 
+
 "use client";
 
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
@@ -20,7 +21,7 @@ import { useToast } from '@/hooks/use-toast';
 import { useRouter } from 'next/navigation';
 import { Input } from '@/components/ui/input';
 import { Separator } from '@/components/ui/separator';
-import { Pie, PieChart, Cell, Sector } from "recharts"
+import { Pie, PieChart, Cell, Sector, Legend } from "recharts"
 import {
   ChartContainer,
   ChartTooltip,
@@ -105,12 +106,6 @@ export default function FinancesPage() {
     loadInitialData();
   }, []);
 
-  const allAvailablePaymentMethods = useMemo(() => {
-      const allMethods = new Set<string>();
-      Object.values(paymentMethodsByLocation).flat().forEach(method => allMethods.add(method));
-      return Array.from(allMethods).sort();
-  }, [paymentMethodsByLocation]);
-
   
   useEffect(() => {
     if (!authIsLoading && (!user || (user.role !== USER_ROLES.CONTADOR && user.role !== USER_ROLES.ADMIN))) {
@@ -172,12 +167,12 @@ export default function FinancesPage() {
             locationTotal: 0
           };
           
-          const paymentGroup = activePaymentGroups.find(g => g.methods.includes(appt.paymentMethod!))?.name || appt.paymentMethod;
+          const groupName = activePaymentGroups.find(g => g.methods.includes(appt.paymentMethod!))?.name || appt.paymentMethod;
 
           let totalAppointmentAmount = (appt.amountPaid || 0) + (appt.addedServices?.reduce((sum, as) => sum + (as.amountPaid || 0), 0) || 0);
 
           if (totalAppointmentAmount > 0) {
-            entry.totalsByMethod[paymentGroup] = (entry.totalsByMethod[paymentGroup] || 0) + totalAppointmentAmount;
+            entry.totalsByMethod[groupName] = (entry.totalsByMethod[groupName] || 0) + totalAppointmentAmount;
             entry.locationTotal += totalAppointmentAmount;
           }
 
@@ -221,18 +216,39 @@ export default function FinancesPage() {
     return Object.values(totalsByPaymentGroup).reduce((sum, total) => sum + (total || 0), 0);
   }, [totalsByPaymentGroup]);
   
+  // State for Chart Interactivity
+  const [activeIndex, setActiveIndex] = useState<number | undefined>(undefined);
+  const [hiddenSlices, setHiddenSlices] = useState<string[]>([]);
 
+  const onPieEnter = useCallback((_: any, index: number) => {
+    setActiveIndex(index);
+  }, [setActiveIndex]);
+
+  const onPieLeave = useCallback(() => {
+    setActiveIndex(undefined);
+  }, [setActiveIndex]);
+  
+  const toggleSliceVisibility = (dataKey: string) => {
+    setHiddenSlices(prev =>
+      prev.includes(dataKey) ? prev.filter(key => key !== dataKey) : [...prev, dataKey]
+    );
+  };
+  
   const chartData = useMemo(() => {
     return Object.entries(totalsByPaymentGroup)
-      .map(([name, value]) => ({ name, value, fill: `var(--color-${name.toLowerCase().replace(/ /g, "_")})` }))
+      .map(([name, value]) => ({ name, value, fill: `var(--color-${name.toLowerCase().replace(/[\s-]/g, "_")})` }))
       .filter(item => item.value > 0);
   }, [totalsByPaymentGroup]);
+
+  const activeChartSlices = useMemo(() => {
+    return chartData.filter(slice => !hiddenSlices.includes(slice.name));
+  }, [chartData, hiddenSlices]);
 
 
   const chartConfig = useMemo(() => {
     const config: ChartConfig = {};
     chartData.forEach((item, index) => {
-      config[item.name.toLowerCase().replace(/ /g, "_")] = {
+      config[item.name.toLowerCase().replace(/[\s-]/g, "_")] = {
         label: item.name,
         color: `hsl(var(--chart-${(index % 5) + 1}))`,
       };
@@ -451,11 +467,21 @@ export default function FinancesPage() {
     savePresets(updatedPresets);
   };
   
-  const getUngroupedMethods = (preset?: GroupingPreset): string[] => {
-    if (!preset) return allAvailablePaymentMethods;
+  const allPaymentMethodsInView = useMemo(() => {
+    const methods = new Set<string>();
+    completedAppointments.forEach(appt => {
+      if (appt.paymentMethod) {
+        methods.add(appt.paymentMethod);
+      }
+    });
+    return Array.from(methods).sort();
+  }, [completedAppointments]);
+  
+  const getUngroupedMethods = useCallback((preset?: GroupingPreset): string[] => {
+    if (!preset) return allPaymentMethodsInView;
     const groupedMethods = new Set(preset.groups.flatMap(g => g.methods));
-    return allAvailablePaymentMethods.filter(m => !groupedMethods.has(m));
-  };
+    return allPaymentMethodsInView.filter(m => !groupedMethods.has(m));
+  }, [allPaymentMethodsInView]);
 
 
   if (authIsLoading || !user || (user.role !== USER_ROLES.CONTADOR && user.role !== USER_ROLES.ADMIN)) {
@@ -597,39 +623,78 @@ export default function FinancesPage() {
                   </Table>
                 )}
               </TabsContent>
-              <TabsContent value="chart">
+              <TabsContent value="chart" className="flex justify-center items-center flex-col min-h-[450px]">
                 {isLoading ? (
-                  <div className="flex justify-center items-center h-40"><Loader2 className="h-8 w-8 animate-spin" /></div>
-                ) : Object.keys(totalsByPaymentGroup).length === 0 ? (
-                  <div className="p-6 border rounded-lg bg-secondary/30 text-center mt-4">
-                      <AlertTriangle className="h-10 w-10 text-muted-foreground mx-auto mb-2" />
-                      <p className="text-muted-foreground">No hay datos suficientes para mostrar el gráfico.</p>
-                  </div>
+                    <div className="flex justify-center items-center h-40"><Loader2 className="h-8 w-8 animate-spin" /></div>
+                ) : activeChartSlices.length === 0 ? (
+                    <div className="p-6 border rounded-lg bg-secondary/30 text-center mt-4">
+                        <AlertTriangle className="h-10 w-10 text-muted-foreground mx-auto mb-2" />
+                        <p className="text-muted-foreground">{chartData.length > 0 ? 'Todos los grupos están ocultos. Selecciónelos en la leyenda.' : 'No hay datos para mostrar el gráfico.'}</p>
+                    </div>
                 ) : (
-                  <ChartContainer
-                    id="finances-chart"
-                    config={chartConfig}
-                    className="mx-auto aspect-square h-[300px]"
-                  >
-                    <PieChart>
-                      <ChartTooltip
-                        cursor={false}
-                        content={<ChartTooltipContent hideLabel />}
-                      />
-                      <Pie
-                        data={chartData}
-                        dataKey="value"
-                        nameKey="name"
-                        innerRadius="60%"
-                        strokeWidth={5}
-                      >
-                        {chartData.map((entry) => (
-                          <Cell key={entry.name} fill={entry.fill} className="outline-none" />
-                        ))}
-                      </Pie>
-                       <ChartLegend content={<ChartLegendContent nameKey="name"/>} />
-                    </PieChart>
-                  </ChartContainer>
+                     <ChartContainer
+                        id="finances-chart"
+                        config={chartConfig}
+                        className="mx-auto aspect-square h-[350px]"
+                    >
+                        <PieChart>
+                            <ChartTooltip cursor={true} content={<ChartTooltipContent hideLabel />} />
+                            <Pie
+                                data={activeChartSlices}
+                                dataKey="value"
+                                nameKey="name"
+                                innerRadius="30%"
+                                outerRadius="80%"
+                                activeIndex={activeIndex}
+                                activeShape={({ cx, cy, innerRadius, outerRadius, startAngle, endAngle, fill, payload, percent, value }) => {
+                                    return (
+                                        <g>
+                                            <text x={cx} y={cy} dy={-10} textAnchor="middle" fill={fill} className="text-lg font-bold">
+                                                {payload.name}
+                                            </text>
+                                            <text x={cx} y={cy} dy={10} textAnchor="middle" fill="hsl(var(--foreground))">
+                                                {`S/ ${value.toFixed(2)} (${(percent * 100).toFixed(1)}%)`}
+                                            </text>
+                                            <Sector
+                                                cx={cx}
+                                                cy={cy}
+                                                innerRadius={innerRadius}
+                                                outerRadius={outerRadius + 5} 
+                                                startAngle={startAngle}
+                                                endAngle={endAngle}
+                                                fill={fill}
+                                            />
+                                        </g>
+                                    );
+                                }}
+                                onMouseEnter={onPieEnter}
+                                onMouseLeave={onPieLeave}
+                            >
+                                {activeChartSlices.map((entry) => (
+                                    <Cell key={entry.name} fill={entry.fill} className="outline-none" />
+                                ))}
+                            </Pie>
+                            <Legend
+                                content={({ payload }) => (
+                                    <div className="flex flex-wrap justify-center gap-x-4 gap-y-1 mt-4 text-xs">
+                                        {payload?.map((entry, index) => {
+                                            const isHidden = hiddenSlices.includes(entry.value);
+                                            return (
+                                                <div
+                                                    key={`item-${index}`}
+                                                    className={`flex items-center cursor-pointer ${isHidden ? 'opacity-50' : ''}`}
+                                                    onClick={() => toggleSliceVisibility(entry.value)}
+                                                >
+                                                    <div className="w-2 h-2 rounded-full mr-1.5" style={{ backgroundColor: entry.color }}></div>
+                                                    <span>{entry.value}</span>
+                                                </div>
+                                            );
+                                        })}
+                                    </div>
+                                )}
+                            />
+                        </PieChart>
+                    </ChartContainer>
                 )}
               </TabsContent>
             </Tabs>
