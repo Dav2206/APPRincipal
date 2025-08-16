@@ -102,10 +102,11 @@ export default function FinancesPage() {
   const allAvailablePaymentGroups = useMemo(() => {
     const allGroups = new Set<string>();
     
+    // Group logic based on prefixes
     completedAppointments.forEach(appt => {
       if (appt.paymentMethod) {
-          const baseType = appt.paymentMethod.split(' - ')[0].trim();
-          allGroups.add(baseType);
+        const paymentGroup = appt.paymentMethod.split(' - ')[0].trim();
+        allGroups.add(paymentGroup);
       }
     });
     
@@ -221,21 +222,35 @@ export default function FinancesPage() {
   
   const totalsByPaymentGroup = useMemo(() => {
     const totals: Partial<Record<string, number>> = {};
-    filteredPaymentGroups.forEach(group => {
-        totals[group] = reportData.reduce((sum, row) => sum + (row.totalsByMethod[group] || 0), 0);
+    const paymentMethods = new Set<string>();
+    completedAppointments.forEach(appt => {
+        if(appt.paymentMethod) paymentMethods.add(appt.paymentMethod);
     });
+
+    Array.from(paymentMethods).forEach(method => {
+        totals[method] = 0;
+    });
+
+    completedAppointments.forEach(appt => {
+        let totalAppointmentAmount = (appt.amountPaid || 0) + (appt.addedServices?.reduce((sum, as) => sum + (as.amountPaid || 0), 0) || 0);
+        if (appt.paymentMethod && totalAppointmentAmount > 0) {
+            totals[appt.paymentMethod] = (totals[appt.paymentMethod] || 0) + totalAppointmentAmount;
+        }
+    });
+
     return totals;
-  }, [reportData, filteredPaymentGroups]);
+  }, [completedAppointments]);
+
 
   const groupedChartData = useMemo(() => {
     const groupedTotals: Record<string, number> = {};
-    const unassignedMethods: Record<string, number> = { ...totalsByPaymentGroup };
+    const unassignedMethods = { ...totalsByPaymentGroup };
 
     Object.entries(chartGroups).forEach(([groupName, methodsInGroup]) => {
       groupedTotals[groupName] = 0;
       methodsInGroup.forEach(method => {
         if (unassignedMethods[method] !== undefined) {
-          groupedTotals[groupName] += unassignedMethods[method];
+          groupedTotals[groupName] += unassignedMethods[method]!;
           delete unassignedMethods[method];
         }
       });
@@ -243,7 +258,7 @@ export default function FinancesPage() {
 
     const finalChartData = Object.entries(groupedTotals).map(([name, value]) => ({ name, value }));
     Object.entries(unassignedMethods).forEach(([name, value]) => {
-      if (value > 0) {
+      if (value !== undefined && value > 0) {
         finalChartData.push({ name, value });
       }
     });
@@ -541,7 +556,7 @@ export default function FinancesPage() {
                         <TableCell>Total General (Filtrado)</TableCell>
                         {filteredPaymentGroups.map(group => (
                           <TableCell key={group} className="text-right">
-                            {(totalsByPaymentGroup[group] || 0).toFixed(2)}
+                            {(Object.values(totalsByPaymentGroup).reduce((total, current) => total + (current || 0), 0) > 0 ? (reportData.reduce((sum, row) => sum + (row.totalsByMethod[group] || 0), 0)).toFixed(2) : '0.00')}
                           </TableCell>
                         ))}
                         <TableCell className="text-right text-lg">
@@ -580,7 +595,7 @@ export default function FinancesPage() {
                                 content={<ChartTooltipContent hideLabel />}
                               />
                               <Pie
-                                data={groupedChartData.filter((d) => activeChartSlices.includes(d.name))}
+                                data={groupedChartData.filter(d => activeChartSlices.some(sliceName => d.name === sliceName))}
                                 dataKey="value"
                                 nameKey="name"
                                 innerRadius="60%"
@@ -614,25 +629,16 @@ export default function FinancesPage() {
                                 content={
                                   <ChartLegendContent
                                       nameKey="name"
-                                      onMouseUp={(data) => {
-                                        if (activeDonutSlice === data.value) {
-                                          setActiveDonutSlice(null);
-                                        } else {
-                                          setActiveDonutSlice(data.value);
-                                        }
-                                      }}
-                                      onMouseDown={(data) => {
-                                        if (activeChartSlices.includes(data.value)) {
+                                      payload={groupedChartData.map(item => ({...item, value: item.name, color: item.fill, type: activeChartSlices.includes(item.name) ? 'circle' : 'line', inactive: !activeChartSlices.includes(item.name) }))}
+                                      onClick={(data) => {
+                                        const { value } = data;
+                                        if (activeChartSlices.includes(value)) {
                                           setActiveChartSlices(
-                                            activeChartSlices.filter((label) => label !== data.value)
+                                            activeChartSlices.filter((label) => label !== value)
                                           );
                                         } else {
-                                          setActiveChartSlices([...activeChartSlices, data.value]);
+                                          setActiveChartSlices([...activeChartSlices, value]);
                                         }
-                                      }}
-                                      className="flex-wrap"
-                                      style={{
-                                        opacity: activeDonutSlice !== null ? 0.5 : 1,
                                       }}
                                   />
                                 }
@@ -659,9 +665,9 @@ export default function FinancesPage() {
                                 <div>
                                     <h5 className="text-xs font-bold mb-2">MÉTODOS DE PAGO SIN AGRUPAR</h5>
                                     <div className="space-y-1">
-                                        {Object.keys(totalsByPaymentGroup)
-                                          .filter(method => !Object.values(chartGroups).flat().includes(method))
-                                          .map(method => (
+                                        {Object.entries(totalsByPaymentGroup)
+                                          .filter(([method]) => !Object.values(chartGroups).flat().includes(method))
+                                          .map(([method, value]) => ( value === undefined ? null :
                                             <div 
                                               key={method} 
                                               className="text-xs p-1.5 border rounded bg-background cursor-grab"
