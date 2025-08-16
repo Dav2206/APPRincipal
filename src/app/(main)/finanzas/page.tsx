@@ -2,10 +2,10 @@
 "use client";
 
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
-import type { Appointment, LocationId, PaymentMethod, Location, PaymentGroup } from '@/types';
+import type { Appointment, LocationId, PaymentMethod, Location, PaymentGroup, GroupingPreset } from '@/types';
 import { useAuth } from '@/contexts/auth-provider';
 import { useAppState } from '@/contexts/app-state-provider';
-import { getAppointments, getLocations, updateLocationPaymentMethods, getPaymentGroups, savePaymentGroups } from '@/lib/data';
+import { getAppointments, getLocations, updateLocationPaymentMethods, getGroupingPresets, saveGroupingPresets } from '@/lib/data';
 import { USER_ROLES, APPOINTMENT_STATUS } from '@/lib/constants';
 
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
@@ -14,7 +14,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow, TableFoo
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { format, startOfMonth, endOfMonth, getYear, getMonth, setYear, setMonth } from 'date-fns';
 import { es } from 'date-fns/locale';
-import { Landmark, Loader2, AlertTriangle, ListPlus, Trash2, Filter, PlusCircle, Pencil, Check, X, PieChartIcon, Group, Layers } from 'lucide-react';
+import { Landmark, Loader2, AlertTriangle, ListPlus, Trash2, Filter, PlusCircle, Pencil, Check, X, PieChartIcon, Group, Layers, Settings2, FolderPlus, ChevronsUpDown, Folder } from 'lucide-react';
 import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
 import { useRouter } from 'next/navigation';
@@ -31,12 +31,13 @@ import {
 } from "@/components/ui/chart"
 import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuCheckboxItem, DropdownMenuLabel, DropdownMenuSeparator } from '@/components/ui/dropdown-menu';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 
 
 type ReportRow = {
   locationId: LocationId;
   locationName: string;
-  totalsByMethod: Partial<Record<string, number>>; // Changed from PaymentMethod to string for group names
+  totalsByMethod: Partial<Record<string, number>>;
   locationTotal: number;
 };
 
@@ -48,6 +49,7 @@ const months = Array.from({ length: 12 }, (_, i) => ({
 }));
 
 const ALL_LOCATIONS_FILTER = "all";
+const NO_GROUPING_PRESET_ID = "__no_grouping__";
 
 export default function FinancesPage() {
   const { user, isLoading: authIsLoading } = useAuth();
@@ -71,26 +73,25 @@ export default function FinancesPage() {
   
   const [editingMethod, setEditingMethod] = useState<{ locationId: LocationId; oldName: string; newName: string; } | null>(null);
 
-  const [selectedPaymentGroups, setSelectedPaymentGroups] = useState<string[]>([]);
-
-  const [activeChartSlices, setActiveChartSlices] = useState<string[]>([]);
-  const [activeDonutSlice, setActiveDonutSlice] = useState<string | null>(null);
-
-  const [paymentGroups, setPaymentGroups] = useState<PaymentGroup[]>([]);
-  const [newGroupName, setNewGroupName] = useState("");
-  const [draggedMethod, setDraggedMethod] = useState<string | null>(null);
-  const [isSavingGroups, setIsSavingGroups] = useState(false);
+  // Grouping state
+  const [groupingPresets, setGroupingPresets] = useState<GroupingPreset[]>([]);
+  const [selectedPresetId, setSelectedPresetId] = useState<string>(NO_GROUPING_PRESET_ID);
+  const [isSavingPresets, setIsSavingPresets] = useState(false);
+  const [isPresetsPopoverOpen, setIsPresetsPopoverOpen] = useState(false);
+  const [newPresetName, setNewPresetName] = useState("");
+  const [editingPreset, setEditingPreset] = useState<GroupingPreset | null>(null);
+  const [draggedMethod, setDraggedMethod] = useState<{ method: string; fromGroupId?: string } | null>(null);
 
 
   useEffect(() => {
     async function loadInitialData() {
-        const [fetchedLocations, fetchedGroups] = await Promise.all([
+        const [fetchedLocations, fetchedPresets] = await Promise.all([
             getLocations(),
-            getPaymentGroups()
+            getGroupingPresets()
         ]);
         
         setLocations(fetchedLocations);
-        setPaymentGroups(fetchedGroups || []);
+        setGroupingPresets(fetchedPresets || []);
 
         const initialPaymentMethods: Record<LocationId, PaymentMethod[]> = {} as Record<LocationId, PaymentMethod[]>
         const initialInputs: Record<LocationId, string> = {};
@@ -116,6 +117,14 @@ export default function FinancesPage() {
       router.replace('/dashboard'); 
     }
   }, [user, authIsLoading, router]);
+
+  const activePaymentGroups = useMemo(() => {
+    if (selectedPresetId === NO_GROUPING_PRESET_ID) {
+      return [];
+    }
+    const preset = groupingPresets.find(p => p.id === selectedPresetId);
+    return preset?.groups || [];
+  }, [selectedPresetId, groupingPresets]);
 
   useEffect(() => {
     async function generateReport() {
@@ -163,7 +172,7 @@ export default function FinancesPage() {
             locationTotal: 0
           };
           
-          const paymentGroup = paymentGroups.find(g => g.methods.includes(appt.paymentMethod!))?.name || appt.paymentMethod;
+          const paymentGroup = activePaymentGroups.find(g => g.methods.includes(appt.paymentMethod!))?.name || appt.paymentMethod;
 
           let totalAppointmentAmount = (appt.amountPaid || 0) + (appt.addedServices?.reduce((sum, as) => sum + (as.amountPaid || 0), 0) || 0);
 
@@ -188,7 +197,7 @@ export default function FinancesPage() {
     if (user && (user.role === USER_ROLES.ADMIN || user.role === USER_ROLES.CONTADOR) && locations.length > 0) {
       generateReport();
     }
-  }, [user, selectedYear, selectedMonth, adminSelectedLocation, toast, locations, paymentGroups]);
+  }, [user, selectedYear, selectedMonth, adminSelectedLocation, toast, locations, activePaymentGroups]);
 
   const totalsByPaymentGroup = useMemo(() => {
     const totals: Partial<Record<string, number>> = {};
@@ -196,41 +205,21 @@ export default function FinancesPage() {
     completedAppointments.forEach(appt => {
         let totalAppointmentAmount = (appt.amountPaid || 0) + (appt.addedServices?.reduce((sum, as) => sum + (as.amountPaid || 0), 0) || 0);
         if (appt.paymentMethod && totalAppointmentAmount > 0) {
-            const groupName = paymentGroups.find(g => g.methods.includes(appt.paymentMethod!))?.name || appt.paymentMethod;
+            const groupName = activePaymentGroups.find(g => g.methods.includes(appt.paymentMethod!))?.name || appt.paymentMethod;
             totals[groupName] = (totals[groupName] || 0) + totalAppointmentAmount;
         }
     });
 
     return totals;
-  }, [completedAppointments, paymentGroups]);
+  }, [completedAppointments, activePaymentGroups]);
 
-  const allAvailablePaymentGroups = useMemo(() => {
-      const allGroups = new Set<string>();
-      Object.keys(totalsByPaymentGroup).forEach((method) => {
-          const group = paymentGroups.find(g => g.methods.includes(method))?.name || method;
-          allGroups.add(group);
-      });
-      return Array.from(allGroups).sort();
-  }, [totalsByPaymentGroup, paymentGroups]);
-  
-  useEffect(() => {
-    setSelectedPaymentGroups(allAvailablePaymentGroups);
-    setActiveChartSlices(allAvailablePaymentGroups);
-  }, [allAvailablePaymentGroups]);
-
-
-  const filteredPaymentGroups = useMemo(() => {
-    return allAvailablePaymentGroups.filter(group => selectedPaymentGroups.includes(group));
-  }, [allAvailablePaymentGroups, selectedPaymentGroups]);
+  const allAvailablePaymentGroupsInView = useMemo(() => {
+    return Array.from(new Set(Object.keys(totalsByPaymentGroup))).sort();
+  }, [totalsByPaymentGroup]);
   
   const grandTotal = useMemo(() => {
-    return reportData.reduce((sum, row) => {
-        const rowTotalFromSelectedGroups = filteredPaymentGroups.reduce((groupSum, group) => {
-            return groupSum + (row.totalsByMethod[group] || 0);
-        }, 0);
-        return sum + rowTotalFromSelectedGroups;
-    }, 0);
-  }, [reportData, filteredPaymentGroups]);
+    return Object.values(totalsByPaymentGroup).reduce((sum, total) => sum + (total || 0), 0);
+  }, [totalsByPaymentGroup]);
   
 
   const chartData = useMemo(() => {
@@ -362,63 +351,110 @@ export default function FinancesPage() {
     return locations.filter(loc => loc.id === locationFilter);
   }, [locationFilter, locations]);
 
-  const saveGroups = useCallback(async (updatedGroups: PaymentGroup[]) => {
-      setIsSavingGroups(true);
+  // --- Grouping Preset Handlers ---
+  const savePresets = useCallback(async (updatedPresets: GroupingPreset[]) => {
+      setIsSavingPresets(true);
       try {
-        await savePaymentGroups(updatedGroups);
-        toast({ title: "Grupos Guardados", description: "La configuración de grupos de pago ha sido guardada."});
+        await saveGroupingPresets(updatedPresets);
+        toast({ title: "Conjuntos de Agrupación Guardados", description: "La configuración se ha guardado exitosamente."});
       } catch (error) {
-        console.error("Error saving payment groups:", error);
-        toast({ title: "Error", description: "No se pudieron guardar los grupos.", variant: "destructive"});
+        console.error("Error saving grouping presets:", error);
+        toast({ title: "Error", description: "No se pudieron guardar los conjuntos.", variant: "destructive"});
       } finally {
-        setIsSavingGroups(false);
+        setIsSavingPresets(false);
       }
   }, [toast]);
   
 
-  const handleCreateGroup = () => {
-    if (newGroupName && !paymentGroups.find(g => g.name.toLowerCase() === newGroupName.toLowerCase())) {
-      const updatedGroups = [...paymentGroups, { id: newGroupName.toLowerCase().replace(/ /g, '_'), name: newGroupName, methods: [] }];
-      setPaymentGroups(updatedGroups);
-      saveGroups(updatedGroups);
-      setNewGroupName("");
-    }
-  };
-
-  const handleDropOnGroup = (groupName: string) => {
-    if (draggedMethod) {
-      const updatedGroups = paymentGroups.map(group => {
-        // Remove from any existing group
-        const filteredMethods = group.methods.filter(m => m !== draggedMethod);
-        if (group.name === groupName) {
-          // Add to the target group if not already there
-          if (!filteredMethods.includes(draggedMethod)) {
-            return { ...group, methods: [...filteredMethods, draggedMethod] };
-          }
-        }
-        return { ...group, methods: filteredMethods };
-      });
-      setPaymentGroups(updatedGroups);
-      saveGroups(updatedGroups);
-      setDraggedMethod(null);
+  const handleCreatePreset = () => {
+    if (newPresetName && !groupingPresets.find(g => g.name.toLowerCase() === newPresetName.toLowerCase())) {
+      const newPreset: GroupingPreset = { id: `preset_${Date.now()}`, name: newPresetName, groups: [] };
+      const updatedPresets = [...groupingPresets, newPreset];
+      setGroupingPresets(updatedPresets);
+      savePresets(updatedPresets);
+      setNewPresetName("");
     }
   };
   
-  const handleRemoveFromGroup = (method: string, groupName: string) => {
-    const updatedGroups = paymentGroups.map(group => {
-        if (group.name === groupName) {
-            return { ...group, methods: group.methods.filter(m => m !== method) };
-        }
-        return group;
-    });
-    setPaymentGroups(updatedGroups);
-    saveGroups(updatedGroups);
+  const handleDeletePreset = (presetId: string) => {
+    if(selectedPresetId === presetId) setSelectedPresetId(NO_GROUPING_PRESET_ID);
+    const updatedPresets = groupingPresets.filter(p => p.id !== presetId);
+    setGroupingPresets(updatedPresets);
+    savePresets(updatedPresets);
+  };
+  
+  const handleCreateGroupInPreset = (presetId: string, newGroupName: string) => {
+      const updatedPresets = groupingPresets.map(p => {
+          if (p.id === presetId) {
+              if (p.groups.find(g => g.name.toLowerCase() === newGroupName.toLowerCase())) {
+                  toast({title: "Grupo Duplicado", description: "Ya existe un grupo con este nombre en el conjunto.", variant: "default"});
+                  return p;
+              }
+              const newGroup: PaymentGroup = { id: `group_${Date.now()}`, name: newGroupName, methods: [] };
+              return { ...p, groups: [...p.groups, newGroup] };
+          }
+          return p;
+      });
+      setGroupingPresets(updatedPresets);
+      savePresets(updatedPresets);
   };
 
-  const handleDeleteGroup = (groupNameToDelete: string) => {
-    const updatedGroups = paymentGroups.filter(group => group.name !== groupNameToDelete);
-    setPaymentGroups(updatedGroups);
-    saveGroups(updatedGroups);
+  const handleDropOnGroup = (presetId: string, groupId: string) => {
+    if (!draggedMethod) return;
+
+    const updatedPresets = groupingPresets.map(p => {
+      if (p.id === presetId) {
+        const updatedGroups = p.groups.map(g => {
+          // Remove from previous group within the same preset
+          let methods = g.methods.filter(m => m !== draggedMethod.method);
+          // Add to the target group
+          if (g.id === groupId && !methods.includes(draggedMethod.method)) {
+            methods.push(draggedMethod.method);
+          }
+          return { ...g, methods };
+        });
+        return { ...p, groups: updatedGroups };
+      }
+      return p;
+    });
+
+    setGroupingPresets(updatedPresets);
+    savePresets(updatedPresets);
+    setDraggedMethod(null);
+  };
+  
+  const handleRemoveFromGroup = (presetId: string, groupId: string, method: string) => {
+    const updatedPresets = groupingPresets.map(p => {
+        if (p.id === presetId) {
+            const updatedGroups = p.groups.map(g => {
+                if (g.id === groupId) {
+                    return { ...g, methods: g.methods.filter(m => m !== method) };
+                }
+                return g;
+            });
+            return { ...p, groups: updatedGroups };
+        }
+        return p;
+    });
+    setGroupingPresets(updatedPresets);
+    savePresets(updatedPresets);
+  };
+
+  const handleDeleteGroup = (presetId: string, groupId: string) => {
+    const updatedPresets = groupingPresets.map(p => {
+        if (p.id === presetId) {
+            return { ...p, groups: p.groups.filter(g => g.id !== groupId) };
+        }
+        return p;
+    });
+    setGroupingPresets(updatedPresets);
+    savePresets(updatedPresets);
+  };
+  
+  const getUngroupedMethods = (preset?: GroupingPreset): string[] => {
+    if (!preset) return allAvailablePaymentMethods;
+    const groupedMethods = new Set(preset.groups.flatMap(g => g.methods));
+    return allAvailablePaymentMethods.filter(m => !groupedMethods.has(m));
   };
 
 
@@ -430,11 +466,6 @@ export default function FinancesPage() {
       </div>
     );
   }
-  
-  const id = "donut-interactive"
-  const totalValue = React.useMemo(() => {
-    return chartData.reduce((acc, curr) => acc + curr.value, 0)
-  }, [chartData])
 
 
   return (
@@ -446,7 +477,7 @@ export default function FinancesPage() {
             Módulo de Finanzas
           </CardTitle>
           <CardDescription>
-            Reporte de ingresos mensuales y gestión de métodos de pago por sede.
+            Reporte de ingresos mensuales y gestión de métodos y grupos de pago.
           </CardDescription>
         </CardHeader>
       </Card>
@@ -454,7 +485,7 @@ export default function FinancesPage() {
       <Card>
         <CardHeader>
           <CardTitle>Reporte de Ingresos Mensuales</CardTitle>
-          <div className="flex flex-col sm:flex-row gap-2 mt-2 items-center">
+          <div className="flex flex-col sm:flex-row gap-2 mt-2 items-center flex-wrap">
             <Select value={String(selectedMonth)} onValueChange={(val) => setSelectedMonth(Number(val))}>
               <SelectTrigger className="w-full sm:w-[180px]"><SelectValue placeholder="Mes" /></SelectTrigger>
               <SelectContent>{months.map(m => <SelectItem key={m.value} value={String(m.value)}>{m.label}</SelectItem>)}</SelectContent>
@@ -463,44 +494,48 @@ export default function FinancesPage() {
               <SelectTrigger className="w-full sm:w-[120px]"><SelectValue placeholder="Año" /></SelectTrigger>
               <SelectContent>{availableYears.map(y => <SelectItem key={y} value={String(y)}>{y}</SelectItem>)}</SelectContent>
             </Select>
-             <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                    <Button variant="outline" className="w-full sm:w-auto">
-                        <Filter className="mr-2 h-4 w-4"/>
-                        Filtrar por Grupos de Pago
-                    </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent>
-                    <DropdownMenuLabel>Mostrar Grupos de Pago</DropdownMenuLabel>
-                    <DropdownMenuSeparator />
-                    <DropdownMenuCheckboxItem
-                        checked={selectedPaymentGroups.length === allAvailablePaymentGroups.length}
-                        onCheckedChange={(checked) => setSelectedPaymentGroups(checked ? allAvailablePaymentGroups : [])}
-                    >
-                        Seleccionar Todos
-                    </DropdownMenuCheckboxItem>
-                     <DropdownMenuCheckboxItem
-                        checked={selectedPaymentGroups.length === 0}
-                        onCheckedChange={(checked) => setSelectedPaymentGroups(checked ? [] : allAvailablePaymentGroups)}
-                    >
-                        No Seleccionar Ninguno
-                    </DropdownMenuCheckboxItem>
-                    <DropdownMenuSeparator />
-                    {allAvailablePaymentGroups.map(group => (
-                        <DropdownMenuCheckboxItem
-                            key={group}
-                            checked={selectedPaymentGroups.includes(group)}
-                            onCheckedChange={(checked) => {
-                                setSelectedPaymentGroups(prev => 
-                                    checked ? [...prev, group] : prev.filter(g => g !== group)
-                                );
-                            }}
-                        >
-                            {group}
-                        </DropdownMenuCheckboxItem>
-                    ))}
-                </DropdownMenuContent>
-            </DropdownMenu>
+             <Select value={selectedPresetId} onValueChange={(val) => setSelectedPresetId(val)}>
+              <SelectTrigger className="w-full sm:w-[220px]">
+                  <SelectValue placeholder="Seleccionar Agrupación" />
+              </SelectTrigger>
+              <SelectContent>
+                  <SelectItem value={NO_GROUPING_PRESET_ID}>Vista Detallada (Sin Agrupar)</SelectItem>
+                  {groupingPresets.map(preset => (
+                    <SelectItem key={preset.id} value={preset.id}>{preset.name}</SelectItem>
+                  ))}
+              </SelectContent>
+             </Select>
+             <Popover open={isPresetsPopoverOpen} onOpenChange={setIsPresetsPopoverOpen}>
+                <PopoverTrigger asChild>
+                    <Button variant="outline"><Settings2 className="mr-2 h-4 w-4"/>Gestionar Conjuntos</Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-[400px] sm:w-[500px] md:w-[600px] p-4">
+                    <div className="space-y-4">
+                        <h4 className="font-medium">Gestor de Conjuntos de Agrupación</h4>
+                        <div className="flex gap-2">
+                            <Input placeholder="Nombre del nuevo conjunto" value={newPresetName} onChange={e => setNewPresetName(e.target.value)} />
+                            <Button onClick={handleCreatePreset}>Crear Conjunto</Button>
+                        </div>
+                        <Separator/>
+                        <div className="max-h-[40vh] overflow-y-auto space-y-3 p-1">
+                            {groupingPresets.map(preset => (
+                                <PresetEditor 
+                                    key={preset.id} 
+                                    preset={preset} 
+                                    ungroupedMethods={getUngroupedMethods(preset)}
+                                    onDeletePreset={handleDeletePreset}
+                                    onCreateGroup={handleCreateGroupInPreset}
+                                    onDeleteGroup={handleDeleteGroup}
+                                    onDropOnGroup={handleDropOnGroup}
+                                    onRemoveFromGroup={handleRemoveFromGroup}
+                                    draggedMethod={draggedMethod}
+                                    setDraggedMethod={setDraggedMethod}
+                                />
+                            ))}
+                        </div>
+                    </div>
+                </PopoverContent>
+             </Popover>
           </div>
            {user && (user.role === USER_ROLES.ADMIN || user.role === USER_ROLES.CONTADOR) && (
             <div className="mt-2 text-sm text-muted-foreground">
@@ -527,31 +562,31 @@ export default function FinancesPage() {
                     <TableHeader>
                       <TableRow>
                         <TableHead>Sede</TableHead>
-                        {filteredPaymentGroups.map(group => <TableHead key={group} className="text-right">{group}</TableHead>)}
-                        <TableHead className="text-right font-bold">Total Sede (Filtrado)</TableHead>
+                        {allAvailablePaymentGroupsInView.map(group => <TableHead key={group} className="text-right">{group}</TableHead>)}
+                        <TableHead className="text-right font-bold">Total Sede</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
                       {reportData.map(row => (
                         <TableRow key={row.locationId}>
                           <TableCell className="font-medium">{row.locationName}</TableCell>
-                          {filteredPaymentGroups.map(group => (
+                          {allAvailablePaymentGroupsInView.map(group => (
                             <TableCell key={group} className="text-right">
                               {(row.totalsByMethod[group] || 0).toFixed(2)}
                             </TableCell>
                           ))}
                           <TableCell className="text-right font-bold">
-                            {filteredPaymentGroups.reduce((sum, group) => sum + (row.totalsByMethod[group] || 0), 0).toFixed(2)}
+                            {Object.values(row.totalsByMethod).reduce((sum, val) => sum + (val || 0), 0).toFixed(2)}
                           </TableCell>
                         </TableRow>
                       ))}
                     </TableBody>
                     <TableFooterComponent>
                       <TableRow className="bg-muted/80 font-bold">
-                        <TableCell>Total General (Filtrado)</TableCell>
-                        {filteredPaymentGroups.map(group => (
+                        <TableCell>Total General</TableCell>
+                        {allAvailablePaymentGroupsInView.map(group => (
                           <TableCell key={group} className="text-right">
-                            {(Object.values(totalsByPaymentGroup).reduce((total, current) => total + (current || 0), 0) > 0 ? (reportData.reduce((sum, row) => sum + (row.totalsByMethod[group] || 0), 0)).toFixed(2) : '0.00')}
+                            {(reportData.reduce((sum, row) => sum + (row.totalsByMethod[group] || 0), 0)).toFixed(2)}
                           </TableCell>
                         ))}
                         <TableCell className="text-right text-lg">
@@ -571,153 +606,36 @@ export default function FinancesPage() {
                       <p className="text-muted-foreground">No hay datos suficientes para mostrar el gráfico.</p>
                   </div>
                 ) : (
-                  <Card className="mt-4">
-                      <CardHeader>
-                          <CardTitle className="flex items-center gap-2"><PieChartIcon />Distribución de Ingresos por Grupo de Pago</CardTitle>
-                          <CardDescription>
-                              Visualización del total de ingresos por tipo de pago. Puede crear grupos personalizados para consolidar la vista.
-                          </CardDescription>
-                      </CardHeader>
-                      <CardContent className="flex-1 pb-0">
-                          <ChartContainer
-                            id={id}
-                            config={chartConfig}
-                            className="mx-auto aspect-square h-[250px]"
-                          >
-                            <PieChart>
-                              <ChartTooltip
-                                cursor={false}
-                                content={<ChartTooltipContent hideLabel />}
-                              />
-                              <Pie
-                                data={chartData.filter(d => activeChartSlices.some(sliceName => d.name === sliceName))}
-                                dataKey="value"
-                                nameKey="name"
-                                innerRadius="60%"
-                                strokeWidth={5}
-                                activeIndex={chartData.findIndex((d) => d.name === activeDonutSlice)}
-                                activeShape={({ ...props }) => <Sector {...props} cornerRadius={5} />}
-                                onMouseUp={(data) => {
-                                  if (activeDonutSlice === data.name) {
-                                    setActiveDonutSlice(null);
-                                  } else {
-                                    setActiveDonutSlice(data.name);
-                                  }
-                                }}
-                              >
-                                {chartData.map((entry) => (
-                                  <Cell
-                                      key={entry.name}
-                                      fill={entry.fill}
-                                      className="outline-none"
-                                      onClick={() => {
-                                        if (activeDonutSlice === entry.name) {
-                                          setActiveDonutSlice(null);
-                                        } else {
-                                          setActiveDonutSlice(entry.name);
-                                        }
-                                      }}
-                                  />
-                                ))}
-                              </Pie>
-                              <ChartLegend
-                                content={
-                                  <ChartLegendContent
-                                      nameKey="name"
-                                      payload={chartData.map(item => ({...item, value: item.name, color: item.fill, type: activeChartSlices.includes(item.name) ? 'circle' : 'line', inactive: !activeChartSlices.includes(item.name) }))}
-                                      onClick={(data) => {
-                                        const { value } = data;
-                                        if (activeChartSlices.includes(value)) {
-                                          setActiveChartSlices(
-                                            activeChartSlices.filter((label) => label !== value)
-                                          );
-                                        } else {
-                                          setActiveChartSlices([...activeChartSlices, value]);
-                                        }
-                                      }}
-                                  />
-                                }
-                              />
-                            </PieChart>
-                          </ChartContainer>
-                      </CardContent>
-                      <CardFooter className="flex-col gap-2 text-sm">
-                          <div className="leading-none text-muted-foreground text-center">
-                              Clic en la leyenda para ocultar/mostrar un grupo. Clic en una porción de la dona para resaltarla.
-                          </div>
-                      </CardFooter>
-                  </Card>
+                  <ChartContainer
+                    id="finances-chart"
+                    config={chartConfig}
+                    className="mx-auto aspect-square h-[300px]"
+                  >
+                    <PieChart>
+                      <ChartTooltip
+                        cursor={false}
+                        content={<ChartTooltipContent hideLabel />}
+                      />
+                      <Pie
+                        data={chartData}
+                        dataKey="value"
+                        nameKey="name"
+                        innerRadius="60%"
+                        strokeWidth={5}
+                      >
+                        {chartData.map((entry) => (
+                          <Cell key={entry.name} fill={entry.fill} className="outline-none" />
+                        ))}
+                      </Pie>
+                       <ChartLegend content={<ChartLegendContent nameKey="name"/>} />
+                    </PieChart>
+                  </ChartContainer>
                 )}
               </TabsContent>
             </Tabs>
         </CardContent>
       </Card>
       
-      <Card>
-          <CardHeader>
-              <CardTitle className="flex items-center gap-2"><Layers />Gestor de Grupos de Pago</CardTitle>
-              <CardDescription>
-                  Cree grupos para consolidar los métodos de pago en los reportes. Arrastre un método de pago a un grupo para asignarlo. Los cambios se guardan automáticamente.
-              </CardDescription>
-          </CardHeader>
-          <CardContent className="w-full p-4 border rounded-lg mt-4">
-              <div className="flex gap-2 mb-4">
-                <Input 
-                    placeholder="Nombre del nuevo grupo" 
-                    value={newGroupName} 
-                    onChange={(e) => setNewGroupName(e.target.value)}
-                />
-                <Button onClick={handleCreateGroup} disabled={isSavingGroups}>Crear Grupo</Button>
-            </div>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                <div>
-                    <h5 className="text-sm font-bold mb-2 p-2">MÉTODOS SIN AGRUPAR</h5>
-                    <div className="space-y-1 p-2 border rounded-md bg-muted/20 min-h-[100px]">
-                        {allAvailablePaymentMethods
-                          .filter(method => !paymentGroups.some(g => g.methods.includes(method)))
-                          .map((method) => (
-                            <div 
-                              key={method} 
-                              className="text-sm p-1.5 border rounded bg-background cursor-grab"
-                              draggable
-                              onDragStart={() => setDraggedMethod(method)}
-                            >
-                                {method}
-                            </div>
-                        ))}
-                    </div>
-                </div>
-                <div className="space-y-2 lg:col-span-2">
-                     <h5 className="text-sm font-bold mb-2 p-2">GRUPOS PERSONALIZADOS {isSavingGroups && <Loader2 className="h-4 w-4 animate-spin inline-block ml-2"/>}</h5>
-                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                     {paymentGroups.map(group => (
-                        <div 
-                            key={group.name}
-                            className="p-2 border rounded-lg bg-muted/50"
-                            onDragOver={(e) => e.preventDefault()}
-                            onDrop={() => handleDropOnGroup(group.name)}
-                        >
-                            <div className="flex justify-between items-center mb-2 p-1">
-                              <h6 className="text-sm font-semibold flex items-center gap-1"><Group size={16}/> {group.name}</h6>
-                              <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => handleDeleteGroup(group.name)}><Trash2 size={14}/></Button>
-                            </div>
-                            <div className="space-y-1 min-h-[40px] border-t pt-2">
-                                {group.methods.map(method => (
-                                    <div key={method} className="flex items-center justify-between text-sm p-1.5 bg-card rounded border">
-                                        <span>{method}</span>
-                                        <Button variant="ghost" size="icon" className="h-5 w-5" onClick={() => handleRemoveFromGroup(method, group.name)}><X size={12}/></Button>
-                                    </div>
-                                ))}
-                            </div>
-                        </div>
-                    ))}
-                    </div>
-                </div>
-            </div>
-          </CardContent>
-      </Card>
-
-
       <Card className="shadow-lg">
         <CardHeader>
             <CardTitle>Gestión de Métodos de Pago por Sede</CardTitle>
@@ -819,4 +737,88 @@ export default function FinancesPage() {
       </Card>
     </div>
   );
+}
+
+// --- Preset Editor Component ---
+interface PresetEditorProps {
+  preset: GroupingPreset;
+  ungroupedMethods: string[];
+  onDeletePreset: (id: string) => void;
+  onCreateGroup: (presetId: string, name: string) => void;
+  onDeleteGroup: (presetId: string, groupId: string) => void;
+  onDropOnGroup: (presetId: string, groupId: string) => void;
+  onRemoveFromGroup: (presetId: string, groupId: string, method: string) => void;
+  draggedMethod: { method: string; fromGroupId?: string } | null;
+  setDraggedMethod: (method: { method: string; fromGroupId?: string } | null) => void;
+}
+
+const PresetEditor: React.FC<PresetEditorProps> = ({
+  preset,
+  ungroupedMethods,
+  onDeletePreset,
+  onCreateGroup,
+  onDeleteGroup,
+  onDropOnGroup,
+  onRemoveFromGroup,
+  draggedMethod,
+  setDraggedMethod,
+}) => {
+  const [newGroupName, setNewGroupName] = useState("");
+
+  const handleCreateGroup = () => {
+    if (newGroupName.trim()) {
+      onCreateGroup(preset.id, newGroupName.trim());
+      setNewGroupName("");
+    }
+  };
+
+  return (
+    <Card className="bg-card">
+      <CardHeader className="flex-row items-center justify-between p-2">
+        <CardTitle className="text-base flex items-center gap-2"><Folder className="h-4 w-4"/>{preset.name}</CardTitle>
+        <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => onDeletePreset(preset.id)}><Trash2 size={14} /></Button>
+      </CardHeader>
+      <CardContent className="p-2 space-y-3">
+        <div className="flex gap-2">
+          <Input placeholder="Nombre del nuevo grupo" value={newGroupName} onChange={(e) => setNewGroupName(e.target.value)} className="h-8"/>
+          <Button onClick={handleCreateGroup} size="sm">Crear Grupo</Button>
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+          <div className="p-2 border rounded-md min-h-[50px] bg-muted/20">
+            <h5 className="text-xs font-bold mb-2">Métodos sin Agrupar</h5>
+            <div className="space-y-1">
+              {ungroupedMethods.map(method => (
+                <div key={method} draggable onDragStart={() => setDraggedMethod({method})} className="text-sm p-1 border rounded bg-background cursor-grab">
+                  {method}
+                </div>
+              ))}
+            </div>
+          </div>
+          <div className="space-y-2">
+            {preset.groups.map(group => (
+              <div 
+                key={group.id}
+                onDragOver={(e) => e.preventDefault()}
+                onDrop={() => onDropOnGroup(preset.id, group.id)}
+                className="p-2 border rounded-md bg-muted/50"
+              >
+                <div className="flex justify-between items-center mb-1">
+                  <h6 className="text-sm font-semibold flex items-center gap-1"><Group size={14}/> {group.name}</h6>
+                  <Button variant="ghost" size="icon" className="h-5 w-5" onClick={() => onDeleteGroup(preset.id, group.id)}><Trash2 size={12} /></Button>
+                </div>
+                <div className="space-y-1 min-h-[20px] border-t pt-1">
+                  {group.methods.map(method => (
+                    <div key={method} className="flex items-center justify-between text-sm p-1 bg-card rounded border">
+                      <span>{method}</span>
+                      <Button variant="ghost" size="icon" className="h-5 w-5" onClick={() => onRemoveFromGroup(preset.id, group.id, method)}><X size={12} /></Button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </CardContent>
+    </Card>
+  )
 }

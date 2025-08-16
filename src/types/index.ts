@@ -27,6 +27,12 @@ export interface PaymentGroup {
   methods: string[];
 }
 
+export interface GroupingPreset {
+  id: string;
+  name: string;
+  groups: PaymentGroup[];
+}
+
 
 export interface Contract {
   id: string;
