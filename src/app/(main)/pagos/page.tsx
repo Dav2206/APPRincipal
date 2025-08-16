@@ -35,10 +35,10 @@ import {
   AlertDialogCancel,
   AlertDialogContent,
   AlertDialogDescription,
-  AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
   AlertDialogTrigger,
+  AlertDialogFooter
 } from "@/components/ui/alert-dialog";
 
 
@@ -661,7 +661,7 @@ export default function PaymentsPage() {
                 )}
               />
               <FormField
-                control={form.control}
+                control={reminderForm.control}
                 name="description"
                 render={({ field }) => (
                   <FormItem>
