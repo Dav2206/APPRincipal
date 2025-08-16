@@ -18,7 +18,7 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow, TableFooter as TableFooterComponent } from '@/components/ui/table';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Loader2, CreditCard, AlertTriangle, PlusCircle, DollarSign, CalendarIcon, List, Users, ShoppingCart, Lightbulb, Landmark as LandmarkIcon, ChevronLeft, ChevronRight, Check, Settings, Percent, Bell, CalendarClock, XCircle, Edit2, Trash2, ShieldAlert, CheckCircle, Clock } from 'lucide-react';
-import { format, getYear, getMonth, getDate, startOfMonth, endOfMonth, addDays, setYear, setMonth, isAfter, parseISO, isPast, isBefore, startOfDay, isSameMonth, addMonths, addQuarters, addYears } from 'date-fns';
+import { format, getYear, getMonth, getDate, startOfMonth, endOfMonth, addDays, setYear, setMonth, isAfter, parseISO, isPast, isBefore, startOfDay } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
@@ -73,6 +73,7 @@ interface PayrollData {
   totalIncome: number;
   baseSalary: number;
   commission: number;
+  discounts: number;
   totalPayment: number;
   commissionRate: number;
   commissionDeductible: number;
@@ -176,7 +177,8 @@ export default function PaymentsPage() {
             const commissionableAmount = Math.max(0, totalIncome - deductible);
             const commission = commissionableAmount * rate;
             const baseSalaryQuincenal = (prof.baseSalary || 0) / 2;
-            const totalPayment = baseSalaryQuincenal + commission;
+            const discounts = 0; // Placeholder for now
+            const totalPayment = baseSalaryQuincenal + commission - discounts;
 
             return {
                 professionalId: prof.id,
@@ -186,6 +188,7 @@ export default function PaymentsPage() {
                 totalIncome: totalIncome,
                 baseSalary: baseSalaryQuincenal,
                 commission: commission,
+                discounts: discounts,
                 totalPayment: totalPayment,
                 commissionRate: rate,
                 commissionDeductible: deductible,
@@ -324,9 +327,12 @@ export default function PaymentsPage() {
   }, [fetchReminders]);
   
   const filteredRemindersForView = useMemo(() => {
+    const periodStart = startOfMonth(setYear(setMonth(new Date(), selectedExpenseMonth), selectedExpenseYear));
+    const periodEnd = endOfMonth(periodStart);
+
     return allReminders.filter(r => {
         const dueDate = parseISO(r.dueDate);
-        return isSameMonth(dueDate, setMonth(new Date(), selectedExpenseMonth)) && getYear(dueDate) === selectedExpenseYear;
+        return dueDate >= periodStart && dueDate <= periodEnd;
     }).sort((a,b) => parseISO(a.dueDate).getTime() - parseISO(b.dueDate).getTime());
   }, [allReminders, selectedExpenseYear, selectedExpenseMonth]);
 
@@ -490,6 +496,7 @@ export default function PaymentsPage() {
                       <TableHead className="text-right">Producción (S/)</TableHead>
                       <TableHead className="text-right">Sueldo Base Quincenal (S/)</TableHead>
                       <TableHead className="text-right">Comisión (S/)</TableHead>
+                      <TableHead className="text-right">Descuentos (S/)</TableHead>
                       <TableHead className="text-right font-bold">Total a Pagar (S/)</TableHead>
                     </TableRow>
                   </TableHeader>
@@ -518,6 +525,9 @@ export default function PaymentsPage() {
                         </TableCell>
                         <TableCell className="text-right text-green-600 font-semibold cursor-pointer" onDoubleClick={() => handleCommissionEdit(item)}>
                             {item.commission.toFixed(2)}
+                        </TableCell>
+                        <TableCell className="text-right text-red-600">
+                          {item.discounts.toFixed(2)}
                         </TableCell>
                         <TableCell className="text-right font-bold text-lg">{item.totalPayment.toFixed(2)}</TableCell>
                       </TableRow>
@@ -846,3 +856,4 @@ export default function PaymentsPage() {
     </div>
   );
 }
+
