@@ -14,13 +14,15 @@ import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Calendar } from '@/components/ui/calendar';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow, TableFooter } from '@/components/ui/table';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow, TableFooter as TableFooterComponent } from '@/components/ui/table';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Loader2, CreditCard, AlertTriangle, PlusCircle, DollarSign, CalendarIcon, List, Users, ShoppingCart, Lightbulb, Landmark as LandmarkIcon } from 'lucide-react';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
+import { Badge } from '@/components/ui/badge';
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 
 
 // --- Mock Data Structures (to be replaced with real data fetching) ---
@@ -116,9 +118,9 @@ export default function PaymentsPage() {
         </CardHeader>
       </Card>
       
-      <Tabs defaultValue="salaries" className="w-full">
+      <Tabs defaultValue="expenses" className="w-full">
         <TabsList className="grid w-full grid-cols-3">
-          <TabsTrigger value="salaries"><Users className="mr-2 h-4 w-4"/>Sueldos y Comisiones</TabsTrigger>
+          <TabsTrigger value="salaries" disabled><Users className="mr-2 h-4 w-4"/>Sueldos y Comisiones</TabsTrigger>
           <TabsTrigger value="expenses"><DollarSign className="mr-2 h-4 w-4"/>Gastos Operativos</TabsTrigger>
           <TabsTrigger value="report" disabled><List className="mr-2 h-4 w-4"/>Reporte Mensual</TabsTrigger>
         </TabsList>
@@ -222,7 +224,7 @@ export default function PaymentsPage() {
                               </TableRow>
                             ))}
                           </TableBody>
-                          <TableFooter>
+                          <TableFooterComponent>
                             <TableRow className="font-bold">
                                 <TableCell colSpan={3}>Total Insumos</TableCell>
                                 <TableCell className="text-right">S/ {totalInsumos.toFixed(2)}</TableCell>
@@ -239,7 +241,7 @@ export default function PaymentsPage() {
                                 <TableCell colSpan={3} className="font-extrabold">Total Egresos Registrados</TableCell>
                                 <TableCell className="text-right font-extrabold">S/ {totalExpenses.toFixed(2)}</TableCell>
                             </TableRow>
-                          </TableFooter>
+                          </TableFooterComponent>
                         </Table>
                      ) : (
                         <p className="text-center text-muted-foreground py-4">No hay gastos registrados para este período.</p>
