@@ -234,7 +234,7 @@ export default function FinancesPage() {
     Object.entries(chartGroups).forEach(([groupName, methodsInGroup]) => {
       groupedTotals[groupName] = 0;
       methodsInGroup.forEach(method => {
-        if (unassignedMethods[method]) {
+        if (unassignedMethods[method] !== undefined) {
           groupedTotals[groupName] += unassignedMethods[method];
           delete unassignedMethods[method];
         }
