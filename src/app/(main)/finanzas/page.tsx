@@ -8,9 +8,9 @@ import { useAppState } from '@/contexts/app-state-provider';
 import { getAppointments, getLocations, updateLocationPaymentMethods } from '@/lib/data';
 import { USER_ROLES, APPOINTMENT_STATUS, APPOINTMENT_STATUS_DISPLAY } from '@/lib/constants';
 
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow, TableFooter } from '@/components/ui/table';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow, TableFooter as TableFooterComponent } from '@/components/ui/table';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { format, startOfMonth, endOfMonth, getYear, getMonth, setYear, setMonth } from 'date-fns';
 import { es } from 'date-fns/locale';
@@ -483,7 +483,7 @@ export default function FinancesPage() {
                   </TableRow>
                 ))}
               </TableBody>
-              <TableFooter>
+              <TableFooterComponent>
                 <TableRow className="bg-muted/80 font-bold">
                   <TableCell>Total General (Filtrado)</TableCell>
                   {filteredPaymentGroups.map(group => (
@@ -495,7 +495,7 @@ export default function FinancesPage() {
                     S/ {grandTotal.toFixed(2)}
                   </TableCell>
                 </TableRow>
-              </TableFooter>
+              </TableFooterComponent>
             </Table>
             {chartData.length > 0 && (
                 <Card className="mt-8">
