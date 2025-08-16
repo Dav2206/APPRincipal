@@ -707,7 +707,7 @@ export function AppointmentEditDialog({ appointment, isOpen, onOpenChange, onApp
 
           <DialogFooter className="pt-4 flex flex-col sm:flex-row sm:justify-between sm:items-center gap-2">
             <div>
-              {user && (user.role === USER_ROLES.ADMIN || user.role === USER_ROLES.LOCATION_STAFF) && (
+              {user && (user.role === USER_ROLES.ADMIN || user.role === USER_ROLES.LOCATION_STAFF || user.role === USER_ROLES.CONTADOR) && (
                 <AlertDialog open={isConfirmDeleteOpen} onOpenChange={setIsConfirmDeleteOpen}>
                   <AlertDialogTrigger asChild>
                     <Button variant="destructive" type="button">
