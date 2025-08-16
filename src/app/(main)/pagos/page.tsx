@@ -145,7 +145,7 @@ export default function PaymentsPage() {
             const deductible = prof.locationId === 'higuereta' ? DEDUCTIBLE_HIGUERETA : DEDUCTIBLE_OTRAS;
             const commissionableAmount = Math.max(0, totalIncome - deductible);
             const commission = commissionableAmount * COMISION_PORCENTAJE;
-            const totalPayment = SUELDO_BASE + commission;
+            const totalPayment = SUELDO_BASE / 2 + commission; // Sueldo es quincenal
 
             return {
                 professionalId: prof.id,
@@ -153,7 +153,7 @@ export default function PaymentsPage() {
                 locationId: prof.locationId,
                 locationName: locations.find(l => l.id === prof.locationId)?.name || 'N/A',
                 totalIncome: totalIncome,
-                baseSalary: SUELDO_BASE,
+                baseSalary: SUELDO_BASE / 2, // Mostrar el sueldo quincenal
                 commission: commission,
                 totalPayment: totalPayment,
             };
@@ -274,7 +274,7 @@ export default function PaymentsPage() {
               <CardHeader>
                 <CardTitle>Pagos al Personal</CardTitle>
                 <CardDescription>
-                  Visualización de los pagos a profesionales, incluyendo sueldo base y comisiones por producción.
+                  Visualización de los pagos a profesionales, incluyendo sueldo base y comisiones por producción quincenal.
                 </CardDescription>
                  <div className="mt-4 flex items-center gap-2 flex-wrap">
                     <Button variant="outline" size="icon" onClick={() => navigateQuincena('prev')} disabled={isPrevQuincenaDisabled()}><ChevronLeft className="h-4 w-4" /></Button>
