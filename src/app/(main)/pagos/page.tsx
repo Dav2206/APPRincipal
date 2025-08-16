@@ -131,19 +131,21 @@ export default function PaymentsPage() {
         const incomeByProfessional: Record<string, number> = {};
 
         appointments.forEach(appt => {
-            const mainProfId = appt.professionalId;
-            if (mainProfId) {
-                let totalAppointmentIncome = appt.amountPaid || 0;
-                
-                // Sumar ingresos de servicios adicionales a la producción del profesional principal
-                appt.addedServices?.forEach(addedService => {
-                    totalAppointmentIncome += addedService.amountPaid || 0;
-                });
+          // 1. Atribuir el ingreso del servicio principal
+          if (appt.professionalId && appt.amountPaid && appt.amountPaid > 0) {
+            incomeByProfessional[appt.professionalId] = (incomeByProfessional[appt.professionalId] || 0) + appt.amountPaid;
+          }
 
-                if (totalAppointmentIncome > 0) {
-                    incomeByProfessional[mainProfId] = (incomeByProfessional[mainProfId] || 0) + totalAppointmentIncome;
-                }
+          // 2. Atribuir los ingresos de los servicios adicionales
+          appt.addedServices?.forEach(addedService => {
+            if (addedService.amountPaid && addedService.amountPaid > 0) {
+              // Asignar al profesional del servicio adicional, o al principal si no está especificado.
+              const profIdForAddedService = addedService.professionalId || appt.professionalId;
+              if (profIdForAddedService) {
+                incomeByProfessional[profIdForAddedService] = (incomeByProfessional[profIdForAddedService] || 0) + addedService.amountPaid;
+              }
             }
+          });
         });
 
         const newPayrollData: PayrollData[] = activeProfessionals.map(prof => {
