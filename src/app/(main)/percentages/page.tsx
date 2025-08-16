@@ -15,7 +15,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow, TableFoo
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { format, startOfDay, parseISO, isEqual, addDays, subDays, startOfMonth, endOfMonth, getDate, getYear, getMonth, setYear, setMonth, isAfter, subMonths } from 'date-fns';
 import { es } from 'date-fns/locale';
-import { CalendarIcon, ChevronLeftIcon, ChevronRightIcon, AlertTriangle, Loader2, TrendingUp, DollarSign, Building, Info, Briefcase } from 'lucide-react';
+import { CalendarIcon, ChevronLeftIcon, ChevronRightIcon, AlertTriangle, Loader2, TrendingUp, DollarSign, Building, Info, Briefcase, Clock } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Badge } from '@/components/ui/badge';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
@@ -29,6 +29,7 @@ interface ProfessionalIncomeReport {
   totalIncomeAllLocations: number;
   totalAppointmentsAllLocations: number;
   workedDaysInSede: number;
+  totalEffectiveMinutes: number;
 }
 
 const currentSystemYear = getYear(new Date());
@@ -112,6 +113,7 @@ export default function PercentagesPage() {
           totalIncomeAllLocations: 0,
           totalAppointmentsAllLocations: 0,
           workedDaysInSede: workedDays,
+          totalEffectiveMinutes: 0,
         });
       });
 
@@ -124,10 +126,14 @@ export default function PercentagesPage() {
           const entry = incomeMap.get(profId)!;
           
           let appointmentIncome = (appt.amountPaid || 0) + (appt.addedServices || []).reduce((sum, as) => sum + (as.amountPaid || 0), 0);
+          const appointmentDuration = appt.totalCalculatedDurationMinutes || appt.durationMinutes || 0;
+
 
           // Add to total income across all locations
           entry.totalIncomeAllLocations += appointmentIncome;
           entry.totalAppointmentsAllLocations += 1;
+          entry.totalEffectiveMinutes += appointmentDuration;
+
 
           // Add to income in the selected location ONLY if the appointment was there
           if (appt.locationId === effectiveLocationId) {
@@ -267,6 +273,13 @@ export default function PercentagesPage() {
     </Card>
   );
 
+  const formatMinutesToHoursAndMinutes = (minutes: number): string => {
+    if (minutes <= 0) return '0h 0m';
+    const hours = Math.floor(minutes / 60);
+    const remainingMinutes = minutes % 60;
+    return `${hours}h ${remainingMinutes}m`;
+  };
+
   return (
     <div className="container mx-auto py-8 px-0 md:px-4 space-y-6">
       <Card className="shadow-lg">
@@ -349,6 +362,7 @@ export default function PercentagesPage() {
                             </TooltipProvider>
                         </div>
                     </TableHead>
+                    <TableHead className="text-center">Prom. Atención / Día</TableHead>
                     <TableHead className="text-center">Citas en Sede Actual</TableHead>
                     <TableHead className="text-right">Ingreso en Sede Actual (S/)</TableHead>
                     <TableHead className="text-right font-bold">Ingreso Total Quincenal (S/)</TableHead>
@@ -372,10 +386,17 @@ export default function PercentagesPage() {
                 <TableBody>
                   {reportData.map((item) => {
                     const average = item.workedDaysInSede > 0 ? (item.totalIncomeAllLocations / 52.5) / item.workedDaysInSede : 0;
+                    const dailyEffectiveTime = item.workedDaysInSede > 0 ? item.totalEffectiveMinutes / item.workedDaysInSede : 0;
                     return (
                     <TableRow key={item.professionalId}>
                       <TableCell className="font-medium">{item.professionalName}</TableCell>
                       <TableCell className="text-center">{item.workedDaysInSede}</TableCell>
+                      <TableCell className="text-center">
+                          <div className="flex items-center justify-center gap-1">
+                            <Clock size={12} className="text-muted-foreground"/>
+                            {formatMinutesToHoursAndMinutes(dailyEffectiveTime)}
+                          </div>
+                      </TableCell>
                       <TableCell className="text-center">{item.appointmentsInSelectedLocation}</TableCell>
                       <TableCell className="text-right font-semibold text-primary">
                         {item.incomeInSelectedLocation.toFixed(2)}
