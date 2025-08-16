@@ -460,6 +460,7 @@ export default function PaymentsPage() {
                       </div>
                       <Alert variant="default" className="mt-4 bg-blue-50 border-blue-200 text-blue-800">
                           <AlertTriangle className="h-4 w-4 !text-blue-800" />
+                          <AlertTitle className="text-blue-900 text-sm">Nota sobre la Persistencia</AlertTitle>
                           <AlertDescription className="text-xs">
                               Nota: El registro de gastos es una simulación visual. Los datos se reiniciarán al recargar la página.
                           </AlertDescription>
