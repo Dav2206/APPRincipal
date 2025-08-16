@@ -9,6 +9,8 @@ import { format, parseISO, isPast } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
+import Link from 'next/link';
+import { Button } from '../ui/button';
 
 interface UpcomingRemindersCardProps {
   title: string;
@@ -83,6 +85,11 @@ export function UpcomingRemindersCard({
             )}
           </ScrollArea>
         )}
+         <div className="mt-3 text-right">
+            <Button variant="link" size="sm" asChild className="text-xs">
+                <Link href="/pagos?tab=expenses">Ver todos los recordatorios...</Link>
+            </Button>
+        </div>
       </CardContent>
     </Card>
   );

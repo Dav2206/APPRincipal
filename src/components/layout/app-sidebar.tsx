@@ -43,8 +43,7 @@ const navItems = [
   { href: '/services', label: 'Servicios', icon: ClipboardList, roles: [USER_ROLES.ADMIN] }, 
   { href: '/finanzas', label: 'Finanzas', icon: Landmark, roles: [USER_ROLES.CONTADOR] },
   { href: '/corroboration', label: 'Corroboración', icon: ListChecks, roles: [USER_ROLES.CONTADOR] },
-  { href: '/pagos', label: 'Pagos', icon: CreditCard, roles: [USER_ROLES.ADMIN, USER_ROLES.CONTADOR] },
-  { href: '/reminders', label: 'Recordatorios', icon: Bell, roles: [USER_ROLES.ADMIN, USER_ROLES.CONTADOR] },
+  { href: '/pagos', label: 'Pagos y Gastos', icon: CreditCard, roles: [USER_ROLES.ADMIN, USER_ROLES.CONTADOR] },
   { href: '/dictation', label: 'Dictado IA', icon: BrainCircuit, roles: [USER_ROLES.ADMIN, USER_ROLES.CONTADOR, USER_ROLES.LOCATION_STAFF] },
   { href: '/test-function', label: 'Test Function', icon: Terminal, roles: [USER_ROLES.ADMIN] },
 ];

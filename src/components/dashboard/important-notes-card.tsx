@@ -52,7 +52,7 @@ export function ImportantNotesCard({
         )}
         <div className="mt-3 text-right">
             <Button variant="link" size="sm" asChild className="text-xs">
-                <Link href="/reminders">Ver todas las notas...</Link>
+                <Link href="/pagos?tab=expenses">Ver todas las notas...</Link>
             </Button>
         </div>
       </CardContent>
