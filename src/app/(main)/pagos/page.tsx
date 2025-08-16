@@ -18,7 +18,7 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow, TableFooter as TableFooterComponent } from '@/components/ui/table';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Loader2, CreditCard, AlertTriangle, PlusCircle, DollarSign, CalendarIcon, List, Users, ShoppingCart, Lightbulb, Landmark as LandmarkIcon, ChevronLeft, ChevronRight, Check, Settings, Percent, Bell, CalendarClock, XCircle, Edit2, Trash2, ShieldAlert, CheckCircle, Clock } from 'lucide-react';
-import { format, getYear, getMonth, getDate, startOfMonth, endOfMonth, addDays, setYear, setMonth, isAfter, parseISO, isPast, isBefore, startOfDay, isSameMonth } from 'date-fns';
+import { format, getYear, getMonth, getDate, startOfMonth, endOfMonth, addDays, setYear, setMonth, isAfter, parseISO, isPast, isBefore, startOfDay, isSameMonth, addMonths, addQuarters, addYears } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
@@ -95,7 +95,7 @@ export default function PaymentsPage() {
   const [editingCommission, setEditingCommission] = useState<{ prof: PayrollData; rate: string; deductible: string; } | null>(null);
   
   // --- State for Reminders ---
-  const [reminders, setReminders] = useState<PeriodicReminder[]>([]);
+  const [allReminders, setAllReminders] = useState<PeriodicReminder[]>([]);
   const [isLoadingReminders, setIsLoadingReminders] = useState(true);
   const [isReminderFormOpen, setIsReminderFormOpen] = useState(false);
   const [editingReminder, setEditingReminder] = useState<PeriodicReminder | null>(null);
@@ -311,7 +311,7 @@ export default function PaymentsPage() {
     setIsLoadingReminders(true);
     try {
       const data = await getPeriodicReminders();
-      setReminders(data.sort((a, b) => parseISO(a.dueDate).getTime() - parseISO(b.dueDate).getTime()));
+      setAllReminders(data);
     } catch (error) {
       toast({ title: "Error", description: "No se pudieron cargar los recordatorios.", variant: "destructive" });
     } finally {
@@ -323,11 +323,15 @@ export default function PaymentsPage() {
     fetchReminders();
   }, [fetchReminders]);
   
-  const expenseSummary = useMemo(() => {
-    const paidRemindersInPeriod = reminders.filter(r => {
+  const filteredRemindersForView = useMemo(() => {
+    return allReminders.filter(r => {
         const dueDate = parseISO(r.dueDate);
-        return r.status === 'paid' && isSameMonth(dueDate, setMonth(new Date(), selectedExpenseMonth)) && getYear(dueDate) === selectedExpenseYear;
-    });
+        return isSameMonth(dueDate, setMonth(new Date(), selectedExpenseMonth)) && getYear(dueDate) === selectedExpenseYear;
+    }).sort((a,b) => parseISO(a.dueDate).getTime() - parseISO(b.dueDate).getTime());
+  }, [allReminders, selectedExpenseYear, selectedExpenseMonth]);
+
+  const expenseSummary = useMemo(() => {
+    const paidRemindersInPeriod = filteredRemindersForView.filter(r => r.status === 'paid');
 
     const summary = REMINDER_CATEGORIES.reduce((acc, category) => {
         acc[category.value] = 0;
@@ -349,7 +353,7 @@ export default function PaymentsPage() {
 
     return { ...summary, grandTotal };
 
-  }, [reminders, selectedExpenseYear, selectedExpenseMonth]);
+  }, [filteredRemindersForView]);
 
   const handleAddReminder = () => {
     setEditingReminder(null);
@@ -393,7 +397,46 @@ export default function PaymentsPage() {
 
   const handleTogglePaidStatus = async (reminder: PeriodicReminder) => {
     const newStatus = reminder.status === 'pending' ? 'paid' : 'pending';
+
+    // If marking as paid and it's a recurring reminder, create the next one.
+    if (newStatus === 'paid' && reminder.recurrence !== 'once') {
+        const currentDueDate = parseISO(reminder.dueDate);
+        let nextDueDate: Date;
+
+        switch (reminder.recurrence) {
+            case 'monthly':
+                nextDueDate = addMonths(currentDueDate, 1);
+                break;
+            case 'quarterly':
+                nextDueDate = addQuarters(currentDueDate, 1);
+                break;
+            case 'annually':
+                nextDueDate = addYears(currentDueDate, 1);
+                break;
+            default:
+                nextDueDate = currentDueDate; // Should not happen
+        }
+
+        const nextReminder: PeriodicReminderFormData = {
+            title: reminder.title,
+            description: reminder.description,
+            category: reminder.category,
+            dueDate: nextDueDate,
+            recurrence: reminder.recurrence,
+            amount: reminder.amount,
+            status: 'pending',
+        };
+        
+        try {
+            await addPeriodicReminder(nextReminder);
+            toast({ title: "Próximo Pago Generado", description: `Se ha creado el pago recurrente para ${format(nextDueDate, "PPP", { locale: es })}.` });
+        } catch (error) {
+             toast({ title: "Error de Recurrencia", description: "No se pudo generar el siguiente pago recurrente.", variant: "destructive" });
+        }
+    }
+
     try {
+      // Always update the status of the current reminder
       await updatePeriodicReminder(reminder.id, { ...reminder, status: newStatus, dueDate: reminder.dueDate, category: reminder.category || 'otros' });
       toast({ title: "Estado Actualizado", description: `El pago "${reminder.title}" ahora está ${newStatus === 'paid' ? 'pagado' : 'pendiente'}.` });
       fetchReminders();
@@ -564,11 +607,11 @@ export default function PaymentsPage() {
                     <Loader2 className="h-8 w-8 animate-spin text-primary" />
                     <p className="ml-2 text-muted-foreground">Cargando pagos...</p>
                     </div>
-                ) : reminders.length === 0 ? (
+                ) : filteredRemindersForView.length === 0 ? (
                     <div className="p-6 border rounded-lg bg-secondary/30 text-center">
                     <ShieldAlert className="h-10 w-10 text-muted-foreground mx-auto mb-2" />
                     <p className="text-muted-foreground">
-                        No hay pagos o gastos configurados. ¡Añade el primero!
+                        No hay pagos o gastos registrados para este mes. ¡Añade el primero!
                     </p>
                     </div>
                 ) : (
@@ -585,7 +628,7 @@ export default function PaymentsPage() {
                         </TableRow>
                         </TableHeader>
                         <TableBody>
-                        {reminders.map((reminder) => {
+                        {filteredRemindersForView.map((reminder) => {
                             const displayStatus = getReminderDisplayStatus(reminder);
                             return (
                             <TableRow key={reminder.id} className={cn(displayStatus.variant === 'destructive' && reminder.status === 'pending' && 'bg-destructive/10')}>
