@@ -114,32 +114,51 @@ export default function PercentagesPage() {
       });
 
       allPeriodAppointments.forEach(appt => {
-        const mainProfId = appt.professionalId;
-        if (!mainProfId || !incomeMap.has(mainProfId)) return;
+        // --- CORRECTED LOGIC START ---
 
-        const entry = incomeMap.get(mainProfId)!;
-        
-        let totalAppointmentIncome = appt.amountPaid || 0;
-        // Sumar ingresos de servicios adicionales a la producción del profesional principal
+        // 1. Process income from the main service for the main professional
+        if (appt.professionalId && incomeMap.has(appt.professionalId) && appt.amountPaid && appt.amountPaid > 0) {
+          const mainProfEntry = incomeMap.get(appt.professionalId)!;
+          mainProfEntry.totalIncomeAllLocations += appt.amountPaid;
+          if (appt.locationId === effectiveLocationId) {
+            mainProfEntry.incomeInSelectedLocation += appt.amountPaid;
+          }
+        }
+
+        // 2. Process income from added services, attributing to the correct professional
         appt.addedServices?.forEach(addedService => {
-            totalAppointmentIncome += addedService.amountPaid || 0;
+          if (addedService.amountPaid && addedService.amountPaid > 0) {
+            // Determine who performed the added service: the assigned professional, or fallback to the main one.
+            const profForAddedServiceId = addedService.professionalId || appt.professionalId;
+            if (profForAddedServiceId && incomeMap.has(profForAddedServiceId)) {
+              const addedProfEntry = incomeMap.get(profForAddedServiceId)!;
+              addedProfEntry.totalIncomeAllLocations += addedService.amountPaid;
+               if (appt.locationId === effectiveLocationId) {
+                addedProfEntry.incomeInSelectedLocation += addedService.amountPaid;
+              }
+            }
+          }
         });
 
-        const appointmentDuration = appt.totalCalculatedDurationMinutes || appt.durationMinutes || 0;
-
-        entry.totalIncomeAllLocations += totalAppointmentIncome;
-        entry.totalAppointmentsAllLocations += 1;
-        entry.totalEffectiveMinutes += appointmentDuration;
-
-        if (appt.locationId === effectiveLocationId) {
-            entry.incomeInSelectedLocation += totalAppointmentIncome;
-            entry.appointmentsInSelectedLocation += 1;
+        // 3. Process appointment counts and duration for the main professional
+        if (appt.professionalId && incomeMap.has(appt.professionalId)) {
+          const mainProfEntry = incomeMap.get(appt.professionalId)!;
+          const appointmentDuration = appt.totalCalculatedDurationMinutes || appt.durationMinutes || 0;
+          mainProfEntry.totalAppointmentsAllLocations += 1;
+          mainProfEntry.totalEffectiveMinutes += appointmentDuration;
+          if (appt.locationId === effectiveLocationId) {
+            mainProfEntry.appointmentsInSelectedLocation += 1;
+          }
         }
-    });
+        
+        // --- CORRECTED LOGIC END ---
+      });
+
 
       let finalReportData = Array.from(incomeMap.values());
 
       if(effectiveLocationId) {
+        // Show only professionals whose base location is the selected one
         const nativeProfessionalIds = new Set(allProfessionals.filter(p => p.locationId === effectiveLocationId).map(p => p.id));
         finalReportData = finalReportData.filter(item => nativeProfessionalIds.has(item.professionalId));
       }
@@ -156,7 +175,7 @@ export default function PercentagesPage() {
     } finally {
       setIsLoading(false);
     }
-  }, [effectiveLocationId, user, locations, selectedYear, selectedMonth, selectedQuincena]);
+  }, [effectiveLocationId, selectedYear, selectedMonth, selectedQuincena]);
 
 
   useEffect(() => {
