@@ -33,7 +33,7 @@ import {
   DialogDescription,
 } from '@/components/ui/dialog';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage, FormDescription } from "@/components/ui/form";
-import { PlusCircle, Edit2, Users, Search, Loader2, CalendarDays, Clock, Trash2, Calendar as CalendarIconLucide, AlertTriangle, Moon, ChevronsDown, FileText, Building, Gift, Briefcase as BriefcaseIcon, ChevronLeft, ChevronRight } from 'lucide-react';
+import { PlusCircle, Edit2, Users, Search, Loader2, CalendarDays, Clock, Trash2, Calendar as CalendarIconLucide, AlertTriangle, Moon, ChevronsDown, FileText, Building, Gift, Briefcase as BriefcaseIcon, ChevronLeft, ChevronRight, Bed } from 'lucide-react';
 import { useForm, useFieldArray, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { ProfessionalFormSchema } from '@/lib/schemas';
@@ -42,7 +42,8 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { Calendar } from '@/components/ui/calendar';
 import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
-import { format, parseISO, getDay, isSameDay, differenceInDays, startOfDay, addDays as dateFnsAddDays, formatISO as dateFnsFormatISO, getMonth, getYear, isSameMonth, addMonths, subMonths, startOfMonth } from 'date-fns';
+import { format, parseISO, getDay, isSameDay, differenceInDays, startOfDay, addDays as dateFnsAddDays, formatISO as dateFnsFormatISO, getMonth, getYear, isSameMonth, addMonths, subMonths, startOfMonth, eachDayOfInterval, isAfter } from 'date-fns';
+import type { DateRange } from "react-day-picker";
 import { es } from 'date-fns/locale';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { Badge } from '@/components/ui/badge';
@@ -71,6 +72,7 @@ export default function ProfessionalsPage() {
   const [searchTerm, setSearchTerm] = useState('');
   
   const [scheduleViewDate, setScheduleViewDate] = useState<Date>(new Date());
+  const [isVacationModalOpen, setIsVacationModalOpen] = useState(false);
 
 
   const defaultBaseWorkSchedule: ProfessionalFormData['workSchedule'] = {
@@ -111,7 +113,7 @@ export default function ProfessionalsPage() {
     }
   });
 
-  const { fields: customScheduleFields, append: appendCustomSchedule, remove: removeCustomSchedule } = useFieldArray({
+  const { fields: customScheduleFields, append: appendCustomSchedule, remove: removeCustomSchedule, replace: replaceCustomSchedule } = useFieldArray({
     control: form.control,
     name: "customScheduleOverrides"
   });
@@ -452,7 +454,7 @@ export default function ProfessionalsPage() {
         </CardContent>
       </Card>
 
-      <Dialog open={isFormOpen} onOpenChange={setIsFormOpen}>
+      <Dialog open={isFormOpen} onOpenChange={(isOpen) => { setIsFormOpen(isOpen); if (!isOpen) setEditingProfessional(null); }}>
         <DialogContent className="sm:max-w-3xl">
           <DialogHeader>
             <DialogTitle>{editingProfessional ? 'Editar' : 'Agregar'} Profesional</DialogTitle>
@@ -691,9 +693,14 @@ export default function ProfessionalsPage() {
                     {customScheduleFields.filter(field => isSameMonth(field.date, overrideDisplayDate)).length === 0 && (
                         <p className="text-sm text-muted-foreground text-center py-4">No hay excepciones para {format(overrideDisplayDate, 'MMMM yyyy', { locale: es })}.</p>
                     )}
-                    <Button type="button" variant="outline" size="sm" className="mt-4" onClick={() => appendCustomSchedule({ id: generateId(), date: startOfMonth(overrideDisplayDate), overrideType: 'descanso', notes: 'Descanso' })}>
-                      <PlusCircle className="mr-2 h-4 w-4" /> Agregar Excepción
-                    </Button>
+                    <div className="flex gap-2">
+                        <Button type="button" variant="outline" size="sm" className="mt-4" onClick={() => appendCustomSchedule({ id: generateId(), date: startOfMonth(overrideDisplayDate), overrideType: 'descanso', notes: 'Descanso' })}>
+                          <PlusCircle className="mr-2 h-4 w-4" /> Agregar Excepción
+                        </Button>
+                         <Button type="button" variant="secondary" size="sm" className="mt-4" onClick={() => setIsVacationModalOpen(true)}>
+                          <Bed className="mr-2 h-4 w-4" /> Registrar Ausencia por Período
+                        </Button>
+                    </div>
                   </AccordionContent>
                 </AccordionItem>
 
@@ -766,6 +773,102 @@ export default function ProfessionalsPage() {
           </Form>
         </DialogContent>
       </Dialog>
+      
+      {/* Vacation/Absence Period Modal */}
+      <VacationFormDialog
+        isOpen={isVacationModalOpen}
+        onClose={() => setIsVacationModalOpen(false)}
+        onSave={(range, reason) => {
+            if (!range.from || !range.to) {
+                toast({ title: "Fechas inválidas", description: "Por favor seleccione un rango de fechas válido.", variant: "destructive"});
+                return;
+            }
+            if (isAfter(range.from, range.to)) {
+                toast({ title: "Rango inválido", description: "La fecha de inicio no puede ser posterior a la fecha de fin.", variant: "destructive"});
+                return;
+            }
+            const allDatesInRange = eachDayOfInterval({ start: range.from, end: range.to });
+            const newOverrides = allDatesInRange.map(date => ({
+                id: generateId(),
+                date: date,
+                overrideType: 'descanso' as const,
+                notes: reason || 'Ausencia programada',
+            }));
+
+            // Smart update: remove existing overrides in the same date range and append the new ones
+            const existingOverrides = form.getValues('customScheduleOverrides') || [];
+            const overridesOutsideRange = existingOverrides.filter(ov => {
+                const ovDate = startOfDay(ov.date);
+                return !(ovDate >= startOfDay(range.from!) && ovDate <= startOfDay(range.to!));
+            });
+            
+            replaceCustomSchedule([...overridesOutsideRange, ...newOverrides]);
+
+            toast({ title: "Ausencia Registrada", description: `Se agregaron ${newOverrides.length} días de descanso.` });
+            setIsVacationModalOpen(false);
+        }}
+      />
+
     </div>
   );
 }
+
+
+interface VacationFormDialogProps {
+  isOpen: boolean;
+  onClose: () => void;
+  onSave: (range: DateRange, reason: string) => void;
+}
+
+function VacationFormDialog({ isOpen, onClose, onSave }: VacationFormDialogProps) {
+    const [dateRange, setDateRange] = useState<DateRange | undefined>(undefined);
+    const [reason, setReason] = useState("");
+
+    const handleSave = () => {
+        if (dateRange && dateRange.from && dateRange.to) {
+            onSave(dateRange, reason);
+            onClose();
+            setDateRange(undefined);
+            setReason("");
+        } else {
+             toast({ title: "Selección Incompleta", description: "Por favor, seleccione un rango de fechas (inicio y fin).", variant: "destructive"});
+        }
+    };
+
+    return (
+        <Dialog open={isOpen} onOpenChange={onClose}>
+            <DialogContent>
+                <DialogHeader>
+                    <DialogTitle>Registrar Ausencia por Período</DialogTitle>
+                    <DialogDescription>
+                        Seleccione el rango de fechas en que el profesional estará ausente. Se crearán excepciones de "Descanso" para cada día.
+                    </DialogDescription>
+                </DialogHeader>
+                <div className="space-y-4 py-4">
+                    <div className="flex justify-center">
+                        <Calendar
+                            mode="range"
+                            selected={dateRange}
+                            onSelect={setDateRange}
+                            numberOfMonths={1}
+                        />
+                    </div>
+                    <div>
+                        <Label htmlFor="absence-reason">Razón de la Ausencia (Opcional)</Label>
+                        <Input 
+                            id="absence-reason" 
+                            value={reason}
+                            onChange={(e) => setReason(e.target.value)}
+                            placeholder="Ej: Vacaciones, Licencia"
+                        />
+                    </div>
+                </div>
+                <DialogFooter>
+                    <Button variant="outline" onClick={onClose}>Cancelar</Button>
+                    <Button onClick={handleSave}>Guardar Período de Ausencia</Button>
+                </DialogFooter>
+            </DialogContent>
+        </Dialog>
+    );
+}
+
