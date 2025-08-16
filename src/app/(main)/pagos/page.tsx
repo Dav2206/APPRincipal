@@ -18,7 +18,7 @@ import { Calendar } from '@/components/ui/calendar';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow, TableFooter as TableFooterComponent } from '@/components/ui/table';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Loader2, CreditCard, AlertTriangle, PlusCircle, DollarSign, CalendarIcon, List, Users, ShoppingCart, Lightbulb, Landmark as LandmarkIcon, ChevronLeft, ChevronRight, Check, Settings, Percent, Bell, CalendarClock, XCircle, Edit2, Trash2, ShieldAlert, CheckCircle, Clock } from 'lucide-react';
+import { Loader2, CreditCard, AlertTriangle, PlusCircle, DollarSign, CalendarIcon, List, Users, ShoppingCart, Lightbulb, Landmark as LandmarkIcon, ChevronLeft, ChevronRight, Check, Settings, Percent, Bell, CalendarClock, XCircle, Edit2, Trash2, ShieldAlert, CheckCircle, Clock, Scale } from 'lucide-react';
 import { format, getYear, getMonth, getDate, startOfMonth, endOfMonth, addDays, setYear, setMonth, isAfter, parseISO, isPast, isBefore, startOfDay } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { useToast } from '@/hooks/use-toast';
@@ -106,6 +106,18 @@ export default function PaymentsPage() {
   const [selectedExpenseYear, setSelectedExpenseYear] = useState<number>(getYear(new Date()));
   const [selectedExpenseMonth, setSelectedExpenseMonth] = useState<number>(getMonth(new Date()));
 
+  // --- State for Balance ---
+  const [balanceData, setBalanceData] = useState({
+      totalIncome: 0,
+      totalSalaries: 0,
+      totalExpenses: 0,
+      finalBalance: 0
+  });
+  const [isLoadingBalance, setIsLoadingBalance] = useState(false);
+  const [balanceYear, setBalanceYear] = useState<number>(getYear(new Date()));
+  const [balanceMonth, setBalanceMonth] = useState<number>(getMonth(new Date()));
+
+
   const reminderForm = useForm<PeriodicReminderFormData>({
     resolver: zodResolver(PeriodicReminderFormSchema),
     defaultValues: {
@@ -134,13 +146,12 @@ export default function PaymentsPage() {
       loadLocations();
   }, []);
 
-  const calculatePayroll = useCallback(async () => {
-    if (locations.length === 0) return;
-    setIsLoadingPayroll(true);
-
-    const baseDate = setMonth(setYear(new Date(), selectedYear), selectedMonth);
-    const startDate = selectedQuincena === 1 ? startOfMonth(baseDate) : addDays(startOfMonth(baseDate), 15);
-    const endDate = selectedQuincena === 1 ? addDays(startOfMonth(baseDate), 14) : endOfMonth(baseDate);
+  const calculatePayroll = useCallback(async (year: number, month: number, quincena: 1 | 2) => {
+    if (locations.length === 0) return { payrollData: [], totalPayroll: 0 };
+    
+    const baseDate = setMonth(setYear(new Date(), year), month);
+    const startDate = quincena === 1 ? startOfMonth(baseDate) : addDays(startOfMonth(baseDate), 15);
+    const endDate = quincena === 1 ? addDays(startOfMonth(baseDate), 14) : endOfMonth(baseDate);
 
     try {
         const allProfessionals = await getProfessionals();
@@ -172,6 +183,7 @@ export default function PaymentsPage() {
           });
         });
 
+        let totalPayrollForPeriod = 0;
         const newPayrollData: PayrollData[] = activeProfessionals.map(prof => {
             const totalIncome = incomeByProfessional[prof.id] || 0;
             const deductible = prof.commissionDeductible ?? (prof.locationId === 'higuereta' ? 2200 : 1800);
@@ -181,6 +193,7 @@ export default function PaymentsPage() {
             const baseSalaryQuincenal = (prof.baseSalary || 0) / 2;
             const discounts = prof.discounts || 0;
             const totalPayment = baseSalaryQuincenal + commission - discounts;
+            totalPayrollForPeriod += totalPayment;
 
             return {
                 professionalId: prof.id,
@@ -197,18 +210,78 @@ export default function PaymentsPage() {
             };
         }).sort((a,b) => a.locationName.localeCompare(b.locationName) || a.professionalName.localeCompare(b.professionalName));
 
-        setPayrollData(newPayrollData);
+        return { payrollData: newPayrollData, totalPayroll: totalPayrollForPeriod };
     } catch (error) {
         console.error("Error calculating payroll:", error);
         toast({ title: "Error", description: "No se pudo calcular la planilla.", variant: "destructive" });
-    } finally {
-        setIsLoadingPayroll(false);
+        return { payrollData: [], totalPayroll: 0 };
     }
-  }, [selectedYear, selectedMonth, selectedQuincena, locations, toast]);
+  }, [locations, toast]);
+
+  const fetchPayrollForUI = useCallback(async () => {
+    setIsLoadingPayroll(true);
+    const { payrollData } = await calculatePayroll(selectedYear, selectedMonth, selectedQuincena);
+    setPayrollData(payrollData);
+    setIsLoadingPayroll(false);
+  }, [selectedYear, selectedMonth, selectedQuincena, calculatePayroll]);
+
 
   useEffect(() => {
-    calculatePayroll();
-  }, [calculatePayroll]);
+    fetchPayrollForUI();
+  }, [fetchPayrollForUI]);
+  
+  const fetchBalanceData = useCallback(async () => {
+    setIsLoadingBalance(true);
+    try {
+        const periodStart = startOfMonth(setMonth(setYear(new Date(), balanceYear), balanceMonth));
+        const periodEnd = endOfMonth(periodStart);
+
+        // 1. Calculate Total Income
+        const appointmentsResponse = await getAppointments({
+            dateRange: { start: periodStart, end: periodEnd },
+            statuses: [APPOINTMENT_STATUS.COMPLETED]
+        });
+        const totalIncome = (appointmentsResponse.appointments || []).reduce((sum, appt) => {
+            const mainAmount = appt.amountPaid || 0;
+            const addedServicesAmount = (appt.addedServices || []).reduce((addedSum, as) => addedSum + (as.amountPaid || 0), 0);
+            return sum + mainAmount + addedServicesAmount;
+        }, 0);
+
+        // 2. Calculate Total Salaries for the month
+        const firstQuincenaPayroll = await calculatePayroll(balanceYear, balanceMonth, 1);
+        const secondQuincenaPayroll = await calculatePayroll(balanceYear, balanceMonth, 2);
+        const totalSalaries = firstQuincenaPayroll.totalPayroll + secondQuincenaPayroll.totalPayroll;
+
+        // 3. Calculate Total Expenses
+        const allFetchedReminders = await getPeriodicReminders(); // Assuming this fetches all, not just for a month
+        const expensesInMonth = allFetchedReminders.filter(r => {
+            const dueDate = parseISO(r.dueDate);
+            return r.status === 'paid' && dueDate >= periodStart && dueDate <= periodEnd;
+        });
+        const totalExpenses = expensesInMonth.reduce((sum, r) => sum + (r.amount || 0), 0);
+        
+        // 4. Set State
+        setBalanceData({
+            totalIncome,
+            totalSalaries,
+            totalExpenses,
+            finalBalance: totalIncome - totalSalaries - totalExpenses
+        });
+
+    } catch(error) {
+        console.error("Error calculating balance:", error);
+        toast({ title: "Error", description: "No se pudo calcular el balance mensual.", variant: "destructive"});
+        setBalanceData({ totalIncome: 0, totalSalaries: 0, totalExpenses: 0, finalBalance: 0 });
+    } finally {
+        setIsLoadingBalance(false);
+    }
+  }, [balanceYear, balanceMonth, calculatePayroll, toast]);
+
+  useEffect(() => {
+    if (user?.role === USER_ROLES.CONTADOR) {
+      fetchBalanceData();
+    }
+  }, [fetchBalanceData, user]);
 
 
   const handleSalaryEdit = (profId: string, currentSalary: number) => {
@@ -228,7 +301,7 @@ export default function PaymentsPage() {
       await updateProfessional(editingSalary.id, { baseSalary: newSalary });
       toast({ title: "Sueldo Actualizado", description: "El sueldo base ha sido actualizado exitosamente." });
       setEditingSalary(null);
-      calculatePayroll(); // Recalculate payroll with new salary
+      fetchPayrollForUI(); // Recalculate payroll with new salary
     } catch (error) {
       toast({ title: "Error", description: "No se pudo actualizar el sueldo.", variant: "destructive" });
     }
@@ -264,7 +337,7 @@ export default function PaymentsPage() {
       });
       toast({ title: "Comisión Actualizada", description: `Los parámetros de comisión para ${editingCommission.prof.professionalName} han sido actualizados.` });
       setEditingCommission(null);
-      calculatePayroll(); // Recalculate payroll
+      fetchPayrollForUI(); // Recalculate payroll
     } catch (error) {
       toast({ title: "Error", description: "No se pudieron actualizar los parámetros de comisión.", variant: "destructive" });
     }
@@ -287,7 +360,7 @@ export default function PaymentsPage() {
       await updateProfessional(editingDiscount.id, { discounts: newDiscount });
       toast({ title: "Descuento Actualizado", description: "El descuento ha sido actualizado." });
       setEditingDiscount(null);
-      calculatePayroll();
+      fetchPayrollForUI();
     } catch (error) {
       toast({ title: "Error", description: "No se pudo actualizar el descuento.", variant: "destructive" });
     }
@@ -490,9 +563,10 @@ export default function PaymentsPage() {
       </Card>
       
        <Tabs defaultValue="payroll" className="w-full">
-        <TabsList className="grid w-full grid-cols-2">
+        <TabsList className="grid w-full grid-cols-3">
           <TabsTrigger value="payroll">Pagos al Personal</TabsTrigger>
           <TabsTrigger value="expenses">Gastos Operativos</TabsTrigger>
+          <TabsTrigger value="balance">Balance Mensual</TabsTrigger>
         </TabsList>
         <TabsContent value="payroll">
           <Card>
@@ -727,6 +801,77 @@ export default function PaymentsPage() {
             </CardContent>
           </Card>
         </TabsContent>
+
+        <TabsContent value="balance">
+            <Card>
+                <CardHeader>
+                    <CardTitle>Balance Mensual</CardTitle>
+                    <CardDescription>Resumen de ingresos, egresos y el balance final para el período seleccionado.</CardDescription>
+                    <div className="mt-4 flex items-center gap-2 flex-wrap border-t pt-4">
+                        <Label className="text-sm font-medium">Ver Balance para:</Label>
+                        <Select value={String(balanceYear)} onValueChange={(val) => setBalanceYear(Number(val))}>
+                            <SelectTrigger className="w-[100px]"><SelectValue /></SelectTrigger>
+                            <SelectContent>{availableYears.map(y => <SelectItem key={y} value={String(y)}>{y}</SelectItem>)}</SelectContent>
+                        </Select>
+                        <Select value={String(balanceMonth)} onValueChange={(val) => setBalanceMonth(Number(val))}>
+                            <SelectTrigger className="w-[150px]"><SelectValue /></SelectTrigger>
+                            <SelectContent>{months.map(m => <SelectItem key={m.value} value={String(m.value)}>{m.label}</SelectItem>)}</SelectContent>
+                        </Select>
+                        <Button onClick={() => fetchBalanceData()} disabled={isLoadingBalance}>
+                            {isLoadingBalance && <Loader2 className="mr-2 h-4 w-4 animate-spin"/>}
+                            Calcular Balance
+                        </Button>
+                    </div>
+                </CardHeader>
+                <CardContent>
+                    {isLoadingBalance ? (
+                        <div className="flex justify-center items-center h-40"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>
+                    ) : (
+                        <div className="space-y-4">
+                            <Card>
+                                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                                    <CardTitle className="text-sm font-medium text-green-600">Total Ingresos</CardTitle>
+                                    <DollarSign className="h-4 w-4 text-muted-foreground" />
+                                </CardHeader>
+                                <CardContent>
+                                    <div className="text-2xl font-bold">S/ {balanceData.totalIncome.toFixed(2)}</div>
+                                </CardContent>
+                            </Card>
+                            <Card>
+                                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                                    <CardTitle className="text-sm font-medium text-red-600">Total Sueldos y Comisiones</CardTitle>
+                                    <Users className="h-4 w-4 text-muted-foreground" />
+                                </CardHeader>
+                                <CardContent>
+                                    <div className="text-2xl font-bold">S/ {balanceData.totalSalaries.toFixed(2)}</div>
+                                </CardContent>
+                            </Card>
+                            <Card>
+                                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                                    <CardTitle className="text-sm font-medium text-red-600">Total Gastos Operativos</CardTitle>
+                                    <ShoppingCart className="h-4 w-4 text-muted-foreground" />
+                                </CardHeader>
+                                <CardContent>
+                                    <div className="text-2xl font-bold">S/ {balanceData.totalExpenses.toFixed(2)}</div>
+                                </CardContent>
+                            </Card>
+                            <Separator />
+                            <Card className={cn(balanceData.finalBalance >= 0 ? "bg-green-50 border-green-200" : "bg-red-50 border-red-200")}>
+                                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                                    <CardTitle className="text-base font-bold">Balance Final</CardTitle>
+                                    <Scale className="h-5 w-5 text-muted-foreground" />
+                                </CardHeader>
+                                <CardContent>
+                                     <div className={cn("text-3xl font-extrabold", balanceData.finalBalance >= 0 ? "text-green-700" : "text-red-700")}>
+                                        S/ {balanceData.finalBalance.toFixed(2)}
+                                    </div>
+                                </CardContent>
+                            </Card>
+                        </div>
+                    )}
+                </CardContent>
+            </Card>
+        </TabsContent>
       </Tabs>
       
       {editingCommission && (
@@ -895,4 +1040,3 @@ export default function PaymentsPage() {
     </div>
   );
 }
-
