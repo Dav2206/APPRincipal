@@ -110,13 +110,14 @@ export default function CorroborationPage() {
             ? new Set(allProfessionals.filter(p => p.locationId === effectiveLocationId).map(p => p.id)) 
             : null;
 
-        appointments.forEach(appt => {
-          const processIncome = (profId: string | undefined | null, amount: number | undefined | null, appointment: Appointment) => {
+        const processIncome = (profId: string | undefined | null, amount: number | undefined | null, appointment: Appointment) => {
             if (!profId || !amount || amount <= 0) return;
             
             const professional = allProfessionals.find(p => p.id === profId);
             if (!professional) return;
             
+            const appointmentDateKey = format(parseISO(appointment.appointmentDateTime), 'yyyy-MM-dd');
+
             // Logic for main report (production in selected location)
             if (appointment.locationId === effectiveLocationId || !effectiveLocationId) {
                 if (!newReportData[profId]) {
@@ -127,8 +128,7 @@ export default function CorroborationPage() {
                         quincenaTotal: 0
                     };
                 }
-                const dayKey = format(parseISO(appointment.appointmentDateTime), 'yyyy-MM-dd');
-                newReportData[profId].dailyTotals[dayKey] = (newReportData[profId].dailyTotals[dayKey] || 0) + amount;
+                newReportData[profId].dailyTotals[appointmentDateKey] = (newReportData[profId].dailyTotals[appointmentDateKey] || 0) + amount;
                 newReportData[profId].quincenaTotal += amount;
             }
 
@@ -153,8 +153,15 @@ export default function CorroborationPage() {
             }
           };
 
-          const totalAppointmentIncome = (appt.amountPaid || 0) + (appt.addedServices?.reduce((sum, as) => sum + (as.amountPaid || 0), 0) || 0);
-          processIncome(appt.professionalId, totalAppointmentIncome, appt);
+        appointments.forEach(appt => {
+            // Process main service income
+            processIncome(appt.professionalId, appt.amountPaid, appt);
+
+            // Process added services income
+            appt.addedServices?.forEach(addedService => {
+                const profIdForAddedService = addedService.professionalId || appt.professionalId;
+                processIncome(profIdForAddedService, addedService.amountPaid, appt);
+            });
         });
 
         setReportData(newReportData);
@@ -400,5 +407,3 @@ export default function CorroborationPage() {
     </div>
   );
 }
-
-
