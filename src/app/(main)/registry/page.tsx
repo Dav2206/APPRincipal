@@ -344,31 +344,26 @@ export default function RegistryPage() {
       appointmentsForPeriod.forEach(appt => {
         if (appt.status !== APPOINTMENT_STATUS.COMPLETED) return;
 
-        // Process main service income
-        if (appt.professionalId && biWeeklyReportMap.has(appt.professionalId)) {
-          const professionalForAppt = professionalsListRaw.find(p => p.id === appt.professionalId);
-          if (professionalForAppt) {
-            const contractStatusOnApptDate = getContractDisplayStatus(professionalForAppt.currentContract, parseISO(appt.appointmentDateTime));
-            if (contractStatusOnApptDate === 'Activo' || contractStatusOnApptDate === 'Próximo a Vencer') {
-              const entry = biWeeklyReportMap.get(appt.professionalId)!;
-              entry.biWeeklyEarnings += appt.amountPaid || 0;
-            }
-          }
-        }
-
-        // Process added services income
-        appt.addedServices?.forEach(addedService => {
-          const profId = addedService.professionalId || appt.professionalId;
+        const processIncomeForProfessional = (profId: string | null | undefined, amount: number | null | undefined) => {
           if (profId && biWeeklyReportMap.has(profId)) {
             const professionalForAppt = professionalsListRaw.find(p => p.id === profId);
             if (professionalForAppt) {
               const contractStatusOnApptDate = getContractDisplayStatus(professionalForAppt.currentContract, parseISO(appt.appointmentDateTime));
               if (contractStatusOnApptDate === 'Activo' || contractStatusOnApptDate === 'Próximo a Vencer') {
                 const entry = biWeeklyReportMap.get(profId)!;
-                entry.biWeeklyEarnings += addedService.amountPaid || 0;
+                entry.biWeeklyEarnings += amount || 0;
               }
             }
           }
+        };
+
+        // Process main service income
+        processIncomeForProfessional(appt.professionalId, appt.amountPaid);
+        
+        // Process added services income
+        appt.addedServices?.forEach(addedService => {
+            const profIdForAdded = addedService.professionalId || appt.professionalId;
+            processIncomeForProfessional(profIdForAdded, addedService.amountPaid);
         });
       });
       
@@ -762,7 +757,7 @@ export default function RegistryPage() {
                                       {isHigueretaStaff ? (
                                           <li key="efectivo" className="flex justify-between">
                                             <span className="text-muted-foreground">Efectivo:</span>
-                                            <span>S/ {cashTotal.toFixed(2)}</span>
+                                            <span>S/ {(locTotal.totalsByMethod['Efectivo'] || 0).toFixed(2)}</span>
                                           </li>
                                       ) : (
                                         Object.entries(locTotal.totalsByMethod).map(([method, total]) => (
@@ -775,7 +770,7 @@ export default function RegistryPage() {
                                     </ul>
                                     <div className="border-t mt-2 pt-2 flex justify-between font-bold">
                                         <span>Total Sede:</span>
-                                        <span>S/ {isHigueretaStaff ? cashTotal.toFixed(2) : locTotal.totalRevenue.toFixed(2)}</span>
+                                        <span>S/ {isHigueretaStaff ? (locTotal.totalsByMethod['Efectivo'] || 0).toFixed(2) : locTotal.totalRevenue.toFixed(2)}</span>
                                     </div>
                                 </CardContent>
                             </Card>
@@ -943,3 +938,5 @@ export default function RegistryPage() {
     </div>
   );
 }
+
+    
