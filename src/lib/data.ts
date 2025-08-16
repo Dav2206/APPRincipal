@@ -4,7 +4,7 @@
 import type { User, Professional, Patient, Service, Appointment, AppointmentFormData, ProfessionalFormData, AppointmentStatus, ServiceFormData, Contract, PeriodicReminder, ImportantNote, PeriodicReminderFormData, ImportantNoteFormData, AddedServiceItem, AppointmentUpdateFormData, Location, PaymentGroup, GroupingPreset } from '@/types';
 import { USER_ROLES, APPOINTMENT_STATUS, APPOINTMENT_STATUS_DISPLAY, TIME_SLOTS, DAYS_OF_WEEK, LOCATIONS_FALLBACK } from '@/lib/constants';
 import type { LocationId, DayOfWeekId } from '@/lib/constants';
-import { formatISO, parseISO, addDays, setHours, setMinutes, startOfDay, endOfDay, isSameDay as dateFnsIsSameDay, startOfMonth, endOfMonth, subDays, isEqual, isBefore, isAfter, getDate, getYear, getMonth, setMonth, setYear, getHours, addMinutes as dateFnsAddMinutes, isWithinInterval, getDay, format, differenceInCalendarDays, areIntervalsOverlapping, parse } from 'date-fns';
+import { formatISO, parseISO, addDays, setHours, setMinutes, startOfDay, endOfDay, isSameDay as dateFnsIsSameDay, startOfMonth, endOfMonth, subDays, isEqual, isBefore, isAfter, getDate, getYear, getMonth, setMonth, setYear, getHours, addMinutes as dateFnsAddMinutes, isWithinInterval, getDay, format, differenceInCalendarDays, areIntervalsOverlapping, parse, addMonths, addQuarters, addYears } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { firestore, useMockDatabase as globalUseMockDatabase, storage } from './firebase-config'; // Centralized mock flag
 import { collection, addDoc, getDocs, doc, getDoc, updateDoc, query, where, deleteDoc, writeBatch, serverTimestamp, Timestamp, runTransaction, setDoc, QueryConstraint, orderBy, limit, startAfter,getCountFromServer, CollectionReference, DocumentData, documentId } from 'firebase/firestore';
@@ -1517,28 +1517,71 @@ export async function addPeriodicReminder(data: PeriodicReminderFormData): Promi
   return { id: docRef.id, ...newReminderData };
 }
 
-export async function updatePeriodicReminder(id: string, data: Partial<PeriodicReminderFormData> & {id: string, dueDate: string, category: 'insumos' | 'servicios' | 'impuestos' | 'otros'}): Promise<PeriodicReminder | undefined> {
-   const reminderUpdateData: Partial<Omit<PeriodicReminder, 'id' | 'createdAt'>> = {
-    ...data,
-    dueDate: typeof data.dueDate === 'string' ? data.dueDate : formatISO(data.dueDate, { representation: 'date'}),
-    amount: data.amount ?? null,
-    updatedAt: formatISO(new Date()),
-  };
-  delete (reminderUpdateData as any).id;
-
-
-
+export async function updatePeriodicReminder(id: string, data: Partial<PeriodicReminderFormData>): Promise<PeriodicReminder | undefined> {
   if (!firestore) throw new Error("Firestore not initialized for updatePeriodicReminder");
 
-  const docRef = doc(firestore, 'recordatorios', id);
-  const firestoreUpdate: any = {...reminderUpdateData};
-  if (firestoreUpdate.dueDate) firestoreUpdate.dueDate = toFirestoreTimestamp(firestoreUpdate.dueDate);
-  if (firestoreUpdate.updatedAt) firestoreUpdate.updatedAt = toFirestoreTimestamp(firestoreUpdate.updatedAt);
-  
-  await updateDoc(docRef, firestoreUpdate);
-  const updatedDoc = await getDoc(docRef);
-  return updatedDoc.exists() ? { id: updatedDoc.id, ...convertDocumentData(updatedDoc.data()) } as PeriodicReminder : undefined;
+  return runTransaction(firestore, async (transaction) => {
+    const reminderRef = doc(firestore, "recordatorios", id);
+    const reminderSnap = await transaction.get(reminderRef);
+    if (!reminderSnap.exists()) {
+      throw new Error(`Recordatorio con ID ${id} no encontrado.`);
+    }
+    const currentReminder = reminderSnap.data() as PeriodicReminder;
+
+    // First, update the current reminder
+    const updateData: Partial<PeriodicReminder> = {
+      ...data,
+      updatedAt: formatISO(new Date()),
+    };
+    if (data.dueDate) {
+      updateData.dueDate = typeof data.dueDate === 'string' ? data.dueDate : formatISO(data.dueDate, { representation: 'date'});
+    }
+    const firestoreUpdateData: any = {...updateData};
+    if (firestoreUpdateData.dueDate) firestoreUpdateData.dueDate = toFirestoreTimestamp(firestoreUpdateData.dueDate);
+    if (firestoreUpdateData.updatedAt) firestoreUpdateData.updatedAt = toFirestoreTimestamp(firestoreUpdateData.updatedAt);
+    
+    transaction.update(reminderRef, firestoreUpdateData);
+
+    // If marking as paid and it's recurring, create the next one
+    if (data.status === 'paid' && currentReminder.recurrence !== 'once') {
+      const currentDueDate = parseISO(currentReminder.dueDate);
+      let nextDueDate: Date;
+      switch (currentReminder.recurrence) {
+        case 'monthly': nextDueDate = addMonths(currentDueDate, 1); break;
+        case 'quarterly': nextDueDate = addQuarters(currentDueDate, 1); break;
+        case 'annually': nextDueDate = addYears(currentDueDate, 1); break;
+        default: nextDueDate = currentDueDate;
+      }
+      
+      const nextReminderData: Omit<PeriodicReminder, 'id'> = {
+        title: currentReminder.title,
+        description: currentReminder.description,
+        category: currentReminder.category,
+        dueDate: formatISO(nextDueDate, { representation: 'date' }),
+        recurrence: currentReminder.recurrence,
+        amount: currentReminder.amount,
+        status: 'pending',
+        createdAt: formatISO(new Date()),
+        updatedAt: formatISO(new Date()),
+      };
+      
+      const nextReminderFirestoreData: any = {
+          ...nextReminderData,
+          dueDate: toFirestoreTimestamp(nextReminderData.dueDate),
+          createdAt: serverTimestamp(),
+          updatedAt: serverTimestamp(),
+      };
+      
+      const newReminderRef = doc(collection(firestore, "recordatorios"));
+      transaction.set(newReminderRef, nextReminderFirestoreData);
+    }
+    
+    // Return the updated document data for the UI
+    const finalDoc = await getDoc(reminderRef);
+    return finalDoc.exists() ? { id: finalDoc.id, ...convertDocumentData(finalDoc.data()) } as PeriodicReminder : undefined;
+  });
 }
+
 
 export async function deletePeriodicReminder(reminderId: string): Promise<boolean> {
   
@@ -1770,6 +1813,7 @@ export async function mergePatients(primaryPatientId: string, duplicateIds: stri
 }
 
 // --- End Maintenance ---
+
 
 
 

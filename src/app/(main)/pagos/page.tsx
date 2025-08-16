@@ -397,47 +397,8 @@ export default function PaymentsPage() {
 
   const handleTogglePaidStatus = async (reminder: PeriodicReminder) => {
     const newStatus = reminder.status === 'pending' ? 'paid' : 'pending';
-
-    // If marking as paid and it's a recurring reminder, create the next one.
-    if (newStatus === 'paid' && reminder.recurrence !== 'once') {
-        const currentDueDate = parseISO(reminder.dueDate);
-        let nextDueDate: Date;
-
-        switch (reminder.recurrence) {
-            case 'monthly':
-                nextDueDate = addMonths(currentDueDate, 1);
-                break;
-            case 'quarterly':
-                nextDueDate = addQuarters(currentDueDate, 1);
-                break;
-            case 'annually':
-                nextDueDate = addYears(currentDueDate, 1);
-                break;
-            default:
-                nextDueDate = currentDueDate; // Should not happen
-        }
-
-        const nextReminder: PeriodicReminderFormData = {
-            title: reminder.title,
-            description: reminder.description,
-            category: reminder.category,
-            dueDate: nextDueDate,
-            recurrence: reminder.recurrence,
-            amount: reminder.amount,
-            status: 'pending',
-        };
-        
-        try {
-            await addPeriodicReminder(nextReminder);
-            toast({ title: "Próximo Pago Generado", description: `Se ha creado el pago recurrente para ${format(nextDueDate, "PPP", { locale: es })}.` });
-        } catch (error) {
-             toast({ title: "Error de Recurrencia", description: "No se pudo generar el siguiente pago recurrente.", variant: "destructive" });
-        }
-    }
-
     try {
-      // Always update the status of the current reminder
-      await updatePeriodicReminder(reminder.id, { ...reminder, status: newStatus, dueDate: reminder.dueDate, category: reminder.category || 'otros' });
+      await updatePeriodicReminder(reminder.id, { ...reminder, status: newStatus });
       toast({ title: "Estado Actualizado", description: `El pago "${reminder.title}" ahora está ${newStatus === 'paid' ? 'pagado' : 'pendiente'}.` });
       fetchReminders();
     } catch (error) {
@@ -448,10 +409,10 @@ export default function PaymentsPage() {
   const onSubmitReminderForm = async (data: PeriodicReminderFormData) => {
     try {
       if (editingReminder) {
-        await updatePeriodicReminder(editingReminder.id, { ...data, id: editingReminder.id, dueDate: format(data.dueDate, "yyyy-MM-dd") });
+        await updatePeriodicReminder(editingReminder.id, { ...data, id: editingReminder.id });
         toast({ title: "Pago Actualizado", description: `"${data.title}" ha sido actualizado.` });
       } else {
-        await addPeriodicReminder({ ...data, dueDate: format(data.dueDate, "yyyy-MM-dd") });
+        await addPeriodicReminder(data);
         toast({ title: "Pago Añadido", description: `"${data.title}" ha sido añadido.` });
       }
       setIsReminderFormOpen(false);
