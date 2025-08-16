@@ -21,6 +21,12 @@ export interface Location {
     paymentMethods: PaymentMethod[];
 }
 
+export interface PaymentGroup {
+  id: string;
+  name: string;
+  methods: string[];
+}
+
 
 export interface Contract {
   id: string;

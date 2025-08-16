@@ -1,7 +1,6 @@
 
-
 // src/lib/data.ts
-import type { User, Professional, Patient, Service, Appointment, AppointmentFormData, ProfessionalFormData, AppointmentStatus, ServiceFormData, Contract, PeriodicReminder, ImportantNote, PeriodicReminderFormData, ImportantNoteFormData, AddedServiceItem, AppointmentUpdateFormData, Location } from '@/types';
+import type { User, Professional, Patient, Service, Appointment, AppointmentFormData, ProfessionalFormData, AppointmentStatus, ServiceFormData, Contract, PeriodicReminder, ImportantNote, PeriodicReminderFormData, ImportantNoteFormData, AddedServiceItem, AppointmentUpdateFormData, Location, PaymentGroup } from '@/types';
 import { USER_ROLES, APPOINTMENT_STATUS, APPOINTMENT_STATUS_DISPLAY, TIME_SLOTS, DAYS_OF_WEEK, LOCATIONS_FALLBACK } from '@/lib/constants';
 import type { LocationId, DayOfWeekId } from '@/lib/constants';
 import { formatISO, parseISO, addDays, setHours, setMinutes, startOfDay, endOfDay, isSameDay as dateFnsIsSameDay, startOfMonth, endOfMonth, subDays, isEqual, isBefore, isAfter, getDate, getYear, getMonth, setMonth, setYear, getHours, addMinutes as dateFnsAddMinutes, isWithinInterval, getDay, format, differenceInCalendarDays, areIntervalsOverlapping, parse } from 'date-fns';
@@ -1607,6 +1606,34 @@ export async function deleteImportantNote(noteId: string): Promise<boolean> {
 }
 // --- End Important Notes ---
 
+// --- Configuration Functions ---
+export async function getPaymentGroups(): Promise<PaymentGroup[]> {
+  if (!firestore) return [];
+  try {
+    const configDocRef = doc(firestore, 'configuracion', 'paymentGroups');
+    const docSnap = await getDoc(configDocRef);
+    if (docSnap.exists()) {
+      return (docSnap.data().groups || []) as PaymentGroup[];
+    }
+    return [];
+  } catch (error) {
+    console.error("Error fetching payment groups:", error);
+    return [];
+  }
+}
+
+export async function savePaymentGroups(groups: PaymentGroup[]): Promise<void> {
+  if (!firestore) throw new Error("Firestore not initialized.");
+  try {
+    const configDocRef = doc(firestore, 'configuracion', 'paymentGroups');
+    await setDoc(configDocRef, { groups });
+  } catch (error) {
+    console.error("Error saving payment groups:", error);
+    throw error;
+  }
+}
+
+
 // --- Maintenance Functions ---
 export async function cleanupOrphanedTravelBlocks(): Promise<number> {
   if (!firestore) {
@@ -1729,6 +1756,7 @@ export async function mergePatients(primaryPatientId: string, duplicateIds: stri
 }
 
 // --- End Maintenance ---
+
 
 
 
