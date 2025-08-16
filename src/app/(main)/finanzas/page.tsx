@@ -14,7 +14,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow, TableFoo
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { format, startOfMonth, endOfMonth, getYear, getMonth, setYear, setMonth } from 'date-fns';
 import { es } from 'date-fns/locale';
-import { Landmark, Loader2, AlertTriangle, ListPlus, Trash2, Filter, PlusCircle, Pencil, Check, X, PieChartIcon } from 'lucide-react';
+import { Landmark, Loader2, AlertTriangle, ListPlus, Trash2, Filter, PlusCircle, Pencil, Check, X, PieChartIcon, Group, Layers } from 'lucide-react';
 import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
 import { useRouter } from 'next/navigation';
@@ -77,6 +77,11 @@ export default function FinancesPage() {
   const [activeChartSlices, setActiveChartSlices] = useState<string[]>([]);
   const [activeDonutSlice, setActiveDonutSlice] = useState<string | null>(null);
 
+  // State for manual grouping in chart
+  const [chartGroups, setChartGroups] = useState<Record<string, string[]>>({});
+  const [newGroupName, setNewGroupName] = useState("");
+  const [draggedMethod, setDraggedMethod] = useState<string | null>(null);
+
 
   useEffect(() => {
     async function loadLocations() {
@@ -97,20 +102,6 @@ export default function FinancesPage() {
   const allAvailablePaymentGroups = useMemo(() => {
     const allGroups = new Set<string>();
     
-    // Consider payment methods from the current state, filtered by the selected location
-    const relevantLocations = (adminSelectedLocation === 'all' || !adminSelectedLocation)
-      ? Object.keys(paymentMethodsByLocation) as LocationId[]
-      : [adminSelectedLocation as LocationId];
-
-    relevantLocations.forEach(locId => {
-      const methodsForLocation = paymentMethodsByLocation[locId] || [];
-      methodsForLocation.forEach(method => {
-        const baseType = method.split(' - ')[0].trim();
-        allGroups.add(baseType);
-      });
-    });
-
-    // Also consider payment methods from historical completed appointments (these are already filtered by location)
     completedAppointments.forEach(appt => {
       if (appt.paymentMethod) {
           const baseType = appt.paymentMethod.split(' - ')[0].trim();
@@ -119,7 +110,7 @@ export default function FinancesPage() {
     });
     
     return Array.from(allGroups).sort((a,b) => a.localeCompare(b));
-  }, [paymentMethodsByLocation, completedAppointments, adminSelectedLocation]);
+  }, [completedAppointments]);
   
   useEffect(() => {
     setSelectedPaymentGroups(allAvailablePaymentGroups);
@@ -236,22 +227,43 @@ export default function FinancesPage() {
     return totals;
   }, [reportData, filteredPaymentGroups]);
 
-  const chartData = useMemo(() => {
-    return Object.entries(totalsByPaymentGroup)
-      .map(([name, value]) => ({ name, value: value || 0, fill: `var(--color-${name.toLowerCase().replace(/ /g, "_")})` }))
+  const groupedChartData = useMemo(() => {
+    const groupedTotals: Record<string, number> = {};
+    const unassignedMethods: Record<string, number> = { ...totalsByPaymentGroup };
+
+    Object.entries(chartGroups).forEach(([groupName, methodsInGroup]) => {
+      groupedTotals[groupName] = 0;
+      methodsInGroup.forEach(method => {
+        if (unassignedMethods[method]) {
+          groupedTotals[groupName] += unassignedMethods[method];
+          delete unassignedMethods[method];
+        }
+      });
+    });
+
+    const finalChartData = Object.entries(groupedTotals).map(([name, value]) => ({ name, value }));
+    Object.entries(unassignedMethods).forEach(([name, value]) => {
+      if (value > 0) {
+        finalChartData.push({ name, value });
+      }
+    });
+
+    return finalChartData
+      .map(item => ({ ...item, fill: `var(--color-${item.name.toLowerCase().replace(/ /g, "_")})` }))
       .filter(item => item.value > 0);
-  }, [totalsByPaymentGroup]);
+  }, [totalsByPaymentGroup, chartGroups]);
+
 
   const chartConfig = useMemo(() => {
     const config: ChartConfig = {};
-    chartData.forEach((item, index) => {
+    groupedChartData.forEach((item, index) => {
       config[item.name.toLowerCase().replace(/ /g, "_")] = {
         label: item.name,
         color: `hsl(var(--chart-${(index % 5) + 1}))`,
       };
     });
     return config;
-  }, [chartData]);
+  }, [groupedChartData]);
 
 
   const handleAddNewMethod = (locationId: LocationId) => {
@@ -364,6 +376,41 @@ export default function FinancesPage() {
     return locations.filter(loc => loc.id === locationFilter);
   }, [locationFilter, locations]);
 
+  // Chart Grouping Handlers
+  const handleCreateGroup = () => {
+    if (newGroupName && !chartGroups[newGroupName]) {
+      setChartGroups(prev => ({ ...prev, [newGroupName]: [] }));
+      setNewGroupName("");
+    }
+  };
+
+  const handleDropOnGroup = (groupName: string) => {
+    if (draggedMethod) {
+      // Remove from any existing group first
+      const newGroups = { ...chartGroups };
+      Object.keys(newGroups).forEach(g => {
+        newGroups[g] = newGroups[g].filter(m => m !== draggedMethod);
+      });
+      // Add to new group
+      newGroups[groupName] = [...(newGroups[groupName] || []), draggedMethod];
+      setChartGroups(newGroups);
+      setDraggedMethod(null);
+    }
+  };
+  
+  const handleRemoveFromGroup = (method: string, groupName: string) => {
+    setChartGroups(prev => ({
+        ...prev,
+        [groupName]: prev[groupName].filter(m => m !== method)
+    }));
+  };
+
+  const handleDeleteGroup = (groupName: string) => {
+    const newGroups = {...chartGroups};
+    delete newGroups[groupName];
+    setChartGroups(newGroups);
+  };
+
 
   if (authIsLoading || !user || (user.role !== USER_ROLES.CONTADOR && user.role !== USER_ROLES.ADMIN)) {
     return (
@@ -376,8 +423,8 @@ export default function FinancesPage() {
   
   const id = "donut-interactive"
   const totalValue = React.useMemo(() => {
-    return chartData.reduce((acc, curr) => acc + curr.value, 0)
-  }, [chartData])
+    return groupedChartData.reduce((acc, curr) => acc + curr.value, 0)
+  }, [groupedChartData])
 
 
   return (
@@ -508,7 +555,7 @@ export default function FinancesPage() {
               <TabsContent value="chart">
                 {isLoading ? (
                   <div className="flex justify-center items-center h-40"><Loader2 className="h-8 w-8 animate-spin" /></div>
-                ) : chartData.length === 0 ? (
+                ) : Object.keys(totalsByPaymentGroup).length === 0 ? (
                   <div className="p-6 border rounded-lg bg-secondary/30 text-center mt-4">
                       <AlertTriangle className="h-10 w-10 text-muted-foreground mx-auto mb-2" />
                       <p className="text-muted-foreground">No hay datos suficientes para mostrar el gráfico.</p>
@@ -518,7 +565,7 @@ export default function FinancesPage() {
                       <CardHeader>
                           <CardTitle className="flex items-center gap-2"><PieChartIcon />Distribución de Ingresos por Grupo de Pago</CardTitle>
                           <CardDescription>
-                              Visualización del total de ingresos por tipo de pago para la selección actual. Los pagos se agrupan por su primera palabra (ej: "Tarjeta - Visa" se agrupa como "Tarjeta").
+                              Visualización del total de ingresos por tipo de pago. Puede crear grupos personalizados para consolidar la vista.
                           </CardDescription>
                       </CardHeader>
                       <CardContent className="flex-1 pb-0">
@@ -533,12 +580,12 @@ export default function FinancesPage() {
                                 content={<ChartTooltipContent hideLabel />}
                               />
                               <Pie
-                                data={chartData.filter((d) => activeChartSlices.includes(d.name))}
+                                data={groupedChartData.filter((d) => activeChartSlices.includes(d.name))}
                                 dataKey="value"
                                 nameKey="name"
                                 innerRadius="60%"
                                 strokeWidth={5}
-                                activeIndex={chartData.findIndex((d) => d.name === activeDonutSlice)}
+                                activeIndex={groupedChartData.findIndex((d) => d.name === activeDonutSlice)}
                                 activeShape={({ ...props }) => <Sector {...props} cornerRadius={5} />}
                                 onMouseUp={(data) => {
                                   if (activeDonutSlice === data.name) {
@@ -548,7 +595,7 @@ export default function FinancesPage() {
                                   }
                                 }}
                               >
-                                {chartData.map((entry) => (
+                                {groupedChartData.map((entry) => (
                                   <Cell
                                       key={entry.name}
                                       fill={entry.fill}
@@ -593,12 +640,64 @@ export default function FinancesPage() {
                             </PieChart>
                           </ChartContainer>
                       </CardContent>
-                      <CardFooter className="flex-col gap-2 text-sm">
-                          <div className="flex items-center gap-2 font-medium leading-none">
-                              Mostrando total de {activeChartSlices.length} de {chartData.length} grupos.
-                          </div>
-                           <div className="leading-none text-muted-foreground">
+                      <CardFooter className="flex-col gap-4 text-sm">
+                          <div className="leading-none text-muted-foreground text-center">
                               Clic en la leyenda para ocultar/mostrar un grupo. Clic en una porción de la dona para resaltarla.
+                          </div>
+                          {/* Manual Grouping UI */}
+                          <div className="w-full p-4 border rounded-lg mt-4">
+                            <h4 className="font-semibold mb-2 flex items-center gap-2"><Layers />Gestor de Grupos del Gráfico</h4>
+                             <div className="flex gap-2 mb-4">
+                                <Input 
+                                    placeholder="Nombre del nuevo grupo" 
+                                    value={newGroupName} 
+                                    onChange={(e) => setNewGroupName(e.target.value)}
+                                />
+                                <Button onClick={handleCreateGroup}>Crear Grupo</Button>
+                            </div>
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <div>
+                                    <h5 className="text-xs font-bold mb-2">MÉTODOS DE PAGO SIN AGRUPAR</h5>
+                                    <div className="space-y-1">
+                                        {Object.keys(totalsByPaymentGroup)
+                                          .filter(method => !Object.values(chartGroups).flat().includes(method))
+                                          .map(method => (
+                                            <div 
+                                              key={method} 
+                                              className="text-xs p-1.5 border rounded bg-background cursor-grab"
+                                              draggable
+                                              onDragStart={() => setDraggedMethod(method)}
+                                            >
+                                                {method}
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+                                <div className="space-y-2">
+                                     <h5 className="text-xs font-bold mb-2">GRUPOS PERSONALIZADOS</h5>
+                                     {Object.keys(chartGroups).map(groupName => (
+                                        <div 
+                                            key={groupName}
+                                            className="p-2 border rounded bg-muted/50"
+                                            onDragOver={(e) => e.preventDefault()}
+                                            onDrop={() => handleDropOnGroup(groupName)}
+                                        >
+                                            <div className="flex justify-between items-center mb-1">
+                                              <h6 className="text-xs font-semibold flex items-center gap-1"><Group size={14}/> {groupName}</h6>
+                                              <Button variant="ghost" size="icon" className="h-5 w-5" onClick={() => handleDeleteGroup(groupName)}><Trash2 size={12}/></Button>
+                                            </div>
+                                            <div className="space-y-1 min-h-[20px]">
+                                                {chartGroups[groupName].map(method => (
+                                                    <div key={method} className="flex items-center justify-between text-xs p-1 bg-card rounded">
+                                                        <span>{method}</span>
+                                                        <Button variant="ghost" size="icon" className="h-5 w-5" onClick={() => handleRemoveFromGroup(method, groupName)}><X size={12}/></Button>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
                           </div>
                       </CardFooter>
                   </Card>
@@ -713,5 +812,3 @@ export default function FinancesPage() {
     </div>
   );
 }
-
-    
