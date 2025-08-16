@@ -92,13 +92,20 @@ export default function FinancesPage() {
   const allAvailablePaymentGroups = useMemo(() => {
     const allGroups = new Set<string>();
     
-    // Consider payment methods from the current state.
-    Object.values(paymentMethodsByLocation).flat().forEach(method => {
+    // Consider payment methods from the current state, filtered by the selected location
+    const relevantLocations = (adminSelectedLocation === 'all' || !adminSelectedLocation)
+      ? Object.keys(paymentMethodsByLocation) as LocationId[]
+      : [adminSelectedLocation as LocationId];
+
+    relevantLocations.forEach(locId => {
+      const methodsForLocation = paymentMethodsByLocation[locId] || [];
+      methodsForLocation.forEach(method => {
         const baseType = method.split(' - ')[0].trim();
         allGroups.add(baseType);
+      });
     });
 
-    // Also consider payment methods from historical completed appointments
+    // Also consider payment methods from historical completed appointments (these are already filtered by location)
     completedAppointments.forEach(appt => {
       if (appt.paymentMethod) {
           const baseType = appt.paymentMethod.split(' - ')[0].trim();
@@ -107,7 +114,7 @@ export default function FinancesPage() {
     });
     
     return Array.from(allGroups).sort((a,b) => a.localeCompare(b));
-  }, [paymentMethodsByLocation, completedAppointments]);
+  }, [paymentMethodsByLocation, completedAppointments, adminSelectedLocation]);
   
   useEffect(() => {
     setSelectedPaymentGroups(allAvailablePaymentGroups);
@@ -627,5 +634,3 @@ export default function FinancesPage() {
     </div>
   );
 }
-
-    
