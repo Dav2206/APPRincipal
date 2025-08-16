@@ -14,12 +14,22 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow, TableFoo
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { format, startOfMonth, endOfMonth, getYear, getMonth, setYear, setMonth } from 'date-fns';
 import { es } from 'date-fns/locale';
-import { Landmark, Loader2, AlertTriangle, ListPlus, Trash2, Filter, PlusCircle, Pencil, Check, X } from 'lucide-react';
+import { Landmark, Loader2, AlertTriangle, ListPlus, Trash2, Filter, PlusCircle, Pencil, Check, X, PieChartIcon } from 'lucide-react';
 import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
 import { useRouter } from 'next/navigation';
 import { Input } from '@/components/ui/input';
 import { Separator } from '@/components/ui/separator';
+import { Pie, PieChart, Cell } from "recharts"
+import {
+  ChartContainer,
+  ChartTooltip,
+  ChartTooltipContent,
+  ChartLegend,
+  ChartLegendContent,
+  type ChartConfig,
+} from "@/components/ui/chart"
+
 
 type ReportRow = {
   locationId: LocationId;
@@ -198,6 +208,23 @@ export default function FinancesPage() {
     return totals;
   }, [reportData, allAvailablePaymentTypes]);
 
+  const chartData = useMemo(() => {
+    return Object.entries(totalsByAllMethods)
+      .map(([name, value]) => ({ name, value: value || 0, fill: `var(--color-${name.toLowerCase().replace(/ /g, "_")})` }))
+      .filter(item => item.value > 0);
+  }, [totalsByAllMethods]);
+
+  const chartConfig = useMemo(() => {
+    const config: ChartConfig = {};
+    chartData.forEach((item, index) => {
+      config[item.name.toLowerCase().replace(/ /g, "_")] = {
+        label: item.name,
+        color: `hsl(var(--chart-${(index % 5) + 1}))`,
+      };
+    });
+    return config;
+  }, [chartData]);
+
 
   const handleAddNewMethod = (locationId: LocationId) => {
     const newMethodName = newMethodInputs[locationId]?.trim();
@@ -361,6 +388,7 @@ export default function FinancesPage() {
                 <p className="text-muted-foreground">No se encontraron ingresos para el periodo y selección actual.</p>
             </div>
           ) : (
+            <>
             <Table>
               <TableHeader>
                 <TableRow>
@@ -398,6 +426,45 @@ export default function FinancesPage() {
                 </TableRow>
               </TableFooter>
             </Table>
+            {chartData.length > 0 && (
+                <Card className="mt-8">
+                    <CardHeader>
+                        <CardTitle className="flex items-center gap-2"><PieChartIcon />Distribución de Ingresos por Método de Pago</CardTitle>
+                        <CardDescription>
+                            Visualización del total de ingresos por tipo de pago para la selección actual.
+                        </CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                        <ChartContainer
+                            config={chartConfig}
+                            className="mx-auto aspect-square max-h-[300px]"
+                        >
+                            <PieChart>
+                            <ChartTooltip
+                                cursor={false}
+                                content={<ChartTooltipContent hideLabel />}
+                            />
+                            <Pie
+                                data={chartData}
+                                dataKey="value"
+                                nameKey="name"
+                                innerRadius="60%"
+                                strokeWidth={5}
+                            >
+                                {chartData.map((entry, index) => (
+                                    <Cell key={`cell-${index}`} fill={entry.fill} />
+                                ))}
+                            </Pie>
+                            <ChartLegend
+                                content={<ChartLegendContent nameKey="name" />}
+                                className="-mt-2"
+                            />
+                            </PieChart>
+                        </ChartContainer>
+                    </CardContent>
+                </Card>
+            )}
+            </>
           )}
         </CardContent>
       </Card>
@@ -507,5 +574,3 @@ export default function FinancesPage() {
     </div>
   );
 }
-
-    
