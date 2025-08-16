@@ -35,6 +35,7 @@ import {
   AlertDialogCancel,
   AlertDialogContent,
   AlertDialogDescription,
+  AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
   AlertDialogTrigger,
@@ -660,7 +661,7 @@ export default function PaymentsPage() {
                 )}
               />
               <FormField
-                control={reminderForm.control}
+                control={form.control}
                 name="description"
                 render={({ field }) => (
                   <FormItem>
