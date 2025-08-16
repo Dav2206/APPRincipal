@@ -34,7 +34,7 @@ import {
 type ReportRow = {
   locationId: LocationId;
   locationName: string;
-  totalsByMethod: Partial<Record<PaymentMethod, number>>;
+  totalsByMethod: Partial<Record<string, number>>; // Changed from PaymentMethod to string for group names
   locationTotal: number;
 };
 
@@ -86,26 +86,25 @@ export default function FinancesPage() {
     loadLocations();
   }, []);
 
-  const allAvailablePaymentTypes = useMemo(() => {
-    const allTypes = new Set<string>();
+  const allAvailablePaymentGroups = useMemo(() => {
+    const allGroups = new Set<string>();
     
-    // Consider payment methods from the current state, which includes newly added (but unsaved) ones.
+    // Consider payment methods from the current state.
     Object.values(paymentMethodsByLocation).flat().forEach(method => {
         const baseType = method.split(' - ')[0].trim();
-        allTypes.add(baseType);
+        allGroups.add(baseType);
     });
 
     // Also consider payment methods from historical completed appointments
     completedAppointments.forEach(appt => {
-      const locationMatches = !adminSelectedLocation || adminSelectedLocation === 'all' || appt.locationId === adminSelectedLocation;
-      if (locationMatches && appt.paymentMethod) {
+      if (appt.paymentMethod) {
           const baseType = appt.paymentMethod.split(' - ')[0].trim();
-          allTypes.add(baseType);
+          allGroups.add(baseType);
       }
     });
     
-    return Array.from(allTypes).sort((a,b) => a.localeCompare(b));
-  }, [paymentMethodsByLocation, completedAppointments, adminSelectedLocation]);
+    return Array.from(allGroups).sort((a,b) => a.localeCompare(b));
+  }, [paymentMethodsByLocation, completedAppointments]);
 
 
   useEffect(() => {
@@ -160,11 +159,11 @@ export default function FinancesPage() {
             locationTotal: 0
           };
           
-          const basePaymentType = appt.paymentMethod.split(' - ')[0].trim();
+          const paymentGroup = appt.paymentMethod.split(' - ')[0].trim();
 
           // Sum main service amount
           if (appt.amountPaid && appt.amountPaid > 0) {
-            entry.totalsByMethod[basePaymentType] = (entry.totalsByMethod[basePaymentType] || 0) + appt.amountPaid;
+            entry.totalsByMethod[paymentGroup] = (entry.totalsByMethod[paymentGroup] || 0) + appt.amountPaid;
             entry.locationTotal += appt.amountPaid;
           }
           
@@ -172,7 +171,7 @@ export default function FinancesPage() {
           if (appt.addedServices) {
             for (const addedSvc of appt.addedServices) {
               if (addedSvc.amountPaid && addedSvc.amountPaid > 0) {
-                entry.totalsByMethod[basePaymentType] = (entry.totalsByMethod[basePaymentType] || 0) + addedSvc.amountPaid;
+                entry.totalsByMethod[paymentGroup] = (entry.totalsByMethod[paymentGroup] || 0) + addedSvc.amountPaid;
                 entry.locationTotal += addedSvc.amountPaid;
               }
             }
@@ -200,19 +199,19 @@ export default function FinancesPage() {
     return reportData.reduce((sum, row) => sum + row.locationTotal, 0);
   }, [reportData]);
   
-  const totalsByAllMethods = useMemo(() => {
+  const totalsByPaymentGroup = useMemo(() => {
     const totals: Partial<Record<string, number>> = {};
-    allAvailablePaymentTypes.forEach(type => {
-        totals[type] = reportData.reduce((sum, row) => sum + (row.totalsByMethod[type] || 0), 0);
+    allAvailablePaymentGroups.forEach(group => {
+        totals[group] = reportData.reduce((sum, row) => sum + (row.totalsByMethod[group] || 0), 0);
     });
     return totals;
-  }, [reportData, allAvailablePaymentTypes]);
+  }, [reportData, allAvailablePaymentGroups]);
 
   const chartData = useMemo(() => {
-    return Object.entries(totalsByAllMethods)
+    return Object.entries(totalsByPaymentGroup)
       .map(([name, value]) => ({ name, value: value || 0, fill: `var(--color-${name.toLowerCase().replace(/ /g, "_")})` }))
       .filter(item => item.value > 0);
-  }, [totalsByAllMethods]);
+  }, [totalsByPaymentGroup]);
 
   const chartConfig = useMemo(() => {
     const config: ChartConfig = {};
@@ -393,7 +392,7 @@ export default function FinancesPage() {
               <TableHeader>
                 <TableRow>
                   <TableHead>Sede</TableHead>
-                  {allAvailablePaymentTypes.map(method => <TableHead key={method} className="text-right">{method}</TableHead>)}
+                  {allAvailablePaymentGroups.map(group => <TableHead key={group} className="text-right">{group}</TableHead>)}
                   <TableHead className="text-right font-bold">Total Sede</TableHead>
                 </TableRow>
               </TableHeader>
@@ -401,9 +400,9 @@ export default function FinancesPage() {
                 {reportData.map(row => (
                   <TableRow key={row.locationId}>
                     <TableCell className="font-medium">{row.locationName}</TableCell>
-                    {allAvailablePaymentTypes.map(type => (
-                      <TableCell key={type} className="text-right">
-                        {(row.totalsByMethod[type] || 0).toFixed(2)}
+                    {allAvailablePaymentGroups.map(group => (
+                      <TableCell key={group} className="text-right">
+                        {(row.totalsByMethod[group] || 0).toFixed(2)}
                       </TableCell>
                     ))}
                     <TableCell className="text-right font-bold">
@@ -415,9 +414,9 @@ export default function FinancesPage() {
               <TableFooter>
                 <TableRow className="bg-muted/80 font-bold">
                   <TableCell>Total General</TableCell>
-                  {allAvailablePaymentTypes.map(type => (
-                    <TableCell key={type} className="text-right">
-                      {(totalsByAllMethods[type] || 0).toFixed(2)}
+                  {allAvailablePaymentGroups.map(group => (
+                    <TableCell key={group} className="text-right">
+                      {(totalsByPaymentGroup[group] || 0).toFixed(2)}
                     </TableCell>
                   ))}
                   <TableCell className="text-right text-lg">
@@ -429,9 +428,9 @@ export default function FinancesPage() {
             {chartData.length > 0 && (
                 <Card className="mt-8">
                     <CardHeader>
-                        <CardTitle className="flex items-center gap-2"><PieChartIcon />Distribución de Ingresos por Método de Pago</CardTitle>
+                        <CardTitle className="flex items-center gap-2"><PieChartIcon />Distribución de Ingresos por Grupo de Pago</CardTitle>
                         <CardDescription>
-                            Visualización del total de ingresos por tipo de pago para la selección actual.
+                            Visualización del total de ingresos por tipo de pago para la selección actual. Los pagos se agrupan por su primera palabra (ej. "Tarjeta - Visa" se agrupa como "Tarjeta").
                         </CardDescription>
                     </CardHeader>
                     <CardContent>
@@ -503,7 +502,7 @@ export default function FinancesPage() {
                             onChange={(e) => setNewMethodInputs(prev => ({...prev, [location.id]: e.target.value}))}
                         />
                          <p className="text-xs text-muted-foreground mt-1">
-                            Use el formato "Tipo - Detalle" para agrupar (ej: Yape - Cuenta A).
+                            Para agrupar, use un prefijo común (ej: "Yape - Cuenta A", "Yape - Cuenta B").
                         </p>
                       </div>
                       <Button onClick={() => handleAddNewMethod(location.id)} size="sm">
