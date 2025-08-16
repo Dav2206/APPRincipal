@@ -352,10 +352,27 @@ export default function PercentagesPage() {
                     <TableHead className="text-center">Citas en Sede Actual</TableHead>
                     <TableHead className="text-right">Ingreso en Sede Actual (S/)</TableHead>
                     <TableHead className="text-right font-bold">Ingreso Total Quincenal (S/)</TableHead>
+                    <TableHead className="text-right">
+                       <div className="flex items-center justify-end gap-1">
+                          Promedio
+                          <TooltipProvider>
+                              <Tooltip>
+                                  <TooltipTrigger asChild>
+                                      <Info className="h-3 w-3 text-muted-foreground cursor-help" />
+                                  </TooltipTrigger>
+                                  <TooltipContent>
+                                      <p className="text-xs">(Ingreso Total / 52.5) / Días Laborados</p>
+                                  </TooltipContent>
+                              </Tooltip>
+                          </TooltipProvider>
+                        </div>
+                    </TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {reportData.map((item) => (
+                  {reportData.map((item) => {
+                    const average = item.workedDaysInSede > 0 ? (item.totalIncomeAllLocations / 52.5) / item.workedDaysInSede : 0;
+                    return (
                     <TableRow key={item.professionalId}>
                       <TableCell className="font-medium">{item.professionalName}</TableCell>
                       <TableCell className="text-center">{item.workedDaysInSede}</TableCell>
@@ -366,8 +383,12 @@ export default function PercentagesPage() {
                        <TableCell className="text-right font-bold text-lg">
                         {item.totalIncomeAllLocations.toFixed(2)}
                       </TableCell>
+                      <TableCell className="text-right">
+                        {average.toFixed(2)}
+                      </TableCell>
                     </TableRow>
-                  ))}
+                    );
+                  })}
                 </TableBody>
               </Table>
             </div>
