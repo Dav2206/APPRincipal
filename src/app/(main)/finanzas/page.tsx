@@ -30,6 +30,7 @@ import {
   type ChartConfig,
 } from "@/components/ui/chart"
 import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuCheckboxItem, DropdownMenuLabel, DropdownMenuSeparator } from '@/components/ui/dropdown-menu';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 
 
 type ReportRow = {
@@ -451,139 +452,159 @@ export default function FinancesPage() {
           )}
         </CardHeader>
         <CardContent>
-          {isLoading ? (
-            <div className="flex justify-center items-center h-40"><Loader2 className="h-8 w-8 animate-spin" /></div>
-          ) : reportData.length === 0 ? (
-            <div className="p-6 border rounded-lg bg-secondary/30 text-center">
-                <AlertTriangle className="h-10 w-10 text-muted-foreground mx-auto mb-2" />
-                <p className="text-muted-foreground">No se encontraron ingresos para el periodo y selección actual.</p>
-            </div>
-          ) : (
-            <>
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Sede</TableHead>
-                  {filteredPaymentGroups.map(group => <TableHead key={group} className="text-right">{group}</TableHead>)}
-                  <TableHead className="text-right font-bold">Total Sede (Filtrado)</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {reportData.map(row => (
-                  <TableRow key={row.locationId}>
-                    <TableCell className="font-medium">{row.locationName}</TableCell>
-                    {filteredPaymentGroups.map(group => (
-                      <TableCell key={group} className="text-right">
-                        {(row.totalsByMethod[group] || 0).toFixed(2)}
-                      </TableCell>
-                    ))}
-                    <TableCell className="text-right font-bold">
-                      {filteredPaymentGroups.reduce((sum, group) => sum + (row.totalsByMethod[group] || 0), 0).toFixed(2)}
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-              <TableFooterComponent>
-                <TableRow className="bg-muted/80 font-bold">
-                  <TableCell>Total General (Filtrado)</TableCell>
-                  {filteredPaymentGroups.map(group => (
-                    <TableCell key={group} className="text-right">
-                      {(totalsByPaymentGroup[group] || 0).toFixed(2)}
-                    </TableCell>
-                  ))}
-                  <TableCell className="text-right text-lg">
-                    S/ {grandTotal.toFixed(2)}
-                  </TableCell>
-                </TableRow>
-              </TableFooterComponent>
-            </Table>
-            {chartData.length > 0 && (
-                <Card className="mt-8">
-                    <CardHeader>
-                        <CardTitle className="flex items-center gap-2"><PieChartIcon />Distribución de Ingresos por Grupo de Pago</CardTitle>
-                        <CardDescription>
-                            Visualización del total de ingresos por tipo de pago para la selección actual. Los pagos se agrupan por su primera palabra (ej. "Tarjeta - Visa" se agrupa como "Tarjeta").
-                        </CardDescription>
-                    </CardHeader>
-                    <CardContent className="flex-1 pb-0">
-                        <ChartContainer
-                          id={id}
-                          config={chartConfig}
-                          className="mx-auto aspect-square h-[250px]"
-                        >
-                          <PieChart>
-                            <ChartTooltip
-                              cursor={false}
-                              content={<ChartTooltipContent hideLabel />}
-                            />
-                            <Pie
-                              data={chartData.filter((d) => activeChartSlices.includes(d.name))}
-                              dataKey="value"
-                              nameKey="name"
-                              innerRadius="60%"
-                              strokeWidth={5}
-                              activeIndex={
-                                chartData.findIndex((d) => d.name === activeDonutSlice)
-                              }
-                              activeShape={({
-                                ...props
-                              }) => (
-                                <g>
-                                  <Sector {...props} cornerRadius={5}/>
-                                </g>
-                              )}
-                            >
-                               {chartData.map((entry) => (
-                                <Cell
-                                    key={entry.name}
-                                    fill={entry.fill}
-                                    className="outline-none"
-                                />
+            <Tabs defaultValue="table" className="w-full">
+              <TabsList>
+                <TabsTrigger value="table">Tabla de Ingresos</TabsTrigger>
+                <TabsTrigger value="chart">Gráfico de Distribución</TabsTrigger>
+              </TabsList>
+              <TabsContent value="table">
+                {isLoading ? (
+                  <div className="flex justify-center items-center h-40"><Loader2 className="h-8 w-8 animate-spin" /></div>
+                ) : reportData.length === 0 ? (
+                  <div className="p-6 border rounded-lg bg-secondary/30 text-center mt-4">
+                      <AlertTriangle className="h-10 w-10 text-muted-foreground mx-auto mb-2" />
+                      <p className="text-muted-foreground">No se encontraron ingresos para el periodo y selección actual.</p>
+                  </div>
+                ) : (
+                  <Table className="mt-4">
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Sede</TableHead>
+                        {filteredPaymentGroups.map(group => <TableHead key={group} className="text-right">{group}</TableHead>)}
+                        <TableHead className="text-right font-bold">Total Sede (Filtrado)</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {reportData.map(row => (
+                        <TableRow key={row.locationId}>
+                          <TableCell className="font-medium">{row.locationName}</TableCell>
+                          {filteredPaymentGroups.map(group => (
+                            <TableCell key={group} className="text-right">
+                              {(row.totalsByMethod[group] || 0).toFixed(2)}
+                            </TableCell>
+                          ))}
+                          <TableCell className="text-right font-bold">
+                            {filteredPaymentGroups.reduce((sum, group) => sum + (row.totalsByMethod[group] || 0), 0).toFixed(2)}
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                    <TableFooterComponent>
+                      <TableRow className="bg-muted/80 font-bold">
+                        <TableCell>Total General (Filtrado)</TableCell>
+                        {filteredPaymentGroups.map(group => (
+                          <TableCell key={group} className="text-right">
+                            {(totalsByPaymentGroup[group] || 0).toFixed(2)}
+                          </TableCell>
+                        ))}
+                        <TableCell className="text-right text-lg">
+                          S/ {grandTotal.toFixed(2)}
+                        </TableCell>
+                      </TableRow>
+                    </TableFooterComponent>
+                  </Table>
+                )}
+              </TabsContent>
+              <TabsContent value="chart">
+                {isLoading ? (
+                  <div className="flex justify-center items-center h-40"><Loader2 className="h-8 w-8 animate-spin" /></div>
+                ) : chartData.length === 0 ? (
+                  <div className="p-6 border rounded-lg bg-secondary/30 text-center mt-4">
+                      <AlertTriangle className="h-10 w-10 text-muted-foreground mx-auto mb-2" />
+                      <p className="text-muted-foreground">No hay datos suficientes para mostrar el gráfico.</p>
+                  </div>
+                ) : (
+                  <Card className="mt-4">
+                      <CardHeader>
+                          <CardTitle className="flex items-center gap-2"><PieChartIcon />Distribución de Ingresos por Grupo de Pago</CardTitle>
+                          <CardDescription>
+                              Visualización del total de ingresos por tipo de pago para la selección actual. Los pagos se agrupan por su primera palabra (ej. "Tarjeta - Visa" se agrupa como "Tarjeta").
+                          </CardDescription>
+                      </CardHeader>
+                      <CardContent className="flex-1 pb-0">
+                          <ChartContainer
+                            id={id}
+                            config={chartConfig}
+                            className="mx-auto aspect-square h-[250px]"
+                          >
+                            <PieChart>
+                              <ChartTooltip
+                                cursor={false}
+                                content={<ChartTooltipContent hideLabel />}
+                              />
+                              <Pie
+                                data={chartData.filter((d) => activeChartSlices.includes(d.name))}
+                                dataKey="value"
+                                nameKey="name"
+                                innerRadius="60%"
+                                strokeWidth={5}
+                                activeIndex={chartData.findIndex((d) => d.name === activeDonutSlice)}
+                                activeShape={({ ...props }) => <Sector {...props} cornerRadius={5} />}
+                                onMouseUp={(data) => {
+                                  if (activeDonutSlice === data.name) {
+                                    setActiveDonutSlice(null);
+                                  } else {
+                                    setActiveDonutSlice(data.name);
+                                  }
+                                }}
+                              >
+                                {chartData.map((entry) => (
+                                  <Cell
+                                      key={entry.name}
+                                      fill={entry.fill}
+                                      className="outline-none"
+                                      onClick={() => {
+                                        if (activeDonutSlice === entry.name) {
+                                          setActiveDonutSlice(null);
+                                        } else {
+                                          setActiveDonutSlice(entry.name);
+                                        }
+                                      }}
+                                  />
                                 ))}
-                            </Pie>
-                            <ChartLegend
-                              content={
-                                <ChartLegendContent
-                                    nameKey="name"
-                                    onMouseUp={(data) => {
-                                    if(activeDonutSlice === data.value) {
-                                        setActiveDonutSlice(null)
-                                    } else {
-                                        setActiveDonutSlice(data.value)
-                                    }
-                                    }}
-                                    onMouseDown={(data) => {
-                                    if (activeChartSlices.includes(data.value)) {
-                                        setActiveChartSlices(
-                                        activeChartSlices.filter((label) => label !== data.value)
-                                        )
-                                    } else {
-                                        setActiveChartSlices([...activeChartSlices, data.value])
-                                    }
-                                    }}
-                                    className="flex-wrap"
-                                    style={{
-                                    opacity: activeDonutSlice !== null ? 0.5 : 1,
-                                    }}
-                                />
+                              </Pie>
+                              <ChartLegend
+                                content={
+                                  <ChartLegendContent
+                                      nameKey="name"
+                                      onMouseUp={(data) => {
+                                        if (activeDonutSlice === data.value) {
+                                          setActiveDonutSlice(null);
+                                        } else {
+                                          setActiveDonutSlice(data.value);
+                                        }
+                                      }}
+                                      onMouseDown={(data) => {
+                                        if (activeChartSlices.includes(data.value)) {
+                                          setActiveChartSlices(
+                                            activeChartSlices.filter((label) => label !== data.value)
+                                          );
+                                        } else {
+                                          setActiveChartSlices([...activeChartSlices, data.value]);
+                                        }
+                                      }}
+                                      className="flex-wrap"
+                                      style={{
+                                        opacity: activeDonutSlice !== null ? 0.5 : 1,
+                                      }}
+                                  />
                                 }
-                              
-                            />
-                          </PieChart>
-                        </ChartContainer>
-                    </CardContent>
-                    <CardFooter className="flex-col gap-2 text-sm">
-                        <div className="flex items-center gap-2 font-medium leading-none">
-                            Mostrando total de {activeChartSlices.length} de {chartData.length} grupos.
-                        </div>
-                         <div className="leading-none text-muted-foreground">
-                            Clic en la leyenda para ocultar/mostrar un grupo.
-                        </div>
-                    </CardFooter>
-                </Card>
-            )}
-            </>
-          )}
+                              />
+                            </PieChart>
+                          </ChartContainer>
+                      </CardContent>
+                      <CardFooter className="flex-col gap-2 text-sm">
+                          <div className="flex items-center gap-2 font-medium leading-none">
+                              Mostrando total de {activeChartSlices.length} de {chartData.length} grupos.
+                          </div>
+                           <div className="leading-none text-muted-foreground">
+                              Clic en la leyenda para ocultar/mostrar un grupo.
+                          </div>
+                      </CardFooter>
+                  </Card>
+                )}
+              </TabsContent>
+            </Tabs>
         </CardContent>
       </Card>
 
@@ -621,7 +642,7 @@ export default function FinancesPage() {
                             onChange={(e) => setNewMethodInputs(prev => ({...prev, [location.id]: e.target.value}))}
                         />
                          <p className="text-xs text-muted-foreground mt-1">
-                            Para agrupar, use un prefijo común (ej: "Yape - Cuenta A", "Yape - Cuenta B").
+                            Para agrupar, use un prefijo común (ej: "Tarjeta - Visa", "Tarjeta - Mastercard").
                         </p>
                       </div>
                       <Button onClick={() => handleAddNewMethod(location.id)} size="sm">
