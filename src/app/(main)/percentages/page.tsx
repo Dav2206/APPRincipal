@@ -15,7 +15,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow, TableFoo
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { format, startOfDay, parseISO, isEqual, addDays, subDays, startOfMonth, endOfMonth, getDate, getYear, getMonth, setYear, setMonth, isAfter, subMonths } from 'date-fns';
 import { es } from 'date-fns/locale';
-import { CalendarIcon, ChevronLeftIcon, ChevronRightIcon, AlertTriangle, Loader2, TrendingUp, DollarSign, Building, Info } from 'lucide-react';
+import { CalendarIcon, ChevronLeftIcon, ChevronRightIcon, AlertTriangle, Loader2, TrendingUp, DollarSign, Building, Info, Briefcase } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Badge } from '@/components/ui/badge';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
@@ -28,6 +28,7 @@ interface ProfessionalIncomeReport {
   appointmentsInSelectedLocation: number;
   totalIncomeAllLocations: number;
   totalAppointmentsAllLocations: number;
+  workedDaysInSede: number;
 }
 
 const currentSystemYear = getYear(new Date());
@@ -93,13 +94,24 @@ export default function PercentagesPage() {
       
       // Initialize map for native professionals of the selected location
       nativeProfessionals.forEach(prof => {
+        let workedDays = 0;
+        let currentDate = startDate;
+        while (currentDate <= endDate) {
+            const availability = getProfessionalAvailabilityForDate(prof, currentDate);
+            if (availability?.isWorking && availability.workingLocationId === effectiveLocationId) {
+                workedDays++;
+            }
+            currentDate = addDays(currentDate, 1);
+        }
+
         incomeMap.set(prof.id, {
           professionalId: prof.id,
           professionalName: `${prof.firstName} ${prof.lastName}`,
           incomeInSelectedLocation: 0,
           appointmentsInSelectedLocation: 0,
           totalIncomeAllLocations: 0,
-          totalAppointmentsAllLocations: 0
+          totalAppointmentsAllLocations: 0,
+          workedDaysInSede: workedDays,
         });
       });
 
@@ -125,7 +137,7 @@ export default function PercentagesPage() {
         }
       });
 
-      const finalReportData = Array.from(incomeMap.values()).filter(item => item.totalAppointmentsAllLocations > 0);
+      const finalReportData = Array.from(incomeMap.values()).filter(item => item.totalAppointmentsAllLocations > 0 || item.workedDaysInSede > 0);
       const sortedReport = finalReportData.sort((a, b) => b.totalIncomeAllLocations - a.totalIncomeAllLocations);
       setReportData(sortedReport);
 
@@ -322,6 +334,21 @@ export default function PercentagesPage() {
                 <TableHeader>
                   <TableRow>
                     <TableHead>Profesional</TableHead>
+                    <TableHead className="text-center">
+                        <div className="flex items-center justify-center gap-1">
+                            Días Laborados
+                            <TooltipProvider>
+                                <Tooltip>
+                                    <TooltipTrigger asChild>
+                                        <Info className="h-3 w-3 text-muted-foreground cursor-help" />
+                                    </TooltipTrigger>
+                                    <TooltipContent>
+                                        <p className="text-xs">Días trabajados en la sede actual durante la quincena, según horario y excepciones.</p>
+                                    </TooltipContent>
+                                </Tooltip>
+                            </TooltipProvider>
+                        </div>
+                    </TableHead>
                     <TableHead className="text-center">Citas en Sede Actual</TableHead>
                     <TableHead className="text-right">Ingreso en Sede Actual (S/)</TableHead>
                     <TableHead className="text-right font-bold">Ingreso Total Quincenal (S/)</TableHead>
@@ -331,6 +358,7 @@ export default function PercentagesPage() {
                   {reportData.map((item) => (
                     <TableRow key={item.professionalId}>
                       <TableCell className="font-medium">{item.professionalName}</TableCell>
+                      <TableCell className="text-center">{item.workedDaysInSede}</TableCell>
                       <TableCell className="text-center">{item.appointmentsInSelectedLocation}</TableCell>
                       <TableCell className="text-right font-semibold text-primary">
                         {item.incomeInSelectedLocation.toFixed(2)}
