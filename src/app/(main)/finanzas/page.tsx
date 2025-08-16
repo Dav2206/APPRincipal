@@ -110,21 +110,7 @@ export default function FinancesPage() {
       return Array.from(allMethods).sort();
   }, [paymentMethodsByLocation]);
 
-  const allAvailablePaymentGroups = useMemo(() => {
-      const allGroups = new Set<string>();
-      Object.values(totalsByPaymentGroup).forEach((_, method) => {
-          const group = paymentGroups.find(g => g.methods.includes(method))?.name || method;
-          allGroups.add(group);
-      });
-      return Array.from(allGroups).sort();
-  }, [totalsByPaymentGroup, paymentGroups]);
   
-  useEffect(() => {
-    setSelectedPaymentGroups(allAvailablePaymentGroups);
-    setActiveChartSlices(allAvailablePaymentGroups);
-  }, [allAvailablePaymentGroups]);
-
-
   useEffect(() => {
     if (!authIsLoading && (!user || (user.role !== USER_ROLES.CONTADOR && user.role !== USER_ROLES.ADMIN))) {
       router.replace('/dashboard'); 
@@ -204,19 +190,6 @@ export default function FinancesPage() {
     }
   }, [user, selectedYear, selectedMonth, adminSelectedLocation, toast, locations, paymentGroups]);
 
-  const filteredPaymentGroups = useMemo(() => {
-    return allAvailablePaymentGroups.filter(group => selectedPaymentGroups.includes(group));
-  }, [allAvailablePaymentGroups, selectedPaymentGroups]);
-  
-  const grandTotal = useMemo(() => {
-    return reportData.reduce((sum, row) => {
-        const rowTotalFromSelectedGroups = filteredPaymentGroups.reduce((groupSum, group) => {
-            return groupSum + (row.totalsByMethod[group] || 0);
-        }, 0);
-        return sum + rowTotalFromSelectedGroups;
-    }, 0);
-  }, [reportData, filteredPaymentGroups]);
-  
   const totalsByPaymentGroup = useMemo(() => {
     const totals: Partial<Record<string, number>> = {};
     
@@ -231,6 +204,34 @@ export default function FinancesPage() {
     return totals;
   }, [completedAppointments, paymentGroups]);
 
+  const allAvailablePaymentGroups = useMemo(() => {
+      const allGroups = new Set<string>();
+      Object.keys(totalsByPaymentGroup).forEach((method) => {
+          const group = paymentGroups.find(g => g.methods.includes(method))?.name || method;
+          allGroups.add(group);
+      });
+      return Array.from(allGroups).sort();
+  }, [totalsByPaymentGroup, paymentGroups]);
+  
+  useEffect(() => {
+    setSelectedPaymentGroups(allAvailablePaymentGroups);
+    setActiveChartSlices(allAvailablePaymentGroups);
+  }, [allAvailablePaymentGroups]);
+
+
+  const filteredPaymentGroups = useMemo(() => {
+    return allAvailablePaymentGroups.filter(group => selectedPaymentGroups.includes(group));
+  }, [allAvailablePaymentGroups, selectedPaymentGroups]);
+  
+  const grandTotal = useMemo(() => {
+    return reportData.reduce((sum, row) => {
+        const rowTotalFromSelectedGroups = filteredPaymentGroups.reduce((groupSum, group) => {
+            return groupSum + (row.totalsByMethod[group] || 0);
+        }, 0);
+        return sum + rowTotalFromSelectedGroups;
+    }, 0);
+  }, [reportData, filteredPaymentGroups]);
+  
 
   const chartData = useMemo(() => {
     return Object.entries(totalsByPaymentGroup)
