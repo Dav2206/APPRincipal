@@ -228,6 +228,7 @@ export type ContractEditFormData = {
 export interface PeriodicReminder extends BaseEntity {
   title: string;
   description?: string | null;
+  category: 'insumos' | 'servicios' | 'impuestos' | 'otros';
   dueDate: string; // ISO Date string 'YYYY-MM-DD'
   recurrence: 'once' | 'monthly' | 'quarterly' | 'annually';
   amount?: number | null;
@@ -239,6 +240,7 @@ export interface PeriodicReminder extends BaseEntity {
 export interface PeriodicReminderFormData {
   title: string;
   description?: string | null;
+  category: 'insumos' | 'servicios' | 'impuestos' | 'otros';
   dueDate: Date;
   recurrence: 'once' | 'monthly' | 'quarterly' | 'annually';
   amount?: number | null;

@@ -37,7 +37,6 @@ import {
   AlertDialogDescription,
   AlertDialogHeader,
   AlertDialogTitle,
-  AlertDialogTrigger,
   AlertDialogFooter
 } from "@/components/ui/alert-dialog";
 
@@ -55,6 +54,13 @@ const RECURRENCE_OPTIONS = [
   { value: 'quarterly', label: 'Trimestral' },
   { value: 'annually', label: 'Anual' },
 ];
+
+const REMINDER_CATEGORIES = [
+  { value: 'insumos', label: 'Insumos' },
+  { value: 'servicios', label: 'Servicios (Luz, Agua, etc.)' },
+  { value: 'impuestos', label: 'Impuestos' },
+  { value: 'otros', label: 'Otros' },
+] as const;
 
 interface PayrollData {
   professionalId: string;
@@ -97,6 +103,7 @@ export default function PaymentsPage() {
     defaultValues: {
       title: '',
       description: '',
+      category: 'otros',
       dueDate: new Date(),
       recurrence: 'once',
       amount: undefined,
@@ -148,13 +155,10 @@ export default function PaymentsPage() {
                   incomeByProfessional[profId] = (incomeByProfessional[profId] || 0) + amount;
               }
           };
-
-          // Process main service income, always attribute to the main professional
+          
           processIncomeForProfessional(appt.professionalId, appt.amountPaid);
           
-          // Process added services income
           appt.addedServices?.forEach(addedService => {
-              // Attribute to specific prof if assigned, otherwise fallback to main professional
               const profIdForAddedService = addedService.professionalId || appt.professionalId;
               processIncomeForProfessional(profIdForAddedService, addedService.amountPaid);
           });
@@ -319,6 +323,7 @@ export default function PaymentsPage() {
     reminderForm.reset({
       title: '',
       description: '',
+      category: 'otros',
       dueDate: new Date(),
       recurrence: 'once',
       amount: undefined,
@@ -332,6 +337,7 @@ export default function PaymentsPage() {
     reminderForm.reset({
       title: reminder.title,
       description: reminder.description || '',
+      category: reminder.category || 'otros',
       dueDate: parseISO(reminder.dueDate),
       recurrence: reminder.recurrence,
       amount: reminder.amount ?? undefined,
@@ -355,7 +361,7 @@ export default function PaymentsPage() {
   const handleTogglePaidStatus = async (reminder: PeriodicReminder) => {
     const newStatus = reminder.status === 'pending' ? 'paid' : 'pending';
     try {
-      await updatePeriodicReminder(reminder.id, { ...reminder, status: newStatus, dueDate: reminder.dueDate });
+      await updatePeriodicReminder(reminder.id, { ...reminder, status: newStatus, dueDate: reminder.dueDate, category: reminder.category || 'otros' });
       toast({ title: "Estado Actualizado", description: `El recordatorio "${reminder.title}" ahora está ${newStatus === 'paid' ? 'pagado' : 'pendiente'}.` });
       fetchReminders();
     } catch (error) {
@@ -531,8 +537,8 @@ export default function PaymentsPage() {
                         <TableHeader>
                         <TableRow>
                             <TableHead>Título</TableHead>
+                            <TableHead>Categoría</TableHead>
                             <TableHead>Fecha Vencimiento</TableHead>
-                            <TableHead className="hidden md:table-cell">Recurrencia</TableHead>
                             <TableHead className="hidden sm:table-cell text-right">Monto (S/)</TableHead>
                             <TableHead className="text-center">Estado</TableHead>
                             <TableHead className="text-right">Acciones</TableHead>
@@ -547,8 +553,10 @@ export default function PaymentsPage() {
                                 {reminder.title}
                                 {reminder.description && <p className="text-xs text-muted-foreground truncate max-w-xs">{reminder.description}</p>}
                                 </TableCell>
+                                <TableCell>
+                                  <Badge variant="outline" className="text-xs">{REMINDER_CATEGORIES.find(c => c.value === reminder.category)?.label || reminder.category}</Badge>
+                                </TableCell>
                                 <TableCell>{format(parseISO(reminder.dueDate), "PPP", { locale: es })}</TableCell>
-                                <TableCell className="hidden md:table-cell">{RECURRENCE_OPTIONS.find(opt => opt.value === reminder.recurrence)?.label}</TableCell>
                                 <TableCell className="hidden sm:table-cell text-right">{reminder.amount ? reminder.amount.toFixed(2) : '-'}</TableCell>
                                 <TableCell className="text-center">
                                 <Badge variant={displayStatus.variant} className="text-xs">
@@ -655,7 +663,25 @@ export default function PaymentsPage() {
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel>Título</FormLabel>
-                    <FormControl><Input placeholder="Ej: Pago de IGV" {...field} /></FormControl>
+                    <FormControl><Input placeholder="Ej: Pago de Alquiler" {...field} /></FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={reminderForm.control}
+                name="category"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Categoría</FormLabel>
+                    <Select onValueChange={field.onChange} value={field.value}>
+                      <FormControl><SelectTrigger><SelectValue placeholder="Seleccionar categoría" /></SelectTrigger></FormControl>
+                      <SelectContent>
+                        {REMINDER_CATEGORIES.map(opt => (
+                          <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
                     <FormMessage />
                   </FormItem>
                 )}
@@ -666,7 +692,7 @@ export default function PaymentsPage() {
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel>Descripción (Opcional)</FormLabel>
-                    <FormControl><Textarea placeholder="Ej: Declaración mensual, periodo 05-2025" {...field} value={field.value || ''}/></FormControl>
+                    <FormControl><Textarea placeholder="Ej: Periodo 05-2025" {...field} value={field.value || ''}/></FormControl>
                     <FormMessage />
                   </FormItem>
                 )}

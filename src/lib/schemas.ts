@@ -219,6 +219,9 @@ export type ContractEditFormData = z.infer<typeof ContractEditFormSchema>;
 export const PeriodicReminderFormSchema = z.object({
   title: z.string().min(1, "El título es requerido."),
   description: z.string().optional().nullable(),
+  category: z.enum(['insumos', 'servicios', 'impuestos', 'otros'], {
+    required_error: "La categoría es requerida.",
+  }),
   dueDate: z.date({ required_error: "La fecha de vencimiento es requerida." }),
   recurrence: z.enum(['once', 'monthly', 'quarterly', 'annually'], {
     required_error: "La recurrencia es requerida.",

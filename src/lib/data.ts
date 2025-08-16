@@ -1517,7 +1517,7 @@ export async function addPeriodicReminder(data: PeriodicReminderFormData): Promi
   return { id: docRef.id, ...newReminderData };
 }
 
-export async function updatePeriodicReminder(id: string, data: Partial<PeriodicReminderFormData> & {id: string, dueDate: string}): Promise<PeriodicReminder | undefined> {
+export async function updatePeriodicReminder(id: string, data: Partial<PeriodicReminderFormData> & {id: string, dueDate: string, category: 'insumos' | 'servicios' | 'impuestos' | 'otros'}): Promise<PeriodicReminder | undefined> {
    const reminderUpdateData: Partial<Omit<PeriodicReminder, 'id' | 'createdAt'>> = {
     ...data,
     dueDate: typeof data.dueDate === 'string' ? data.dueDate : formatISO(data.dueDate, { representation: 'date'}),
@@ -1784,4 +1784,3 @@ export async function mergePatients(primaryPatientId: string, duplicateIds: stri
 
 
 
-    
