@@ -12,7 +12,8 @@ import { Button } from '@/components/ui/button';
 import { Calendar } from '@/components/ui/calendar';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow, TableFooter } from '@/components/ui/table';
-import { format, startOfDay, parseISO, isEqual, addDays, subDays, startOfMonth, endOfMonth, getDate } from 'date-fns';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { format, startOfDay, parseISO, isEqual, addDays, subDays, startOfMonth, endOfMonth, getDate, getYear, getMonth, setYear, setMonth, isAfter, subMonths } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { CalendarIcon, ChevronLeftIcon, ChevronRightIcon, AlertTriangle, Loader2, TrendingUp, DollarSign, Building, Info } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -29,6 +30,13 @@ interface ProfessionalIncomeReport {
   totalAppointmentsAllLocations: number;
 }
 
+const currentSystemYear = getYear(new Date());
+const availableYears = [currentSystemYear, currentSystemYear - 1, currentSystemYear - 2];
+const months = Array.from({ length: 12 }, (_, i) => ({
+  value: i,
+  label: format(new Date(currentSystemYear, i), 'MMMM', { locale: es }),
+}));
+
 
 export default function PercentagesPage() {
   const { user } = useAuth();
@@ -36,6 +44,11 @@ export default function PercentagesPage() {
   const [reportData, setReportData] = useState<ProfessionalIncomeReport[]>([]);
   const [locations, setLocations] = useState<Location[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+
+  const [selectedYear, setSelectedYear] = useState<number>(getYear(new Date()));
+  const [selectedMonth, setSelectedMonth] = useState<number>(getMonth(new Date()));
+  const [selectedQuincena, setSelectedQuincena] = useState<1 | 2>(getDate(new Date()) <= 15 ? 1 : 2);
+
 
   const isAdminOrContador = user?.role === USER_ROLES.ADMIN || user?.role === USER_ROLES.CONTADOR;
   const effectiveLocationId = useMemo(() => {
@@ -59,10 +72,10 @@ export default function PercentagesPage() {
     }
     setIsLoading(true);
 
-    const today = new Date();
-    const dayOfMonth = getDate(today);
-    const startDate = dayOfMonth <= 15 ? startOfMonth(today) : addDays(startOfMonth(today), 15);
-    const endDate = dayOfMonth <= 15 ? addDays(startOfMonth(today), 14) : endOfMonth(today);
+    const baseDate = setMonth(setYear(new Date(), selectedYear), selectedMonth);
+    const startDate = selectedQuincena === 1 ? startOfMonth(baseDate) : addDays(startOfMonth(baseDate), 15);
+    const endDate = selectedQuincena === 1 ? addDays(startOfMonth(baseDate), 14) : endOfMonth(baseDate);
+
 
     try {
       // Fetch only professionals whose base location is the one selected
@@ -122,7 +135,7 @@ export default function PercentagesPage() {
     } finally {
       setIsLoading(false);
     }
-  }, [effectiveLocationId, user, locations]);
+  }, [effectiveLocationId, user, locations, selectedYear, selectedMonth, selectedQuincena]);
 
 
   useEffect(() => {
@@ -139,17 +152,90 @@ export default function PercentagesPage() {
   const totalIncomeGeneral = useMemo(() => {
     return reportData.reduce((sum, item) => sum + item.totalIncomeAllLocations, 0);
   }, [reportData]);
+  
+  const navigateQuincena = (direction: 'prev' | 'next') => {
+    let newYear = selectedYear;
+    let newMonth = selectedMonth;
+    let newQuincena = selectedQuincena;
 
+    if (direction === 'next') {
+      if (newQuincena === 1) {
+        newQuincena = 2;
+      } else {
+        newQuincena = 1;
+        if (newMonth === 11) {
+          newMonth = 0;
+          newYear += 1;
+        } else {
+          newMonth += 1;
+        }
+      }
+    } else {
+      if (newQuincena === 2) {
+        newQuincena = 1;
+      } else {
+        newQuincena = 2;
+        if (newMonth === 0) {
+          newMonth = 11;
+          newYear -= 1;
+        } else {
+          newMonth -= 1;
+        }
+      }
+    }
+    
+    // Prevent navigating to a future quincena
+    const today = new Date();
+    const firstDayOfNewQuincena = newQuincena === 1 ? startOfMonth(setMonth(setYear(new Date(),newYear), newMonth)) : addDays(startOfMonth(setMonth(setYear(new Date(),newYear), newMonth)),15);
+    if(isAfter(firstDayOfNewQuincena, today) && !isEqual(startOfDay(firstDayOfNewQuincena), startOfDay(today))) {
+        return;
+    }
+
+    if (newYear < availableYears[availableYears.length -1]) {
+        return;
+    }
+
+    setSelectedYear(newYear);
+    setSelectedMonth(newMonth);
+    setSelectedQuincena(newQuincena as 1 | 2);
+  };
+  
+  const isNextQuincenaDisabled = () => {
+    let nextQYear = selectedYear;
+    let nextQMonth = selectedMonth;
+    let nextQQuincena = selectedQuincena;
+
+    if (nextQQuincena === 1) nextQQuincena = 2;
+    else { nextQQuincena = 1; if (nextQMonth === 11) { nextQMonth = 0; nextQYear +=1; } else nextQMonth +=1; }
+    
+    const firstDayOfNextQ = nextQQuincena === 1 ? startOfMonth(setMonth(setYear(new Date(),nextQYear), nextQMonth)) : addDays(startOfMonth(setMonth(setYear(new Date(),nextQYear), nextQMonth)),15);
+    return isAfter(firstDayOfNextQ, new Date()) && !isEqual(startOfDay(firstDayOfNextQ), startOfDay(new Date()));
+  };
+
+  const isPrevQuincenaDisabled = () => {
+    let prevQYear = selectedYear;
+    if (selectedQuincena === 1 && selectedMonth === 0) { 
+        prevQYear -= 1;
+    }
+    return prevQYear < availableYears[availableYears.length-1];
+  };
 
   const displayLocationName = effectiveLocationId 
     ? (locations.find(l => l.id === effectiveLocationId)?.name || `Sede Desconocida`) 
     : 'No se ha seleccionado sede';
 
-    const today = new Date();
-    const dayOfMonth = getDate(today);
-    const quincenaDescription = dayOfMonth <= 15 
-        ? `Quincena del 1 al 15 de ${format(today, 'MMMM', {locale: es})}` 
-        : `Quincena del 16 al ${format(endOfMonth(today), 'd', {locale: es})} de ${format(today, 'MMMM', {locale: es})}`;
+    const getBiWeeklyPeriodDescription = () => {
+        const dateForDescription = setMonth(setYear(new Date(), selectedYear), selectedMonth);
+        const monthName = format(dateForDescription, "MMMM", { locale: es });
+        const year = selectedYear;
+
+        if (selectedQuincena === 1) {
+            return `Quincena del 1 al 15 de ${monthName}, ${year}`;
+        } else {
+            const endDayOfMonth = format(endOfMonth(dateForDescription), "d");
+            return `Quincena del 16 al ${endDayOfMonth} de ${monthName}, ${year}`;
+        }
+    };
 
 
   const LoadingState = () => (
@@ -180,19 +266,41 @@ export default function PercentagesPage() {
                 Análisis de Ingresos por Profesional
               </CardTitle>
               <CardDescription>
-                Ingresos de los profesionales NATIVOS de {displayLocationName} durante la quincena actual.
+                Ingresos de los profesionales NATIVOS de {displayLocationName}.
                  <TooltipProvider>
                   <Tooltip>
                     <TooltipTrigger asChild>
                       <Info className="inline-block ml-2 h-4 w-4 text-muted-foreground cursor-help" />
                     </TooltipTrigger>
                     <TooltipContent>
-                      <p>Este reporte muestra el rendimiento de los profesionales cuya sede base es la seleccionada, <br/> detallando sus ingresos en esta sede y su total en todas las sedes.</p>
+                      <p>Este reporte muestra el rendimiento de los profesionales cuya sede base es la seleccionada, <br/> detallando sus ingresos en esta sede y su total en todas las sedes para la quincena elegida.</p>
                     </TooltipContent>
                   </Tooltip>
                 </TooltipProvider>
               </CardDescription>
-              <p className="text-sm font-semibold text-primary mt-2">{quincenaDescription}</p>
+              <div className="mt-4 flex items-center gap-2 flex-wrap">
+                    <Button variant="outline" size="icon" onClick={() => navigateQuincena('prev')} disabled={isPrevQuincenaDisabled()}>
+                        <ChevronLeftIcon className="h-4 w-4" />
+                    </Button>
+                     <Select value={String(selectedYear)} onValueChange={(val) => setSelectedYear(Number(val))}>
+                        <SelectTrigger className="w-[100px]"><SelectValue /></SelectTrigger>
+                        <SelectContent>{availableYears.map(y => <SelectItem key={y} value={String(y)}>{y}</SelectItem>)}</SelectContent>
+                    </Select>
+                    <Select value={String(selectedMonth)} onValueChange={(val) => setSelectedMonth(Number(val))}>
+                        <SelectTrigger className="w-[150px]"><SelectValue /></SelectTrigger>
+                        <SelectContent>{months.map(m => <SelectItem key={m.value} value={String(m.value)}>{m.label}</SelectItem>)}</SelectContent>
+                    </Select>
+                    <Select value={String(selectedQuincena)} onValueChange={(val) => setSelectedQuincena(Number(val) as 1 | 2)}>
+                        <SelectTrigger className="w-[150px]"><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                            <SelectItem value="1">1ra Quincena</SelectItem>
+                            <SelectItem value="2">2da Quincena</SelectItem>
+                        </SelectContent>
+                    </Select>
+                     <Button variant="outline" size="icon" onClick={() => navigateQuincena('next')} disabled={isNextQuincenaDisabled()}>
+                        <ChevronRightIcon className="h-4 w-4" />
+                    </Button>
+                </div>
             </div>
           </div>
            {isAdminOrContador && (
