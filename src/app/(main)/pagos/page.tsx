@@ -1,5 +1,4 @@
 
-
 "use client";
 
 import React, { useState, useMemo, useEffect, useCallback } from 'react';
@@ -19,7 +18,7 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow, TableFooter as TableFooterComponent } from '@/components/ui/table';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Loader2, CreditCard, AlertTriangle, PlusCircle, DollarSign, CalendarIcon, List, Users, ShoppingCart, Lightbulb, Landmark as LandmarkIcon, ChevronLeft, ChevronRight, Check, Settings, Percent, Bell, CalendarClock, XCircle, Edit2, Trash2, ShieldAlert, CheckCircle, Clock } from 'lucide-react';
-import { format, getYear, getMonth, getDate, startOfMonth, endOfMonth, addDays, setYear, setMonth, isAfter, parseISO, isPast, isBefore } from 'date-fns';
+import { format, getYear, getMonth, getDate, startOfMonth, endOfMonth, addDays, setYear, setMonth, isAfter, parseISO, isPast, isBefore, startOfDay } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
@@ -149,9 +148,12 @@ export default function PaymentsPage() {
               }
           };
 
+          // Process main service income, always attribute to the main professional
           processIncomeForProfessional(appt.professionalId, appt.amountPaid);
           
+          // Process added services income
           appt.addedServices?.forEach(addedService => {
+              // Attribute to specific prof if assigned, otherwise fallback to main professional
               const profIdForAddedService = addedService.professionalId || appt.professionalId;
               processIncomeForProfessional(profIdForAddedService, addedService.amountPaid);
           });
@@ -242,7 +244,7 @@ export default function PaymentsPage() {
 
     try {
       await updateProfessional(editingCommission.prof.professionalId, { 
-        commissionRate: newRate / 100, 
+        commissionRate: newRate / 100, // Convert percentage back to decimal
         commissionDeductible: newDeductible
       });
       toast({ title: "Comisión Actualizada", description: `Los parámetros de comisión para ${editingCommission.prof.professionalName} han sido actualizados.` });
