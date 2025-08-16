@@ -34,7 +34,7 @@ import {
   DialogDescription,
 } from '@/components/ui/dialog';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage, FormDescription } from "@/components/ui/form";
-import { PlusCircle, Edit2, Users, Search, Loader2, CalendarDays, Clock, Trash2, Calendar as CalendarIconLucide, AlertTriangle, Moon, ChevronsDown, FileText, Building, Gift, Briefcase as BriefcaseIcon, ChevronLeft, ChevronRight, Bed, DollarSign } from 'lucide-react';
+import { PlusCircle, Edit2, Users, Search, Loader2, CalendarDays, Clock, Trash2, Calendar as CalendarIconLucide, AlertTriangle, Moon, ChevronsDown, FileText, Building, Gift, Briefcase as BriefcaseIcon, ChevronLeft, ChevronRight, Bed, DollarSign, Percent } from 'lucide-react';
 import { useForm, useFieldArray, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { ProfessionalFormSchema } from '@/lib/schemas';
@@ -104,6 +104,8 @@ export default function ProfessionalsPage() {
       phone: '',
       isManager: false,
       baseSalary: 1025,
+      commissionRate: 20,
+      commissionDeductible: undefined,
       workSchedule: defaultBaseWorkSchedule,
       customScheduleOverrides: [],
       currentContract_startDate: null,
@@ -185,6 +187,8 @@ export default function ProfessionalsPage() {
       phone: '',
       isManager: false,
       baseSalary: 1025,
+      commissionRate: 20,
+      commissionDeductible: (defaultLoc === 'higuereta' ? 2200 : 1800),
       workSchedule: defaultBaseWorkSchedule,
       customScheduleOverrides: [],
       currentContract_startDate: null,
@@ -222,6 +226,8 @@ export default function ProfessionalsPage() {
         phone: professional.phone || undefined, 
         isManager: professional.isManager || false,
         baseSalary: professional.baseSalary ?? 1025,
+        commissionRate: (professional.commissionRate ?? 0.20) * 100,
+        commissionDeductible: professional.commissionDeductible ?? (professional.locationId === 'higuereta' ? 2200 : 1800),
         workSchedule: formWorkSchedule,
         customScheduleOverrides: professional.customScheduleOverrides?.map(ov => ({
             ...ov,
@@ -248,6 +254,7 @@ export default function ProfessionalsPage() {
     try {
       const formattedData: ProfessionalFormData = {
         ...data,
+        commissionRate: (data.commissionRate ?? 20) / 100,
         customScheduleOverrides: (data.customScheduleOverrides || []).map(ov => ({
             ...ov,
             startTime: ov.overrideType !== 'descanso' ? ov.startTime : undefined,
@@ -498,6 +505,22 @@ export default function ProfessionalsPage() {
                                 <FormMessage />
                             </FormItem>
                         )}/>
+                    </div>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <FormField control={form.control} name="commissionDeductible" render={({ field }) => (
+                          <FormItem>
+                              <FormLabel className="flex items-center gap-1"><DollarSign size={16}/>Monto a Deducir para Comisión (S/)</FormLabel>
+                              <FormControl><Input type="number" placeholder="Ej: 1800" {...field} value={field.value ?? ''} onChange={e => field.onChange(e.target.value === '' ? null : parseFloat(e.target.value) || null)}/></FormControl>
+                              <FormMessage />
+                          </FormItem>
+                      )}/>
+                       <FormField control={form.control} name="commissionRate" render={({ field }) => (
+                          <FormItem>
+                              <FormLabel className="flex items-center gap-1"><Percent size={16}/>Tasa de Comisión (%)</FormLabel>
+                              <FormControl><Input type="number" placeholder="Ej: 20" {...field} value={field.value ?? ''} onChange={e => field.onChange(e.target.value === '' ? null : parseFloat(e.target.value) || null)}/></FormControl>
+                              <FormMessage />
+                          </FormItem>
+                      )}/>
                     </div>
                     <FormField control={form.control} name="phone" render={({ field }) => (
                         <FormItem><FormLabel>Teléfono (Opcional)</FormLabel><FormControl><Input type="tel" placeholder="Ej: 987654321" {...field} value={field.value ?? ''} /></FormControl><FormMessage /></FormItem>

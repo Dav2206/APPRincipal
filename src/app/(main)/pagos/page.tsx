@@ -18,13 +18,14 @@ import { Calendar } from '@/components/ui/calendar';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow, TableFooter as TableFooterComponent } from '@/components/ui/table';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Loader2, CreditCard, AlertTriangle, PlusCircle, DollarSign, CalendarIcon, List, Users, ShoppingCart, Lightbulb, Landmark as LandmarkIcon, ChevronLeft, ChevronRight, Check } from 'lucide-react';
+import { Loader2, CreditCard, AlertTriangle, PlusCircle, DollarSign, CalendarIcon, List, Users, ShoppingCart, Lightbulb, Landmark as LandmarkIcon, ChevronLeft, ChevronRight, Check, Settings, Percent } from 'lucide-react';
 import { format, getYear, getMonth, getDate, startOfMonth, endOfMonth, addDays, setYear, setMonth, isAfter, parseISO } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
 import { Badge } from '@/components/ui/badge';
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogClose } from '@/components/ui/dialog';
 
 
 // --- Mock Data Structures (to be replaced with real data fetching) ---
@@ -46,9 +47,6 @@ const getExpenseTypeLabel = (type: ExpenseType) => {
   }
 };
 
-const DEDUCTIBLE_HIGUERETA = 2200;
-const DEDUCTIBLE_OTRAS = 1800;
-const COMISION_PORCENTAJE = 0.20;
 
 const currentSystemYear = getYear(new Date());
 const availableYears = [currentSystemYear, currentSystemYear - 1, currentSystemYear - 2];
@@ -66,6 +64,8 @@ interface PayrollData {
   baseSalary: number;
   commission: number;
   totalPayment: number;
+  commissionRate: number;
+  commissionDeductible: number;
 }
 
 
@@ -82,6 +82,7 @@ export default function PaymentsPage() {
   const [selectedQuincena, setSelectedQuincena] = useState<1 | 2>(getDate(new Date()) <= 15 ? 1 : 2);
   const [locations, setLocations] = useState<Location[]>([]);
   const [editingSalary, setEditingSalary] = useState<{ id: string; value: string } | null>(null);
+  const [editingCommission, setEditingCommission] = useState<{ prof: PayrollData; rate: string; deductible: string; } | null>(null);
 
 
   // --- State for General Expenses ---
@@ -143,9 +144,10 @@ export default function PaymentsPage() {
 
         const newPayrollData: PayrollData[] = activeProfessionals.map(prof => {
             const totalIncome = incomeByProfessional[prof.id] || 0;
-            const deductible = prof.locationId === 'higuereta' ? DEDUCTIBLE_HIGUERETA : DEDUCTIBLE_OTRAS;
+            const deductible = prof.commissionDeductible ?? (prof.locationId === 'higuereta' ? 2200 : 1800);
+            const rate = prof.commissionRate ?? 0.20;
             const commissionableAmount = Math.max(0, totalIncome - deductible);
-            const commission = commissionableAmount * COMISION_PORCENTAJE;
+            const commission = commissionableAmount * rate;
             const baseSalaryQuincenal = (prof.baseSalary || 0) / 2;
             const totalPayment = baseSalaryQuincenal + commission;
 
@@ -158,6 +160,8 @@ export default function PaymentsPage() {
                 baseSalary: baseSalaryQuincenal,
                 commission: commission,
                 totalPayment: totalPayment,
+                commissionRate: rate,
+                commissionDeductible: deductible,
             };
         }).sort((a,b) => a.locationName.localeCompare(b.locationName) || a.professionalName.localeCompare(b.professionalName));
 
@@ -218,6 +222,43 @@ export default function PaymentsPage() {
       toast({ title: "Error", description: "No se pudo actualizar el sueldo.", variant: "destructive" });
     }
   };
+  
+  const handleCommissionEdit = (profData: PayrollData) => {
+    setEditingCommission({
+      prof: profData,
+      rate: (profData.commissionRate * 100).toString(),
+      deductible: profData.commissionDeductible.toString(),
+    });
+  };
+
+  const handleSaveCommission = async () => {
+    if (!editingCommission) return;
+
+    const newRate = parseFloat(editingCommission.rate);
+    const newDeductible = parseFloat(editingCommission.deductible);
+
+    if (isNaN(newRate) || newRate < 0 || newRate > 100) {
+      toast({ title: "Valor inválido", description: "La tasa de comisión debe ser un número entre 0 y 100.", variant: "destructive" });
+      return;
+    }
+     if (isNaN(newDeductible) || newDeductible < 0) {
+      toast({ title: "Valor inválido", description: "El deducible debe ser un número positivo.", variant: "destructive" });
+      return;
+    }
+
+    try {
+      await updateProfessional(editingCommission.prof.professionalId, { 
+        commissionRate: newRate / 100,
+        commissionDeductible: newDeductible
+      });
+      toast({ title: "Comisión Actualizada", description: `Los parámetros de comisión para ${editingCommission.prof.professionalName} han sido actualizados.` });
+      setEditingCommission(null);
+      calculatePayroll(); // Recalculate payroll
+    } catch (error) {
+      toast({ title: "Error", description: "No se pudieron actualizar los parámetros de comisión.", variant: "destructive" });
+    }
+  };
+
 
   const navigateQuincena = (direction: 'prev' | 'next') => {
     let newYear = selectedYear;
@@ -330,7 +371,7 @@ export default function PaymentsPage() {
                           <TableCell className="font-medium">{item.professionalName}</TableCell>
                           <TableCell>{item.locationName}</TableCell>
                           <TableCell className="text-right">{item.totalIncome.toFixed(2)}</TableCell>
-                          <TableCell className="text-right" onDoubleClick={() => handleSalaryEdit(item.professionalId, item.baseSalary)}>
+                          <TableCell className="text-right cursor-pointer" onDoubleClick={() => handleSalaryEdit(item.professionalId, item.baseSalary)}>
                             {editingSalary?.id === item.professionalId ? (
                               <div className="flex gap-1 justify-end items-center">
                                 <Input
@@ -347,7 +388,9 @@ export default function PaymentsPage() {
                               <span>{item.baseSalary.toFixed(2)}</span>
                             )}
                           </TableCell>
-                          <TableCell className="text-right text-green-600 font-semibold">{item.commission.toFixed(2)}</TableCell>
+                          <TableCell className="text-right text-green-600 font-semibold cursor-pointer" onDoubleClick={() => handleCommissionEdit(item)}>
+                              {item.commission.toFixed(2)}
+                          </TableCell>
                           <TableCell className="text-right font-bold text-lg">{item.totalPayment.toFixed(2)}</TableCell>
                         </TableRow>
                       ))}
@@ -472,6 +515,49 @@ export default function PaymentsPage() {
             </Card>
         </TabsContent>
       </Tabs>
+      
+      {editingCommission && (
+        <Dialog open={!!editingCommission} onOpenChange={() => setEditingCommission(null)}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Editar Parámetros de Comisión</DialogTitle>
+              <DialogDescription>
+                Ajuste el cálculo de comisión para {editingCommission.prof.professionalName}.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="grid gap-4 py-4">
+              <div className="grid grid-cols-4 items-center gap-4">
+                <Label htmlFor="deductible" className="text-right col-span-1">
+                  Deducible (S/)
+                </Label>
+                <Input
+                  id="deductible"
+                  type="number"
+                  value={editingCommission.deductible}
+                  onChange={(e) => setEditingCommission({ ...editingCommission, deductible: e.target.value })}
+                  className="col-span-3"
+                />
+              </div>
+              <div className="grid grid-cols-4 items-center gap-4">
+                <Label htmlFor="rate" className="text-right col-span-1">
+                  Tasa (%)
+                </Label>
+                <Input
+                  id="rate"
+                  type="number"
+                  value={editingCommission.rate}
+                  onChange={(e) => setEditingCommission({ ...editingCommission, rate: e.target.value })}
+                  className="col-span-3"
+                />
+              </div>
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setEditingCommission(null)}>Cancelar</Button>
+              <Button onClick={handleSaveCommission}>Guardar Cambios</Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      )}
     </div>
   );
 }

@@ -106,6 +106,9 @@ export const ProfessionalFormSchema = z.object({
   birthDay: z.coerce.number().int().min(1).max(31).optional().nullable(),
   birthMonth: z.coerce.number().int().min(1).max(12).optional().nullable(),
   baseSalary: z.coerce.number().positive("El sueldo base debe ser un número positivo.").optional().nullable(),
+  commissionRate: z.coerce.number().min(0, "La tasa no puede ser negativa").max(100, "La tasa no puede ser mayor a 100").optional().nullable(),
+  commissionDeductible: z.coerce.number().min(0, "El deducible no puede ser negativo").optional().nullable(),
+
 
   workSchedule: z.object(
     DAYS_OF_WEEK.reduce((acc, day) => {
