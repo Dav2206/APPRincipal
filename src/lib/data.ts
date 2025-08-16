@@ -1526,7 +1526,7 @@ export async function updatePeriodicReminder(id: string, data: Partial<PeriodicR
     if (!reminderSnap.exists()) {
       throw new Error(`Recordatorio con ID ${id} no encontrado.`);
     }
-    const currentReminder = reminderSnap.data() as PeriodicReminder;
+    const currentReminder = convertDocumentData(reminderSnap.data()) as PeriodicReminder;
 
     // First, update the current reminder
     const updateData: Partial<PeriodicReminder> = {
@@ -1544,7 +1544,7 @@ export async function updatePeriodicReminder(id: string, data: Partial<PeriodicR
 
     // If marking as paid and it's recurring, create the next one
     if (data.status === 'paid' && currentReminder.recurrence !== 'once') {
-      const currentDueDate = parseISO(currentReminder.dueDate);
+      const currentDueDate = parseISO(currentReminder.dueDate); // This was the point of failure
       let nextDueDate: Date;
       switch (currentReminder.recurrence) {
         case 'monthly': nextDueDate = addMonths(currentDueDate, 1); break;
@@ -1577,8 +1577,25 @@ export async function updatePeriodicReminder(id: string, data: Partial<PeriodicR
     }
     
     // Return the updated document data for the UI
-    const finalDoc = await getDoc(reminderRef);
-    return finalDoc.exists() ? { id: finalDoc.id, ...convertDocumentData(finalDoc.data()) } as PeriodicReminder : undefined;
+    const finalDocSnap = await getDoc(reminderRef);
+    if (!finalDocSnap.exists()) return undefined;
+    
+    const finalDocData = convertDocumentData(finalDocSnap.data());
+    
+    // Ensure that the returned data for the UI matches the expected type
+    return {
+        id: finalDocSnap.id,
+        title: finalDocData.title,
+        description: finalDocData.description,
+        category: finalDocData.category,
+        dueDate: finalDocData.dueDate, // Will be an ISO string
+        recurrence: finalDocData.recurrence,
+        amount: finalDocData.amount,
+        status: finalDocData.status,
+        createdAt: finalDocData.createdAt,
+        updatedAt: finalDocData.updatedAt,
+    } as PeriodicReminder;
+
   });
 }
 
@@ -1813,18 +1830,3 @@ export async function mergePatients(primaryPatientId: string, duplicateIds: stri
 }
 
 // --- End Maintenance ---
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
