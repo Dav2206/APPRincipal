@@ -1,4 +1,5 @@
 
+
 // src/lib/data.ts
 import type { User, Professional, Patient, Service, Appointment, AppointmentFormData, ProfessionalFormData, AppointmentStatus, ServiceFormData, Contract, PeriodicReminder, ImportantNote, PeriodicReminderFormData, ImportantNoteFormData, AddedServiceItem, AppointmentUpdateFormData, Location, PaymentGroup, GroupingPreset } from '@/types';
 import { USER_ROLES, APPOINTMENT_STATUS, APPOINTMENT_STATUS_DISPLAY, TIME_SLOTS, DAYS_OF_WEEK, LOCATIONS_FALLBACK } from '@/lib/constants';
@@ -306,6 +307,7 @@ export async function addProfessional (data: Omit<ProfessionalFormData, 'id'>): 
     isManager: data.isManager || false,
     birthDay: data.birthDay ?? null,
     birthMonth: data.birthMonth ?? null,
+    baseSalary: data.baseSalary ?? null,
     workSchedule: {}, 
     customScheduleOverrides: (data.customScheduleOverrides || []).map(ov => ({
       ...ov,
@@ -357,6 +359,7 @@ export async function addProfessional (data: Omit<ProfessionalFormData, 'id'>): 
   firestoreData.isManager = firestoreData.isManager ?? false;
   firestoreData.birthDay = firestoreData.birthDay ?? null;
   firestoreData.birthMonth = firestoreData.birthMonth ?? null;
+  firestoreData.baseSalary = firestoreData.baseSalary ?? null;
  
   if (firestoreData.currentContract) {
     firestoreData.currentContract.startDate = toFirestoreTimestamp(firestoreData.currentContract.startDate);
@@ -418,6 +421,7 @@ export async function updateProfessional (id: string, data: Partial<Professional
     if (data.hasOwnProperty('isManager')) professionalToUpdate.isManager = data.isManager || false;
     if (data.hasOwnProperty('birthDay')) professionalToUpdate.birthDay = data.birthDay ?? null;
     if (data.hasOwnProperty('birthMonth')) professionalToUpdate.birthMonth = data.birthMonth ?? null;
+    if (data.hasOwnProperty('baseSalary')) professionalToUpdate.baseSalary = data.baseSalary ?? null;
 
     if (data.workSchedule !== undefined) {
         professionalToUpdate.workSchedule = {};
@@ -496,6 +500,7 @@ export async function updateProfessional (id: string, data: Partial<Professional
     firestoreUpdateData.isManager = firestoreUpdateData.isManager ?? false;
     firestoreUpdateData.birthDay = firestoreUpdateData.birthDay ?? null;
     firestoreUpdateData.birthMonth = firestoreUpdateData.birthMonth ?? null;
+    firestoreUpdateData.baseSalary = firestoreUpdateData.baseSalary ?? null;
     
     if (firestoreUpdateData.hasOwnProperty('customScheduleOverrides') && firestoreUpdateData.customScheduleOverrides) {
        firestoreUpdateData.customScheduleOverrides = firestoreUpdateData.customScheduleOverrides.map((ov: any) => ({
@@ -1756,6 +1761,7 @@ export async function mergePatients(primaryPatientId: string, duplicateIds: stri
 }
 
 // --- End Maintenance ---
+
 
 
 

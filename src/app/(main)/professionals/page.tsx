@@ -1,4 +1,5 @@
 
+
 "use client";
 
 import type { Professional, ProfessionalFormData, Contract, Location } from '@/types';
@@ -33,7 +34,7 @@ import {
   DialogDescription,
 } from '@/components/ui/dialog';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage, FormDescription } from "@/components/ui/form";
-import { PlusCircle, Edit2, Users, Search, Loader2, CalendarDays, Clock, Trash2, Calendar as CalendarIconLucide, AlertTriangle, Moon, ChevronsDown, FileText, Building, Gift, Briefcase as BriefcaseIcon, ChevronLeft, ChevronRight, Bed } from 'lucide-react';
+import { PlusCircle, Edit2, Users, Search, Loader2, CalendarDays, Clock, Trash2, Calendar as CalendarIconLucide, AlertTriangle, Moon, ChevronsDown, FileText, Building, Gift, Briefcase as BriefcaseIcon, ChevronLeft, ChevronRight, Bed, DollarSign } from 'lucide-react';
 import { useForm, useFieldArray, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { ProfessionalFormSchema } from '@/lib/schemas';
@@ -102,6 +103,7 @@ export default function ProfessionalsPage() {
       locationId: '',
       phone: '',
       isManager: false,
+      baseSalary: 1025,
       workSchedule: defaultBaseWorkSchedule,
       customScheduleOverrides: [],
       currentContract_startDate: null,
@@ -182,6 +184,7 @@ export default function ProfessionalsPage() {
       locationId: defaultLoc as LocationId,
       phone: '',
       isManager: false,
+      baseSalary: 1025,
       workSchedule: defaultBaseWorkSchedule,
       customScheduleOverrides: [],
       currentContract_startDate: null,
@@ -218,6 +221,7 @@ export default function ProfessionalsPage() {
         locationId: professional.locationId as LocationId,
         phone: professional.phone || undefined, 
         isManager: professional.isManager || false,
+        baseSalary: professional.baseSalary ?? 1025,
         workSchedule: formWorkSchedule,
         customScheduleOverrides: professional.customScheduleOverrides?.map(ov => ({
             ...ov,
@@ -468,7 +472,7 @@ export default function ProfessionalsPage() {
 
               <Accordion type="multiple" defaultValue={['personal-info', 'base-schedule']} className="w-full">
                 <AccordionItem value="personal-info">
-                  <AccordionTrigger className="text-lg font-semibold">Información Personal</AccordionTrigger>
+                  <AccordionTrigger className="text-lg font-semibold">Información Personal y Sueldo</AccordionTrigger>
                   <AccordionContent className="space-y-4 pt-2">
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       <FormField control={form.control} name="firstName" render={({ field }) => (
@@ -478,16 +482,25 @@ export default function ProfessionalsPage() {
                         <FormItem><FormLabel>Apellido(s)</FormLabel><FormControl><Input placeholder="Ej: Pérez" {...field} /></FormControl><FormMessage /></FormItem>
                       )}/>
                     </div>
-                    <FormField control={form.control} name="locationId" render={({ field }) => (
-                        <FormItem className="mt-4"><FormLabel>Sede Base</FormLabel>
-                          <Select onValueChange={field.onChange} value={field.value} disabled={isContadorOnly && !!editingProfessional}>
-                            <FormControl><SelectTrigger><SelectValue placeholder="Seleccionar sede" /></SelectTrigger></FormControl>
-                            <SelectContent>{locations.map(loc => (<SelectItem key={loc.id} value={loc.id}>{loc.name}</SelectItem>))}</SelectContent>
-                          </Select><FormMessage />
-                        </FormItem>
-                    )}/>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <FormField control={form.control} name="locationId" render={({ field }) => (
+                            <FormItem><FormLabel>Sede Base</FormLabel>
+                            <Select onValueChange={field.onChange} value={field.value} disabled={isContadorOnly && !!editingProfessional}>
+                                <FormControl><SelectTrigger><SelectValue placeholder="Seleccionar sede" /></SelectTrigger></FormControl>
+                                <SelectContent>{locations.map(loc => (<SelectItem key={loc.id} value={loc.id}>{loc.name}</SelectItem>))}</SelectContent>
+                            </Select><FormMessage />
+                            </FormItem>
+                        )}/>
+                         <FormField control={form.control} name="baseSalary" render={({ field }) => (
+                            <FormItem>
+                                <FormLabel className="flex items-center gap-1"><DollarSign size={16}/>Sueldo Base Mensual (S/)</FormLabel>
+                                <FormControl><Input type="number" placeholder="Ej: 1025.00" {...field} value={field.value ?? ''} onChange={e => field.onChange(e.target.value === '' ? null : parseFloat(e.target.value) || null)}/></FormControl>
+                                <FormMessage />
+                            </FormItem>
+                        )}/>
+                    </div>
                     <FormField control={form.control} name="phone" render={({ field }) => (
-                        <FormItem className="mt-4"><FormLabel>Teléfono (Opcional)</FormLabel><FormControl><Input type="tel" placeholder="Ej: 987654321" {...field} value={field.value ?? ''} /></FormControl><FormMessage /></FormItem>
+                        <FormItem><FormLabel>Teléfono (Opcional)</FormLabel><FormControl><Input type="tel" placeholder="Ej: 987654321" {...field} value={field.value ?? ''} /></FormControl><FormMessage /></FormItem>
                     )}/>
                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       <FormField
@@ -871,4 +884,3 @@ function VacationFormDialog({ isOpen, onClose, onSave }: VacationFormDialogProps
         </Dialog>
     );
 }
-

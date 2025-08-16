@@ -1,4 +1,5 @@
 
+
 "use client";
 
 import React, { useState, useMemo, useEffect, useCallback } from 'react';
@@ -6,7 +7,7 @@ import type { Professional, Location, Appointment } from '@/types';
 import { useAuth } from '@/contexts/auth-provider';
 import { useRouter } from 'next/navigation';
 import { USER_ROLES, APPOINTMENT_STATUS } from '@/lib/constants';
-import { getProfessionals, getLocations, getAppointments, getContractDisplayStatus } from '@/lib/data';
+import { getProfessionals, getLocations, getAppointments, getContractDisplayStatus, updateProfessional } from '@/lib/data';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -17,7 +18,7 @@ import { Calendar } from '@/components/ui/calendar';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow, TableFooter as TableFooterComponent } from '@/components/ui/table';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Loader2, CreditCard, AlertTriangle, PlusCircle, DollarSign, CalendarIcon, List, Users, ShoppingCart, Lightbulb, Landmark as LandmarkIcon, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Loader2, CreditCard, AlertTriangle, PlusCircle, DollarSign, CalendarIcon, List, Users, ShoppingCart, Lightbulb, Landmark as LandmarkIcon, ChevronLeft, ChevronRight, Check } from 'lucide-react';
 import { format, getYear, getMonth, getDate, startOfMonth, endOfMonth, addDays, setYear, setMonth, isAfter, parseISO } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { useToast } from '@/hooks/use-toast';
@@ -45,7 +46,6 @@ const getExpenseTypeLabel = (type: ExpenseType) => {
   }
 };
 
-const SUELDO_BASE = 1025.00;
 const DEDUCTIBLE_HIGUERETA = 2200;
 const DEDUCTIBLE_OTRAS = 1800;
 const COMISION_PORCENTAJE = 0.20;
@@ -81,6 +81,7 @@ export default function PaymentsPage() {
   const [selectedMonth, setSelectedMonth] = useState<number>(getMonth(new Date()));
   const [selectedQuincena, setSelectedQuincena] = useState<1 | 2>(getDate(new Date()) <= 15 ? 1 : 2);
   const [locations, setLocations] = useState<Location[]>([]);
+  const [editingSalary, setEditingSalary] = useState<{ id: string; value: string } | null>(null);
 
 
   // --- State for General Expenses ---
@@ -145,7 +146,8 @@ export default function PaymentsPage() {
             const deductible = prof.locationId === 'higuereta' ? DEDUCTIBLE_HIGUERETA : DEDUCTIBLE_OTRAS;
             const commissionableAmount = Math.max(0, totalIncome - deductible);
             const commission = commissionableAmount * COMISION_PORCENTAJE;
-            const totalPayment = SUELDO_BASE / 2 + commission; // Sueldo es quincenal
+            const baseSalaryQuincenal = (prof.baseSalary || 0) / 2;
+            const totalPayment = baseSalaryQuincenal + commission;
 
             return {
                 professionalId: prof.id,
@@ -153,7 +155,7 @@ export default function PaymentsPage() {
                 locationId: prof.locationId,
                 locationName: locations.find(l => l.id === prof.locationId)?.name || 'N/A',
                 totalIncome: totalIncome,
-                baseSalary: SUELDO_BASE / 2, // Mostrar el sueldo quincenal
+                baseSalary: baseSalaryQuincenal,
                 commission: commission,
                 totalPayment: totalPayment,
             };
@@ -192,6 +194,29 @@ export default function PaymentsPage() {
 
     setExpenseDescription('');
     setExpenseAmount('');
+  };
+
+  const handleSalaryEdit = (profId: string, currentSalary: number) => {
+    setEditingSalary({ id: profId, value: (currentSalary * 2).toString() }); // Edit the full monthly salary
+  };
+
+  const handleSaveSalary = async () => {
+    if (!editingSalary) return;
+    
+    const newSalary = parseFloat(editingSalary.value);
+    if (isNaN(newSalary) || newSalary < 0) {
+      toast({ title: "Valor inválido", description: "El sueldo base debe ser un número positivo.", variant: "destructive" });
+      return;
+    }
+
+    try {
+      await updateProfessional(editingSalary.id, { baseSalary: newSalary });
+      toast({ title: "Sueldo Actualizado", description: "El sueldo base ha sido actualizado exitosamente." });
+      setEditingSalary(null);
+      calculatePayroll(); // Recalculate payroll with new salary
+    } catch (error) {
+      toast({ title: "Error", description: "No se pudo actualizar el sueldo.", variant: "destructive" });
+    }
   };
 
   const navigateQuincena = (direction: 'prev' | 'next') => {
@@ -294,7 +319,7 @@ export default function PaymentsPage() {
                         <TableHead>Profesional</TableHead>
                         <TableHead>Sede Base</TableHead>
                         <TableHead className="text-right">Producción (S/)</TableHead>
-                        <TableHead className="text-right">Sueldo Base (S/)</TableHead>
+                        <TableHead className="text-right">Sueldo Base Quincenal (S/)</TableHead>
                         <TableHead className="text-right">Comisión (S/)</TableHead>
                         <TableHead className="text-right font-bold">Total a Pagar (S/)</TableHead>
                       </TableRow>
@@ -305,7 +330,23 @@ export default function PaymentsPage() {
                           <TableCell className="font-medium">{item.professionalName}</TableCell>
                           <TableCell>{item.locationName}</TableCell>
                           <TableCell className="text-right">{item.totalIncome.toFixed(2)}</TableCell>
-                          <TableCell className="text-right">{item.baseSalary.toFixed(2)}</TableCell>
+                          <TableCell className="text-right" onDoubleClick={() => handleSalaryEdit(item.professionalId, item.baseSalary)}>
+                            {editingSalary?.id === item.professionalId ? (
+                              <div className="flex gap-1 justify-end items-center">
+                                <Input
+                                  type="number"
+                                  value={editingSalary.value}
+                                  onChange={(e) => setEditingSalary({ ...editingSalary, value: e.target.value })}
+                                  onKeyDown={(e) => { if(e.key === 'Enter') handleSaveSalary(); if(e.key === 'Escape') setEditingSalary(null); }}
+                                  className="w-24 h-8 text-right"
+                                  autoFocus
+                                />
+                                <Button size="icon" className="h-8 w-8" onClick={handleSaveSalary}><Check size={16}/></Button>
+                              </div>
+                            ) : (
+                              <span>{item.baseSalary.toFixed(2)}</span>
+                            )}
+                          </TableCell>
                           <TableCell className="text-right text-green-600 font-semibold">{item.commission.toFixed(2)}</TableCell>
                           <TableCell className="text-right font-bold text-lg">{item.totalPayment.toFixed(2)}</TableCell>
                         </TableRow>

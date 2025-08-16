@@ -105,6 +105,7 @@ export const ProfessionalFormSchema = z.object({
   isManager: z.boolean().optional(),
   birthDay: z.coerce.number().int().min(1).max(31).optional().nullable(),
   birthMonth: z.coerce.number().int().min(1).max(12).optional().nullable(),
+  baseSalary: z.coerce.number().positive("El sueldo base debe ser un número positivo.").optional().nullable(),
 
   workSchedule: z.object(
     DAYS_OF_WEEK.reduce((acc, day) => {
@@ -188,7 +189,7 @@ export const ServiceFormSchema = z.object({
   name: z.string().min(2, "Nombre del servicio es requerido."),
   defaultDuration: z.object({
     hours: z.coerce.number().int().min(0, "Horas no pueden ser negativas.").max(23, "Horas no pueden ser más de 23.").default(0),
-    minutes: z.coerce.number().int().min(0, "Minutos no pueden ser negativos.").max(59, "Minutos no pueden ser más de 59.").default(30),
+    minutes: z.coerce.number().int().min(0, "Minutos no pueden ser más de 59.").default(30),
   }).refine(data => (data.hours * 60 + data.minutes) > 0, {
     message: "La duración total debe ser mayor a 0 minutos.",
     path: ["root"],
