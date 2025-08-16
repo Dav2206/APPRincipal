@@ -28,6 +28,8 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogClose } from '@/components/ui/dialog';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { PeriodicReminderFormSchema } from '@/lib/schemas';
+import { useForm } from 'react-hook-form';
+import { zodResolver } from '@hookform/resolvers/zod';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -240,7 +242,7 @@ export default function PaymentsPage() {
 
     try {
       await updateProfessional(editingCommission.prof.professionalId, { 
-        commissionRate: newRate, 
+        commissionRate: newRate / 100, 
         commissionDeductible: newDeductible
       });
       toast({ title: "Comisión Actualizada", description: `Los parámetros de comisión para ${editingCommission.prof.professionalName} han sido actualizados.` });
