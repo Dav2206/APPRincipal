@@ -25,6 +25,8 @@ interface CorroborationReportData {
   };
 }
 
+const ALL_PROFESSIONALS_VALUE = "all";
+
 const currentSystemYear = getYear(new Date());
 const availableYears = [currentSystemYear, currentSystemYear - 1, currentSystemYear - 2];
 const months = Array.from({ length: 12 }, (_, i) => ({
@@ -44,6 +46,8 @@ export default function CorroborationPage() {
   const [selectedYear, setSelectedYear] = useState<number>(getYear(new Date()));
   const [selectedMonth, setSelectedMonth] = useState<number>(getMonth(new Date()));
   const [selectedQuincena, setSelectedQuincena] = useState<1 | 2>(getDate(new Date()) <= 15 ? 1 : 2);
+  const [selectedProfessional, setSelectedProfessional] = useState<string>(ALL_PROFESSIONALS_VALUE);
+
   
   const effectiveLocationId = useMemo(() => {
     if (user?.role === USER_ROLES.CONTADOR) {
@@ -131,6 +135,24 @@ export default function CorroborationPage() {
     generateReport();
   }, [user, effectiveLocationId, selectedYear, selectedMonth, selectedQuincena, locations]);
 
+  const professionalsWithActivity = useMemo(() => {
+    return Object.entries(reportData).map(([profId, profData]) => ({
+      id: profId,
+      name: profData.professionalName
+    })).sort((a,b) => a.name.localeCompare(b.name));
+  }, [reportData]);
+  
+  const displayedReportData = useMemo(() => {
+    if (selectedProfessional === ALL_PROFESSIONALS_VALUE) {
+        return reportData;
+    }
+    const filteredData: CorroborationReportData = {};
+    if (reportData[selectedProfessional]) {
+        filteredData[selectedProfessional] = reportData[selectedProfessional];
+    }
+    return filteredData;
+  }, [reportData, selectedProfessional]);
+
 
   const dateHeaders = useMemo(() => {
     const baseDate = setMonth(setYear(new Date(), selectedYear), selectedMonth);
@@ -143,10 +165,10 @@ export default function CorroborationPage() {
     const totals: { [day: string]: number } = {};
     dateHeaders.forEach(date => {
         const dayKey = format(date, 'yyyy-MM-dd');
-        totals[dayKey] = Object.values(reportData).reduce((sum, profData) => sum + (profData.dailyTotals[dayKey] || 0), 0);
+        totals[dayKey] = Object.values(displayedReportData).reduce((sum, profData) => sum + (profData.dailyTotals[dayKey] || 0), 0);
     });
     return totals;
-  }, [reportData, dateHeaders]);
+  }, [displayedReportData, dateHeaders]);
   
   const grandTotal = useMemo(() => {
     return Object.values(dailyTotals).reduce((sum, total) => sum + total, 0);
@@ -174,6 +196,7 @@ export default function CorroborationPage() {
     setSelectedYear(newYear);
     setSelectedMonth(newMonth);
     setSelectedQuincena(newQuincena as 1 | 2);
+    setSelectedProfessional(ALL_PROFESSIONALS_VALUE);
   };
   
   const isNextQuincenaDisabled = () => {
@@ -225,10 +248,21 @@ export default function CorroborationPage() {
           </CardDescription>
            <div className="mt-4 flex items-center gap-2 flex-wrap">
               <Button variant="outline" size="icon" onClick={() => navigateQuincena('prev')} disabled={isPrevQuincenaDisabled()}><ChevronLeft className="h-4 w-4" /></Button>
-              <Select value={String(selectedYear)} onValueChange={(val) => setSelectedYear(Number(val))}><SelectTrigger className="w-[100px]"><SelectValue /></SelectTrigger><SelectContent>{availableYears.map(y => <SelectItem key={y} value={String(y)}>{y}</SelectItem>)}</SelectContent></Select>
-              <Select value={String(selectedMonth)} onValueChange={(val) => setSelectedMonth(Number(val))}><SelectTrigger className="w-[150px]"><SelectValue /></SelectTrigger><SelectContent>{months.map(m => <SelectItem key={m.value} value={String(m.value)}>{m.label}</SelectItem>)}</SelectContent></Select>
-              <Select value={String(selectedQuincena)} onValueChange={(val) => setSelectedQuincena(Number(val) as 1 | 2)}><SelectTrigger className="w-[150px]"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="1">1ra Quincena</SelectItem><SelectItem value="2">2da Quincena</SelectItem></SelectContent></Select>
+              <Select value={String(selectedYear)} onValueChange={(val) => {setSelectedYear(Number(val)); setSelectedProfessional(ALL_PROFESSIONALS_VALUE);}}><SelectTrigger className="w-[100px]"><SelectValue /></SelectTrigger><SelectContent>{availableYears.map(y => <SelectItem key={y} value={String(y)}>{y}</SelectItem>)}</SelectContent></Select>
+              <Select value={String(selectedMonth)} onValueChange={(val) => {setSelectedMonth(Number(val)); setSelectedProfessional(ALL_PROFESSIONALS_VALUE);}}><SelectTrigger className="w-[150px]"><SelectValue /></SelectTrigger><SelectContent>{months.map(m => <SelectItem key={m.value} value={String(m.value)}>{m.label}</SelectItem>)}</SelectContent></Select>
+              <Select value={String(selectedQuincena)} onValueChange={(val) => {setSelectedQuincena(Number(val) as 1 | 2); setSelectedProfessional(ALL_PROFESSIONALS_VALUE);}}><SelectTrigger className="w-[150px]"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="1">1ra Quincena</SelectItem><SelectItem value="2">2da Quincena</SelectItem></SelectContent></Select>
               <Button variant="outline" size="icon" onClick={() => navigateQuincena('next')} disabled={isNextQuincenaDisabled()}><ChevronRight className="h-4 w-4" /></Button>
+              <Select value={selectedProfessional} onValueChange={setSelectedProfessional}>
+                <SelectTrigger className="w-[200px]">
+                    <SelectValue placeholder="Filtrar Profesional"/>
+                </SelectTrigger>
+                <SelectContent>
+                    <SelectItem value={ALL_PROFESSIONALS_VALUE}>Todos los profesionales</SelectItem>
+                    {professionalsWithActivity.map(prof => (
+                        <SelectItem key={prof.id} value={prof.id}>{prof.name}</SelectItem>
+                    ))}
+                </SelectContent>
+              </Select>
             </div>
             {user && (user.role === USER_ROLES.ADMIN || user.role === USER_ROLES.CONTADOR) && (
             <div className="mt-2 text-sm text-muted-foreground">
@@ -237,7 +271,7 @@ export default function CorroborationPage() {
           )}
         </CardHeader>
         <CardContent>
-          {isLoading ? <LoadingState /> : Object.keys(reportData).length === 0 ? <NoDataState /> : (
+          {isLoading ? <LoadingState /> : Object.keys(displayedReportData).length === 0 ? <NoDataState /> : (
             <div className="overflow-x-auto">
                 <Table className="min-w-full">
                   <TableHeader>
@@ -253,7 +287,7 @@ export default function CorroborationPage() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {Object.entries(reportData).sort(([,a],[,b]) => b.quincenaTotal - a.quincenaTotal).map(([profId, profData]) => (
+                    {Object.entries(displayedReportData).sort(([,a],[,b]) => b.quincenaTotal - a.quincenaTotal).map(([profId, profData]) => (
                       <TableRow key={profId}>
                         <TableCell className="sticky left-0 bg-background z-10 font-medium">{profData.professionalName}</TableCell>
                         <TableCell>{profData.locationName}</TableCell>
@@ -292,3 +326,5 @@ export default function CorroborationPage() {
     </div>
   );
 }
+
+    
