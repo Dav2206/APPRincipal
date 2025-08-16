@@ -117,18 +117,18 @@ export default function PercentagesPage() {
         });
       });
 
-      // Iterate through all appointments from all locations to calculate totals
-      allPeriodAppointments.forEach(appt => {
-        
-        const processAppointmentIncome = (profId: string | null | undefined, appointment: Appointment) => {
-            if (!profId || !incomeMap.has(profId)) return;
+      // Iterate through all appointments to calculate totals
+        allPeriodAppointments.forEach(appt => {
+            const mainProfId = appt.professionalId;
+            if (!mainProfId || !incomeMap.has(mainProfId)) return;
 
-            const entry = incomeMap.get(profId)!;
-            const appointmentDuration = appointment.totalCalculatedDurationMinutes || appointment.durationMinutes || 0;
-            
-            let mainServiceIncome = appointment.amountPaid || 0;
-            let addedServicesIncome = (appointment.addedServices || []).reduce((sum, as) => sum + (as.amountPaid || 0), 0);
-            let totalAppointmentIncome = mainServiceIncome + addedServicesIncome;
+            const entry = incomeMap.get(mainProfId)!;
+
+            const mainServiceIncome = appt.amountPaid || 0;
+            const addedServicesIncome = (appt.addedServices || []).reduce((sum, as) => sum + (as.amountPaid || 0), 0);
+            const totalAppointmentIncome = mainServiceIncome + addedServicesIncome;
+
+            const appointmentDuration = appt.totalCalculatedDurationMinutes || appt.durationMinutes || 0;
 
             // This appointment contributes to the professional's total income regardless of location
             entry.totalIncomeAllLocations += totalAppointmentIncome;
@@ -136,24 +136,12 @@ export default function PercentagesPage() {
             entry.totalEffectiveMinutes += appointmentDuration;
 
             // This appointment contributes to the location-specific income only if it happened there
-            if (appointment.locationId === effectiveLocationId) {
+            if (appt.locationId === effectiveLocationId) {
                 entry.incomeInSelectedLocation += totalAppointmentIncome;
                 entry.appointmentsInSelectedLocation += 1;
             }
-        };
-
-        // Process income for main professional
-        processAppointmentIncome(appt.professionalId, appt);
-
-        // Process income for professionals on added services if they are different
-        (appt.addedServices || []).forEach(addedService => {
-            if (addedService.professionalId && addedService.professionalId !== appt.professionalId) {
-                // This case is more complex as we are adding to a different professional's tally
-                // For now, let's assume added services income is attributed to the main professional for simplicity in this report.
-                // A more detailed implementation might handle this differently.
-            }
         });
-      });
+
 
       const finalReportData = Array.from(incomeMap.values()).filter(item => item.totalAppointmentsAllLocations > 0 || item.workedDaysInSede > 0);
       const sortedReport = finalReportData.sort((a, b) => b.totalIncomeAllLocations - a.totalIncomeAllLocations);
