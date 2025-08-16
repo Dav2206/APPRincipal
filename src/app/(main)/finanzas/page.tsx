@@ -20,7 +20,7 @@ import { useToast } from '@/hooks/use-toast';
 import { useRouter } from 'next/navigation';
 import { Input } from '@/components/ui/input';
 import { Separator } from '@/components/ui/separator';
-import { Pie, PieChart, Cell } from "recharts"
+import { Pie, PieChart, Cell, Sector } from "recharts"
 import {
   ChartContainer,
   ChartTooltip,
@@ -72,6 +72,10 @@ export default function FinancesPage() {
 
   const [selectedPaymentGroups, setSelectedPaymentGroups] = useState<string[]>([]);
 
+  // State for interactive chart
+  const [activeChartSlices, setActiveChartSlices] = useState<string[]>([]);
+  const [activeDonutSlice, setActiveDonutSlice] = useState<string | null>(null);
+
 
   useEffect(() => {
     async function loadLocations() {
@@ -118,6 +122,7 @@ export default function FinancesPage() {
   
   useEffect(() => {
     setSelectedPaymentGroups(allAvailablePaymentGroups);
+    setActiveChartSlices(allAvailablePaymentGroups);
   }, [allAvailablePaymentGroups]);
 
 
@@ -367,6 +372,12 @@ export default function FinancesPage() {
       </div>
     );
   }
+  
+  const id = "donut-interactive"
+  const totalValue = React.useMemo(() => {
+    return chartData.reduce((acc, curr) => acc + curr.value, 0)
+  }, [chartData])
+
 
   return (
     <div className="container mx-auto py-8 px-4 md:px-0 space-y-8">
@@ -494,34 +505,81 @@ export default function FinancesPage() {
                             Visualización del total de ingresos por tipo de pago para la selección actual. Los pagos se agrupan por su primera palabra (ej. "Tarjeta - Visa" se agrupa como "Tarjeta").
                         </CardDescription>
                     </CardHeader>
-                    <CardContent>
+                    <CardContent className="flex-1 pb-0">
                         <ChartContainer
-                            config={chartConfig}
-                            className="mx-auto aspect-square max-h-[300px]"
+                          id={id}
+                          config={chartConfig}
+                          className="mx-auto aspect-square h-[250px]"
                         >
-                            <PieChart>
+                          <PieChart>
                             <ChartTooltip
-                                cursor={false}
-                                content={<ChartTooltipContent hideLabel />}
+                              cursor={false}
+                              content={<ChartTooltipContent hideLabel />}
                             />
                             <Pie
-                                data={chartData}
-                                dataKey="value"
-                                nameKey="name"
-                                innerRadius="60%"
-                                strokeWidth={5}
+                              data={chartData.filter((d) => activeChartSlices.includes(d.name))}
+                              dataKey="value"
+                              nameKey="name"
+                              innerRadius="60%"
+                              strokeWidth={5}
+                              activeIndex={
+                                chartData.findIndex((d) => d.name === activeDonutSlice)
+                              }
+                              activeShape={({
+                                ...props
+                              }) => (
+                                <g>
+                                  <Sector {...props} cornerRadius={5}/>
+                                </g>
+                              )}
                             >
-                                {chartData.map((entry, index) => (
-                                    <Cell key={`cell-${index}`} fill={entry.fill} />
+                               {chartData.map((entry) => (
+                                <Cell
+                                    key={entry.name}
+                                    fill={entry.fill}
+                                    className="outline-none"
+                                />
                                 ))}
                             </Pie>
                             <ChartLegend
-                                content={<ChartLegendContent nameKey="name" />}
-                                className="-mt-2"
+                              content={
+                                <ChartLegendContent
+                                    nameKey="name"
+                                    onMouseUp={(data) => {
+                                    if(activeDonutSlice === data.value) {
+                                        setActiveDonutSlice(null)
+                                    } else {
+                                        setActiveDonutSlice(data.value)
+                                    }
+                                    }}
+                                    onMouseDown={(data) => {
+                                    if (activeChartSlices.includes(data.value)) {
+                                        setActiveChartSlices(
+                                        activeChartSlices.filter((label) => label !== data.value)
+                                        )
+                                    } else {
+                                        setActiveChartSlices([...activeChartSlices, data.value])
+                                    }
+                                    }}
+                                    className="flex-wrap"
+                                    style={{
+                                    opacity: activeDonutSlice !== null ? 0.5 : 1,
+                                    }}
+                                />
+                                }
+                              
                             />
-                            </PieChart>
+                          </PieChart>
                         </ChartContainer>
                     </CardContent>
+                    <CardFooter className="flex-col gap-2 text-sm">
+                        <div className="flex items-center gap-2 font-medium leading-none">
+                            Mostrando total de {activeChartSlices.length} de {chartData.length} grupos.
+                        </div>
+                         <div className="leading-none text-muted-foreground">
+                            Clic en la leyenda para ocultar/mostrar un grupo.
+                        </div>
+                    </CardFooter>
                 </Card>
             )}
             </>
