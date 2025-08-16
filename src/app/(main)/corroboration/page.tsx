@@ -7,13 +7,13 @@ import { useAuth } from '@/contexts/auth-provider';
 import { useAppState } from '@/contexts/app-state-provider';
 import { getAppointments, getProfessionals, getLocations } from '@/lib/data';
 import { USER_ROLES, APPOINTMENT_STATUS, LocationId } from '@/lib/constants';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow, TableFooter } from '@/components/ui/table';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { format, startOfMonth, endOfMonth, eachDayOfInterval, getYear, getMonth, setYear, setMonth, addDays, isAfter, getDate } from 'date-fns';
+import { format, startOfMonth, endOfMonth, eachDayOfInterval, getYear, getMonth, setYear, setMonth, addDays, isAfter, getDate, parseISO } from 'date-fns';
 import { es } from 'date-fns/locale';
-import { ListChecks, Loader2, AlertTriangle, ChevronLeft, ChevronRight } from 'lucide-react';
+import { ListChecks, Loader2, AlertTriangle, ChevronLeft, ChevronRight, Shuffle } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 
 interface CorroborationReportData {
@@ -24,6 +24,20 @@ interface CorroborationReportData {
     quincenaTotal: number;
   };
 }
+
+interface ExternalProductionReportData {
+  [professionalId: string]: {
+      professionalName: string;
+      productionByLocation: {
+          [locationId: string]: {
+              locationName: string;
+              total: number;
+          }
+      };
+      totalExternalProduction: number;
+  }
+}
+
 
 const ALL_PROFESSIONALS_VALUE = "all";
 
@@ -40,6 +54,7 @@ export default function CorroborationPage() {
   const router = useRouter();
 
   const [reportData, setReportData] = useState<CorroborationReportData>({});
+  const [externalReportData, setExternalReportData] = useState<ExternalProductionReportData>({});
   const [locations, setLocations] = useState<Location[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   
@@ -81,9 +96,8 @@ export default function CorroborationPage() {
 
       try {
         const [allProfessionals, allAppointmentsResponse] = await Promise.all([
-          getProfessionals(), // Fetch ALL professionals to get their names regardless of their base location.
+          getProfessionals(),
           getAppointments({
-            locationId: effectiveLocationId,
             dateRange: { start: startDate, end: endDate },
             statuses: [APPOINTMENT_STATUS.COMPLETED]
           })
@@ -91,43 +105,64 @@ export default function CorroborationPage() {
         
         const appointments = allAppointmentsResponse.appointments || [];
         const newReportData: CorroborationReportData = {};
+        const newExternalReportData: ExternalProductionReportData = {};
+        const nativeProfessionalsIds = effectiveLocationId 
+            ? new Set(allProfessionals.filter(p => p.locationId === effectiveLocationId).map(p => p.id)) 
+            : null;
 
-        // Iterate over appointments to build the report. A professional will only be added
-        // if they have a completed appointment in the selected location/period.
         appointments.forEach(appt => {
-          const processIncome = (profId: string | undefined | null, amount: number | undefined | null, date: string) => {
+          const processIncome = (profId: string | undefined | null, amount: number | undefined | null, appointment: Appointment) => {
             if (!profId || !amount || amount <= 0) return;
             
-            // Find professional details from the complete list
             const professional = allProfessionals.find(p => p.id === profId);
-            if (!professional) return; // Skip if professional details not found
-
-            // Initialize professional in the report if they are not already there
-            if (!newReportData[profId]) {
-                newReportData[profId] = {
-                    professionalName: `${professional.firstName} ${professional.lastName}`,
-                    locationName: locations.find(l => l.id === professional.locationId)?.name || 'N/A', // Base location
-                    dailyTotals: {},
-                    quincenaTotal: 0
-                };
-            }
+            if (!professional) return;
             
-            const dayKey = format(new Date(date), 'yyyy-MM-dd');
-            newReportData[profId].dailyTotals[dayKey] = (newReportData[profId].dailyTotals[dayKey] || 0) + amount;
-            newReportData[profId].quincenaTotal += amount;
+            // Logic for main report (production in selected location)
+            if (appointment.locationId === effectiveLocationId || !effectiveLocationId) {
+                if (!newReportData[profId]) {
+                    newReportData[profId] = {
+                        professionalName: `${professional.firstName} ${professional.lastName}`,
+                        locationName: locations.find(l => l.id === professional.locationId)?.name || 'N/A',
+                        dailyTotals: {},
+                        quincenaTotal: 0
+                    };
+                }
+                const dayKey = format(parseISO(appointment.appointmentDateTime), 'yyyy-MM-dd');
+                newReportData[profId].dailyTotals[dayKey] = (newReportData[profId].dailyTotals[dayKey] || 0) + amount;
+                newReportData[profId].quincenaTotal += amount;
+            }
+
+            // Logic for external production report
+            if (nativeProfessionalsIds && nativeProfessionalsIds.has(profId) && appointment.locationId !== effectiveLocationId) {
+                if (!newExternalReportData[profId]) {
+                    newExternalReportData[profId] = {
+                        professionalName: `${professional.firstName} ${professional.lastName}`,
+                        productionByLocation: {},
+                        totalExternalProduction: 0
+                    };
+                }
+                const externalLocId = appointment.locationId;
+                if (!newExternalReportData[profId].productionByLocation[externalLocId]) {
+                    newExternalReportData[profId].productionByLocation[externalLocId] = {
+                        locationName: locations.find(l => l.id === externalLocId)?.name || 'Externa',
+                        total: 0
+                    };
+                }
+                newExternalReportData[profId].productionByLocation[externalLocId].total += amount;
+                newExternalReportData[profId].totalExternalProduction += amount;
+            }
           };
 
-          processIncome(appt.professionalId, appt.amountPaid, appt.appointmentDateTime);
-          appt.addedServices?.forEach(added => {
-            // Added services are attributed to the professional assigned to them, or the main professional if not specified
-            processIncome(added.professionalId || appt.professionalId, added.amountPaid, appt.appointmentDateTime);
-          });
+          const totalAppointmentIncome = (appt.amountPaid || 0) + (appt.addedServices?.reduce((sum, as) => sum + (as.amountPaid || 0), 0) || 0);
+          processIncome(appt.professionalId, totalAppointmentIncome, appt);
         });
 
         setReportData(newReportData);
+        setExternalReportData(newExternalReportData);
       } catch (error) {
         console.error("Error generating corroboration report:", error);
         setReportData({});
+        setExternalReportData({});
       } finally {
         setIsLoading(false);
       }
@@ -323,8 +358,47 @@ export default function CorroborationPage() {
           )}
         </CardContent>
       </Card>
+
+      {effectiveLocationId && Object.keys(externalReportData).length > 0 && (
+         <Card className="shadow-lg mt-8">
+            <CardHeader>
+                <CardTitle className="text-xl flex items-center gap-2">
+                    <Shuffle className="text-primary"/>
+                    Producción de Profesionales Nativos en Otras Sedes
+                </CardTitle>
+                <CardDescription>
+                    Ingresos generados por los profesionales de {locations.find(l => l.id === effectiveLocationId)?.name} cuando trabajaron en otras sedes durante esta quincena.
+                </CardDescription>
+            </CardHeader>
+            <CardContent>
+                <Table>
+                    <TableHeader>
+                        <TableRow>
+                            <TableHead>Profesional Nativo</TableHead>
+                            <TableHead>Sede Externa</TableHead>
+                            <TableHead className="text-right">Producción Externa (S/)</TableHead>
+                        </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                        {Object.entries(externalReportData)
+                            .sort(([, a], [, b]) => a.professionalName.localeCompare(b.professionalName))
+                            .flatMap(([profId, profData]) => 
+                                Object.entries(profData.productionByLocation).map(([locId, locData]) => (
+                                    <TableRow key={`${profId}-${locId}`}>
+                                        <TableCell>{profData.professionalName}</TableCell>
+                                        <TableCell>{locData.locationName}</TableCell>
+                                        <TableCell className="text-right font-medium">{locData.total.toFixed(2)}</TableCell>
+                                    </TableRow>
+                                ))
+                            )}
+                    </TableBody>
+                </Table>
+            </CardContent>
+         </Card>
+      )}
+
     </div>
   );
 }
 
-    
+
