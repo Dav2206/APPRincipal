@@ -77,7 +77,7 @@ export default function CorroborationPage() {
 
       try {
         const [allProfessionals, allAppointmentsResponse] = await Promise.all([
-          getProfessionals(effectiveLocationId),
+          getProfessionals(), // Fetch ALL professionals to get their names regardless of their base location.
           getAppointments({
             locationId: effectiveLocationId,
             dateRange: { start: startDate, end: endDate },
@@ -88,18 +88,25 @@ export default function CorroborationPage() {
         const appointments = allAppointmentsResponse.appointments || [];
         const newReportData: CorroborationReportData = {};
 
-        allProfessionals.forEach(prof => {
-          newReportData[prof.id] = {
-            professionalName: `${prof.firstName} ${prof.lastName}`,
-            locationName: locations.find(l => l.id === prof.locationId)?.name || 'N/A',
-            dailyTotals: {},
-            quincenaTotal: 0
-          };
-        });
-
+        // Iterate over appointments to build the report. A professional will only be added
+        // if they have a completed appointment in the selected location/period.
         appointments.forEach(appt => {
           const processIncome = (profId: string | undefined | null, amount: number | undefined | null, date: string) => {
-            if (!profId || !amount || amount <= 0 || !newReportData[profId]) return;
+            if (!profId || !amount || amount <= 0) return;
+            
+            // Find professional details from the complete list
+            const professional = allProfessionals.find(p => p.id === profId);
+            if (!professional) return; // Skip if professional details not found
+
+            // Initialize professional in the report if they are not already there
+            if (!newReportData[profId]) {
+                newReportData[profId] = {
+                    professionalName: `${professional.firstName} ${professional.lastName}`,
+                    locationName: locations.find(l => l.id === professional.locationId)?.name || 'N/A', // Base location
+                    dailyTotals: {},
+                    quincenaTotal: 0
+                };
+            }
             
             const dayKey = format(new Date(date), 'yyyy-MM-dd');
             newReportData[profId].dailyTotals[dayKey] = (newReportData[profId].dailyTotals[dayKey] || 0) + amount;
@@ -108,15 +115,9 @@ export default function CorroborationPage() {
 
           processIncome(appt.professionalId, appt.amountPaid, appt.appointmentDateTime);
           appt.addedServices?.forEach(added => {
+            // Added services are attributed to the professional assigned to them, or the main professional if not specified
             processIncome(added.professionalId || appt.professionalId, added.amountPaid, appt.appointmentDateTime);
           });
-        });
-        
-        // Filter out professionals with no activity in the period
-        Object.keys(newReportData).forEach(profId => {
-            if(newReportData[profId].quincenaTotal === 0) {
-                delete newReportData[profId];
-            }
         });
 
         setReportData(newReportData);
