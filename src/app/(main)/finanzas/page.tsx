@@ -520,17 +520,6 @@ export default function FinancesPage() {
               <SelectTrigger className="w-full sm:w-[120px]"><SelectValue placeholder="Año" /></SelectTrigger>
               <SelectContent>{availableYears.map(y => <SelectItem key={y} value={String(y)}>{y}</SelectItem>)}</SelectContent>
             </Select>
-             <Select value={selectedPresetId} onValueChange={(val) => setSelectedPresetId(val)}>
-              <SelectTrigger className="w-full sm:w-[220px]">
-                  <SelectValue placeholder="Seleccionar Agrupación" />
-              </SelectTrigger>
-              <SelectContent>
-                  <SelectItem value={NO_GROUPING_PRESET_ID}>Vista Detallada (Sin Agrupar)</SelectItem>
-                  {groupingPresets.map(preset => (
-                    <SelectItem key={preset.id} value={preset.id}>{preset.name}</SelectItem>
-                  ))}
-              </SelectContent>
-             </Select>
              <Popover open={isPresetsPopoverOpen} onOpenChange={setIsPresetsPopoverOpen}>
                 <PopoverTrigger asChild>
                     <Button variant="outline"><Settings2 className="mr-2 h-4 w-4"/>Gestionar Conjuntos</Button>
@@ -562,6 +551,28 @@ export default function FinancesPage() {
                     </div>
                 </PopoverContent>
              </Popover>
+          </div>
+          <div className="mt-4 space-y-2">
+             <Label>Agrupar por</Label>
+             <div className="flex flex-wrap gap-2">
+                <Button 
+                    variant={selectedPresetId === NO_GROUPING_PRESET_ID ? 'default' : 'outline'}
+                    onClick={() => setSelectedPresetId(NO_GROUPING_PRESET_ID)}
+                    size="sm"
+                >
+                    Vista Detallada
+                </Button>
+                {groupingPresets.map(preset => (
+                    <Button
+                        key={preset.id}
+                        variant={selectedPresetId === preset.id ? 'default' : 'outline'}
+                        onClick={() => setSelectedPresetId(preset.id)}
+                        size="sm"
+                    >
+                        {preset.name}
+                    </Button>
+                ))}
+             </div>
           </div>
            {user && (user.role === USER_ROLES.ADMIN || user.role === USER_ROLES.CONTADOR) && (
             <div className="mt-2 text-sm text-muted-foreground">
