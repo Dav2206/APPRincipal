@@ -6,7 +6,7 @@ import type { Appointment, LocationId, PaymentMethod, Location } from '@/types';
 import { useAuth } from '@/contexts/auth-provider';
 import { useAppState } from '@/contexts/app-state-provider';
 import { getAppointments, getLocations, updateLocationPaymentMethods } from '@/lib/data';
-import { USER_ROLES, APPOINTMENT_STATUS, APPOINTMENT_STATUS_DISPLAY } from '@/lib/constants';
+import { USER_ROLES, APPOINTMENT_STATUS } from '@/lib/constants';
 
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -518,7 +518,7 @@ export default function FinancesPage() {
                       <CardHeader>
                           <CardTitle className="flex items-center gap-2"><PieChartIcon />Distribución de Ingresos por Grupo de Pago</CardTitle>
                           <CardDescription>
-                              Visualización del total de ingresos por tipo de pago para la selección actual. Los pagos se agrupan por su primera palabra (ej. "Tarjeta - Visa" se agrupa como "Tarjeta").
+                              Visualización del total de ingresos por tipo de pago para la selección actual. Los pagos se agrupan por su primera palabra (ej: "Tarjeta - Visa" se agrupa como "Tarjeta").
                           </CardDescription>
                       </CardHeader>
                       <CardContent className="flex-1 pb-0">
@@ -598,7 +598,7 @@ export default function FinancesPage() {
                               Mostrando total de {activeChartSlices.length} de {chartData.length} grupos.
                           </div>
                            <div className="leading-none text-muted-foreground">
-                              Clic en la leyenda para ocultar/mostrar un grupo.
+                              Clic en la leyenda para ocultar/mostrar un grupo. Clic en una porción de la dona para resaltarla.
                           </div>
                       </CardFooter>
                   </Card>
@@ -612,7 +612,7 @@ export default function FinancesPage() {
         <CardHeader>
             <CardTitle>Gestión de Métodos de Pago por Sede</CardTitle>
             <CardDescription>
-                Añada, edite o elimine los métodos de pago para cada una de sus sedes.
+                Añada, edite o elimine los métodos de pago para cada una de sus sedes. Use un prefijo común para agruparlos en los reportes (ej. "Tarjeta - Visa").
             </CardDescription>
             <div className="pt-4">
               <Label htmlFor="location-filter">Filtrar por Sede</Label>
@@ -713,3 +713,5 @@ export default function FinancesPage() {
     </div>
   );
 }
+
+    
