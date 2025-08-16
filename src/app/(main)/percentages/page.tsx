@@ -1,4 +1,5 @@
 
+
 "use client";
 
 import type { Appointment, Professional, Location } from '@/types';
@@ -68,10 +69,6 @@ export default function PercentagesPage() {
   }, []);
 
   const fetchDataForReport = useCallback(async () => {
-    if (!effectiveLocationId || !user) {
-      setIsLoading(false);
-      return;
-    }
     setIsLoading(true);
 
     const baseDate = setMonth(setYear(new Date(), selectedYear), selectedMonth);
@@ -80,10 +77,8 @@ export default function PercentagesPage() {
 
 
     try {
-      // Fetch only professionals whose base location is the one selected
-      const nativeProfessionals = await getProfessionals(effectiveLocationId);
+      const allProfessionals = await getProfessionals(); // Fetch all to get a complete list for mapping
       
-      // Fetch appointments from ALL locations to calculate total income
       const dateRange = { start: startDate, end: endDate };
       const allAppointmentsResponse = await getAppointments({ 
         dateRange, 
@@ -93,58 +88,66 @@ export default function PercentagesPage() {
 
       const incomeMap = new Map<string, ProfessionalIncomeReport>();
       
-      // Initialize map for native professionals of the selected location
-      nativeProfessionals.forEach(prof => {
-        let workedDays = 0;
-        let currentDate = startDate;
-        while (currentDate <= endDate) {
-            const availability = getProfessionalAvailabilityForDate(prof, currentDate);
-            if (availability?.isWorking && availability.workingLocationId === effectiveLocationId) {
-                workedDays++;
-            }
-            currentDate = addDays(currentDate, 1);
-        }
+      allProfessionals.forEach(prof => {
+          let workedDays = 0;
+          if(effectiveLocationId){ // Only calculate worked days if a specific location is selected
+              let currentDate = startDate;
+              while (currentDate <= endDate) {
+                  const availability = getProfessionalAvailabilityForDate(prof, currentDate);
+                  if (availability?.isWorking && availability.workingLocationId === effectiveLocationId) {
+                      workedDays++;
+                  }
+                  currentDate = addDays(currentDate, 1);
+              }
+          }
 
-        incomeMap.set(prof.id, {
-          professionalId: prof.id,
-          professionalName: `${prof.firstName} ${prof.lastName}`,
-          incomeInSelectedLocation: 0,
-          appointmentsInSelectedLocation: 0,
-          totalIncomeAllLocations: 0,
-          totalAppointmentsAllLocations: 0,
-          workedDaysInSede: workedDays,
-          totalEffectiveMinutes: 0,
-        });
+          incomeMap.set(prof.id, {
+            professionalId: prof.id,
+            professionalName: `${prof.firstName} ${prof.lastName}`,
+            incomeInSelectedLocation: 0,
+            appointmentsInSelectedLocation: 0,
+            totalIncomeAllLocations: 0,
+            totalAppointmentsAllLocations: 0,
+            workedDaysInSede: workedDays,
+            totalEffectiveMinutes: 0,
+          });
       });
 
-      // Iterate through all appointments to calculate totals
-        allPeriodAppointments.forEach(appt => {
-            const mainProfId = appt.professionalId;
-            if (!mainProfId || !incomeMap.has(mainProfId)) return;
+      allPeriodAppointments.forEach(appt => {
+        const mainProfId = appt.professionalId;
+        if (!mainProfId || !incomeMap.has(mainProfId)) return;
 
-            const entry = incomeMap.get(mainProfId)!;
-
-            const mainServiceIncome = appt.amountPaid || 0;
-            const addedServicesIncome = (appt.addedServices || []).reduce((sum, as) => sum + (as.amountPaid || 0), 0);
-            const totalAppointmentIncome = mainServiceIncome + addedServicesIncome;
-
-            const appointmentDuration = appt.totalCalculatedDurationMinutes || appt.durationMinutes || 0;
-
-            // This appointment contributes to the professional's total income regardless of location
-            entry.totalIncomeAllLocations += totalAppointmentIncome;
-            entry.totalAppointmentsAllLocations += 1;
-            entry.totalEffectiveMinutes += appointmentDuration;
-
-            // This appointment contributes to the location-specific income only if it happened there
-            if (appt.locationId === effectiveLocationId) {
-                entry.incomeInSelectedLocation += totalAppointmentIncome;
-                entry.appointmentsInSelectedLocation += 1;
-            }
+        const entry = incomeMap.get(mainProfId)!;
+        
+        let totalAppointmentIncome = appt.amountPaid || 0;
+        // Sumar ingresos de servicios adicionales a la producción del profesional principal
+        appt.addedServices?.forEach(addedService => {
+            totalAppointmentIncome += addedService.amountPaid || 0;
         });
 
+        const appointmentDuration = appt.totalCalculatedDurationMinutes || appt.durationMinutes || 0;
 
-      const finalReportData = Array.from(incomeMap.values()).filter(item => item.totalAppointmentsAllLocations > 0 || item.workedDaysInSede > 0);
-      const sortedReport = finalReportData.sort((a, b) => b.totalIncomeAllLocations - a.totalIncomeAllLocations);
+        entry.totalIncomeAllLocations += totalAppointmentIncome;
+        entry.totalAppointmentsAllLocations += 1;
+        entry.totalEffectiveMinutes += appointmentDuration;
+
+        if (appt.locationId === effectiveLocationId) {
+            entry.incomeInSelectedLocation += totalAppointmentIncome;
+            entry.appointmentsInSelectedLocation += 1;
+        }
+    });
+
+      let finalReportData = Array.from(incomeMap.values());
+
+      if(effectiveLocationId) {
+        const nativeProfessionalIds = new Set(allProfessionals.filter(p => p.locationId === effectiveLocationId).map(p => p.id));
+        finalReportData = finalReportData.filter(item => nativeProfessionalIds.has(item.professionalId));
+      }
+
+      const sortedReport = finalReportData
+        .filter(item => item.totalIncomeAllLocations > 0 || (effectiveLocationId && item.workedDaysInSede > 0))
+        .sort((a, b) => b.totalIncomeAllLocations - a.totalIncomeAllLocations);
+
       setReportData(sortedReport);
 
     } catch (error) {

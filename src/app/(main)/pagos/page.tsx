@@ -122,7 +122,6 @@ export default function PaymentsPage() {
           return contractStatus === 'Activo' || contractStatus === 'Próximo a Vencer';
         });
 
-        // Fetch appointments from all locations to get total production
         const appointmentsResponse = await getAppointments({ 
             dateRange: { start: startDate, end: endDate },
             statuses: [APPOINTMENT_STATUS.COMPLETED]
@@ -132,15 +131,19 @@ export default function PaymentsPage() {
         const incomeByProfessional: Record<string, number> = {};
 
         appointments.forEach(appt => {
-            const processIncome = (profId: string | null | undefined, amount: number | null | undefined) => {
-                if(profId && amount && amount > 0) {
-                    incomeByProfessional[profId] = (incomeByProfessional[profId] || 0) + amount;
+            const mainProfId = appt.professionalId;
+            if (mainProfId) {
+                let totalAppointmentIncome = appt.amountPaid || 0;
+                
+                // Sumar ingresos de servicios adicionales a la producción del profesional principal
+                appt.addedServices?.forEach(addedService => {
+                    totalAppointmentIncome += addedService.amountPaid || 0;
+                });
+
+                if (totalAppointmentIncome > 0) {
+                    incomeByProfessional[mainProfId] = (incomeByProfessional[mainProfId] || 0) + totalAppointmentIncome;
                 }
-            };
-            processIncome(appt.professionalId, appt.amountPaid);
-            appt.addedServices?.forEach(as => {
-                processIncome(as.professionalId || appt.professionalId, as.amountPaid);
-            });
+            }
         });
 
         const newPayrollData: PayrollData[] = activeProfessionals.map(prof => {
