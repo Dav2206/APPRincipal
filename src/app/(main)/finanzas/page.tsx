@@ -29,6 +29,7 @@ import {
   ChartLegendContent,
   type ChartConfig,
 } from "@/components/ui/chart"
+import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuCheckboxItem, DropdownMenuLabel, DropdownMenuSeparator } from '@/components/ui/dropdown-menu';
 
 
 type ReportRow = {
@@ -69,6 +70,8 @@ export default function FinancesPage() {
   
   const [editingMethod, setEditingMethod] = useState<{ locationId: LocationId; oldName: string; newName: string; } | null>(null);
 
+  const [selectedPaymentGroups, setSelectedPaymentGroups] = useState<string[]>([]);
+
 
   useEffect(() => {
     async function loadLocations() {
@@ -105,6 +108,10 @@ export default function FinancesPage() {
     
     return Array.from(allGroups).sort((a,b) => a.localeCompare(b));
   }, [paymentMethodsByLocation, completedAppointments]);
+  
+  useEffect(() => {
+    setSelectedPaymentGroups(allAvailablePaymentGroups);
+  }, [allAvailablePaymentGroups]);
 
 
   useEffect(() => {
@@ -194,18 +201,27 @@ export default function FinancesPage() {
       generateReport();
     }
   }, [user, selectedYear, selectedMonth, adminSelectedLocation, toast, locations]);
+
+  const filteredPaymentGroups = useMemo(() => {
+    return allAvailablePaymentGroups.filter(group => selectedPaymentGroups.includes(group));
+  }, [allAvailablePaymentGroups, selectedPaymentGroups]);
   
   const grandTotal = useMemo(() => {
-    return reportData.reduce((sum, row) => sum + row.locationTotal, 0);
-  }, [reportData]);
+    return reportData.reduce((sum, row) => {
+        const rowTotalFromSelectedGroups = filteredPaymentGroups.reduce((groupSum, group) => {
+            return groupSum + (row.totalsByMethod[group] || 0);
+        }, 0);
+        return sum + rowTotalFromSelectedGroups;
+    }, 0);
+  }, [reportData, filteredPaymentGroups]);
   
   const totalsByPaymentGroup = useMemo(() => {
     const totals: Partial<Record<string, number>> = {};
-    allAvailablePaymentGroups.forEach(group => {
+    filteredPaymentGroups.forEach(group => {
         totals[group] = reportData.reduce((sum, row) => sum + (row.totalsByMethod[group] || 0), 0);
     });
     return totals;
-  }, [reportData, allAvailablePaymentGroups]);
+  }, [reportData, filteredPaymentGroups]);
 
   const chartData = useMemo(() => {
     return Object.entries(totalsByPaymentGroup)
@@ -371,6 +387,44 @@ export default function FinancesPage() {
               <SelectTrigger className="w-full sm:w-[120px]"><SelectValue placeholder="Año" /></SelectTrigger>
               <SelectContent>{availableYears.map(y => <SelectItem key={y} value={String(y)}>{y}</SelectItem>)}</SelectContent>
             </Select>
+             <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                    <Button variant="outline" className="w-full sm:w-auto">
+                        <Filter className="mr-2 h-4 w-4"/>
+                        Filtrar por Grupos de Pago
+                    </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent>
+                    <DropdownMenuLabel>Mostrar Grupos de Pago</DropdownMenuLabel>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuCheckboxItem
+                        checked={selectedPaymentGroups.length === allAvailablePaymentGroups.length}
+                        onCheckedChange={(checked) => setSelectedPaymentGroups(checked ? allAvailablePaymentGroups : [])}
+                    >
+                        Seleccionar Todos
+                    </DropdownMenuCheckboxItem>
+                     <DropdownMenuCheckboxItem
+                        checked={selectedPaymentGroups.length === 0}
+                        onCheckedChange={(checked) => setSelectedPaymentGroups(checked ? [] : allAvailablePaymentGroups)}
+                    >
+                        No Seleccionar Ninguno
+                    </DropdownMenuCheckboxItem>
+                    <DropdownMenuSeparator />
+                    {allAvailablePaymentGroups.map(group => (
+                        <DropdownMenuCheckboxItem
+                            key={group}
+                            checked={selectedPaymentGroups.includes(group)}
+                            onCheckedChange={(checked) => {
+                                setSelectedPaymentGroups(prev => 
+                                    checked ? [...prev, group] : prev.filter(g => g !== group)
+                                );
+                            }}
+                        >
+                            {group}
+                        </DropdownMenuCheckboxItem>
+                    ))}
+                </DropdownMenuContent>
+            </DropdownMenu>
           </div>
            {user && (user.role === USER_ROLES.ADMIN || user.role === USER_ROLES.CONTADOR) && (
             <div className="mt-2 text-sm text-muted-foreground">
@@ -392,29 +446,29 @@ export default function FinancesPage() {
               <TableHeader>
                 <TableRow>
                   <TableHead>Sede</TableHead>
-                  {allAvailablePaymentGroups.map(group => <TableHead key={group} className="text-right">{group}</TableHead>)}
-                  <TableHead className="text-right font-bold">Total Sede</TableHead>
+                  {filteredPaymentGroups.map(group => <TableHead key={group} className="text-right">{group}</TableHead>)}
+                  <TableHead className="text-right font-bold">Total Sede (Filtrado)</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {reportData.map(row => (
                   <TableRow key={row.locationId}>
                     <TableCell className="font-medium">{row.locationName}</TableCell>
-                    {allAvailablePaymentGroups.map(group => (
+                    {filteredPaymentGroups.map(group => (
                       <TableCell key={group} className="text-right">
                         {(row.totalsByMethod[group] || 0).toFixed(2)}
                       </TableCell>
                     ))}
                     <TableCell className="text-right font-bold">
-                      {row.locationTotal.toFixed(2)}
+                      {filteredPaymentGroups.reduce((sum, group) => sum + (row.totalsByMethod[group] || 0), 0).toFixed(2)}
                     </TableCell>
                   </TableRow>
                 ))}
               </TableBody>
               <TableFooter>
                 <TableRow className="bg-muted/80 font-bold">
-                  <TableCell>Total General</TableCell>
-                  {allAvailablePaymentGroups.map(group => (
+                  <TableCell>Total General (Filtrado)</TableCell>
+                  {filteredPaymentGroups.map(group => (
                     <TableCell key={group} className="text-right">
                       {(totalsByPaymentGroup[group] || 0).toFixed(2)}
                     </TableCell>
@@ -573,3 +627,5 @@ export default function FinancesPage() {
     </div>
   );
 }
+
+    
