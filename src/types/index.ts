@@ -53,6 +53,7 @@ export interface Professional extends BaseEntity {
   baseSalary?: number | null;
   commissionRate?: number | null;
   commissionDeductible?: number | null;
+  discounts?: number | null;
 
 
   biWeeklyEarnings?: number;

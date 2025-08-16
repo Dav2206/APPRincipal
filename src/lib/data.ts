@@ -310,6 +310,7 @@ export async function addProfessional (data: Omit<ProfessionalFormData, 'id'>): 
     baseSalary: data.baseSalary ?? null,
     commissionRate: (data.commissionRate ?? 20) / 100,
     commissionDeductible: data.commissionDeductible,
+    discounts: 0,
     workSchedule: {}, 
     customScheduleOverrides: (data.customScheduleOverrides || []).map(ov => ({
       ...ov,
@@ -364,6 +365,7 @@ export async function addProfessional (data: Omit<ProfessionalFormData, 'id'>): 
   firestoreData.baseSalary = firestoreData.baseSalary ?? null;
   firestoreData.commissionRate = firestoreData.commissionRate ?? null;
   firestoreData.commissionDeductible = firestoreData.commissionDeductible ?? null;
+  firestoreData.discounts = firestoreData.discounts ?? null;
  
   if (firestoreData.currentContract) {
     firestoreData.currentContract.startDate = toFirestoreTimestamp(firestoreData.currentContract.startDate);
@@ -428,6 +430,7 @@ export async function updateProfessional (id: string, data: Partial<Professional
     if (data.hasOwnProperty('baseSalary')) professionalToUpdate.baseSalary = data.baseSalary ?? null;
     if (data.hasOwnProperty('commissionRate')) professionalToUpdate.commissionRate = data.commissionRate ?? null;
     if (data.hasOwnProperty('commissionDeductible')) professionalToUpdate.commissionDeductible = data.commissionDeductible ?? null;
+    if (data.hasOwnProperty('discounts')) professionalToUpdate.discounts = data.discounts ?? null;
 
 
     if (data.workSchedule !== undefined) {
@@ -510,6 +513,7 @@ export async function updateProfessional (id: string, data: Partial<Professional
     firestoreUpdateData.baseSalary = firestoreUpdateData.baseSalary ?? null;
     firestoreUpdateData.commissionRate = firestoreUpdateData.commissionRate ?? null;
     firestoreUpdateData.commissionDeductible = firestoreUpdateData.commissionDeductible ?? null;
+    firestoreUpdateData.discounts = firestoreUpdateData.discounts ?? null;
 
     if (firestoreUpdateData.hasOwnProperty('customScheduleOverrides') && firestoreUpdateData.customScheduleOverrides) {
        firestoreUpdateData.customScheduleOverrides = firestoreUpdateData.customScheduleOverrides.map((ov: any) => ({

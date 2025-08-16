@@ -1,4 +1,5 @@
 
+
 "use client";
 
 import React, { useState, useMemo, useEffect, useCallback } from 'react';
@@ -94,6 +95,7 @@ export default function PaymentsPage() {
   const [locations, setLocations] = useState<Location[]>([]);
   const [editingSalary, setEditingSalary] = useState<{ id: string; value: string } | null>(null);
   const [editingCommission, setEditingCommission] = useState<{ prof: PayrollData; rate: string; deductible: string; } | null>(null);
+  const [editingDiscount, setEditingDiscount] = useState<{ id: string; value: string } | null>(null);
   
   // --- State for Reminders ---
   const [allReminders, setAllReminders] = useState<PeriodicReminder[]>([]);
@@ -177,7 +179,7 @@ export default function PaymentsPage() {
             const commissionableAmount = Math.max(0, totalIncome - deductible);
             const commission = commissionableAmount * rate;
             const baseSalaryQuincenal = (prof.baseSalary || 0) / 2;
-            const discounts = 0; // Placeholder for now
+            const discounts = prof.discounts || 0;
             const totalPayment = baseSalaryQuincenal + commission - discounts;
 
             return {
@@ -265,6 +267,29 @@ export default function PaymentsPage() {
       calculatePayroll(); // Recalculate payroll
     } catch (error) {
       toast({ title: "Error", description: "No se pudieron actualizar los parámetros de comisión.", variant: "destructive" });
+    }
+  };
+
+  const handleDiscountEdit = (profId: string, currentDiscount: number) => {
+    setEditingDiscount({ id: profId, value: currentDiscount.toString() });
+  };
+
+  const handleSaveDiscount = async () => {
+    if (!editingDiscount) return;
+
+    const newDiscount = parseFloat(editingDiscount.value);
+    if (isNaN(newDiscount) || newDiscount < 0) {
+      toast({ title: "Valor inválido", description: "El descuento debe ser un número positivo.", variant: "destructive" });
+      return;
+    }
+
+    try {
+      await updateProfessional(editingDiscount.id, { discounts: newDiscount });
+      toast({ title: "Descuento Actualizado", description: "El descuento ha sido actualizado." });
+      setEditingDiscount(null);
+      calculatePayroll();
+    } catch (error) {
+      toast({ title: "Error", description: "No se pudo actualizar el descuento.", variant: "destructive" });
     }
   };
 
@@ -526,8 +551,22 @@ export default function PaymentsPage() {
                         <TableCell className="text-right text-green-600 font-semibold cursor-pointer" onDoubleClick={() => handleCommissionEdit(item)}>
                             {item.commission.toFixed(2)}
                         </TableCell>
-                        <TableCell className="text-right text-red-600">
-                          {item.discounts.toFixed(2)}
+                        <TableCell className="text-right text-red-600 cursor-pointer" onDoubleClick={() => handleDiscountEdit(item.professionalId, item.discounts)}>
+                          {editingDiscount?.id === item.professionalId ? (
+                            <div className="flex gap-1 justify-end items-center">
+                              <Input
+                                type="number"
+                                value={editingDiscount.value}
+                                onChange={(e) => setEditingDiscount({ ...editingDiscount, value: e.target.value })}
+                                onKeyDown={(e) => { if(e.key === 'Enter') handleSaveDiscount(); if(e.key === 'Escape') setEditingDiscount(null); }}
+                                className="w-24 h-8 text-right"
+                                autoFocus
+                              />
+                              <Button size="icon" className="h-8 w-8" onClick={handleSaveDiscount}><Check size={16}/></Button>
+                            </div>
+                          ) : (
+                            <span>{item.discounts.toFixed(2)}</span>
+                          )}
                         </TableCell>
                         <TableCell className="text-right font-bold text-lg">{item.totalPayment.toFixed(2)}</TableCell>
                       </TableRow>
@@ -547,7 +586,7 @@ export default function PaymentsPage() {
             <CardFooter className="flex-col items-start gap-2 text-xs text-muted-foreground">
                 <p><span className="font-semibold">Producción:</span> Suma de todos los servicios (principales y adicionales) realizados por el profesional en la quincena.</p>
                 <p><span className="font-semibold">Comisión:</span> Se calcula como `(Producción - Deducible) * Tasa`. El deducible y la tasa son configurables por profesional.</p>
-                <p><span className="font-semibold">Edición Rápida:</span> Haga doble clic en "Sueldo Base" o "Comisión" para editar los valores del profesional.</p>
+                <p><span className="font-semibold">Edición Rápida:</span> Haga doble clic en "Sueldo Base", "Comisión" o "Descuentos" para editar los valores del profesional.</p>
             </CardFooter>
           </Card>
         </TabsContent>
