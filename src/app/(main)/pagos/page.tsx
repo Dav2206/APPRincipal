@@ -122,6 +122,7 @@ export default function PaymentsPage() {
           return contractStatus === 'Activo' || contractStatus === 'Próximo a Vencer';
         });
 
+        // Fetch appointments from all locations to get total production
         const appointmentsResponse = await getAppointments({ 
             dateRange: { start: startDate, end: endDate },
             statuses: [APPOINTMENT_STATUS.COMPLETED]
