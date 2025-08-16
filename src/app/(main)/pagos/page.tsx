@@ -18,7 +18,7 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow, TableFooter as TableFooterComponent } from '@/components/ui/table';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Loader2, CreditCard, AlertTriangle, PlusCircle, DollarSign, CalendarIcon, List, Users, ShoppingCart, Lightbulb, Landmark as LandmarkIcon, ChevronLeft, ChevronRight, Check, Settings, Percent, Bell, CalendarClock, XCircle, Edit2, Trash2, ShieldAlert, CheckCircle, Clock } from 'lucide-react';
-import { format, getYear, getMonth, getDate, startOfMonth, endOfMonth, addDays, setYear, setMonth, isAfter, parseISO, isPast, isBefore, startOfDay } from 'date-fns';
+import { format, getYear, getMonth, getDate, startOfMonth, endOfMonth, addDays, setYear, setMonth, isAfter, parseISO, isPast, isBefore, startOfDay, isSameMonth } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
@@ -40,6 +40,7 @@ import {
   AlertDialogTrigger,
   AlertDialogFooter
 } from "@/components/ui/alert-dialog";
+import { Separator } from '@/components/ui/separator';
 
 
 const currentSystemYear = getYear(new Date());
@@ -62,6 +63,7 @@ const REMINDER_CATEGORIES = [
   { value: 'impuestos', label: 'Impuestos' },
   { value: 'otros', label: 'Otros' },
 ] as const;
+type ReminderCategoryValue = typeof REMINDER_CATEGORIES[number]['value'];
 
 interface PayrollData {
   professionalId: string;
@@ -98,6 +100,8 @@ export default function PaymentsPage() {
   const [isReminderFormOpen, setIsReminderFormOpen] = useState(false);
   const [editingReminder, setEditingReminder] = useState<PeriodicReminder | null>(null);
   const [reminderToDelete, setReminderToDelete] = useState<PeriodicReminder | null>(null);
+  const [selectedExpenseYear, setSelectedExpenseYear] = useState<number>(getYear(new Date()));
+  const [selectedExpenseMonth, setSelectedExpenseMonth] = useState<number>(getMonth(new Date()));
 
   const reminderForm = useForm<PeriodicReminderFormData>({
     resolver: zodResolver(PeriodicReminderFormSchema),
@@ -318,6 +322,34 @@ export default function PaymentsPage() {
   useEffect(() => {
     fetchReminders();
   }, [fetchReminders]);
+  
+  const expenseSummary = useMemo(() => {
+    const paidRemindersInPeriod = reminders.filter(r => {
+        const dueDate = parseISO(r.dueDate);
+        return r.status === 'paid' && isSameMonth(dueDate, setMonth(new Date(), selectedExpenseMonth)) && getYear(dueDate) === selectedExpenseYear;
+    });
+
+    const summary = REMINDER_CATEGORIES.reduce((acc, category) => {
+        acc[category.value] = 0;
+        return acc;
+    }, {} as Record<ReminderCategoryValue, number>);
+    
+    let grandTotal = 0;
+
+    for(const reminder of paidRemindersInPeriod) {
+        const amount = reminder.amount || 0;
+        const category = reminder.category || 'otros';
+        if(summary[category] !== undefined) {
+             summary[category] += amount;
+        } else {
+            summary.otros += amount;
+        }
+        grandTotal += amount;
+    }
+
+    return { ...summary, grandTotal };
+
+  }, [reminders, selectedExpenseYear, selectedExpenseMonth]);
 
   const handleAddReminder = () => {
     setEditingReminder(null);
@@ -508,16 +540,23 @@ export default function PaymentsPage() {
 
         <TabsContent value="expenses">
           <Card>
-            <CardHeader className="flex flex-row justify-between items-center">
-                <div>
+            <CardHeader>
+                <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+                  <div>
                     <CardTitle>Gastos Operativos y Recordatorios</CardTitle>
                     <CardDescription>
                         Configure y dé seguimiento a los pagos recurrentes de la empresa.
                     </CardDescription>
+                  </div>
+                   <Button onClick={handleAddReminder}>
+                      <PlusCircle className="mr-2 h-4 w-4" /> Añadir Recordatorio
+                  </Button>
                 </div>
-                 <Button onClick={handleAddReminder}>
-                    <PlusCircle className="mr-2 h-4 w-4" /> Añadir Recordatorio
-                </Button>
+                 <div className="mt-4 flex items-center gap-2 flex-wrap border-t pt-4">
+                    <Label className="text-sm font-medium">Ver Resumen para:</Label>
+                    <Select value={String(selectedExpenseYear)} onValueChange={(val) => {setSelectedExpenseYear(Number(val));}}><SelectTrigger className="w-[100px]"><SelectValue /></SelectTrigger><SelectContent>{availableYears.map(y => <SelectItem key={y} value={String(y)}>{y}</SelectItem>)}</SelectContent></Select>
+                    <Select value={String(selectedExpenseMonth)} onValueChange={(val) => {setSelectedExpenseMonth(Number(val));}}><SelectTrigger className="w-[150px]"><SelectValue /></SelectTrigger><SelectContent>{months.map(m => <SelectItem key={m.value} value={String(m.value)}>{m.label}</SelectItem>)}</SelectContent></Select>
+                </div>
             </CardHeader>
             <CardContent>
                  {isLoadingReminders ? (
@@ -573,7 +612,7 @@ export default function PaymentsPage() {
                                 <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => handleEditReminder(reminder)} title="Editar">
                                     <Edit2 className="h-4 w-4" />
                                 </Button>
-                                <AlertDialog>
+                                <AlertDialog open={reminderToDelete?.id === reminder.id} onOpenChange={(isOpen) => !isOpen && setReminderToDelete(null)}>
                                     <AlertDialogTrigger asChild>
                                     <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => setReminderToDelete(reminder)} title="Eliminar">
                                         <Trash2 className="h-4 w-4 text-destructive" />
@@ -587,7 +626,7 @@ export default function PaymentsPage() {
                                         </AlertDialogDescription>
                                     </AlertDialogHeader>
                                     <AlertDialogFooter>
-                                        <AlertDialogCancel onClick={() => setReminderToDelete(null)}>Cancelar</AlertDialogCancel>
+                                        <AlertDialogCancel>Cancelar</AlertDialogCancel>
                                         <AlertDialogAction onClick={handleDeleteReminder} className={buttonVariants({ variant: "destructive" })}>
                                         Eliminar
                                         </AlertDialogAction>
@@ -602,6 +641,36 @@ export default function PaymentsPage() {
                     </Table>
                     </div>
                 )}
+                 <Separator className="my-6" />
+                <div className="space-y-4">
+                    <h3 className="text-lg font-semibold">Resumen de Gastos del Mes (Pagados)</h3>
+                     <Card>
+                        <CardContent className="pt-6">
+                            <Table>
+                                <TableHeader>
+                                    <TableRow>
+                                        <TableHead>Categoría</TableHead>
+                                        <TableHead className="text-right">Total Pagado (S/)</TableHead>
+                                    </TableRow>
+                                </TableHeader>
+                                <TableBody>
+                                    {REMINDER_CATEGORIES.map(category => (
+                                        <TableRow key={category.value}>
+                                            <TableCell>{category.label}</TableCell>
+                                            <TableCell className="text-right">{(expenseSummary[category.value] || 0).toFixed(2)}</TableCell>
+                                        </TableRow>
+                                    ))}
+                                </TableBody>
+                                <TableFooterComponent>
+                                    <TableRow className="font-bold text-base">
+                                        <TableCell>Total General de Gastos Pagados</TableCell>
+                                        <TableCell className="text-right">S/ {expenseSummary.grandTotal.toFixed(2)}</TableCell>
+                                    </TableRow>
+                                </TableFooterComponent>
+                            </Table>
+                        </CardContent>
+                    </Card>
+                </div>
             </CardContent>
           </Card>
         </TabsContent>
@@ -773,3 +842,4 @@ export default function PaymentsPage() {
     </div>
   );
 }
+
