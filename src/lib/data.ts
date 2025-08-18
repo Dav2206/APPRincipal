@@ -1065,6 +1065,7 @@ export async function addAppointment(data: AppointmentFormData): Promise<Appoint
       appointmentDateTime: formatISO(proposedStartTime),
       status: 'booked',
       durationMinutes: mainServiceDuration,
+      preferredProfessionalId: data.preferredProfessionalId, // Save the preference
       isExternalProfessional,
       externalProfessionalOriginLocationId,
       actualArrivalTime: null, // Initial value
@@ -1081,6 +1082,7 @@ export async function addAppointment(data: AppointmentFormData): Promise<Appoint
       totalCalculatedDurationMinutes: totalDurationForSlotCheck,
       isForFamilyMember: data.isForFamilyMember || false,
       familyMemberRelation: data.isForFamilyMember ? data.familyMemberRelation : null,
+      bookingObservations: data.bookingObservations
     };
 
     const batch = writeBatch(firestore);
@@ -1093,7 +1095,7 @@ export async function addAppointment(data: AppointmentFormData): Promise<Appoint
       updatedAt: serverTimestamp(),
       addedServices: newAppointmentData.addedServices?.map(as => ({ ...as })) || [],
     };
-    delete mainAppointmentFirestoreData.preferredProfessionalId;
+    
     batch.set(mainAppointmentRef, mainAppointmentFirestoreData);
     console.log(`[data.ts] addAppointment (batch): Main appointment queued for creation with ID ${mainAppointmentRef.id}.`);
 
@@ -1530,16 +1532,23 @@ export async function updatePeriodicReminder(id: string, data: Partial<PeriodicR
     if (!reminderSnap.exists()) {
       throw new Error(`Recordatorio con ID ${id} no encontrado.`);
     }
-    const currentReminder = convertDocumentData(reminderSnap.data()) as PeriodicReminder;
+    
+    const currentReminderData = reminderSnap.data();
+    const currentReminderDueDate = currentReminderData.dueDate?.toDate(); // Convert Firestore Timestamp to JS Date
 
+    if(!currentReminderDueDate){
+        throw new Error("El recordatorio actual no tiene una fecha de vencimiento válida.");
+    }
+    
     // First, update the current reminder
     const updateData: Partial<PeriodicReminder> = {
       ...data,
       updatedAt: formatISO(new Date()),
     };
-    if (data.dueDate) {
+     if (data.dueDate) {
       updateData.dueDate = typeof data.dueDate === 'string' ? data.dueDate : formatISO(data.dueDate, { representation: 'date'});
     }
+
     const firestoreUpdateData: any = {...updateData};
     if (firestoreUpdateData.dueDate) firestoreUpdateData.dueDate = toFirestoreTimestamp(firestoreUpdateData.dueDate);
     if (firestoreUpdateData.updatedAt) firestoreUpdateData.updatedAt = toFirestoreTimestamp(firestoreUpdateData.updatedAt);
@@ -1547,23 +1556,22 @@ export async function updatePeriodicReminder(id: string, data: Partial<PeriodicR
     transaction.update(reminderRef, firestoreUpdateData);
 
     // If marking as paid and it's recurring, create the next one
-    if (data.status === 'paid' && currentReminder.recurrence !== 'once') {
-      const currentDueDate = parseISO(currentReminder.dueDate); // This was the point of failure
+    if (data.status === 'paid' && currentReminderData.recurrence !== 'once') {
       let nextDueDate: Date;
-      switch (currentReminder.recurrence) {
-        case 'monthly': nextDueDate = addMonths(currentDueDate, 1); break;
-        case 'quarterly': nextDueDate = addQuarters(currentDueDate, 1); break;
-        case 'annually': nextDueDate = addYears(currentDueDate, 1); break;
-        default: nextDueDate = currentDueDate;
+      switch (currentReminderData.recurrence) {
+        case 'monthly': nextDueDate = addMonths(currentReminderDueDate, 1); break;
+        case 'quarterly': nextDueDate = addQuarters(currentReminderDueDate, 1); break;
+        case 'annually': nextDueDate = addYears(currentReminderDueDate, 1); break;
+        default: nextDueDate = currentReminderDueDate;
       }
       
       const nextReminderData: Omit<PeriodicReminder, 'id'> = {
-        title: currentReminder.title,
-        description: currentReminder.description,
-        category: currentReminder.category,
+        title: currentReminderData.title,
+        description: currentReminderData.description,
+        category: currentReminderData.category,
         dueDate: formatISO(nextDueDate, { representation: 'date' }),
-        recurrence: currentReminder.recurrence,
-        amount: currentReminder.amount,
+        recurrence: currentReminderData.recurrence,
+        amount: currentReminderData.amount,
         status: 'pending',
         createdAt: formatISO(new Date()),
         updatedAt: formatISO(new Date()),
@@ -1580,28 +1588,14 @@ export async function updatePeriodicReminder(id: string, data: Partial<PeriodicR
       transaction.set(newReminderRef, nextReminderFirestoreData);
     }
     
-    // Return the updated document data for the UI
     const finalDocSnap = await getDoc(reminderRef);
     if (!finalDocSnap.exists()) return undefined;
     
-    const finalDocData = convertDocumentData(finalDocSnap.data());
-    
-    // Ensure that the returned data for the UI matches the expected type
-    return {
-        id: finalDocSnap.id,
-        title: finalDocData.title,
-        description: finalDocData.description,
-        category: finalDocData.category,
-        dueDate: finalDocData.dueDate, // Will be an ISO string
-        recurrence: finalDocData.recurrence,
-        amount: finalDocData.amount,
-        status: finalDocData.status,
-        createdAt: finalDocData.createdAt,
-        updatedAt: finalDocData.updatedAt,
-    } as PeriodicReminder;
+    return { id: finalDocSnap.id, ...convertDocumentData(finalDocSnap.data()) } as PeriodicReminder;
 
   });
 }
+
 
 
 export async function deletePeriodicReminder(reminderId: string): Promise<boolean> {

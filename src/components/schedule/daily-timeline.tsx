@@ -423,7 +423,7 @@ const DailyTimelineComponent = ({ professionals, appointments, timeSlots, onAppo
                               )}
                               style={{
                                 ...styleProps,
-                                borderLeft: `4px solid ${block.groupColor}`, 
+                                borderLeft: wasSpecificallyRequested ? `4px solid hsl(var(--destructive))` : `4px solid ${block.groupColor}`,
                               }}
                               onClick={() => onAppointmentClick?.(block.originalAppointmentData, block.serviceId)}
                             >
