@@ -983,7 +983,7 @@ export async function addAppointment(data: AppointmentFormData): Promise<Appoint
 
     const proposedStartTime = parse(`${format(data.appointmentDate, 'yyyy-MM-dd')} ${data.appointmentTime}`, 'yyyy-MM-dd HH:mm', new Date());
     
-    let professionalIdToAssign: string | null = data.preferredProfessionalId;
+    let professionalIdToAssign: string | null = data.preferredProfessionalId === '_any_professional_placeholder_' ? null : data.preferredProfessionalId;
     
     let isExternalProfessional = false;
     let externalProfessionalOriginLocationId: LocationId | null = null;
@@ -1065,7 +1065,7 @@ export async function addAppointment(data: AppointmentFormData): Promise<Appoint
       appointmentDateTime: formatISO(proposedStartTime),
       status: 'booked',
       durationMinutes: mainServiceDuration,
-      preferredProfessionalId: data.preferredProfessionalId, // Save the preference
+      preferredProfessionalId: data.preferredProfessionalId === '_any_professional_placeholder_' ? null : data.preferredProfessionalId, // Save the preference
       isExternalProfessional,
       externalProfessionalOriginLocationId,
       actualArrivalTime: null, // Initial value
@@ -1082,7 +1082,7 @@ export async function addAppointment(data: AppointmentFormData): Promise<Appoint
       totalCalculatedDurationMinutes: totalDurationForSlotCheck,
       isForFamilyMember: data.isForFamilyMember || false,
       familyMemberRelation: data.isForFamilyMember ? data.familyMemberRelation : null,
-      bookingObservations: data.bookingObservations
+      bookingObservations: data.bookingObservations || null,
     };
 
     const batch = writeBatch(firestore);
