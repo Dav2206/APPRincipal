@@ -1082,7 +1082,7 @@ export async function addAppointment(data: AppointmentFormData): Promise<Appoint
       totalCalculatedDurationMinutes: totalDurationForSlotCheck,
       isForFamilyMember: data.isForFamilyMember || false,
       familyMemberRelation: data.isForFamilyMember ? data.familyMemberRelation : null,
-      bookingObservations: data.bookingObservations || null,
+      bookingObservations: data.bookingObservations ?? null,
     };
 
     const batch = writeBatch(firestore);
@@ -1426,6 +1426,41 @@ export async function updateAppointmentProfessional(appointmentId: string, newPr
     return updatedAppointment;
 }
 
+export async function updateAddedServiceProfessional(appointmentId: string, serviceId: string, newProfessionalId: string): Promise<Appointment | undefined> {
+    if (!firestore) {
+        throw new Error("Firestore not initialized.");
+    }
+    const docRef = doc(firestore, 'citas', appointmentId);
+    
+    await runTransaction(firestore, async (transaction) => {
+        const apptDoc = await transaction.get(docRef);
+        if (!apptDoc.exists()) {
+            throw new Error("Appointment not found!");
+        }
+
+        const apptData = apptDoc.data() as Appointment;
+        const addedServices = apptData.addedServices || [];
+        let serviceUpdated = false;
+
+        const updatedAddedServices = addedServices.map(as => {
+            if (as.serviceId === serviceId && !serviceUpdated) { // Update only the first match
+                serviceUpdated = true;
+                return { ...as, professionalId: newProfessionalId };
+            }
+            return as;
+        });
+
+        if (serviceUpdated) {
+            transaction.update(docRef, { 
+                addedServices: updatedAddedServices,
+                updatedAt: serverTimestamp() 
+            });
+        }
+    });
+
+    return await getAppointmentById(appointmentId);
+}
+
 
 export async function getPatientAppointmentHistory(patientId: string): Promise<{appointments: Appointment[]}> {
     return getAppointments({ patientId });
@@ -1533,8 +1568,9 @@ export async function updatePeriodicReminder(id: string, data: Partial<PeriodicR
       throw new Error(`Recordatorio con ID ${id} no encontrado.`);
     }
     
-    const currentReminderData = reminderSnap.data();
-    const currentReminderDueDate = currentReminderData.dueDate?.toDate(); // Convert Firestore Timestamp to JS Date
+    const currentReminderData = convertDocumentData(reminderSnap.data());
+    const currentReminderDueDate = currentReminderData.dueDate ? parseISO(currentReminderData.dueDate) : null;
+
 
     if(!currentReminderDueDate){
         throw new Error("El recordatorio actual no tiene una fecha de vencimiento válida.");

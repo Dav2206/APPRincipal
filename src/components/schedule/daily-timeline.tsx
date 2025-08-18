@@ -19,7 +19,7 @@ interface DailyTimelineProps {
   timeSlots: string[];
   currentDate: Date;
   onAppointmentClick?: (appointment: Appointment, serviceId?: string) => void;
-  onAppointmentDrop: (appointmentId: string, newProfessionalId: string) => Promise<boolean>;
+  onAppointmentDrop: (appointmentId: string, newProfessionalId: string, serviceId?: string) => Promise<boolean>;
   viewingLocationId: LocationId;
   locations: Location[];
   isDragDropEnabled: boolean;
@@ -87,7 +87,7 @@ const PaymentMethodIcon = ({ method }: { method?: string | null }) => {
 
 
 const DailyTimelineComponent = ({ professionals, appointments, timeSlots, onAppointmentClick, onAppointmentDrop, viewingLocationId, currentDate, locations, isDragDropEnabled }: DailyTimelineProps) => {
-  const [draggedAppointmentId, setDraggedAppointmentId] = useState<string | null>(null);
+  const [draggedItemId, setDraggedItemId] = useState<string | null>(null);
   const professionalColumnsRef = useRef<Record<string, HTMLDivElement | null>>({});
   const scrollAreaRef = useRef<HTMLDivElement>(null);
 
@@ -209,8 +209,9 @@ const DailyTimelineComponent = ({ professionals, appointments, timeSlots, onAppo
 
   const totalTimelineHeight = (timeSlots.length * 30 * PIXELS_PER_MINUTE) + PIXELS_PER_MINUTE * 30;
 
-  const handleDragStart = (e: React.DragEvent<HTMLDivElement>, appointmentId: string) => {
-    e.dataTransfer.setData("appointmentId", appointmentId);
+ const handleDragStart = (e: React.DragEvent<HTMLDivElement>, blockId: string, appointmentId: string, serviceId: string, isMainService: boolean) => {
+    const dragData = JSON.stringify({ blockId, appointmentId, serviceId, isMainService });
+    e.dataTransfer.setData("application/json", dragData);
   };
   
   const handleDragOver = (e: React.DragEvent<HTMLDivElement>) => {
@@ -219,23 +220,26 @@ const DailyTimelineComponent = ({ professionals, appointments, timeSlots, onAppo
   
   const handleDrop = (e: React.DragEvent<HTMLDivElement>, newProfessionalId: string) => {
     e.preventDefault();
-    const appointmentId = e.dataTransfer.getData("appointmentId");
-    if (appointmentId && newProfessionalId) {
-      onAppointmentDrop(appointmentId, newProfessionalId);
+    try {
+      const data = JSON.parse(e.dataTransfer.getData("application/json"));
+      const { appointmentId, serviceId, isMainService } = data;
+      onAppointmentDrop(appointmentId, newProfessionalId, isMainService ? undefined : serviceId);
+    } catch (error) {
+      console.error("Error parsing drag data:", error);
     }
   };
 
   // --- Touch Event Handlers ---
-  const handleTouchStart = (e: React.TouchEvent<HTMLDivElement>, appointmentId: string) => {
+  const handleTouchStart = (e: React.TouchEvent<HTMLDivElement>, blockId: string, appointmentId: string, serviceId: string, isMainService: boolean) => {
     if (scrollAreaRef.current) {
       const viewport = scrollAreaRef.current.querySelector<HTMLDivElement>('div[style*="overflow"]');
       if (viewport) viewport.style.overflowX = 'hidden';
     }
-    setDraggedAppointmentId(appointmentId);
+    setDraggedItemId(JSON.stringify({ blockId, appointmentId, serviceId, isMainService }));
   };
 
   const handleTouchMove = (e: React.TouchEvent<HTMLDivElement>) => {
-    if (!draggedAppointmentId) return;
+    if (!draggedItemId) return;
     const touch = e.touches[0];
     const targetElement = document.elementFromPoint(touch.clientX, touch.clientY);
     
@@ -254,7 +258,7 @@ const DailyTimelineComponent = ({ professionals, appointments, timeSlots, onAppo
   };
 
   const handleTouchEnd = (e: React.TouchEvent<HTMLDivElement>) => {
-    if (!draggedAppointmentId) return;
+    if (!draggedItemId) return;
 
     if (scrollAreaRef.current) {
       const viewport = scrollAreaRef.current.querySelector<HTMLDivElement>('div[style*="overflow"]');
@@ -273,11 +277,16 @@ const DailyTimelineComponent = ({ professionals, appointments, timeSlots, onAppo
       if (professionalColumn) {
         const newProfessionalId = professionalColumn.getAttribute('data-professional-id');
         if (newProfessionalId) {
-          onAppointmentDrop(draggedAppointmentId, newProfessionalId);
+            try {
+                const { appointmentId, serviceId, isMainService } = JSON.parse(draggedItemId);
+                onAppointmentDrop(appointmentId, newProfessionalId, isMainService ? undefined : serviceId);
+            } catch (error) {
+                console.error("Error parsing touch drag data:", error);
+            }
         }
       }
     }
-    setDraggedAppointmentId(null);
+    setDraggedItemId(null);
   };
 
 
@@ -388,7 +397,7 @@ const DailyTimelineComponent = ({ professionals, appointments, timeSlots, onAppo
                       let blockTextClass = 'text-slate-800';
                       let blockBorderColorClass = 'border-slate-300';
                       
-                      const wasSpecificallyRequested = block.originalAppointmentData.preferredProfessionalId && block.originalAppointmentData.preferredProfessionalId === block.assignedProfessionalId;
+                      const wasSpecificallyRequested = block.isMainService && block.originalAppointmentData.preferredProfessionalId && block.originalAppointmentData.preferredProfessionalId === block.assignedProfessionalId;
 
                       const status = block.originalAppointmentData.status;
                       if (status === APPOINTMENT_STATUS.COMPLETED) {
@@ -410,8 +419,8 @@ const DailyTimelineComponent = ({ professionals, appointments, timeSlots, onAppo
                           <TooltipTrigger asChild>
                             <div
                               draggable={isDragDropEnabled}
-                              onDragStart={isDragDropEnabled ? (e) => handleDragStart(e, block.originalAppointmentId) : undefined}
-                              onTouchStart={isDragDropEnabled ? (e) => handleTouchStart(e, block.originalAppointmentId) : undefined}
+                              onDragStart={isDragDropEnabled ? (e) => handleDragStart(e, block.id, block.originalAppointmentId, block.serviceId, block.isMainService) : undefined}
+                              onTouchStart={isDragDropEnabled ? (e) => handleTouchStart(e, block.id, block.originalAppointmentId, block.serviceId, block.isMainService) : undefined}
                               onTouchMove={isDragDropEnabled ? handleTouchMove : undefined}
                               onTouchEnd={isDragDropEnabled ? handleTouchEnd : undefined}
                               className={cn(
@@ -430,7 +439,7 @@ const DailyTimelineComponent = ({ professionals, appointments, timeSlots, onAppo
                               <div className="flex-grow overflow-hidden">
                                 <div className="flex justify-between items-start">
                                    <div className="flex items-center gap-1.5 font-semibold truncate leading-tight">
-                                    {block.isMainService && wasSpecificallyRequested &&
+                                    {wasSpecificallyRequested &&
                                         <Heart size={12} className="shrink-0 text-red-500" title="Profesional específico solicitado"/> 
                                     }
                                     <p className={cn("truncate", !block.isMainService && "font-normal")}>

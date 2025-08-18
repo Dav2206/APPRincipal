@@ -6,7 +6,7 @@ import type { Appointment, Professional, Location } from '@/types';
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useAuth } from '@/contexts/auth-provider';
 import { useAppState } from '@/contexts/app-state-provider';
-import { getAppointments, getProfessionals, getAppointmentById, getProfessionalAvailabilityForDate, getLocations, getProfessionalById, updateAppointmentProfessional } from '@/lib/data';
+import { getAppointments, getProfessionals, getAppointmentById, getProfessionalAvailabilityForDate, getLocations, getProfessionalById, updateAppointmentProfessional, updateAddedServiceProfessional } from '@/lib/data';
 import { USER_ROLES, TIME_SLOTS, LocationId, APPOINTMENT_STATUS } from '@/lib/constants';
 import { DailyTimeline } from '@/components/schedule/daily-timeline';
 import { Button } from '@/components/ui/button';
@@ -158,7 +158,6 @@ const fetchData = useCallback(async (isBackgroundFetch = false) => {
       setIsLoading(false);
       setAppointments([]);
       setWorkingProfessionalsForTimeline([]);
-      setAllSystemProfessionals([]);
     }
   }, [fetchData, actualEffectiveLocationId, user, authIsLoading]);
 
@@ -201,57 +200,63 @@ const fetchData = useCallback(async (isBackgroundFetch = false) => {
     });
   }, [toast]);
   
-  const handleAppointmentDrop = useCallback(async (appointmentId: string, newProfessionalId: string): Promise<boolean> => {
+  const handleAppointmentDrop = useCallback(async (appointmentId: string, newProfessionalId: string, serviceId?: string): Promise<boolean> => {
     const originalAppointment = appointments.find(a => a.id === appointmentId);
-    if (!originalAppointment || originalAppointment.professionalId === newProfessionalId) {
-        return false;
-    }
+    if (!originalAppointment) return false;
 
-    const oldProfessionalId = originalAppointment.professionalId;
-    const newProfessional = allSystemProfessionals.find(p => p.id === newProfessionalId);
-
-    // Optimistic UI Update
-    setAppointments(prevAppointments =>
-      prevAppointments.map(appt =>
-        appt.id === appointmentId
-          ? { ...appt, professionalId: newProfessionalId, professional: newProfessional }
-          : appt
-      )
-    );
-
-    try {
-        const updatedAppointmentFromServer = await updateAppointmentProfessional(appointmentId, newProfessionalId);
-        if (updatedAppointmentFromServer) {
-            // Replace the local appointment with the one from the server for consistency
-            setAppointments(prevAppointments =>
-              prevAppointments.map(appt =>
-                appt.id === appointmentId ? updatedAppointmentFromServer : appt
-              )
-            );
-            toast({
-                title: "Cita Reasignada",
-                description: `La cita ha sido movida a ${newProfessional?.firstName || 'nuevo profesional'}.`,
-            });
-            return true;
-        } else {
-            throw new Error("La actualización no devolvió la cita actualizada.");
+    // If it's an added service
+    if (serviceId && serviceId !== originalAppointment.serviceId) {
+        const addedService = originalAppointment.addedServices?.find(as => as.serviceId === serviceId);
+        if (!addedService || (addedService.professionalId || originalAppointment.professionalId) === newProfessionalId) {
+            return false;
         }
-    } catch (error) {
-        console.error("Error reassigning appointment:", error);
-        // Revert Optimistic UI Update on failure
-        setAppointments(prevAppointments =>
-          prevAppointments.map(appt =>
-            appt.id === appointmentId
-              ? { ...appt, professionalId: oldProfessionalId, professional: allSystemProfessionals.find(p => p.id === oldProfessionalId) }
-              : appt
-          )
-        );
-        toast({
-            title: "Error al Reasignar",
-            description: "No se pudo cambiar el profesional. La cita ha sido restaurada.",
-            variant: "destructive",
-        });
-        return false;
+
+        // Optimistic UI for added service
+        setAppointments(prev => prev.map(appt => {
+            if (appt.id !== appointmentId) return appt;
+            const newAddedServices = (appt.addedServices || []).map(as => 
+                as.serviceId === serviceId ? { ...as, professionalId: newProfessionalId } : as
+            );
+            return { ...appt, addedServices: newAddedServices };
+        }));
+
+        try {
+            const updatedAppointment = await updateAddedServiceProfessional(appointmentId, serviceId, newProfessionalId);
+            if (updatedAppointment) {
+                setAppointments(prev => prev.map(appt => appt.id === appointmentId ? updatedAppointment : appt));
+                toast({ title: "Servicio Reasignado", description: "El servicio adicional ha sido reasignado." });
+                return true;
+            }
+            throw new Error("Update failed");
+        } catch (error) {
+            // Revert on failure
+            setAppointments(prev => prev.map(appt => appt.id === appointmentId ? originalAppointment : appt));
+            toast({ title: "Error", description: "No se pudo reasignar el servicio adicional.", variant: "destructive" });
+            return false;
+        }
+    } else { // It's the main service
+        if (originalAppointment.professionalId === newProfessionalId) return false;
+        const newProfessional = allSystemProfessionals.find(p => p.id === newProfessionalId);
+
+        // Optimistic UI for main appointment
+        setAppointments(prev => prev.map(appt =>
+            appt.id === appointmentId ? { ...appt, professionalId: newProfessionalId, professional: newProfessional } : appt
+        ));
+
+        try {
+            const updatedAppointment = await updateAppointmentProfessional(appointmentId, newProfessionalId);
+            if (updatedAppointment) {
+                setAppointments(prev => prev.map(appt => appt.id === appointmentId ? updatedAppointment : appt));
+                toast({ title: "Cita Reasignada", description: `La cita ha sido movida a ${newProfessional?.firstName || 'profesional'}.` });
+                return true;
+            }
+            throw new Error("Update failed");
+        } catch (error) {
+            // Revert on failure
+            setAppointments(prev => prev.map(appt => appt.id === appointmentId ? originalAppointment : appt));
+            toast({ title: "Error al Reasignar", description: "No se pudo cambiar el profesional.", variant: "destructive" });
+            return false;
+        }
     }
   }, [appointments, allSystemProfessionals, toast]);
 
