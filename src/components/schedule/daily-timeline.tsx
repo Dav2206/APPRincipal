@@ -387,6 +387,8 @@ const DailyTimelineComponent = ({ professionals, appointments, timeSlots, onAppo
                       let blockBgClass = 'bg-slate-100 hover:bg-slate-200';
                       let blockTextClass = 'text-slate-800';
                       let blockBorderColorClass = 'border-slate-300';
+                      
+                      const wasSpecificallyRequested = block.originalAppointmentData.preferredProfessionalId && block.originalAppointmentData.preferredProfessionalId === block.assignedProfessionalId;
 
                       const status = block.originalAppointmentData.status;
                       if (status === APPOINTMENT_STATUS.COMPLETED) {
@@ -423,7 +425,7 @@ const DailyTimelineComponent = ({ professionals, appointments, timeSlots, onAppo
                                 ...styleProps,
                                 opacity: block.isMainService ? 1 : 0.85,
                                 borderLeft: `4px solid ${block.groupColor}`, 
-                                borderStyle: !block.isMainService ? 'dashed' : 'solid',
+                                borderStyle: !block.originalAppointmentData.preferredProfessionalId ? 'dashed' : 'solid',
                               }}
                               onClick={() => onAppointmentClick?.(block.originalAppointmentData, block.serviceId)}
                             >
