@@ -7,7 +7,7 @@ import React, { useState, useRef } from 'react';
 import { parseISO, getHours, getMinutes, addMinutes, format, setMinutes, setHours, startOfDay } from 'date-fns';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { ScrollArea, ScrollBar } from '@/components/ui/scroll-area';
-import { User, Clock, AlertTriangle, Shuffle, Navigation, ShoppingBag, DollarSign, CreditCard, Smartphone, Coins, UserCheck } from 'lucide-react';
+import { User, Clock, AlertTriangle, Shuffle, Navigation, ShoppingBag, DollarSign, CreditCard, Smartphone, Coins, Heart } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { APPOINTMENT_STATUS } from '@/lib/constants';
 import { Badge } from '@/components/ui/badge';
@@ -430,11 +430,9 @@ const DailyTimelineComponent = ({ professionals, appointments, timeSlots, onAppo
                               <div className="flex-grow overflow-hidden">
                                 <div className="flex justify-between items-start">
                                    <div className="flex items-center gap-1.5 font-semibold truncate leading-tight">
-                                    {block.isMainService && (
-                                        wasSpecificallyRequested 
-                                        ? <UserCheck size={12} className="shrink-0 text-green-600" title="Profesional específico solicitado y asignado"/> 
-                                        : <Shuffle size={12} className="shrink-0 text-muted-foreground" title="Asignado al azar"/>
-                                    )}
+                                    {block.isMainService && wasSpecificallyRequested &&
+                                        <Heart size={12} className="shrink-0 text-red-500" title="Profesional específico solicitado"/> 
+                                    }
                                     <p className={cn("truncate", !block.isMainService && "font-normal")}>
                                       {block.isMainService ? block.patientName : block.serviceName}
                                     </p>
