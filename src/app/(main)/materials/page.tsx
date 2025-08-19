@@ -1,10 +1,11 @@
 
+
 "use client";
 
-import type { Material, MaterialFormData } from '@/types';
-import React, { useState, useEffect, useCallback } from 'react';
+import type { Material, MaterialFormData, MaterialConsumption } from '@/types';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useAuth } from '@/contexts/auth-provider';
-import { getMaterials, addMaterial } from '@/lib/data'; // Assuming update/delete will be added
+import { getMaterials, addMaterial, getMaterialConsumption } from '@/lib/data'; // Assuming update/delete will be added
 import { USER_ROLES } from '@/lib/constants';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -16,6 +17,7 @@ import {
   TableHead,
   TableHeader,
   TableRow,
+  TableFooter
 } from '@/components/ui/table';
 import {
   Dialog,
@@ -27,12 +29,24 @@ import {
   DialogDescription,
 } from '@/components/ui/dialog';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
-import { PlusCircle, Edit2, Package, Loader2, AlertTriangle, Trash2 } from 'lucide-react';
+import { PlusCircle, Edit2, Package, Loader2, AlertTriangle, Trash2, CalendarIcon } from 'lucide-react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { MaterialFormSchema } from '@/lib/schemas';
 import { useToast } from '@/hooks/use-toast';
 import { useRouter } from 'next/navigation';
+import { format, startOfMonth, endOfMonth, getYear, getMonth, setYear, setMonth } from 'date-fns';
+import { es } from 'date-fns/locale';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Label } from '@/components/ui/label';
+
+const currentSystemYear = getYear(new Date());
+const availableYears = [currentSystemYear, currentSystemYear - 1, currentSystemYear - 2];
+const months = Array.from({ length: 12 }, (_, i) => ({
+  value: i,
+  label: format(new Date(currentSystemYear, i), 'MMMM', { locale: es }),
+}));
+
 
 export default function MaterialsPage() {
   const { user, isLoading: authIsLoading } = useAuth();
@@ -43,6 +57,12 @@ export default function MaterialsPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [editingMaterial, setEditingMaterial] = useState<Material | null>(null);
+
+  const [consumptionReport, setConsumptionReport] = useState<Record<string, number>>({});
+  const [isLoadingReport, setIsLoadingReport] = useState(false);
+  const [selectedYear, setSelectedYear] = useState<number>(getYear(new Date()));
+  const [selectedMonth, setSelectedMonth] = useState<number>(getMonth(new Date()));
+
 
   const form = useForm<MaterialFormData>({
     resolver: zodResolver(MaterialFormSchema),
@@ -71,11 +91,33 @@ export default function MaterialsPage() {
     }
   }, [toast]);
 
+  const fetchConsumptionReport = useCallback(async () => {
+    setIsLoadingReport(true);
+    try {
+        const startDate = startOfMonth(setMonth(setYear(new Date(), selectedYear), selectedMonth));
+        const endDate = endOfMonth(startDate);
+        const consumptionData = await getMaterialConsumption({ dateRange: { start: startDate, end: endDate } });
+        
+        const report: Record<string, number> = {};
+        consumptionData.forEach(item => {
+            report[item.materialId] = (report[item.materialId] || 0) + item.quantity;
+        });
+        setConsumptionReport(report);
+
+    } catch (error) {
+        toast({ title: "Error en Reporte", description: "No se pudo cargar el reporte de consumo.", variant: "destructive" });
+        setConsumptionReport({});
+    } finally {
+        setIsLoadingReport(false);
+    }
+  }, [selectedYear, selectedMonth, toast]);
+
   useEffect(() => {
     if (user && user.role === USER_ROLES.ADMIN) {
       fetchMaterials();
+      fetchConsumptionReport();
     }
-  }, [fetchMaterials, user]);
+  }, [fetchMaterials, fetchConsumptionReport, user]);
 
   const handleAddMaterial = () => {
     setEditingMaterial(null);
@@ -131,7 +173,7 @@ export default function MaterialsPage() {
   );
 
   return (
-    <div className="space-y-6">
+    <div className="container mx-auto py-8 px-4 md:px-0 space-y-8">
       <Card className="shadow-md">
         <CardHeader className="flex flex-col md:flex-row justify-between items-center">
           <div>
@@ -171,6 +213,56 @@ export default function MaterialsPage() {
           )}
         </CardContent>
       </Card>
+      
+       <Card className="shadow-md">
+        <CardHeader>
+          <CardTitle>Reporte de Consumo de Insumos</CardTitle>
+          <CardDescription>Visualice la cantidad total de insumos utilizados en un período determinado.</CardDescription>
+          <div className="mt-4 flex items-center gap-2 flex-wrap border-t pt-4">
+              <Label className="text-sm font-medium">Ver Resumen para:</Label>
+              <Select value={String(selectedYear)} onValueChange={(val) => setSelectedYear(Number(val))}>
+                <SelectTrigger className="w-[120px]"><SelectValue /></SelectTrigger>
+                <SelectContent>{availableYears.map(y => <SelectItem key={y} value={String(y)}>{y}</SelectItem>)}</SelectContent>
+              </Select>
+              <Select value={String(selectedMonth)} onValueChange={(val) => setSelectedMonth(Number(val))}>
+                <SelectTrigger className="w-[150px]"><SelectValue /></SelectTrigger>
+                <SelectContent>{months.map(m => <SelectItem key={m.value} value={String(m.value)}>{m.label}</SelectItem>)}</SelectContent>
+              </Select>
+               <Button onClick={fetchConsumptionReport} disabled={isLoadingReport}>
+                  {isLoadingReport && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                  Generar Reporte
+              </Button>
+          </div>
+        </CardHeader>
+        <CardContent>
+            {isLoadingReport ? <div className="flex justify-center items-center h-24"><Loader2 className="h-8 w-8 animate-spin"/></div> 
+            : Object.keys(consumptionReport).length === 0 ? <p className="text-sm text-muted-foreground text-center py-4">No se encontró consumo de insumos para el período seleccionado.</p>
+            : (
+                <div className="rounded-md border">
+                    <Table>
+                        <TableHeader>
+                            <TableRow>
+                                <TableHead>Insumo</TableHead>
+                                <TableHead className="text-right">Cantidad Consumida</TableHead>
+                            </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                            {Object.entries(consumptionReport).map(([materialId, quantity]) => {
+                                const material = materials.find(m => m.id === materialId);
+                                return (
+                                    <TableRow key={materialId}>
+                                        <TableCell className="font-medium">{material?.name || 'Insumo Desconocido'}</TableCell>
+                                        <TableCell className="text-right font-semibold">{`${quantity} ${material?.unit || ''}`}</TableCell>
+                                    </TableRow>
+                                )
+                            })}
+                        </TableBody>
+                    </Table>
+                </div>
+            )}
+        </CardContent>
+      </Card>
+
 
       <Dialog open={isFormOpen} onOpenChange={setIsFormOpen}>
         <DialogContent className="sm:max-w-md">
@@ -210,3 +302,4 @@ export default function MaterialsPage() {
     </div>
   );
 }
+
