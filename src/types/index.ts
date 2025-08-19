@@ -87,11 +87,17 @@ export interface Patient extends BaseEntity {
   notes?: string | null;
 }
 
+export interface ServiceMaterial {
+  name: string;
+  quantity: number;
+}
+
 export interface Service {
   id: string;
   name: string;
   defaultDuration: number; // in minutes
   price?: number | null;
+  materialsUsed?: ServiceMaterial[];
 }
 
 export interface AddedServiceItem {
@@ -218,6 +224,10 @@ export type ServiceFormData = {
     minutes: number;
   };
   price?: number | null;
+  materialsUsed?: {
+    name: string;
+    quantity: number;
+  }[];
 };
 
 export type ContractEditFormData = {

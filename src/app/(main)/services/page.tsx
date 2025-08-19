@@ -1,3 +1,4 @@
+
 "use client";
 
 import type { Service, ServiceFormData } from '@/types';
@@ -26,12 +27,13 @@ import {
   DialogDescription,
 } from '@/components/ui/dialog';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
-import { PlusCircle, Edit2, ClipboardList, Loader2, AlertTriangle } from 'lucide-react';
-import { useForm } from 'react-hook-form';
+import { PlusCircle, Edit2, ClipboardList, Loader2, AlertTriangle, Trash2, Package } from 'lucide-react';
+import { useForm, useFieldArray } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { ServiceFormSchema } from '@/lib/schemas';
 import { useToast } from '@/hooks/use-toast';
 import { useRouter } from 'next/navigation';
+import { Separator } from '@/components/ui/separator';
 
 export default function ServicesPage() {
   const { user, isLoading: authIsLoading } = useAuth();
@@ -49,7 +51,13 @@ export default function ServicesPage() {
       name: '',
       defaultDuration: { hours: 0, minutes: 30 },
       price: undefined,
+      materialsUsed: [],
     }
+  });
+
+  const { fields: materialFields, append: appendMaterial, remove: removeMaterial } = useFieldArray({
+    control: form.control,
+    name: "materialsUsed",
   });
 
   useEffect(() => {
@@ -79,7 +87,7 @@ export default function ServicesPage() {
 
   const handleAddService = () => {
     setEditingService(null);
-    form.reset({ name: '', defaultDuration: { hours: 0, minutes: 30 }, price: undefined });
+    form.reset({ name: '', defaultDuration: { hours: 0, minutes: 30 }, price: undefined, materialsUsed: [] });
     setIsFormOpen(true);
   };
 
@@ -92,6 +100,7 @@ export default function ServicesPage() {
       name: service.name,
       defaultDuration: { hours, minutes },
       price: service.price ?? undefined,
+      materialsUsed: service.materialsUsed || [],
     });
     setIsFormOpen(true);
   };
@@ -154,7 +163,7 @@ export default function ServicesPage() {
         <CardHeader className="flex flex-col md:flex-row justify-between items-center">
           <div>
             <CardTitle className="text-2xl flex items-center gap-2"><ClipboardList className="text-primary"/> Gestión de Servicios</CardTitle>
-            <CardDescription>Ver, agregar o editar los servicios ofrecidos.</CardDescription>
+            <CardDescription>Ver, agregar o editar los servicios ofrecidos y los materiales que consumen.</CardDescription>
           </div>
           <Button onClick={handleAddService} className="w-full mt-4 md:mt-0 md:w-auto">
             <PlusCircle className="mr-2 h-4 w-4" /> Agregar Servicio
@@ -269,6 +278,47 @@ export default function ServicesPage() {
                   <FormMessage />
                 </FormItem>
               )}/>
+
+              <Separator />
+
+              <div>
+                <h4 className="text-md font-semibold mb-2 flex items-center gap-2"><Package/>Materiales Utilizados</h4>
+                 <div className="space-y-3">
+                  {materialFields.map((field, index) => (
+                    <div key={field.id} className="flex items-end gap-2 p-2 border rounded-md">
+                      <FormField
+                        control={form.control}
+                        name={`materialsUsed.${index}.name`}
+                        render={({ field }) => (
+                          <FormItem className="flex-grow">
+                            <FormLabel className="text-xs">Nombre Material</FormLabel>
+                            <FormControl><Input {...field} placeholder="Ej: Bisturí" /></FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                      <FormField
+                        control={form.control}
+                        name={`materialsUsed.${index}.quantity`}
+                        render={({ field }) => (
+                          <FormItem className="w-24">
+                             <FormLabel className="text-xs">Cantidad</FormLabel>
+                             <FormControl><Input type="number" {...field} placeholder="1" onChange={e => field.onChange(parseFloat(e.target.value) || 0)} /></FormControl>
+                             <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                      <Button type="button" variant="destructive" size="icon" onClick={() => removeMaterial(index)}>
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  ))}
+                </div>
+                <Button type="button" variant="outline" size="sm" className="mt-2" onClick={() => appendMaterial({ name: '', quantity: 1 })}>
+                  <PlusCircle className="mr-2 h-4 w-4" /> Añadir Material
+                </Button>
+              </div>
+
               <DialogFooter className="pt-4">
                 <DialogClose asChild><Button type="button" variant="outline">Cancelar</Button></DialogClose>
                 <Button type="submit" disabled={form.formState.isSubmitting}>

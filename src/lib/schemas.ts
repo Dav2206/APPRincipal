@@ -198,6 +198,10 @@ export const ServiceFormSchema = z.object({
     path: ["root"],
   }),
   price: z.coerce.number().min(0, "El precio no puede ser negativo.").optional().nullable(),
+  materialsUsed: z.array(z.object({
+    name: z.string().min(1, "El nombre del material es requerido."),
+    quantity: z.coerce.number().min(0.01, "La cantidad debe ser mayor a 0."),
+  })).optional(),
 });
 export type ServiceFormData = z.infer<typeof ServiceFormSchema>;
 

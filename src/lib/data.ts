@@ -379,7 +379,7 @@ export async function addProfessional (data: Omit<ProfessionalFormData, 'id'>): 
   if (firestoreData.customScheduleOverrides) {
     firestoreData.customScheduleOverrides = firestoreData.customScheduleOverrides.map((ov: any) => ({
       ...ov,
-      date: toFirestoreTimestamp(ov.date),
+      date: toFirestoreTimestamp(ov.date), 
       startTime: ov.startTime ?? null,
       endTime: ov.endTime ?? null,
       notes: ov.notes ?? null,
@@ -733,12 +733,13 @@ export async function getServiceById(id: string): Promise<Service | undefined> {
 }
 
 
-export async function addService (data: ServiceFormData): Promise<Service> {
+export async function addService(data: ServiceFormData): Promise<Service> {
   const totalDurationMinutes = (data.defaultDuration.hours * 60) + data.defaultDuration.minutes;
   const newServiceData = {
     name: data.name,
     defaultDuration: totalDurationMinutes,
     price: data.price ?? null,
+    materialsUsed: data.materialsUsed?.filter(m => m.name && m.quantity > 0) || [],
   };
 
   
@@ -747,13 +748,16 @@ export async function addService (data: ServiceFormData): Promise<Service> {
   return { id: docRef.id, ...newServiceData };
 }
 
-export async function updateService (id: string, data: Partial<ServiceFormData>): Promise<Service | undefined> {
+export async function updateService(id: string, data: Partial<ServiceFormData>): Promise<Service | undefined> {
   const serviceUpdateData: Partial<Omit<Service, 'id'>> = {};
   if (data.name) serviceUpdateData.name = data.name;
   if (data.defaultDuration) {
     serviceUpdateData.defaultDuration = (data.defaultDuration.hours * 60) + data.defaultDuration.minutes;
   }
   if (data.hasOwnProperty('price')) serviceUpdateData.price = data.price ?? null;
+  if (data.hasOwnProperty('materialsUsed')) {
+    serviceUpdateData.materialsUsed = data.materialsUsed?.filter(m => m.name && m.quantity > 0) || [];
+  }
 
 
   if (!firestore) throw new Error("Firestore not initialized");
