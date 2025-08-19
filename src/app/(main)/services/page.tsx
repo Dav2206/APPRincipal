@@ -300,10 +300,10 @@ export default function ServicesPage() {
                         render={({ field }) => (
                           <FormItem className="flex-grow">
                             <FormLabel className="text-xs">Material</FormLabel>
-                             <Select onValueChange={field.onChange} value={field.value} >
+                             <Select onValueChange={field.onChange} value={field.value || undefined} >
                                 <FormControl><SelectTrigger><SelectValue placeholder="Seleccionar material" /></SelectTrigger></FormControl>
                                 <SelectContent>
-                                    {materials.length === 0 && <SelectItem value="" disabled>No hay materiales definidos</SelectItem>}
+                                    {materials.length === 0 && <SelectItem value="no-materials" disabled>No hay materiales definidos</SelectItem>}
                                     {materials.map(mat => (<SelectItem key={mat.id} value={mat.id}>{mat.name} ({mat.unit})</SelectItem>))}
                                 </SelectContent>
                             </Select>
@@ -328,9 +328,10 @@ export default function ServicesPage() {
                     </div>
                   ))}
                 </div>
-                <Button type="button" variant="outline" size="sm" className="mt-2" onClick={() => appendMaterial({ materialId: '', quantity: 1 })}>
+                <Button type="button" variant="outline" size="sm" className="mt-2" onClick={() => appendMaterial({ materialId: '', quantity: 1 })} disabled={materials.length === 0}>
                   <PlusCircle className="mr-2 h-4 w-4" /> Añadir Material
                 </Button>
+                 {materials.length === 0 && <p className="text-xs text-muted-foreground mt-1">Debe agregar insumos en el módulo de Insumos primero.</p>}
               </div>
 
               <DialogFooter className="pt-4">
