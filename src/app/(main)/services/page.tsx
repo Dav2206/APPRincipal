@@ -3,7 +3,7 @@
 "use client";
 
 import type { Service, ServiceFormData, Material } from '@/types';
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useAuth } from '@/contexts/auth-provider';
 import { getServices, addService, updateService, getMaterials } from '@/lib/data';
 import { USER_ROLES } from '@/lib/constants';
@@ -63,11 +63,13 @@ export default function ServicesPage() {
     name: "materialsUsed",
   });
 
+  const canViewPage = useMemo(() => user?.role === USER_ROLES.ADMIN || user?.role === USER_ROLES.CONTADOR, [user]);
+
   useEffect(() => {
-    if (!authIsLoading && (!user || user.role !== USER_ROLES.ADMIN)) {
+    if (!authIsLoading && !canViewPage) {
       router.replace('/dashboard');
     }
-  }, [user, authIsLoading, router]);
+  }, [user, authIsLoading, canViewPage, router]);
 
   const fetchServicesAndMaterials = useCallback(async () => {
     setIsLoading(true);
@@ -88,10 +90,10 @@ export default function ServicesPage() {
   }, [toast]);
 
   useEffect(() => {
-    if (user && user.role === USER_ROLES.ADMIN) {
+    if (canViewPage) {
       fetchServicesAndMaterials();
     }
-  }, [fetchServicesAndMaterials, user]);
+  }, [fetchServicesAndMaterials, canViewPage]);
 
   const handleAddService = () => {
     setEditingService(null);
@@ -134,7 +136,7 @@ export default function ServicesPage() {
     }
   };
 
-  if (authIsLoading || !user || user.role !== USER_ROLES.ADMIN) {
+  if (authIsLoading || !canViewPage) {
     return (
       <div className="flex h-screen items-center justify-center">
         <Loader2 className="h-12 w-12 animate-spin text-primary" />

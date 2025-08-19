@@ -72,11 +72,13 @@ export default function MaterialsPage() {
     }
   });
 
+  const canViewPage = useMemo(() => user?.role === USER_ROLES.ADMIN || user?.role === USER_ROLES.CONTADOR, [user]);
+
   useEffect(() => {
-    if (!authIsLoading && (!user || user.role !== USER_ROLES.ADMIN)) {
+    if (!authIsLoading && !canViewPage) {
       router.replace('/dashboard');
     }
-  }, [user, authIsLoading, router]);
+  }, [user, authIsLoading, canViewPage, router]);
 
   const fetchMaterials = useCallback(async () => {
     setIsLoading(true);
@@ -113,11 +115,11 @@ export default function MaterialsPage() {
   }, [selectedYear, selectedMonth, toast]);
 
   useEffect(() => {
-    if (user && user.role === USER_ROLES.ADMIN) {
+    if (canViewPage) {
       fetchMaterials();
       fetchConsumptionReport();
     }
-  }, [fetchMaterials, fetchConsumptionReport, user]);
+  }, [fetchMaterials, fetchConsumptionReport, canViewPage]);
 
   const handleAddMaterial = () => {
     setEditingMaterial(null);
@@ -142,7 +144,7 @@ export default function MaterialsPage() {
     }
   };
 
-  if (authIsLoading || !user || user.role !== USER_ROLES.ADMIN) {
+  if (authIsLoading || !canViewPage) {
     return (
       <div className="flex h-screen items-center justify-center">
         <Loader2 className="h-12 w-12 animate-spin text-primary" />
