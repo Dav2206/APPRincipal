@@ -1,10 +1,11 @@
 
+
 "use client";
 
-import type { Service, ServiceFormData } from '@/types';
+import type { Service, ServiceFormData, Material } from '@/types';
 import React, { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '@/contexts/auth-provider';
-import { getServices, addService, updateService } from '@/lib/data';
+import { getServices, addService, updateService, getMaterials } from '@/lib/data';
 import { USER_ROLES } from '@/lib/constants';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -34,6 +35,7 @@ import { ServiceFormSchema } from '@/lib/schemas';
 import { useToast } from '@/hooks/use-toast';
 import { useRouter } from 'next/navigation';
 import { Separator } from '@/components/ui/separator';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 
 export default function ServicesPage() {
   const { user, isLoading: authIsLoading } = useAuth();
@@ -41,6 +43,7 @@ export default function ServicesPage() {
   const router = useRouter();
 
   const [services, setServices] = useState<Service[]>([]);
+  const [materials, setMaterials] = useState<Material[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [editingService, setEditingService] = useState<Service | null>(null);
@@ -66,14 +69,19 @@ export default function ServicesPage() {
     }
   }, [user, authIsLoading, router]);
 
-  const fetchServices = useCallback(async () => {
+  const fetchServicesAndMaterials = useCallback(async () => {
     setIsLoading(true);
     try {
-      const data = await getServices();
-      setServices(data);
+      const [servicesData, materialsData] = await Promise.all([
+        getServices(),
+        getMaterials(),
+      ]);
+      setServices(servicesData);
+      setMaterials(materialsData);
     } catch (error) {
-      toast({ title: "Error", description: "No se pudieron cargar los servicios.", variant: "destructive" });
+      toast({ title: "Error", description: "No se pudieron cargar los servicios o materiales.", variant: "destructive" });
       setServices([]);
+      setMaterials([]);
     } finally {
       setIsLoading(false);
     }
@@ -81,9 +89,9 @@ export default function ServicesPage() {
 
   useEffect(() => {
     if (user && user.role === USER_ROLES.ADMIN) {
-      fetchServices();
+      fetchServicesAndMaterials();
     }
-  }, [fetchServices, user]);
+  }, [fetchServicesAndMaterials, user]);
 
   const handleAddService = () => {
     setEditingService(null);
@@ -100,7 +108,7 @@ export default function ServicesPage() {
       name: service.name,
       defaultDuration: { hours, minutes },
       price: service.price ?? undefined,
-      materialsUsed: service.materialsUsed || [],
+      materialsUsed: service.materialsUsed?.map(m => ({ materialId: m.materialId, quantity: m.quantity })) || [],
     });
     setIsFormOpen(true);
   };
@@ -119,7 +127,7 @@ export default function ServicesPage() {
         toast({ title: "Servicio Agregado", description: `${newServiceData.name} agregado.` });
       }
       setIsFormOpen(false);
-      fetchServices();
+      fetchServicesAndMaterials();
     } catch (error) {
       toast({ title: "Error", description: "No se pudo guardar el servicio.", variant: "destructive" });
       console.error(error);
@@ -288,11 +296,17 @@ export default function ServicesPage() {
                     <div key={field.id} className="flex items-end gap-2 p-2 border rounded-md">
                       <FormField
                         control={form.control}
-                        name={`materialsUsed.${index}.name`}
+                        name={`materialsUsed.${index}.materialId`}
                         render={({ field }) => (
                           <FormItem className="flex-grow">
-                            <FormLabel className="text-xs">Nombre Material</FormLabel>
-                            <FormControl><Input {...field} placeholder="Ej: Bisturí" /></FormControl>
+                            <FormLabel className="text-xs">Material</FormLabel>
+                             <Select onValueChange={field.onChange} value={field.value} >
+                                <FormControl><SelectTrigger><SelectValue placeholder="Seleccionar material" /></SelectTrigger></FormControl>
+                                <SelectContent>
+                                    {materials.length === 0 && <SelectItem value="" disabled>No hay materiales definidos</SelectItem>}
+                                    {materials.map(mat => (<SelectItem key={mat.id} value={mat.id}>{mat.name} ({mat.unit})</SelectItem>))}
+                                </SelectContent>
+                            </Select>
                             <FormMessage />
                           </FormItem>
                         )}
@@ -314,7 +328,7 @@ export default function ServicesPage() {
                     </div>
                   ))}
                 </div>
-                <Button type="button" variant="outline" size="sm" className="mt-2" onClick={() => appendMaterial({ name: '', quantity: 1 })}>
+                <Button type="button" variant="outline" size="sm" className="mt-2" onClick={() => appendMaterial({ materialId: '', quantity: 1 })}>
                   <PlusCircle className="mr-2 h-4 w-4" /> Añadir Material
                 </Button>
               </div>

@@ -87,8 +87,13 @@ export interface Patient extends BaseEntity {
   notes?: string | null;
 }
 
-export interface ServiceMaterial {
+export interface Material extends BaseEntity {
   name: string;
+  unit: string; // e.g., 'unidad', 'par', 'caja'
+}
+
+export interface ServiceMaterial {
+  materialId: string; // Link to Material entity
   quantity: number;
 }
 
@@ -225,7 +230,7 @@ export type ServiceFormData = {
   };
   price?: number | null;
   materialsUsed?: {
-    name: string;
+    materialId: string;
     quantity: number;
   }[];
 };
@@ -285,3 +290,9 @@ export interface ProfessionalDetails {
     paymentMethod?: string | null;
   }[];
 }
+
+export type MaterialFormData = {
+  id?: string;
+  name: string;
+  unit: string;
+};

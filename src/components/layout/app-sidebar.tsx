@@ -29,6 +29,7 @@ import {
   TrendingUp,
   ListChecks,
   CreditCard,
+  Package, // Added icon for materials
 } from 'lucide-react';
 import { USER_ROLES } from '@/lib/constants';
 
@@ -43,6 +44,7 @@ const navItems = [
   { href: '/contracts', label: 'Contratos', icon: FileSpreadsheet, roles: [USER_ROLES.ADMIN, USER_ROLES.CONTADOR] },
   { href: '/percentages', label: 'Porcentajes', icon: TrendingUp, roles: [USER_ROLES.CONTADOR, USER_ROLES.LOCATION_STAFF] },
   { href: '/services', label: 'Servicios', icon: ClipboardList, roles: [USER_ROLES.ADMIN] }, 
+  { href: '/materials', label: 'Insumos', icon: Package, roles: [USER_ROLES.ADMIN] },
   { href: '/finanzas', label: 'Finanzas', icon: Landmark, roles: [USER_ROLES.CONTADOR] },
   { href: '/corroboration', label: 'Corroboración', icon: ListChecks, roles: [USER_ROLES.CONTADOR] },
   { href: '/pagos', label: 'Pagos y Gastos', icon: CreditCard, roles: [USER_ROLES.CONTADOR] },
@@ -94,7 +96,7 @@ export function AppSidebar() {
                 finalIsActive = false;
               }
               
-              const specificExactMatchRoutes = ['/appointments', '/schedule', '/finanzas', '/services', '/registry', '/contracts', '/reminders', '/test-function', '/dictation', '/percentages', '/corroboration', '/pagos'];
+              const specificExactMatchRoutes = ['/appointments', '/schedule', '/finanzas', '/services', '/registry', '/contracts', '/reminders', '/test-function', '/dictation', '/percentages', '/corroboration', '/pagos', '/materials'];
               if (specificExactMatchRoutes.includes(href)) {
                 finalIsActive = pathname === href || pathname.startsWith(`${href}/`);
               }

@@ -199,7 +199,7 @@ export const ServiceFormSchema = z.object({
   }),
   price: z.coerce.number().min(0, "El precio no puede ser negativo.").optional().nullable(),
   materialsUsed: z.array(z.object({
-    name: z.string().min(1, "El nombre del material es requerido."),
+    materialId: z.string().min(1, "Debe seleccionar un material del catálogo."),
     quantity: z.coerce.number().min(0.01, "La cantidad debe ser mayor a 0."),
   })).optional(),
 });
@@ -245,3 +245,10 @@ export const ImportantNoteFormSchema = z.object({
   content: z.string().min(1, "El contenido es requerido."),
 });
 export type ImportantNoteFormData = z.infer<typeof ImportantNoteFormSchema>;
+
+export const MaterialFormSchema = z.object({
+  id: z.string().optional(),
+  name: z.string().min(2, "El nombre del insumo es requerido."),
+  unit: z.string().min(1, "La unidad es requerida (ej: 'unidad', 'caja', 'par')."),
+});
+export type MaterialFormData = z.infer<typeof MaterialFormSchema>;
