@@ -38,7 +38,7 @@ interface DashboardStats {
   todayAppointments: string;
   pendingConfirmations: string;
   activeProfessionals: string;
-  totalRevenueMonth: string;
+  totalRevenueQuincena: string;
 }
 
 interface BeforeInstallPromptEvent extends Event {
@@ -59,7 +59,7 @@ export default function DashboardPage() {
     todayAppointments: "0",
     pendingConfirmations: "0",
     activeProfessionals: "0",
-    totalRevenueMonth: '0.00',
+    totalRevenueQuincena: '0.00',
   });
   const [isLoadingStats, setIsLoadingStats] = useState(true);
   const [professionalsOnRestToday, setProfessionalsOnRestToday] = useState<Professional[]>([]);
@@ -137,11 +137,15 @@ export default function DashboardPage() {
       let todayAppointmentsCount = 0;
       let pendingConfirmationsCount = 0;
       let activeProfessionalsCount = 0;
-      let totalRevenueMonthValue = 0;
+      let totalRevenueQuincenaValue = 0;
       
       const today = startOfDay(new Date());
+      
+      const currentQuincenaDay = getDate(today);
       const currentMonthStart = startOfMonth(today);
-      const currentMonthEnd = endOfMonth(today);
+      const quincenaStart = currentQuincenaDay <= 15 ? currentMonthStart : addDays(currentMonthStart, 15);
+      const quincenaEnd = currentQuincenaDay <= 15 ? addDays(currentMonthStart, 14) : endOfMonth(currentMonthStart);
+
 
       try {
         // Fetch Today's Appointments
@@ -173,7 +177,7 @@ export default function DashboardPage() {
           }
         }
         
-        // Fetch Total Revenue for Current Month (ONLY FOR CONTADOR)
+        // Fetch Total Revenue for Current Quincena (ONLY FOR CONTADOR)
         if (isContador) {
             const calculateTotalRevenue = (appointments: any[] | undefined) => {
                 if (!appointments) return 0;
@@ -190,19 +194,19 @@ export default function DashboardPage() {
                 const allLocationsCompletedPromises = locations.map(loc => getAppointments({
                     statuses: [APPOINTMENT_STATUS.COMPLETED],
                     locationId: loc.id,
-                    dateRange: { start: currentMonthStart, end: currentMonthEnd },
+                    dateRange: { start: quincenaStart, end: quincenaEnd },
                 }));
                 const allLocationsCompletedResults = await Promise.all(allLocationsCompletedPromises);
-                totalRevenueMonthValue = allLocationsCompletedResults.reduce((totalSum, locationResults) => 
+                totalRevenueQuincenaValue = allLocationsCompletedResults.reduce((totalSum, locationResults) => 
                     totalSum + calculateTotalRevenue(locationResults.appointments), 
                 0);
             } else if (effectiveLocationId) {
                 const { appointments } = await getAppointments({
                     statuses: [APPOINTMENT_STATUS.COMPLETED],
                     locationId: effectiveLocationId,
-                    dateRange: { start: currentMonthStart, end: currentMonthEnd },
+                    dateRange: { start: quincenaStart, end: quincenaEnd },
                 });
-                totalRevenueMonthValue = calculateTotalRevenue(appointments);
+                totalRevenueQuincenaValue = calculateTotalRevenue(appointments);
             }
         }
 
@@ -232,7 +236,7 @@ export default function DashboardPage() {
           todayAppointments: todayAppointmentsCount.toString(),
           pendingConfirmations: pendingConfirmationsCount.toString(),
           activeProfessionals: activeProfessionalsCount.toString(),
-          totalRevenueMonth: totalRevenueMonthValue.toFixed(2),
+          totalRevenueQuincena: totalRevenueQuincenaValue.toFixed(2),
         });
         setIsLoadingStats(false);
 
@@ -310,7 +314,7 @@ export default function DashboardPage() {
             todayAppointments: "N/A",
             pendingConfirmations: "N/A",
             activeProfessionals: "N/A",
-            totalRevenueMonth: "N/A",
+            totalRevenueQuincena: "N/A",
         });
         setProfessionalsOnRestToday([]);
         setProfessionalsWorkingNextSunday([]);
@@ -414,8 +418,8 @@ export default function DashboardPage() {
         />
         {user.role === USER_ROLES.CONTADOR && (
           <StatCard 
-            title="Ingresos del Mes" 
-            value={isLoadingStats ? "..." : `S/ ${stats.totalRevenueMonth}`} 
+            title="Ingresos Quincenales" 
+            value={isLoadingStats ? "..." : `S/ ${stats.totalRevenueQuincena}`} 
             icon={<History className="h-6 w-6 text-primary" />} 
           />
         )}
