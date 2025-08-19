@@ -1,7 +1,7 @@
 
 
 // src/lib/data.ts
-import type { User, Professional, Patient, Service, Appointment, AppointmentFormData, ProfessionalFormData, AppointmentStatus, ServiceFormData, Contract, PeriodicReminder, ImportantNote, PeriodicReminderFormData, ImportantNoteFormData, AddedServiceItem, AppointmentUpdateFormData, Location, PaymentGroup, GroupingPreset, Material, MaterialFormData, MaterialConsumption } from '@/types';
+import type { User, Professional, Patient, Service, Appointment, AppointmentFormData, ProfessionalFormData, AppointmentStatus, ServiceFormData, Contract, PeriodicReminder, ImportantNote, PeriodicReminderFormData, ImportantNoteFormData, AddedServiceItem, AppointmentUpdateFormData, Location, PaymentGroup, GroupingPreset, Material, MaterialFormData } from '@/types';
 import { USER_ROLES, APPOINTMENT_STATUS, APPOINTMENT_STATUS_DISPLAY, TIME_SLOTS, DAYS_OF_WEEK, LOCATIONS_FALLBACK } from '@/lib/constants';
 import type { LocationId, DayOfWeekId } from '@/lib/constants';
 import { formatISO, parseISO, addDays, setHours, setMinutes, startOfDay, endOfDay, isSameDay as dateFnsIsSameDay, startOfMonth, endOfMonth, subDays, isEqual, isBefore, isAfter, getDate, getYear, getMonth, setMonth, setYear, getHours, addMinutes as dateFnsAddMinutes, isWithinInterval, getDay, format, differenceInCalendarDays, areIntervalsOverlapping, parse, addMonths, addQuarters, addYears } from 'date-fns';
@@ -719,33 +719,56 @@ export async function addMaterial(data: MaterialFormData): Promise<Material> {
   return { id: docRef.id, ...newMaterialData };
 }
 
-export async function getMaterialConsumption(options: { dateRange: { start: Date, end: Date } }): Promise<MaterialConsumption[]> {
+export async function getMaterialConsumption(options: { dateRange: { start: Date; end: Date } }): Promise<{ [materialId: string]: number }> {
     if (!firestore) {
-        console.warn("[data.ts] getMaterialConsumption: Firestore not available, returning empty array.");
-        return [];
+        console.warn("[data.ts] getMaterialConsumption: Firestore not available, returning empty object.");
+        return {};
     }
     try {
-        const consumptionCol = collection(firestore, 'consumoInsumos');
-        const startTimestamp = toFirestoreTimestamp(startOfDay(options.dateRange.start));
-        const endTimestamp = toFirestoreTimestamp(endOfDay(options.dateRange.end));
+        const { start, end } = options.dateRange;
 
-        if (!startTimestamp || !endTimestamp) {
-            console.error("Invalid date range for material consumption report.");
-            return [];
+        const appointmentsResponse = await getAppointments({
+            dateRange: { start, end },
+            statuses: [APPOINTMENT_STATUS.COMPLETED]
+        });
+
+        if (!appointmentsResponse || !appointmentsResponse.appointments) {
+            return {};
         }
 
-        const q = query(
-            consumptionCol,
-            where('consumptionDate', '>=', startTimestamp),
-            where('consumptionDate', '<=', endTimestamp)
-        );
-        const snapshot = await getDocs(q);
-        return snapshot.docs.map(docSnap => ({ id: docSnap.id, ...convertDocumentData(docSnap.data()) } as MaterialConsumption));
+        const allServices = await getServices();
+        const materialConsumptionMap = new Map<string, number>();
+
+        for (const appt of appointmentsResponse.appointments) {
+            const servicesPerformed: { serviceId: string }[] = [];
+            if (appt.serviceId) {
+                servicesPerformed.push({ serviceId: appt.serviceId });
+            }
+            if (appt.addedServices) {
+                appt.addedServices.forEach(as => servicesPerformed.push({ serviceId: as.serviceId }));
+            }
+
+            for (const performed of servicesPerformed) {
+                const serviceDetails = allServices.find(s => s.id === performed.serviceId);
+                if (serviceDetails && serviceDetails.materialsUsed) {
+                    for (const material of serviceDetails.materialsUsed) {
+                        materialConsumptionMap.set(
+                            material.materialId,
+                            (materialConsumptionMap.get(material.materialId) || 0) + material.quantity
+                        );
+                    }
+                }
+            }
+        }
+        
+        return Object.fromEntries(materialConsumptionMap);
+
     } catch (error) {
-        console.error("[data.ts] Error fetching material consumption:", error);
-        return [];
+        console.error("[data.ts] Error calculating material consumption on-the-fly:", error);
+        return {};
     }
 }
+
 
 
 // --- Services ---
@@ -1255,60 +1278,6 @@ async function manageRelatedTravelBlock(
 }
 
 
-async function manageMaterialConsumption(
-  batch: ReturnType<typeof writeBatch>,
-  appointment: Appointment,
-  isBecomingCompleted: boolean
-) {
-  if (!firestore) return;
-  const consumptionCol = collection(firestore, 'consumoInsumos');
-
-  // First, delete any existing consumption records for this appointment.
-  const existingConsumptionQuery = query(consumptionCol, where('appointmentId', '==', appointment.id));
-  const existingSnapshot = await getDocs(existingConsumptionQuery);
-  existingSnapshot.forEach(doc => {
-    batch.delete(doc.ref);
-  });
-
-  // If the appointment is being marked as completed, add new consumption records.
-  if (isBecomingCompleted) {
-    const servicesPerformed: { serviceId: string }[] = [];
-    if (appointment.serviceId) {
-      servicesPerformed.push({ serviceId: appointment.serviceId });
-    }
-    if (appointment.addedServices) {
-      appointment.addedServices.forEach(as => servicesPerformed.push({ serviceId: as.serviceId }));
-    }
-
-    const allServices = await getServices();
-    const materialConsumptionMap = new Map<string, number>();
-
-    for (const performed of servicesPerformed) {
-      const serviceDetails = allServices.find(s => s.id === performed.serviceId);
-      if (serviceDetails && serviceDetails.materialsUsed) {
-        for (const material of serviceDetails.materialsUsed) {
-          materialConsumptionMap.set(
-            material.materialId,
-            (materialConsumptionMap.get(material.materialId) || 0) + material.quantity
-          );
-        }
-      }
-    }
-
-    materialConsumptionMap.forEach((quantity, materialId) => {
-      const newConsumptionRef = doc(collection(firestore, 'consumoInsumos'));
-      const consumptionData: Omit<MaterialConsumption, 'id'> = {
-        appointmentId: appointment.id,
-        materialId: materialId,
-        quantity: quantity,
-        locationId: appointment.locationId,
-        consumptionDate: toFirestoreTimestamp(parseISO(appointment.appointmentDateTime)),
-      };
-      batch.set(newConsumptionRef, consumptionData);
-    });
-  }
-}
-
 
 export async function updateAppointment(
   id: string,
@@ -1467,10 +1436,6 @@ export async function updateAppointment(
 
   await manageRelatedTravelBlock(batch, id, finalUpdatedDataForTravelBlock, oldAppointmentData);
   
-  if (isBecomingCompleted || (wasCompleted && !isBecomingCompleted)) {
-    await manageMaterialConsumption(batch, oldAppointmentData, isBecomingCompleted);
-  }
-
 
   await batch.commit();
 
@@ -1517,9 +1482,6 @@ export async function deleteAppointment(appointmentId: string): Promise<boolean>
     } else {
       console.log(`[data.ts] deleteAppointment: No associated travel block found for appointment ${appointmentId}.`);
     }
-
-    await manageMaterialConsumption(batch, {id: appointmentId} as Appointment, false);
-
 
     // Delete the main appointment
     batch.delete(mainAppointmentRef);

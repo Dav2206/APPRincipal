@@ -295,11 +295,3 @@ export type MaterialFormData = {
   name: string;
   unit: string;
 };
-
-export interface MaterialConsumption extends BaseEntity {
-    appointmentId: string;
-    materialId: string;
-    quantity: number;
-    locationId: LocationId;
-    consumptionDate: string | object; // ISO Date String 'YYYY-MM-DD' on client, Timestamp on Firebase
-}
