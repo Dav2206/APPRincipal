@@ -726,10 +726,18 @@ export async function getMaterialConsumption(options: { dateRange: { start: Date
     }
     try {
         const consumptionCol = collection(firestore, 'consumoInsumos');
+        const startTimestamp = toFirestoreTimestamp(startOfDay(options.dateRange.start));
+        const endTimestamp = toFirestoreTimestamp(endOfDay(options.dateRange.end));
+
+        if (!startTimestamp || !endTimestamp) {
+            console.error("Invalid date range for material consumption report.");
+            return [];
+        }
+
         const q = query(
             consumptionCol,
-            where('consumptionDate', '>=', toFirestoreTimestamp(options.dateRange.start)!),
-            where('consumptionDate', '<=', toFirestoreTimestamp(options.dateRange.end)!)
+            where('consumptionDate', '>=', startTimestamp),
+            where('consumptionDate', '<=', endTimestamp)
         );
         const snapshot = await getDocs(q);
         return snapshot.docs.map(docSnap => ({ id: docSnap.id, ...convertDocumentData(docSnap.data()) } as MaterialConsumption));
@@ -1978,4 +1986,3 @@ export async function mergePatients(primaryPatientId: string, duplicateIds: stri
 }
 
 // --- End Maintenance ---
-

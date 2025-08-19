@@ -117,9 +117,14 @@ export default function MaterialsPage() {
   useEffect(() => {
     if (canViewPage) {
       fetchMaterials();
-      fetchConsumptionReport();
     }
-  }, [fetchMaterials, fetchConsumptionReport, canViewPage]);
+  }, [fetchMaterials, canViewPage]);
+
+  useEffect(() => {
+    if(canViewPage) {
+        fetchConsumptionReport();
+    }
+  }, [fetchConsumptionReport, canViewPage, selectedMonth, selectedYear]);
 
   const handleAddMaterial = () => {
     setEditingMaterial(null);
@@ -230,10 +235,6 @@ export default function MaterialsPage() {
                 <SelectTrigger className="w-[150px]"><SelectValue /></SelectTrigger>
                 <SelectContent>{months.map(m => <SelectItem key={m.value} value={String(m.value)}>{m.label}</SelectItem>)}</SelectContent>
               </Select>
-               <Button onClick={fetchConsumptionReport} disabled={isLoadingReport}>
-                  {isLoadingReport && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                  Generar Reporte
-              </Button>
           </div>
         </CardHeader>
         <CardContent>
@@ -304,4 +305,3 @@ export default function MaterialsPage() {
     </div>
   );
 }
-
