@@ -97,8 +97,7 @@ export interface ServiceMaterial {
   quantity: number;
 }
 
-export interface Service {
-  id: string;
+export interface Service extends BaseEntity {
   name: string;
   defaultDuration: number; // in minutes
   price?: number | null;

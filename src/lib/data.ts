@@ -1,7 +1,7 @@
 
 
 // src/lib/data.ts
-import type { User, Professional, Patient, Service, Appointment, AppointmentFormData, ProfessionalFormData, AppointmentStatus, ServiceFormData, Contract, PeriodicReminder, ImportantNote, PeriodicReminderFormData, ImportantNoteFormData, AddedServiceItem, AppointmentUpdateFormData, Location, PaymentGroup, GroupingPreset } from '@/types';
+import type { User, Professional, Patient, Service, Appointment, AppointmentFormData, ProfessionalFormData, AppointmentStatus, ServiceFormData, Contract, PeriodicReminder, ImportantNote, PeriodicReminderFormData, ImportantNoteFormData, AddedServiceItem, AppointmentUpdateFormData, Location, PaymentGroup, GroupingPreset, Material, MaterialFormData } from '@/types';
 import { USER_ROLES, APPOINTMENT_STATUS, APPOINTMENT_STATUS_DISPLAY, TIME_SLOTS, DAYS_OF_WEEK, LOCATIONS_FALLBACK } from '@/lib/constants';
 import type { LocationId, DayOfWeekId } from '@/lib/constants';
 import { formatISO, parseISO, addDays, setHours, setMinutes, startOfDay, endOfDay, isSameDay as dateFnsIsSameDay, startOfMonth, endOfMonth, subDays, isEqual, isBefore, isAfter, getDate, getYear, getMonth, setMonth, setYear, getHours, addMinutes as dateFnsAddMinutes, isWithinInterval, getDay, format, differenceInCalendarDays, areIntervalsOverlapping, parse, addMonths, addQuarters, addYears } from 'date-fns';
@@ -692,6 +692,32 @@ export async function findPatient(firstName: string, lastName: string): Promise<
 
 // --- End Patients ---
 
+// --- Materials ---
+export async function getMaterials(): Promise<Material[]> {
+  if (!firestore) {
+    console.warn("[data.ts] getMaterials: Firestore not available, returning empty array.");
+    return [];
+  }
+  try {
+    const materialsCol = collection(firestore, 'insumos');
+    const q = query(materialsCol, orderBy("name"));
+    const snapshot = await getDocs(q);
+    return snapshot.docs.map(docSnap => ({ id: docSnap.id, ...convertDocumentData(docSnap.data()) } as Material));
+  } catch (error) {
+    console.error("[data.ts] Error fetching materials from Firestore:", error);
+    return [];
+  }
+}
+
+export async function addMaterial(data: MaterialFormData): Promise<Material> {
+  if (!firestore) throw new Error("Firestore not initialized");
+  const newMaterialData = {
+    name: data.name,
+    unit: data.unit,
+  };
+  const docRef = await addDoc(collection(firestore, 'insumos'), newMaterialData);
+  return { id: docRef.id, ...newMaterialData };
+}
 
 // --- Services ---
 export async function getServices(): Promise<Service[]> {
@@ -739,9 +765,8 @@ export async function addService(data: ServiceFormData): Promise<Service> {
     name: data.name,
     defaultDuration: totalDurationMinutes,
     price: data.price ?? null,
-    materialsUsed: data.materialsUsed?.filter(m => m.name && m.quantity > 0) || [],
+    materialsUsed: data.materialsUsed?.filter(m => m.materialId && m.quantity > 0) || [],
   };
-
   
   if (!firestore) throw new Error("Firestore not initialized");
   const docRef = await addDoc(collection(firestore, 'servicios'), newServiceData);
@@ -756,9 +781,8 @@ export async function updateService(id: string, data: Partial<ServiceFormData>):
   }
   if (data.hasOwnProperty('price')) serviceUpdateData.price = data.price ?? null;
   if (data.hasOwnProperty('materialsUsed')) {
-    serviceUpdateData.materialsUsed = data.materialsUsed?.filter(m => m.name && m.quantity > 0) || [];
+    serviceUpdateData.materialsUsed = data.materialsUsed?.filter(m => m.materialId && m.quantity > 0) || [];
   }
-
 
   if (!firestore) throw new Error("Firestore not initialized");
   const docRef = doc(firestore, 'servicios', id);
@@ -1868,3 +1892,4 @@ export async function mergePatients(primaryPatientId: string, duplicateIds: stri
 }
 
 // --- End Maintenance ---
+
