@@ -11,7 +11,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Bar, BarChart, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
-import { format, getYear, getMonth, setYear, setMonth, startOfMonth, endOfMonth, parseISO, getDay } from 'date-fns';
+import { format, getYear, getMonth, setYear, setMonth, startOfMonth, endOfMonth, parseISO, getDay, addDays } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { Loader2, AlertTriangle, PieChartIcon, DollarSign, Users, LineChart, Clock } from 'lucide-react';
 import {
@@ -40,6 +40,7 @@ export default function DataPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [selectedYear, setSelectedYear] = useState<number>(getYear(new Date()));
   const [selectedMonth, setSelectedMonth] = useState<number>(getMonth(new Date()));
+  const [selectedQuincena, setSelectedQuincena] = useState<string>('all'); // 'all', '1', '2'
 
   useEffect(() => {
     async function loadStaticData() {
@@ -58,8 +59,20 @@ export default function DataPage() {
       if (locations.length === 0 || allServices.length === 0) return;
       setIsLoading(true);
 
-      const startDate = startOfMonth(setMonth(setYear(new Date(), selectedYear), selectedMonth));
-      const endDate = endOfMonth(startDate);
+      const baseDate = setMonth(setYear(new Date(), selectedYear), selectedMonth);
+      let startDate: Date;
+      let endDate: Date;
+
+      if (selectedQuincena === '1') {
+          startDate = startOfMonth(baseDate);
+          endDate = addDays(startDate, 14);
+      } else if (selectedQuincena === '2') {
+          startDate = addDays(startOfMonth(baseDate), 15);
+          endDate = endOfMonth(baseDate);
+      } else { // 'all'
+          startDate = startOfMonth(baseDate);
+          endDate = endOfMonth(baseDate);
+      }
       
       try {
         const appointmentsResponse = await getAppointments({
@@ -78,7 +91,7 @@ export default function DataPage() {
     if (locations.length > 0 && allServices.length > 0) {
       fetchAppointments();
     }
-  }, [selectedYear, selectedMonth, locations, allServices]);
+  }, [selectedYear, selectedMonth, selectedQuincena, locations, allServices]);
 
   const filteredAppointments = useMemo(() => {
     if (!selectedLocationId || selectedLocationId === 'all') {
@@ -174,8 +187,16 @@ export default function DataPage() {
             Métricas clave sobre el rendimiento de tu negocio para el período seleccionado.
           </CardDescription>
           <div className="mt-4 flex items-center gap-2 flex-wrap">
-              <Select value={String(selectedYear)} onValueChange={(val) => {setSelectedYear(Number(val));}}><SelectTrigger className="w-[100px]"><SelectValue /></SelectTrigger><SelectContent>{availableYears.map(y => <SelectItem key={y} value={String(y)}>{y}</SelectItem>)}</SelectContent></Select>
+              <Select value={String(selectedYear)} onValueChange={(val) => {setSelectedYear(Number(val));}}><SelectTrigger className="w-[120px]"><SelectValue /></SelectTrigger><SelectContent>{availableYears.map(y => <SelectItem key={y} value={String(y)}>{y}</SelectItem>)}</SelectContent></Select>
               <Select value={String(selectedMonth)} onValueChange={(val) => {setSelectedMonth(Number(val));}}><SelectTrigger className="w-[150px]"><SelectValue /></SelectTrigger><SelectContent>{months.map(m => <SelectItem key={m.value} value={String(m.value)}>{m.label}</SelectItem>)}</SelectContent></Select>
+              <Select value={selectedQuincena} onValueChange={setSelectedQuincena}>
+                <SelectTrigger className="w-[180px]"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                    <SelectItem value="all">Todo el Mes</SelectItem>
+                    <SelectItem value="1">1ra Quincena (1-15)</SelectItem>
+                    <SelectItem value="2">2da Quincena (16-fin)</SelectItem>
+                </SelectContent>
+              </Select>
           </div>
            <div className="mt-2 text-sm text-muted-foreground">
               Viendo para: {selectedLocationId === 'all' ? 'Todas las sedes' : locations.find(l => l.id === selectedLocationId)?.name || 'Sede no especificada'}
