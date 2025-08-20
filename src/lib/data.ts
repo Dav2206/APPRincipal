@@ -719,10 +719,10 @@ export async function addMaterial(data: MaterialFormData): Promise<Material> {
   return { id: docRef.id, ...newMaterialData };
 }
 
-export async function getMaterialConsumption(options: { dateRange: { start: Date; end: Date } }): Promise<{ [materialId: string]: number }> {
+export async function getMaterialConsumption(options: { dateRange: { start: Date; end: Date } }): Promise<{ materialId: string, quantity: number }[]> {
     if (!firestore) {
-        console.warn("[data.ts] getMaterialConsumption: Firestore not available, returning empty object.");
-        return {};
+        console.warn("[data.ts] getMaterialConsumption: Firestore not available, returning empty array.");
+        return [];
     }
     try {
         const { start, end } = options.dateRange;
@@ -733,42 +733,53 @@ export async function getMaterialConsumption(options: { dateRange: { start: Date
         });
 
         if (!appointmentsResponse || !appointmentsResponse.appointments) {
-            return {};
+            return [];
         }
 
         const allServices = await getServices();
-        const materialConsumptionMap = new Map<string, number>();
+        if (!allServices || allServices.length === 0) {
+            return [];
+        }
+        
+        const materialConsumptionMap = new Map<string, { materialId: string, quantity: number }>();
 
         for (const appt of appointmentsResponse.appointments) {
             const servicesPerformed: { serviceId: string }[] = [];
+            
+            // Add main service
             if (appt.serviceId) {
                 servicesPerformed.push({ serviceId: appt.serviceId });
             }
-            if (appt.addedServices) {
-                appt.addedServices.forEach(as => servicesPerformed.push({ serviceId: as.serviceId }));
+            
+            // Add added services
+            if (appt.addedServices && appt.addedServices.length > 0) {
+                appt.addedServices.forEach(as => {
+                    if (as.serviceId) servicesPerformed.push({ serviceId: as.serviceId });
+                });
             }
 
             for (const performed of servicesPerformed) {
                 const serviceDetails = allServices.find(s => s.id === performed.serviceId);
-                if (serviceDetails && serviceDetails.materialsUsed) {
+                
+                if (serviceDetails && serviceDetails.materialsUsed && serviceDetails.materialsUsed.length > 0) {
                     for (const material of serviceDetails.materialsUsed) {
-                        materialConsumptionMap.set(
-                            material.materialId,
-                            (materialConsumptionMap.get(material.materialId) || 0) + material.quantity
-                        );
+                        const existing = materialConsumptionMap.get(material.materialId) || { materialId: material.materialId, quantity: 0 };
+                        materialConsumptionMap.set(material.materialId, {
+                            ...existing,
+                            quantity: existing.quantity + material.quantity,
+                        });
                     }
                 }
             }
         }
         
-        return Object.fromEntries(materialConsumptionMap);
+        return Array.from(materialConsumptionMap.values());
 
     } catch (error) {
         console.error("[data.ts] Error calculating material consumption on-the-fly:", error);
-        return {};
+        return [];
     }
 }
-
 
 
 // --- Services ---

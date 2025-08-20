@@ -58,7 +58,7 @@ export default function MaterialsPage() {
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [editingMaterial, setEditingMaterial] = useState<Material | null>(null);
 
-  const [consumptionReport, setConsumptionReport] = useState<Record<string, number>>({});
+  const [consumptionReport, setConsumptionReport] = useState<{ materialId: string, quantity: number }[]>([]);
   const [isLoadingReport, setIsLoadingReport] = useState(false);
   const [selectedYear, setSelectedYear] = useState<number>(getYear(new Date()));
   const [selectedMonth, setSelectedMonth] = useState<number>(getMonth(new Date()));
@@ -99,16 +99,11 @@ export default function MaterialsPage() {
         const startDate = startOfMonth(setMonth(setYear(new Date(), selectedYear), selectedMonth));
         const endDate = endOfMonth(startDate);
         const consumptionData = await getMaterialConsumption({ dateRange: { start: startDate, end: endDate } });
-        
-        const report: Record<string, number> = {};
-        consumptionData.forEach(item => {
-            report[item.materialId] = (report[item.materialId] || 0) + item.quantity;
-        });
-        setConsumptionReport(report);
+        setConsumptionReport(consumptionData);
 
     } catch (error) {
         toast({ title: "Error en Reporte", description: "No se pudo cargar el reporte de consumo.", variant: "destructive" });
-        setConsumptionReport({});
+        setConsumptionReport([]);
     } finally {
         setIsLoadingReport(false);
     }
@@ -239,7 +234,7 @@ export default function MaterialsPage() {
         </CardHeader>
         <CardContent>
             {isLoadingReport ? <div className="flex justify-center items-center h-24"><Loader2 className="h-8 w-8 animate-spin"/></div> 
-            : Object.keys(consumptionReport).length === 0 ? <p className="text-sm text-muted-foreground text-center py-4">No se encontró consumo de insumos para el período seleccionado.</p>
+            : consumptionReport.length === 0 ? <p className="text-sm text-muted-foreground text-center py-4">No se encontró consumo de insumos para el período seleccionado.</p>
             : (
                 <div className="rounded-md border">
                     <Table>
@@ -250,7 +245,7 @@ export default function MaterialsPage() {
                             </TableRow>
                         </TableHeader>
                         <TableBody>
-                            {Object.entries(consumptionReport).map(([materialId, quantity]) => {
+                            {consumptionReport.map(({ materialId, quantity }) => {
                                 const material = materials.find(m => m.id === materialId);
                                 return (
                                     <TableRow key={materialId}>
