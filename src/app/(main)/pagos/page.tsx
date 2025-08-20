@@ -78,6 +78,9 @@ interface PayrollData {
   totalPayment: number;
   commissionRate: number;
   commissionDeductible: number;
+  afp: number;
+  seguro: number;
+  netoQuincenal: number;
 }
 
 
@@ -96,6 +99,8 @@ export default function PaymentsPage() {
   const [editingSalary, setEditingSalary] = useState<{ id: string; value: string } | null>(null);
   const [editingCommission, setEditingCommission] = useState<{ prof: PayrollData; rate: string; deductible: string; } | null>(null);
   const [editingDiscount, setEditingDiscount] = useState<{ id: string; value: string } | null>(null);
+  const [editingAfp, setEditingAfp] = useState<{ id: string, value: string } | null>(null);
+  const [editingSeguro, setEditingSeguro] = useState<{ id: string, value: string } | null>(null);
   
   // --- State for Reminders ---
   const [allReminders, setAllReminders] = useState<PeriodicReminder[]>([]);
@@ -190,9 +195,16 @@ export default function PaymentsPage() {
             const rate = prof.commissionRate ?? 0.20;
             const commissionableAmount = Math.max(0, totalIncome - deductible);
             const commission = commissionableAmount * rate;
-            const baseSalaryQuincenal = (prof.baseSalary || 0) / 2;
+            
+            const baseSalaryMensual = (prof.baseSalary || 0);
+            const afp = prof.afp ?? 128.5;
+            const seguro = prof.seguro ?? 101.7;
+
+            const baseSalaryQuincenal = baseSalaryMensual / 2;
+            const netoQuincenal = baseSalaryQuincenal - (afp / 2) - (seguro / 2);
             const discounts = prof.discounts || 0;
-            const totalPayment = baseSalaryQuincenal + commission - discounts;
+            const totalPayment = netoQuincenal + commission - discounts;
+
             totalPayrollForPeriod += totalPayment;
 
             return {
@@ -207,6 +219,9 @@ export default function PaymentsPage() {
                 totalPayment: totalPayment,
                 commissionRate: rate,
                 commissionDeductible: deductible,
+                afp: afp,
+                seguro: seguro,
+                netoQuincenal: netoQuincenal,
             };
         }).sort((a,b) => a.locationName.localeCompare(b.locationName) || a.professionalName.localeCompare(b.professionalName));
 
@@ -304,6 +319,23 @@ export default function PaymentsPage() {
       fetchPayrollForUI(); // Recalculate payroll with new salary
     } catch (error) {
       toast({ title: "Error", description: "No se pudo actualizar el sueldo.", variant: "destructive" });
+    }
+  };
+
+  const handleSaveField = async (id: string, field: 'afp' | 'seguro', value: string) => {
+    const numericValue = parseFloat(value);
+     if (isNaN(numericValue) || numericValue < 0) {
+      toast({ title: "Valor inválido", description: "El monto debe ser un número positivo.", variant: "destructive" });
+      return;
+    }
+    try {
+      await updateProfessional(id, { [field]: numericValue });
+      toast({ title: "Campo Actualizado", description: `El campo ${field} ha sido actualizado.` });
+      setEditingAfp(null);
+      setEditingSeguro(null);
+      fetchPayrollForUI();
+    } catch(error) {
+        toast({ title: "Error", description: `No se pudo actualizar el campo ${field}.`, variant: "destructive" });
     }
   };
   
@@ -573,7 +605,7 @@ export default function PaymentsPage() {
             <CardHeader>
               <CardTitle>Pagos al Personal</CardTitle>
               <CardDescription>
-                Visualización de los pagos a profesionales, incluyendo sueldo base y comisiones por producción quincenal.
+                Visualización de los pagos a profesionales, incluyendo sueldo base, deducciones y comisiones por producción quincenal.
               </CardDescription>
               <div className="mt-4 flex items-center gap-2 flex-wrap">
                   <Button variant="outline" size="icon" onClick={() => navigateQuincena('prev')} disabled={isPrevQuincenaDisabled()}><ChevronLeft className="h-4 w-4" /></Button>
@@ -587,66 +619,82 @@ export default function PaymentsPage() {
               {isLoadingPayroll ? (
                 <div className="flex justify-center items-center h-40"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>
               ) : payrollData.length > 0 ? (
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Profesional</TableHead>
-                      <TableHead>Sede Base</TableHead>
-                      <TableHead className="text-right">Producción (S/)</TableHead>
-                      <TableHead className="text-right">Sueldo Base Quincenal (S/)</TableHead>
-                      <TableHead className="text-right">Comisión (S/)</TableHead>
-                      <TableHead className="text-right">Descuentos (S/)</TableHead>
-                      <TableHead className="text-right font-bold">Total a Pagar (S/)</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {payrollData.map(item => (
-                      <TableRow key={item.professionalId}>
-                        <TableCell className="font-medium">{item.professionalName}</TableCell>
-                        <TableCell>{item.locationName}</TableCell>
-                        <TableCell className="text-right">{item.totalIncome.toFixed(2)}</TableCell>
-                        <TableCell className="text-right cursor-pointer" onDoubleClick={() => handleSalaryEdit(item.professionalId, item.baseSalary)}>
-                          {editingSalary?.id === item.professionalId ? (
-                            <div className="flex gap-1 justify-end items-center">
-                              <Input
-                                type="number"
-                                value={editingSalary.value}
-                                onChange={(e) => setEditingSalary({ ...editingSalary, value: e.target.value })}
-                                onKeyDown={(e) => { if(e.key === 'Enter') handleSaveSalary(); if(e.key === 'Escape') setEditingSalary(null); }}
-                                className="w-24 h-8 text-right"
-                                autoFocus
-                              />
-                              <Button size="icon" className="h-8 w-8" onClick={handleSaveSalary}><Check size={16}/></Button>
-                            </div>
-                          ) : (
-                            <span>{item.baseSalary.toFixed(2)}</span>
-                          )}
-                        </TableCell>
-                        <TableCell className="text-right text-green-600 font-semibold cursor-pointer" onDoubleClick={() => handleCommissionEdit(item)}>
-                            {item.commission.toFixed(2)}
-                        </TableCell>
-                        <TableCell className="text-right text-red-600 cursor-pointer" onDoubleClick={() => handleDiscountEdit(item.professionalId, item.discounts)}>
-                          {editingDiscount?.id === item.professionalId ? (
-                            <div className="flex gap-1 justify-end items-center">
-                              <Input
-                                type="number"
-                                value={editingDiscount.value}
-                                onChange={(e) => setEditingDiscount({ ...editingDiscount, value: e.target.value })}
-                                onKeyDown={(e) => { if(e.key === 'Enter') handleSaveDiscount(); if(e.key === 'Escape') setEditingDiscount(null); }}
-                                className="w-24 h-8 text-right"
-                                autoFocus
-                              />
-                              <Button size="icon" className="h-8 w-8" onClick={handleSaveDiscount}><Check size={16}/></Button>
-                            </div>
-                          ) : (
-                            <span>{item.discounts.toFixed(2)}</span>
-                          )}
-                        </TableCell>
-                        <TableCell className="text-right font-bold text-lg">{item.totalPayment.toFixed(2)}</TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
+                <div className="overflow-x-auto">
+                    <Table>
+                    <TableHeader>
+                        <TableRow>
+                        <TableHead>Profesional</TableHead>
+                        <TableHead>Sede Base</TableHead>
+                        <TableHead className="text-right">Producción (S/)</TableHead>
+                        <TableHead className="text-right">S. Base Quincenal (S/)</TableHead>
+                        <TableHead className="text-right">AFP (S/)</TableHead>
+                        <TableHead className="text-right">Seguro (S/)</TableHead>
+                        <TableHead className="text-right">S. Neto Quincenal (S/)</TableHead>
+                        <TableHead className="text-right">Comisión (S/)</TableHead>
+                        <TableHead className="text-right">Otros Desc. (S/)</TableHead>
+                        <TableHead className="text-right font-bold">Total a Pagar (S/)</TableHead>
+                        </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                        {payrollData.map(item => (
+                        <TableRow key={item.professionalId}>
+                            <TableCell className="font-medium whitespace-nowrap">{item.professionalName}</TableCell>
+                            <TableCell>{item.locationName}</TableCell>
+                            <TableCell className="text-right">{item.totalIncome.toFixed(2)}</TableCell>
+                            <TableCell className="text-right cursor-pointer" onDoubleClick={() => handleSalaryEdit(item.professionalId, item.baseSalary)}>
+                            {editingSalary?.id === item.professionalId ? (
+                                <div className="flex gap-1 justify-end items-center">
+                                <Input
+                                    type="number"
+                                    value={editingSalary.value}
+                                    onChange={(e) => setEditingSalary({ ...editingSalary, value: e.target.value })}
+                                    onKeyDown={(e) => { if(e.key === 'Enter') handleSaveSalary(); if(e.key === 'Escape') setEditingSalary(null); }}
+                                    className="w-24 h-8 text-right"
+                                    autoFocus
+                                />
+                                <Button size="icon" className="h-8 w-8" onClick={handleSaveSalary}><Check size={16}/></Button>
+                                </div>
+                            ) : (
+                                <span>{item.baseSalary.toFixed(2)}</span>
+                            )}
+                            </TableCell>
+                             <TableCell className="text-right cursor-pointer" onDoubleClick={() => setEditingAfp({ id: item.professionalId, value: item.afp.toString() })}>
+                              {editingAfp?.id === item.professionalId ? (
+                                <div className="flex gap-1 justify-end items-center"><Input type="number" value={editingAfp.value} onChange={(e) => setEditingAfp({...editingAfp, value: e.target.value})} onKeyDown={(e) => { if (e.key === 'Enter') handleSaveField(item.professionalId, 'afp', editingAfp.value); if (e.key === 'Escape') setEditingAfp(null); }} className="w-24 h-8 text-right" autoFocus/><Button size="icon" className="h-8 w-8" onClick={() => handleSaveField(item.professionalId, 'afp', editingAfp.value)}><Check size={16}/></Button></div>
+                              ) : (<span>{item.afp.toFixed(2)}</span>)}
+                            </TableCell>
+                            <TableCell className="text-right cursor-pointer" onDoubleClick={() => setEditingSeguro({ id: item.professionalId, value: item.seguro.toString() })}>
+                              {editingSeguro?.id === item.professionalId ? (
+                                <div className="flex gap-1 justify-end items-center"><Input type="number" value={editingSeguro.value} onChange={(e) => setEditingSeguro({...editingSeguro, value: e.target.value})} onKeyDown={(e) => { if (e.key === 'Enter') handleSaveField(item.professionalId, 'seguro', editingSeguro.value); if (e.key === 'Escape') setEditingSeguro(null); }} className="w-24 h-8 text-right" autoFocus/><Button size="icon" className="h-8 w-8" onClick={() => handleSaveField(item.professionalId, 'seguro', editingSeguro.value)}><Check size={16}/></Button></div>
+                              ) : (<span>{item.seguro.toFixed(2)}</span>)}
+                            </TableCell>
+                            <TableCell className="text-right font-semibold">{item.netoQuincenal.toFixed(2)}</TableCell>
+                            <TableCell className="text-right text-green-600 font-semibold cursor-pointer" onDoubleClick={() => handleCommissionEdit(item)}>
+                                {item.commission.toFixed(2)}
+                            </TableCell>
+                            <TableCell className="text-right text-red-600 cursor-pointer" onDoubleClick={() => handleDiscountEdit(item.professionalId, item.discounts)}>
+                            {editingDiscount?.id === item.professionalId ? (
+                                <div className="flex gap-1 justify-end items-center">
+                                <Input
+                                    type="number"
+                                    value={editingDiscount.value}
+                                    onChange={(e) => setEditingDiscount({ ...editingDiscount, value: e.target.value })}
+                                    onKeyDown={(e) => { if(e.key === 'Enter') handleSaveDiscount(); if(e.key === 'Escape') setEditingDiscount(null); }}
+                                    className="w-24 h-8 text-right"
+                                    autoFocus
+                                />
+                                <Button size="icon" className="h-8 w-8" onClick={handleSaveDiscount}><Check size={16}/></Button>
+                                </div>
+                            ) : (
+                                <span>{item.discounts.toFixed(2)}</span>
+                            )}
+                            </TableCell>
+                            <TableCell className="text-right font-bold text-lg">{item.totalPayment.toFixed(2)}</TableCell>
+                        </TableRow>
+                        ))}
+                    </TableBody>
+                    </Table>
+                </div>
               ) : (
                 <div className="p-8 border rounded-lg bg-secondary/30 text-center">
                   <AlertTriangle className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
@@ -658,9 +706,9 @@ export default function PaymentsPage() {
               )}
             </CardContent>
             <CardFooter className="flex-col items-start gap-2 text-xs text-muted-foreground">
-                <p><span className="font-semibold">Producción:</span> Suma de todos los servicios (principales y adicionales) realizados por el profesional en la quincena.</p>
+                <p><span className="font-semibold">Sueldo Neto Quincenal:</span> Se calcula como `(Sueldo Base Mensual / 2) - (AFP / 2) - (Seguro / 2)`.</p>
                 <p><span className="font-semibold">Comisión:</span> Se calcula como `(Producción - Deducible) * Tasa`. El deducible y la tasa son configurables por profesional.</p>
-                <p><span className="font-semibold">Edición Rápida:</span> Haga doble clic en "Sueldo Base", "Comisión" o "Descuentos" para editar los valores del profesional.</p>
+                <p><span className="font-semibold">Edición Rápida:</span> Haga doble clic en las celdas de Sueldo Base, AFP, Seguro, Comisión o Descuentos para editar los valores.</p>
             </CardFooter>
           </Card>
         </TabsContent>

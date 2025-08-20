@@ -54,6 +54,8 @@ export interface Professional extends BaseEntity {
   commissionRate?: number | null;
   commissionDeductible?: number | null;
   discounts?: number | null;
+  afp?: number | null;
+  seguro?: number | null;
 
 
   biWeeklyEarnings?: number;
@@ -178,6 +180,8 @@ export type ProfessionalFormData = {
   baseSalary?: number | null;
   commissionRate?: number | null;
   commissionDeductible?: number | null;
+  afp?: number | null;
+  seguro?: number | null;
 
   workSchedule: {
     [key in DayOfWeekId]?: { startTime?: string; endTime?: string; isWorking?: boolean };

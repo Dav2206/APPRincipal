@@ -106,6 +106,8 @@ export default function ProfessionalsPage() {
       baseSalary: 1025,
       commissionRate: 20,
       commissionDeductible: undefined,
+      afp: 128.5,
+      seguro: 101.7,
       workSchedule: defaultBaseWorkSchedule,
       customScheduleOverrides: [],
       currentContract_startDate: null,
@@ -189,6 +191,8 @@ export default function ProfessionalsPage() {
       baseSalary: 1025,
       commissionRate: 20,
       commissionDeductible: (defaultLoc === 'higuereta' ? 2200 : 1800),
+      afp: 128.5,
+      seguro: 101.7,
       workSchedule: defaultBaseWorkSchedule,
       customScheduleOverrides: [],
       currentContract_startDate: null,
@@ -228,6 +232,8 @@ export default function ProfessionalsPage() {
         baseSalary: professional.baseSalary ?? 1025,
         commissionRate: (professional.commissionRate ?? 0.20) * 100,
         commissionDeductible: professional.commissionDeductible ?? (professional.locationId === 'higuereta' ? 2200 : 1800),
+        afp: professional.afp ?? 128.5,
+        seguro: professional.seguro ?? 101.7,
         workSchedule: formWorkSchedule,
         customScheduleOverrides: professional.customScheduleOverrides?.map(ov => ({
             ...ov,
@@ -518,6 +524,22 @@ export default function ProfessionalsPage() {
                           <FormItem>
                               <FormLabel className="flex items-center gap-1"><Percent size={16}/>Tasa de Comisión (%)</FormLabel>
                               <FormControl><Input type="number" placeholder="Ej: 20" {...field} value={field.value ?? ''} onChange={e => field.onChange(e.target.value === '' ? null : parseFloat(e.target.value) || null)}/></FormControl>
+                              <FormMessage />
+                          </FormItem>
+                      )}/>
+                    </div>
+                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <FormField control={form.control} name="afp" render={({ field }) => (
+                          <FormItem>
+                              <FormLabel className="flex items-center gap-1">AFP Mensual (S/)</FormLabel>
+                              <FormControl><Input type="number" placeholder="Ej: 128.50" {...field} value={field.value ?? ''} onChange={e => field.onChange(e.target.value === '' ? null : parseFloat(e.target.value) || null)}/></FormControl>
+                              <FormMessage />
+                          </FormItem>
+                      )}/>
+                       <FormField control={form.control} name="seguro" render={({ field }) => (
+                          <FormItem>
+                              <FormLabel className="flex items-center gap-1">Seguro Mensual (S/)</FormLabel>
+                              <FormControl><Input type="number" placeholder="Ej: 101.70" {...field} value={field.value ?? ''} onChange={e => field.onChange(e.target.value === '' ? null : parseFloat(e.target.value) || null)}/></FormControl>
                               <FormMessage />
                           </FormItem>
                       )}/>

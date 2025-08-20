@@ -108,6 +108,8 @@ export const ProfessionalFormSchema = z.object({
   baseSalary: z.coerce.number().positive("El sueldo base debe ser un número positivo.").optional().nullable(),
   commissionRate: z.coerce.number().min(0, "La tasa no puede ser negativa").max(100, "La tasa no puede ser mayor a 100").optional().nullable(),
   commissionDeductible: z.coerce.number().min(0, "El deducible no puede ser negativo").optional().nullable(),
+  afp: z.coerce.number().min(0, "AFP no puede ser negativo.").optional().nullable(),
+  seguro: z.coerce.number().min(0, "Seguro no puede ser negativo.").optional().nullable(),
 
 
   workSchedule: z.object(
