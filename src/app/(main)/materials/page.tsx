@@ -2,9 +2,10 @@
 
 "use client";
 
-import type { Material, MaterialFormData, MaterialConsumption } from '@/types';
+import type { Material, MaterialFormData, MaterialConsumption, LocationId } from '@/types';
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useAuth } from '@/contexts/auth-provider';
+import { useAppState } from '@/contexts/app-state-provider';
 import { getMaterials, addMaterial, getMaterialConsumption } from '@/lib/data'; // Assuming update/delete will be added
 import { USER_ROLES } from '@/lib/constants';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -35,7 +36,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { MaterialFormSchema } from '@/lib/schemas';
 import { useToast } from '@/hooks/use-toast';
 import { useRouter } from 'next/navigation';
-import { format, startOfMonth, endOfMonth, getYear, getMonth, setYear, setMonth } from 'date-fns';
+import { format, startOfMonth, endOfMonth, getYear, getMonth, setYear, setMonth, addDays, getDate } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Label } from '@/components/ui/label';
@@ -50,6 +51,7 @@ const months = Array.from({ length: 12 }, (_, i) => ({
 
 export default function MaterialsPage() {
   const { user, isLoading: authIsLoading } = useAuth();
+  const { selectedLocationId } = useAppState();
   const { toast } = useToast();
   const router = useRouter();
 
@@ -62,6 +64,7 @@ export default function MaterialsPage() {
   const [isLoadingReport, setIsLoadingReport] = useState(false);
   const [selectedYear, setSelectedYear] = useState<number>(getYear(new Date()));
   const [selectedMonth, setSelectedMonth] = useState<number>(getMonth(new Date()));
+  const [selectedQuincena, setSelectedQuincena] = useState<'all' | 1 | 2>('all');
 
 
   const form = useForm<MaterialFormData>({
@@ -73,6 +76,13 @@ export default function MaterialsPage() {
   });
 
   const canViewPage = useMemo(() => user?.role === USER_ROLES.ADMIN || user?.role === USER_ROLES.CONTADOR, [user]);
+  
+  const effectiveLocationId = useMemo(() => {
+    if (user?.role === USER_ROLES.ADMIN || user?.role === USER_ROLES.CONTADOR) {
+      return selectedLocationId === 'all' ? undefined : selectedLocationId as LocationId;
+    }
+    return user?.locationId;
+  }, [user, selectedLocationId]);
 
   useEffect(() => {
     if (!authIsLoading && !canViewPage) {
@@ -96,9 +106,22 @@ export default function MaterialsPage() {
   const fetchConsumptionReport = useCallback(async () => {
     setIsLoadingReport(true);
     try {
-        const startDate = startOfMonth(setMonth(setYear(new Date(), selectedYear), selectedMonth));
-        const endDate = endOfMonth(startDate);
-        const consumptionData = await getMaterialConsumption({ dateRange: { start: startDate, end: endDate } });
+        const baseDate = setMonth(setYear(new Date(), selectedYear), selectedMonth);
+        let startDate: Date;
+        let endDate: Date;
+
+        if (selectedQuincena === 1) {
+            startDate = startOfMonth(baseDate);
+            endDate = addDays(startDate, 14);
+        } else if (selectedQuincena === 2) {
+            startDate = addDays(startOfMonth(baseDate), 15);
+            endDate = endOfMonth(baseDate);
+        } else {
+            startDate = startOfMonth(baseDate);
+            endDate = endOfMonth(baseDate);
+        }
+
+        const consumptionData = await getMaterialConsumption({ dateRange: { start: startDate, end: endDate }, locationId: effectiveLocationId });
         setConsumptionReport(consumptionData);
 
     } catch (error) {
@@ -107,7 +130,7 @@ export default function MaterialsPage() {
     } finally {
         setIsLoadingReport(false);
     }
-  }, [selectedYear, selectedMonth, toast]);
+  }, [selectedYear, selectedMonth, selectedQuincena, toast, effectiveLocationId]);
 
   useEffect(() => {
     if (canViewPage) {
@@ -119,7 +142,7 @@ export default function MaterialsPage() {
     if(canViewPage) {
         fetchConsumptionReport();
     }
-  }, [fetchConsumptionReport, canViewPage, selectedMonth, selectedYear]);
+  }, [fetchConsumptionReport, canViewPage, selectedMonth, selectedYear, selectedQuincena, effectiveLocationId]);
 
   const handleAddMaterial = () => {
     setEditingMaterial(null);
@@ -223,12 +246,20 @@ export default function MaterialsPage() {
           <div className="mt-4 flex items-center gap-2 flex-wrap border-t pt-4">
               <Label className="text-sm font-medium">Ver Resumen para:</Label>
               <Select value={String(selectedYear)} onValueChange={(val) => setSelectedYear(Number(val))}>
-                <SelectTrigger className="w-[120px]"><SelectValue /></SelectTrigger>
+                <SelectTrigger className="w-full sm:w-[120px]"><SelectValue /></SelectTrigger>
                 <SelectContent>{availableYears.map(y => <SelectItem key={y} value={String(y)}>{y}</SelectItem>)}</SelectContent>
               </Select>
               <Select value={String(selectedMonth)} onValueChange={(val) => setSelectedMonth(Number(val))}>
-                <SelectTrigger className="w-[150px]"><SelectValue /></SelectTrigger>
+                <SelectTrigger className="w-full sm:w-[150px]"><SelectValue /></SelectTrigger>
                 <SelectContent>{months.map(m => <SelectItem key={m.value} value={String(m.value)}>{m.label}</SelectItem>)}</SelectContent>
+              </Select>
+               <Select value={String(selectedQuincena)} onValueChange={(val) => setSelectedQuincena(val as 'all' | 1 | 2)}>
+                <SelectTrigger className="w-full sm:w-[150px]"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                    <SelectItem value="all">Mes Completo</SelectItem>
+                    <SelectItem value="1">1ra Quincena</SelectItem>
+                    <SelectItem value="2">2da Quincena</SelectItem>
+                </SelectContent>
               </Select>
           </div>
         </CardHeader>

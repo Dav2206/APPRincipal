@@ -719,7 +719,7 @@ export async function addMaterial(data: MaterialFormData): Promise<Material> {
   return { id: docRef.id, ...newMaterialData };
 }
 
-export async function getMaterialConsumption(options: { dateRange: { start: Date; end: Date } }): Promise<{ materialId: string, quantity: number }[]> {
+export async function getMaterialConsumption(options: { dateRange: { start: Date; end: Date }, locationId?: LocationId }): Promise<{ materialId: string, quantity: number }[]> {
     if (!firestore) {
         console.warn("[data.ts] getMaterialConsumption: Firestore not available, returning empty array.");
         return [];
@@ -729,7 +729,8 @@ export async function getMaterialConsumption(options: { dateRange: { start: Date
 
         const appointmentsResponse = await getAppointments({
             dateRange: { start, end },
-            statuses: [APPOINTMENT_STATUS.COMPLETED]
+            statuses: [APPOINTMENT_STATUS.COMPLETED],
+            locationId: options.locationId,
         });
 
         if (!appointmentsResponse || !Array.isArray(appointmentsResponse.appointments)) {
