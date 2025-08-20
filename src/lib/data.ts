@@ -732,7 +732,8 @@ export async function getMaterialConsumption(options: { dateRange: { start: Date
             statuses: [APPOINTMENT_STATUS.COMPLETED]
         });
 
-        if (!appointmentsResponse || !appointmentsResponse.appointments) {
+        if (!appointmentsResponse || !Array.isArray(appointmentsResponse.appointments)) {
+            console.warn("[data.ts] getMaterialConsumption: getAppointments did not return a valid array.");
             return [];
         }
 
