@@ -201,7 +201,7 @@ export default function PaymentsPage() {
             const seguro = prof.seguro ?? 101.7;
 
             const baseSalaryQuincenal = baseSalaryMensual / 2;
-            const netoQuincenal = baseSalaryQuincenal - (afp / 2) - (seguro / 2);
+            const netoQuincenal = baseSalaryQuincenal - (afp / 2); // Corrected: only AFP is deducted
             const discounts = prof.discounts || 0;
             const totalPayment = netoQuincenal + commission - discounts;
 
@@ -706,7 +706,7 @@ export default function PaymentsPage() {
               )}
             </CardContent>
             <CardFooter className="flex-col items-start gap-2 text-xs text-muted-foreground">
-                <p><span className="font-semibold">Sueldo Neto Quincenal:</span> Se calcula como `(Sueldo Base Mensual / 2) - (AFP / 2) - (Seguro / 2)`.</p>
+                <p><span className="font-semibold">Sueldo Neto Quincenal:</span> Se calcula como `(Sueldo Base Mensual / 2) - (AFP / 2)`.</p>
                 <p><span className="font-semibold">Comisión:</span> Se calcula como `(Producción - Deducible) * Tasa`. El deducible y la tasa son configurables por profesional.</p>
                 <p><span className="font-semibold">Edición Rápida:</span> Haga doble clic en las celdas de Sueldo Base, AFP, Seguro, Comisión o Descuentos para editar los valores.</p>
             </CardFooter>
