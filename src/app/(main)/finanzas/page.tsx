@@ -13,7 +13,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter }
 import { Button } from '@/components/ui/button';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow, TableFooter as TableFooterComponent } from '@/components/ui/table';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { format, startOfMonth, endOfMonth, getYear, getMonth, setYear, setMonth } from 'date-fns';
+import { format, startOfMonth, endOfMonth, getYear, getMonth, setYear, setMonth, addDays } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { Landmark, Loader2, AlertTriangle, ListPlus, Trash2, Filter, PlusCircle, Pencil, Check, X, PieChartIcon, Group, Layers, Settings2, FolderPlus, ChevronsUpDown, Folder } from 'lucide-react';
 import { Label } from '@/components/ui/label';
@@ -66,6 +66,7 @@ export default function FinancesPage() {
   
   const [selectedYear, setSelectedYear] = useState<number>(getYear(new Date()));
   const [selectedMonth, setSelectedMonth] = useState<number>(getMonth(new Date()));
+  const [selectedQuincena, setSelectedQuincena] = useState<string>('all'); // 'all', '1', '2'
   
   const [paymentMethodsByLocation, setPaymentMethodsByLocation] = useState<Record<LocationId, PaymentMethod[]>>({} as Record<LocationId, PaymentMethod[]>);
   const [newMethodInputs, setNewMethodInputs] = useState<Record<LocationId, string>>({});
@@ -127,9 +128,21 @@ export default function FinancesPage() {
     async function generateReport() {
       if (!user) return;
       setIsLoading(true);
+      
+      const baseDate = setMonth(setYear(new Date(), selectedYear), selectedMonth);
+      let startDate: Date;
+      let endDate: Date;
 
-      const startDate = startOfMonth(setMonth(setYear(new Date(), selectedYear), selectedMonth));
-      const endDate = endOfMonth(startDate);
+      if (selectedQuincena === '1') {
+          startDate = startOfMonth(baseDate);
+          endDate = addDays(startDate, 14);
+      } else if (selectedQuincena === '2') {
+          startDate = addDays(startOfMonth(baseDate), 15);
+          endDate = endOfMonth(baseDate);
+      } else { // 'all'
+          startDate = startOfMonth(baseDate);
+          endDate = endOfMonth(baseDate);
+      }
       
       const effectiveLocationId = (user.role === USER_ROLES.ADMIN || user.role === USER_ROLES.CONTADOR)
         ? adminSelectedLocation === 'all' ? undefined : adminSelectedLocation as LocationId
@@ -194,7 +207,7 @@ export default function FinancesPage() {
     if (user && (user.role === USER_ROLES.ADMIN || user.role === USER_ROLES.CONTADOR) && locations.length > 0) {
       generateReport();
     }
-  }, [user, selectedYear, selectedMonth, adminSelectedLocation, toast, locations, activePaymentGroups]);
+  }, [user, selectedYear, selectedMonth, selectedQuincena, adminSelectedLocation, toast, locations, activePaymentGroups]);
 
   const totalsByPaymentGroup = useMemo(() => {
     const totals: Partial<Record<string, number>> = {};
@@ -517,15 +530,23 @@ export default function FinancesPage() {
       
       <Card>
         <CardHeader>
-          <CardTitle>Reporte de Ingresos Mensuales</CardTitle>
+          <CardTitle>Reporte de Ingresos</CardTitle>
           <div className="flex flex-col sm:flex-row gap-2 mt-2 items-center flex-wrap">
             <Select value={String(selectedMonth)} onValueChange={(val) => setSelectedMonth(Number(val))}>
-              <SelectTrigger className="w-full sm:w-[180px]"><SelectValue placeholder="Mes" /></SelectTrigger>
+              <SelectTrigger className="w-full sm:w-[150px]"><SelectValue placeholder="Mes" /></SelectTrigger>
               <SelectContent>{months.map(m => <SelectItem key={m.value} value={String(m.value)}>{m.label}</SelectItem>)}</SelectContent>
             </Select>
             <Select value={String(selectedYear)} onValueChange={(val) => setSelectedYear(Number(val))}>
               <SelectTrigger className="w-full sm:w-[120px]"><SelectValue placeholder="Año" /></SelectTrigger>
               <SelectContent>{availableYears.map(y => <SelectItem key={y} value={String(y)}>{y}</SelectItem>)}</SelectContent>
+            </Select>
+            <Select value={selectedQuincena} onValueChange={(value) => setSelectedQuincena(value as string)}>
+                <SelectTrigger className="w-full sm:w-[180px]"><SelectValue placeholder="Periodo" /></SelectTrigger>
+                <SelectContent>
+                    <SelectItem value="all">Mes Completo</SelectItem>
+                    <SelectItem value="1">1ra Quincena (1-15)</SelectItem>
+                    <SelectItem value="2">2da Quincena (16 en adelante)</SelectItem>
+                </SelectContent>
             </Select>
              <Popover open={isPresetsPopoverOpen} onOpenChange={setIsPresetsPopoverOpen}>
                 <PopoverTrigger asChild>
