@@ -77,13 +77,13 @@ const PaymentMethodIcon = ({ method }: { method?: string | null }) => {
     if (!method) return null;
     const methodLower = method.toLowerCase();
     if (methodLower.includes('yape') || methodLower.includes('plin')) {
-        return <Smartphone size={10} className="inline-block" title={`Pago con ${method}`} />;
+        return <span title={`Pago con ${method}`} className="flex items-center gap-0.5"><Smartphone size={10} /><span className="font-bold">Y</span></span>;
     }
     if (methodLower.includes('tarjeta') || methodLower.includes('visa')) {
-        return <CreditCard size={10} className="inline-block" title={`Pago con ${method}`} />;
+        return <span title={`Pago con ${method}`} className="flex items-center gap-0.5"><CreditCard size={10} /><span className="font-bold">V</span></span>;
     }
     if (methodLower.includes('efectivo')) {
-        return <Coins size={10} className="inline-block" title="Pago en Efectivo" />;
+        return <span title="Pago en Efectivo" className="flex items-center gap-0.5"><Coins size={10} /><span className="font-bold">E</span></span>;
     }
     return <DollarSign size={10} className="inline-block" title={`Pago: ${method}`}/>;
 };
