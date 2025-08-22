@@ -863,6 +863,7 @@ export function AppointmentForm({
                         )}
                       />
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        {!isBasicMode && (
                         <FormField
                           control={form.control}
                           name="appointmentDate"
@@ -903,11 +904,12 @@ export function AppointmentForm({
                             </FormItem>
                           )}
                         />
+                        )}
                         <FormField
                           control={form.control}
                           name="appointmentTime"
                           render={({ field }) => (
-                            <FormItem>
+                            <FormItem className={cn(isBasicMode && 'sm:col-span-2')}>
                               <FormLabel className="flex items-center gap-1"><ClockIcon size={16}/>Hora de la Cita</FormLabel>
                               <FormControl>
                                 <Input
