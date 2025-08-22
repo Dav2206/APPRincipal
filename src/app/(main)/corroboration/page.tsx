@@ -11,7 +11,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter }
 import { Button } from '@/components/ui/button';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow, TableFooter as TableFooterComponent } from '@/components/ui/table';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { format, startOfMonth, endOfMonth, eachDayOfInterval, getYear, getMonth, setYear, setMonth, addDays, isAfter, getDate, parseISO } from 'date-fns';
+import { format, startOfMonth, endOfMonth, eachDayOfInterval, getYear, getMonth, setYear, setMonth, addDays, isAfter, getDate, parseISO, isSameDay } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { ListChecks, Loader2, AlertTriangle, ChevronLeft, ChevronRight, Shuffle, UserSquare, CalendarIcon, CreditCard, XIcon } from 'lucide-react';
 import { useRouter } from 'next/navigation';
