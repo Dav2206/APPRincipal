@@ -311,6 +311,8 @@ export async function addProfessional (data: Omit<ProfessionalFormData, 'id'>): 
     commissionRate: (data.commissionRate ?? 20) / 100,
     commissionDeductible: data.commissionDeductible,
     discounts: 0,
+    afp: data.afp,
+    seguro: data.seguro,
     workSchedule: {}, 
     customScheduleOverrides: (data.customScheduleOverrides || []).map(ov => ({
       ...ov,
@@ -431,6 +433,8 @@ export async function updateProfessional (id: string, data: Partial<Professional
     if (data.hasOwnProperty('commissionRate')) professionalToUpdate.commissionRate = data.commissionRate ?? null;
     if (data.hasOwnProperty('commissionDeductible')) professionalToUpdate.commissionDeductible = data.commissionDeductible ?? null;
     if (data.hasOwnProperty('discounts')) professionalToUpdate.discounts = data.discounts ?? null;
+    if (data.hasOwnProperty('afp')) professionalToUpdate.afp = data.afp ?? null;
+    if (data.hasOwnProperty('seguro')) professionalToUpdate.seguro = data.seguro ?? null;
 
 
     if (data.workSchedule !== undefined) {
@@ -514,6 +518,8 @@ export async function updateProfessional (id: string, data: Partial<Professional
     firestoreUpdateData.commissionRate = firestoreUpdateData.commissionRate ?? null;
     firestoreUpdateData.commissionDeductible = firestoreUpdateData.commissionDeductible ?? null;
     firestoreUpdateData.discounts = firestoreUpdateData.discounts ?? null;
+    firestoreUpdateData.afp = firestoreUpdateData.afp ?? null;
+    firestoreUpdateData.seguro = firestoreUpdateData.seguro ?? null;
 
     if (firestoreUpdateData.hasOwnProperty('customScheduleOverrides') && firestoreUpdateData.customScheduleOverrides) {
        firestoreUpdateData.customScheduleOverrides = firestoreUpdateData.customScheduleOverrides.map((ov: any) => ({
@@ -1521,6 +1527,37 @@ export async function updateAppointmentProfessional(appointmentId: string, newPr
 
     const updatedAppointment = await getAppointmentById(appointmentId);
     return updatedAppointment;
+}
+
+export async function updateAppointmentDateTime(appointmentId: string, newDateTime: Date): Promise<Appointment | undefined> {
+    if (!firestore) {
+        throw new Error("Firestore not initialized.");
+    }
+    const batch = writeBatch(firestore);
+    const mainAppointmentRef = doc(firestore, 'citas', appointmentId);
+    
+    // Update the main appointment
+    batch.update(mainAppointmentRef, {
+        appointmentDateTime: toFirestoreTimestamp(newDateTime),
+        updatedAt: serverTimestamp(),
+    });
+    
+    // Find and update the related travel block, if it exists
+    const travelBlockQuery = query(collection(firestore, 'citas'), where('originalAppointmentId', '==', appointmentId));
+    const travelBlockSnapshot = await getDocs(travelBlockQuery);
+    
+    if (!travelBlockSnapshot.empty) {
+        const travelBlockDoc = travelBlockSnapshot.docs[0];
+        batch.update(travelBlockDoc.ref, {
+            appointmentDateTime: toFirestoreTimestamp(newDateTime),
+            updatedAt: serverTimestamp(),
+        });
+        console.log(`[data.ts] Queued update for travel block ${travelBlockDoc.id} time.`);
+    }
+
+    await batch.commit();
+
+    return getAppointmentById(appointmentId);
 }
 
 export async function updateAddedServiceProfessional(appointmentId: string, serviceId: string, newProfessionalId: string): Promise<Appointment | undefined> {

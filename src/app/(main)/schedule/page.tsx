@@ -6,7 +6,7 @@ import type { Appointment, Professional, Location } from '@/types';
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useAuth } from '@/contexts/auth-provider';
 import { useAppState } from '@/contexts/app-state-provider';
-import { getAppointments, getProfessionals, getAppointmentById, getProfessionalAvailabilityForDate, getLocations, getProfessionalById, updateAppointmentProfessional, updateAddedServiceProfessional } from '@/lib/data';
+import { getAppointments, getProfessionals, getAppointmentById, getProfessionalAvailabilityForDate, getLocations, getProfessionalById, updateAppointmentProfessional, updateAddedServiceProfessional, updateAppointmentDateTime } from '@/lib/data';
 import { USER_ROLES, TIME_SLOTS, LocationId, APPOINTMENT_STATUS } from '@/lib/constants';
 import { DailyTimeline } from '@/components/schedule/daily-timeline';
 import { Button } from '@/components/ui/button';
@@ -15,7 +15,7 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { format, addDays, subDays, startOfDay, isEqual, parseISO } from 'date-fns';
 import { es } from 'date-fns/locale';
-import { CalendarIcon, ChevronLeft, ChevronRight, AlertTriangle, Loader2, CalendarClock, PlusCircleIcon, UserXIcon, ZoomIn, ZoomOut, RefreshCw, XIcon, MousePointerClick, Zap } from 'lucide-react';
+import { CalendarIcon, ChevronLeft, ChevronRight, AlertTriangle, Loader2, CalendarClock, PlusCircleIcon, UserXIcon, ZoomIn, ZoomOut, RefreshCw, XIcon, MousePointerClick, Zap, MoveVertical } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { AppointmentEditDialog } from '@/components/appointments/appointment-edit-dialog';
 import { AppointmentForm } from '@/components/appointments/appointment-form';
@@ -43,6 +43,7 @@ export default function SchedulePage() {
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [isNewAppointmentFormOpen, setIsNewAppointmentFormOpen] = useState(false);
   const [isDragDropEnabled, setIsDragDropEnabled] = useState(false);
+  const [isVerticalDragEnabled, setIsVerticalDragEnabled] = useState(false);
   const [isBasicMode, setIsBasicMode] = useState(true);
 
   // State for image modal
@@ -324,6 +325,29 @@ const fetchData = useCallback(async (isBackgroundFetch = false) => {
      e.currentTarget.style.cursor = zoomLevel > 1 ? (isDragging ? 'grabbing' : 'grab') : 'default';
   };
 
+  const handleAppointmentTimeUpdate = useCallback(async (appointmentId: string, newDateTime: Date): Promise<boolean> => {
+    const originalAppointment = appointments.find(a => a.id === appointmentId);
+    if (!originalAppointment) return false;
+
+    // Optimistic UI update
+    setAppointments(prev => prev.map(a => a.id === appointmentId ? { ...a, appointmentDateTime: newDateTime.toISOString() } : a));
+
+    try {
+        const result = await updateAppointmentDateTime(appointmentId, newDateTime);
+        if (result) {
+            toast({ title: "Horario Actualizado", description: "La hora de la cita ha sido modificada." });
+            fetchData(true); // Refetch data in background to sync everything
+            return true;
+        }
+        throw new Error("Update failed to return appointment.");
+    } catch (error) {
+        // Revert on failure
+        setAppointments(prev => prev.map(a => a.id === appointmentId ? originalAppointment : a));
+        toast({ title: "Error", description: "No se pudo actualizar el horario de la cita.", variant: "destructive" });
+        return false;
+    }
+  }, [appointments, toast, fetchData]);
+
   const LoadingState = () => (
     <div className="flex flex-col items-center justify-center min-h-[400px]">
       <Loader2 className="h-12 w-12 animate-spin text-primary" />
@@ -439,7 +463,18 @@ const fetchData = useCallback(async (isBackgroundFetch = false) => {
                 />
                 <Label htmlFor="drag-drop-switch" className="text-xs flex items-center gap-1">
                   <MousePointerClick className="h-4 w-4" />
-                  Habilitar Arrastre
+                  Mover Profesional
+                </Label>
+              </div>
+              <div className="flex items-center space-x-2">
+                <Switch
+                  id="vertical-drag-switch"
+                  checked={isVerticalDragEnabled}
+                  onCheckedChange={setIsVerticalDragEnabled}
+                />
+                <Label htmlFor="vertical-drag-switch" className="text-xs flex items-center gap-1">
+                  <MoveVertical className="h-4 w-4" />
+                  Mover Horario
                 </Label>
               </div>
               <div className="flex items-center space-x-2">
@@ -475,9 +510,11 @@ const fetchData = useCallback(async (isBackgroundFetch = false) => {
               currentDate={currentDate}
               onAppointmentClick={handleTimelineAppointmentClick}
               onAppointmentDrop={handleAppointmentDrop}
+              onAppointmentTimeUpdate={handleAppointmentTimeUpdate}
               viewingLocationId={actualEffectiveLocationId!} 
               locations={locations}
               isDragDropEnabled={isDragDropEnabled}
+              isVerticalDragEnabled={isVerticalDragEnabled}
             />
           )}
         </CardContent>

@@ -3,7 +3,7 @@
 "use client";
 
 import type { Appointment, Professional, LocationId, Service, AddedServiceItem, Location } from '@/types';
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useCallback } from 'react';
 import { parseISO, getHours, getMinutes, addMinutes, format, setMinutes, setHours, startOfDay } from 'date-fns';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { ScrollArea, ScrollBar } from '@/components/ui/scroll-area';
@@ -20,9 +20,11 @@ interface DailyTimelineProps {
   currentDate: Date;
   onAppointmentClick?: (appointment: Appointment, serviceId?: string) => void;
   onAppointmentDrop: (appointmentId: string, newProfessionalId: string, serviceId?: string) => Promise<boolean>;
+  onAppointmentTimeUpdate: (appointmentId: string, newDateTime: Date) => Promise<boolean>;
   viewingLocationId: LocationId;
   locations: Location[];
   isDragDropEnabled: boolean;
+  isVerticalDragEnabled: boolean;
 }
 
 const stringToColor = (str: string): string => {
@@ -37,6 +39,7 @@ const stringToColor = (str: string): string => {
 
 const PIXELS_PER_MINUTE = 1.5;
 const DAY_START_HOUR = 9;
+const SNAP_INTERVAL_MINUTES = 15;
 
 interface RenderableServiceBlock {
   id: string;
@@ -86,10 +89,11 @@ const PaymentMethodIcon = ({ method }: { method?: string | null }) => {
 };
 
 
-const DailyTimelineComponent = ({ professionals, appointments, timeSlots, onAppointmentClick, onAppointmentDrop, viewingLocationId, currentDate, locations, isDragDropEnabled }: DailyTimelineProps) => {
+const DailyTimelineComponent = ({ professionals, appointments, timeSlots, onAppointmentClick, onAppointmentDrop, onAppointmentTimeUpdate, viewingLocationId, currentDate, locations, isDragDropEnabled, isVerticalDragEnabled }: DailyTimelineProps) => {
   const [draggedItemId, setDraggedItemId] = useState<string | null>(null);
   const professionalColumnsRef = useRef<Record<string, HTMLDivElement | null>>({});
   const scrollAreaRef = useRef<HTMLDivElement>(null);
+  const timelineRef = useRef<HTMLDivElement>(null);
 
   const allServiceBlocks: RenderableServiceBlock[] = [];
 
@@ -209,25 +213,40 @@ const DailyTimelineComponent = ({ professionals, appointments, timeSlots, onAppo
 
   const totalTimelineHeight = (timeSlots.length * 30 * PIXELS_PER_MINUTE) + PIXELS_PER_MINUTE * 30;
 
- const handleDragStart = (e: React.DragEvent<HTMLDivElement>, blockId: string, appointmentId: string, serviceId: string, isMainService: boolean) => {
-    const dragData = JSON.stringify({ blockId, appointmentId, serviceId, isMainService });
+  const handleDragStart = useCallback((e: React.DragEvent<HTMLDivElement>, blockId: string, appointmentId: string, serviceId: string, isMainService: boolean) => {
+    const dragData = JSON.stringify({ blockId, appointmentId, serviceId, isMainService, startY: e.clientY });
     e.dataTransfer.setData("application/json", dragData);
-  };
+  }, []);
   
   const handleDragOver = (e: React.DragEvent<HTMLDivElement>) => {
-    e.preventDefault(); // This is necessary to allow dropping
+    e.preventDefault();
   };
   
-  const handleDrop = (e: React.DragEvent<HTMLDivElement>, newProfessionalId: string) => {
+  const handleDrop = async (e: React.DragEvent<HTMLDivElement>, newProfessionalId: string) => {
     e.preventDefault();
     try {
       const data = JSON.parse(e.dataTransfer.getData("application/json"));
-      const { appointmentId, serviceId, isMainService } = data;
-      onAppointmentDrop(appointmentId, newProfessionalId, isMainService ? undefined : serviceId);
+      const { appointmentId, serviceId, isMainService, startY } = data;
+      const dropY = e.clientY;
+      const deltaY = dropY - startY;
+      const minutesMoved = deltaY / PIXELS_PER_MINUTE;
+      const snappedMinutes = Math.round(minutesMoved / SNAP_INTERVAL_MINUTES) * SNAP_INTERVAL_MINUTES;
+
+      const originalAppointment = appointments.find(a => a.id === appointmentId);
+      if (!originalAppointment) return;
+
+      if (isVerticalDragEnabled && originalAppointment.professionalId === newProfessionalId) {
+        const originalDateTime = parseISO(originalAppointment.appointmentDateTime);
+        const newDateTime = addMinutes(originalDateTime, snappedMinutes);
+        await onAppointmentTimeUpdate(appointmentId, newDateTime);
+      } else if (isDragDropEnabled) {
+        onAppointmentDrop(appointmentId, newProfessionalId, isMainService ? undefined : serviceId);
+      }
     } catch (error) {
       console.error("Error parsing drag data:", error);
     }
   };
+
 
   // --- Touch Event Handlers ---
   const handleTouchStart = (e: React.TouchEvent<HTMLDivElement>, blockId: string, appointmentId: string, serviceId: string, isMainService: boolean) => {
@@ -235,7 +254,8 @@ const DailyTimelineComponent = ({ professionals, appointments, timeSlots, onAppo
       const viewport = scrollAreaRef.current.querySelector<HTMLDivElement>('div[style*="overflow"]');
       if (viewport) viewport.style.overflowX = 'hidden';
     }
-    setDraggedItemId(JSON.stringify({ blockId, appointmentId, serviceId, isMainService }));
+    const startY = e.touches[0].clientY;
+    setDraggedItemId(JSON.stringify({ blockId, appointmentId, serviceId, isMainService, startY }));
   };
 
   const handleTouchMove = (e: React.TouchEvent<HTMLDivElement>) => {
@@ -243,7 +263,6 @@ const DailyTimelineComponent = ({ professionals, appointments, timeSlots, onAppo
     const touch = e.touches[0];
     const targetElement = document.elementFromPoint(touch.clientX, touch.clientY);
     
-    // Reset all column styles
     Object.values(professionalColumnsRef.current).forEach(col => {
       if (col) col.style.backgroundColor = '';
     });
@@ -251,50 +270,61 @@ const DailyTimelineComponent = ({ professionals, appointments, timeSlots, onAppo
     if (targetElement) {
       const professionalColumn = targetElement.closest('[data-professional-id]');
       if (professionalColumn) {
-        // Highlight the column we are hovering over
         (professionalColumn as HTMLDivElement).style.backgroundColor = 'hsl(var(--accent) / 0.2)';
       }
     }
   };
 
-  const handleTouchEnd = (e: React.TouchEvent<HTMLDivElement>) => {
+  const handleTouchEnd = async (e: React.TouchEvent<HTMLDivElement>) => {
     if (!draggedItemId) return;
-
+  
     if (scrollAreaRef.current) {
       const viewport = scrollAreaRef.current.querySelector<HTMLDivElement>('div[style*="overflow"]');
       if (viewport) viewport.style.overflowX = 'auto';
     }
-
+  
     Object.values(professionalColumnsRef.current).forEach(col => {
       if (col) col.style.backgroundColor = '';
     });
-
+  
     const touch = e.changedTouches[0];
     const targetElement = document.elementFromPoint(touch.clientX, touch.clientY);
+    
+    try {
+      const { appointmentId, serviceId, isMainService, startY } = JSON.parse(draggedItemId);
+      const originalAppointment = appointments.find(a => a.id === appointmentId);
+      if (!originalAppointment) return;
 
-    if (targetElement) {
-      const professionalColumn = targetElement.closest('[data-professional-id]');
-      if (professionalColumn) {
-        const newProfessionalId = professionalColumn.getAttribute('data-professional-id');
-        if (newProfessionalId) {
-            try {
-                const { appointmentId, serviceId, isMainService } = JSON.parse(draggedItemId);
-                onAppointmentDrop(appointmentId, newProfessionalId, isMainService ? undefined : serviceId);
-            } catch (error) {
-                console.error("Error parsing touch drag data:", error);
+      if (targetElement) {
+        const professionalColumn = targetElement.closest('[data-professional-id]');
+        if (professionalColumn) {
+          const newProfessionalId = professionalColumn.getAttribute('data-professional-id');
+          if (newProfessionalId) {
+            if (isVerticalDragEnabled && originalAppointment.professionalId === newProfessionalId) {
+              const deltaY = touch.clientY - startY;
+              const minutesMoved = deltaY / PIXELS_PER_MINUTE;
+              const snappedMinutes = Math.round(minutesMoved / SNAP_INTERVAL_MINUTES) * SNAP_INTERVAL_MINUTES;
+              const originalDateTime = parseISO(originalAppointment.appointmentDateTime);
+              const newDateTime = addMinutes(originalDateTime, snappedMinutes);
+              await onAppointmentTimeUpdate(appointmentId, newDateTime);
+            } else if (isDragDropEnabled) {
+              onAppointmentDrop(appointmentId, newProfessionalId, isMainService ? undefined : serviceId);
             }
+          }
         }
       }
+    } catch (error) {
+      console.error("Error parsing touch drag data:", error);
+    } finally {
+      setDraggedItemId(null);
     }
-    setDraggedItemId(null);
   };
-
 
 
   return (
     <TooltipProvider>
       <ScrollArea ref={scrollAreaRef} className="w-full whitespace-nowrap rounded-md border">
-        <div className="flex relative">
+        <div className="flex relative" ref={timelineRef}>
           <div className="sticky left-0 z-20 bg-background border-r">
             <div className="h-16 flex items-center justify-center font-semibold border-b px-2 text-sm">Hora</div>
             {timeSlots.map((slot) => (
@@ -336,8 +366,8 @@ const DailyTimelineComponent = ({ professionals, appointments, timeSlots, onAppo
                   ref={(el) => professionalColumnsRef.current[prof.id] = el}
                   data-professional-id={prof.id}
                   className="min-w-[120px] md:min-w-[150px] border-r relative transition-colors duration-200"
-                  onDragOver={isDragDropEnabled ? handleDragOver : undefined}
-                  onDrop={isDragDropEnabled ? (e) => handleDrop(e, prof.id) : undefined}
+                  onDragOver={(isDragDropEnabled || isVerticalDragEnabled) ? handleDragOver : undefined}
+                  onDrop={(isDragDropEnabled || isVerticalDragEnabled) ? (e) => handleDrop(e, prof.id) : undefined}
                 >
                   <div className="sticky top-0 z-10 h-16 flex items-center justify-center font-semibold border-b bg-background p-2 text-sm truncate" title={`${prof.firstName} ${prof.lastName}`}>
                     {prof.firstName} {prof.lastName.split(' ')[0]}
@@ -418,14 +448,14 @@ const DailyTimelineComponent = ({ professionals, appointments, timeSlots, onAppo
                         <Tooltip key={block.id} delayDuration={100}>
                           <TooltipTrigger asChild>
                             <div
-                              draggable={isDragDropEnabled}
-                              onDragStart={isDragDropEnabled ? (e) => handleDragStart(e, block.id, block.originalAppointmentId, block.serviceId, block.isMainService) : undefined}
-                              onTouchStart={isDragDropEnabled ? (e) => handleTouchStart(e, block.id, block.originalAppointmentId, block.serviceId, block.isMainService) : undefined}
-                              onTouchMove={isDragDropEnabled ? handleTouchMove : undefined}
-                              onTouchEnd={isDragDropEnabled ? handleTouchEnd : undefined}
+                              draggable={isDragDropEnabled || (isVerticalDragEnabled && block.isMainService)}
+                              onDragStart={(isDragDropEnabled || (isVerticalDragEnabled && block.isMainService)) ? (e) => handleDragStart(e, block.id, block.originalAppointmentId, block.serviceId, block.isMainService) : undefined}
+                              onTouchStart={(isDragDropEnabled || isVerticalDragEnabled) ? (e) => handleTouchStart(e, block.id, block.originalAppointmentId, block.serviceId, block.isMainService) : undefined}
+                              onTouchMove={isDragDropEnabled || isVerticalDragEnabled ? handleTouchMove : undefined}
+                              onTouchEnd={isDragDropEnabled || isVerticalDragEnabled ? handleTouchEnd : undefined}
                               className={cn(
                                 "absolute left-1 right-1 rounded-md p-1.5 shadow-md text-xs overflow-hidden transition-all flex flex-col justify-start border",
-                                isDragDropEnabled ? 'cursor-grab' : 'cursor-pointer',
+                                (isDragDropEnabled || isVerticalDragEnabled) ? 'cursor-grab' : 'cursor-pointer',
                                 blockBgClass,
                                 blockTextClass,
                                 isBlockOverlapping ? "ring-2 ring-destructive border-destructive" : blockBorderColorClass
