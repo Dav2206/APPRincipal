@@ -6,7 +6,7 @@ import type { Appointment, Professional, Location } from '@/types';
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useAuth } from '@/contexts/auth-provider';
 import { useAppState } from '@/contexts/app-state-provider';
-import { getAppointments, getProfessionals, getAppointmentById, getProfessionalAvailabilityForDate, getLocations, getProfessionalById, updateAppointmentProfessional, updateAddedServiceProfessional, updateAppointmentDateTime } from '@/lib/data';
+import { getAppointments, getProfessionals, getAppointmentById, getProfessionalAvailabilityForDate, getLocations, getProfessionalById, updateAppointmentProfessional, updateAddedServiceProfessional, updateAppointmentDateTime, getContractDisplayStatus } from '@/lib/data';
 import { USER_ROLES, TIME_SLOTS, LocationId, APPOINTMENT_STATUS } from '@/lib/constants';
 import { DailyTimeline } from '@/components/schedule/daily-timeline';
 import { Button } from '@/components/ui/button';
@@ -106,15 +106,17 @@ const fetchData = useCallback(async (isBackgroundFetch = false) => {
 
         const professionalIdsInSchedule = new Set<string>();
 
-        // Rule 1: Add professionals whose base location is the current view and are scheduled to work
+        // Rule 1: Add professionals who are scheduled to work AND have a valid contract
         allProfessionals.forEach(prof => {
             const availability = getProfessionalAvailabilityForDate(prof, currentDate);
-            if(availability?.isWorking && availability.workingLocationId === actualEffectiveLocationId) {
+            const contractStatus = getContractDisplayStatus(prof.currentContract, currentDate);
+            
+            if(availability?.isWorking && availability.workingLocationId === actualEffectiveLocationId && (contractStatus === 'Activo' || contractStatus === 'Próximo a Vencer')) {
                 professionalIdsInSchedule.add(prof.id);
             }
         });
 
-        // Rule 2: Add professionals who have an appointment (or travel block) in the current view, regardless of base location
+        // Rule 2: Add professionals who have an appointment (or travel block) in the current view, regardless of their schedule or contract status for that day. This prevents appointments from becoming "orphaned" in the UI.
         dailyAppointments.forEach(appt => {
             if (appt.professionalId) {
                 professionalIdsInSchedule.add(appt.professionalId);
