@@ -105,9 +105,15 @@ export default function RotationsPage() {
         const initialUnassigned: Record<LocationId, Professional[]> = {} as Record<LocationId, Professional[]>;
         
         allLocations.forEach(loc => {
-          initialGroups[loc.id] = [{ id: 'g1', name: 'Grupo 1', professionals: [] }, { id: 'g2', name: 'Grupo 2', professionals: [] }];
-          initialUnassigned[loc.id] = activeProfs.filter(p => p.locationId === loc.id);
+            const groupCount = loc.id === 'san_antonio' ? 3 : 2;
+            initialGroups[loc.id] = Array.from({ length: groupCount }, (_, i) => ({
+                id: `g${i + 1}`,
+                name: `Grupo ${i + 1}`,
+                professionals: []
+            }));
+            initialUnassigned[loc.id] = activeProfs.filter(p => p.locationId === loc.id);
         });
+
 
         setRotationGroups(initialGroups);
         setUnassignedProfessionals(initialUnassigned);
@@ -133,6 +139,10 @@ export default function RotationsPage() {
     e.preventDefault();
     const { profId, origin } = JSON.parse(e.dataTransfer.getData("application/json"));
     
+    const profToMove = activeProfessionals.find(p => p.id === profId);
+    if (!profToMove) return;
+
+    // Remove from unassigned list for that location
     setUnassignedProfessionals(prev => {
         const newUnassigned = {...prev};
         if(newUnassigned[locationId]) {
@@ -144,16 +154,15 @@ export default function RotationsPage() {
     setRotationGroups(prev => {
         const newGroups = {...prev};
         if (newGroups[locationId]) {
-             // Remove from any group it might be in already
-            newGroups[locationId] = newGroups[locationId].map(g => ({...g, professionals: g.professionals.filter(p => p.id !== profId)}));
+             // Remove from any group it might be in already across all locations
+            Object.keys(newGroups).forEach(locId => {
+                newGroups[locId as LocationId] = newGroups[locId as LocationId].map(g => ({...g, professionals: g.professionals.filter(p => p.id !== profId)}));
+            });
             
             // Add to the new group
             const targetGroupIndex = newGroups[locationId].findIndex(g => g.id === targetGroupId);
-            if (targetGroupIndex !== -1) {
-                const profToAdd = activeProfessionals.find(p => p.id === profId);
-                if (profToAdd) {
-                    newGroups[locationId][targetGroupIndex].professionals.push(profToAdd);
-                }
+            if (targetGroupIndex !== -1 && !newGroups[locationId][targetGroupIndex].professionals.some(p => p.id === profId)) {
+               newGroups[locationId][targetGroupIndex].professionals.push(profToMove);
             }
         }
         return newGroups;
@@ -167,21 +176,25 @@ export default function RotationsPage() {
      const profToMove = activeProfessionals.find(p => p.id === profId);
      if (!profToMove) return;
 
+     // Remove from any group it might be in
      setRotationGroups(prev => {
         const newGroups = {...prev};
-        if (newGroups[locationId]) {
-            newGroups[locationId] = newGroups[locationId].map(g => ({...g, professionals: g.professionals.filter(p => p.id !== profId)}));
-        }
+        Object.keys(newGroups).forEach(locId => {
+            newGroups[locId as LocationId] = newGroups[locId as LocationId].map(g => ({...g, professionals: g.professionals.filter(p => p.id !== profId)}));
+        });
         return newGroups;
      });
-
-     setUnassignedProfessionals(prev => {
-        const newUnassigned = {...prev};
-        if (newUnassigned[locationId] && !newUnassigned[locationId].some(p => p.id === profId)) {
-            newUnassigned[locationId] = [...newUnassigned[locationId], profToMove];
-        }
-        return newUnassigned;
-     });
+    
+     // Add to unassigned ONLY if it belongs to that location
+     if (profToMove.locationId === locationId) {
+        setUnassignedProfessionals(prev => {
+            const newUnassigned = {...prev};
+            if (newUnassigned[locationId] && !newUnassigned[locationId].some(p => p.id === profId)) {
+                newUnassigned[locationId] = [...newUnassigned[locationId], profToMove];
+            }
+            return newUnassigned;
+        });
+     }
   }
 
 
@@ -211,7 +224,7 @@ export default function RotationsPage() {
             ))}
           </div>
         </div>
-        <div className="md:col-span-3 grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <div className="md:col-span-3 grid grid-cols-1 sm:grid-cols-3 gap-4">
           {groups.map(group => (
             <div 
               key={group.id} 
@@ -255,99 +268,94 @@ export default function RotationsPage() {
         </CardHeader>
       </Card>
       
-      <Card>
-        <CardHeader>
-          <CardTitle>Planificador de Grupos de Rotación</CardTitle>
-          <CardDescription>Arrastre y suelte a los profesionales para asignarlos a los grupos de rotación de cada sede.</CardDescription>
-        </CardHeader>
-        <CardContent>
-          {isLoading ? (
-            <div className="flex justify-center items-center h-40"><Loader2 className="h-8 w-8 animate-spin" /></div>
-          ) : (
-             <Tabs defaultValue={locations[0]?.id || 'loading'} className="w-full">
-                <TabsList>
-                  {locations.map(loc => <TabsTrigger key={loc.id} value={loc.id}>{loc.name}</TabsTrigger>)}
-                </TabsList>
-                {locations.map(loc => (
-                  <TabsContent key={loc.id} value={loc.id} className="mt-4">
-                    <RotationPlanner location={loc}/>
-                  </TabsContent>
-                ))}
-            </Tabs>
-          )}
-        </CardContent>
-      </Card>
-
-
-      <Tabs defaultValue="higuereta" className="w-full">
-        <TabsList className="grid w-full grid-cols-2">
-          <TabsTrigger value="higuereta">Sede Higuereta</TabsTrigger>
-          <TabsTrigger value="san_antonio">Sede San Antonio</TabsTrigger>
+      <Tabs defaultValue={locations[0]?.id || 'loading'} className="w-full">
+        <TabsList>
+          {isLoading ? <Loader2 className="h-4 w-4 animate-spin"/> : locations.map(loc => <TabsTrigger key={loc.id} value={loc.id}>{loc.name}</TabsTrigger>)}
         </TabsList>
-        <TabsContent value="higuereta">
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-xl flex items-center gap-2"><Sun className="text-amber-500"/>Asignación de Domingos (Higuereta)</CardTitle>
-              <CardDescription>Esta sección es una réplica visual. Próximamente se conectará al planificador.</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <Table>
-              <TableHeader><TableRow><TableHead>Domingo</TableHead><TableHead>Grupo Asignado</TableHead><TableHead>Encargada</TableHead></TableRow></TableHeader>
-              <TableBody>
-                  {domingosDataHiguereta.map(d => (
-                  <TableRow key={d.fecha}>
-                      <TableCell>{d.fecha} {d.feriado && <Badge variant="destructive">FERIADO</Badge>}</TableCell>
-                      <TableCell><Badge variant={d.grupo === 1 ? 'default' : 'secondary'}>GRUPO {d.grupo}</Badge></TableCell>
-                      <TableCell>{d.encargada}</TableCell>
-                  </TableRow>
-                  ))}
-              </TableBody>
-              </Table>
-            </CardContent>
-          </Card>
-          
-          <Card className="mt-8">
-            <CardHeader>
-              <CardTitle className="text-xl flex items-center gap-2"><Star className="text-yellow-500"/>Rotación de Feriados (Higuereta)</CardTitle>
-            </CardHeader>
-            <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        
+        {isLoading ? <div className="flex justify-center items-center h-40"><Loader2 className="h-8 w-8 animate-spin" /></div> : 
+        
+        locations.map(loc => (
+          <TabsContent key={loc.id} value={loc.id} className="mt-4 space-y-8">
+            <Card>
+              <CardHeader>
+                <CardTitle>Planificador de Grupos de Rotación para {loc.name}</CardTitle>
+                <CardDescription>Arrastre y suelte a los profesionales para asignarlos a los grupos de rotación de esta sede.</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <RotationPlanner location={loc}/>
+              </CardContent>
+            </Card>
+
+            {loc.id === 'higuereta' && (
+              <>
                 <Card>
-                    <CardHeader className="pb-2"><CardTitle className="text-lg">Grupo 1 Feriados</CardTitle></CardHeader>
-                    <CardContent><ul className="list-disc list-inside">{feriadosGrupo1.map(p => <li key={`f1-${p}`}>{p}</li>)}</ul></CardContent>
+                  <CardHeader>
+                    <CardTitle className="text-xl flex items-center gap-2"><Sun className="text-amber-500"/>Asignación de Domingos (Ejemplo)</CardTitle>
+                    <CardDescription>Esta tabla muestra un ejemplo de cómo se aplicarían los grupos a los domingos.</CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <Table>
+                    <TableHeader><TableRow><TableHead>Domingo</TableHead><TableHead>Grupo Asignado</TableHead><TableHead>Encargada</TableHead></TableRow></TableHeader>
+                    <TableBody>
+                        {domingosDataHiguereta.map(d => (
+                        <TableRow key={d.fecha}>
+                            <TableCell>{d.fecha} {d.feriado && <Badge variant="destructive">FERIADO</Badge>}</TableCell>
+                            <TableCell><Badge variant={d.grupo === 1 ? 'default' : 'secondary'}>GRUPO {d.grupo}</Badge></TableCell>
+                            <TableCell>{d.encargada}</TableCell>
+                        </TableRow>
+                        ))}
+                    </TableBody>
+                    </Table>
+                  </CardContent>
                 </Card>
                 <Card>
-                    <CardHeader className="pb-2"><CardTitle className="text-lg">Grupo 2 Feriados</CardTitle></CardHeader>
-                    <CardContent><ul className="list-disc list-inside">{feriadosGrupo2.map(p => <li key={`f2-${p}`}>{p}</li>)}</ul></CardContent>
+                  <CardHeader>
+                    <CardTitle className="text-xl flex items-center gap-2"><Star className="text-yellow-500"/>Rotación de Feriados (Ejemplo)</CardTitle>
+                  </CardHeader>
+                  <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                      <Card>
+                          <CardHeader className="pb-2"><CardTitle className="text-lg">Grupo 1 Feriados</CardTitle></CardHeader>
+                          <CardContent><ul className="list-disc list-inside">{feriadosGrupo1.map(p => <li key={`f1-${p}`}>{p}</li>)}</ul></CardContent>
+                      </Card>
+                      <Card>
+                          <CardHeader className="pb-2"><CardTitle className="text-lg">Grupo 2 Feriados</CardTitle></CardHeader>
+                          <CardContent><ul className="list-disc list-inside">{feriadosGrupo2.map(p => <li key={`f2-${p}`}>{p}</li>)}</ul></CardContent>
+                      </Card>
+                  </CardContent>
                 </Card>
-            </CardContent>
-          </Card>
-        </TabsContent>
-        <TabsContent value="san_antonio">
-           <Card>
-            <CardHeader>
-              <CardTitle className="text-xl flex items-center gap-2"><Sun className="text-amber-500"/>Asignación de Domingos (San Antonio)</CardTitle>
-              <CardDescription>Esta sección es una réplica visual. Próximamente se conectará al planificador.</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <Table>
-              <TableHeader><TableRow><TableHead>Domingo</TableHead><TableHead>Grupo Asignado</TableHead></TableRow></TableHeader>
-              <TableBody>
-                  {domingosDataSanAntonio.map(d => (
-                  <TableRow key={d.fecha}>
-                      <TableCell>{d.fecha}</TableCell>
-                      <TableCell><Badge variant={d.grupo === 1 ? 'default' : (d.grupo === 2 ? 'secondary' : 'outline')}>GRUPO {d.grupo}</Badge></TableCell>
-                  </TableRow>
-                  ))}
-              </TableBody>
-              </Table>
-            </CardContent>
-          </Card>
-        </TabsContent>
+              </>
+            )}
+
+            {loc.id === 'san_antonio' && (
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="text-xl flex items-center gap-2"><Sun className="text-amber-500"/>Asignación de Domingos (Ejemplo)</CardTitle>
+                    <CardDescription>Esta tabla muestra un ejemplo de cómo se aplicarían los grupos a los domingos.</CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <Table>
+                    <TableHeader><TableRow><TableHead>Domingo</TableHead><TableHead>Grupo Asignado</TableHead></TableRow></TableHeader>
+                    <TableBody>
+                        {domingosDataSanAntonio.map(d => (
+                        <TableRow key={d.fecha}>
+                            <TableCell>{d.fecha}</TableCell>
+                            <TableCell><Badge variant={d.grupo === 1 ? 'default' : (d.grupo === 2 ? 'secondary' : 'outline')}>GRUPO {d.grupo}</Badge></TableCell>
+                        </TableRow>
+                        ))}
+                    </TableBody>
+                    </Table>
+                  </CardContent>
+                </Card>
+            )}
+
+          </TabsContent>
+        ))}
       </Tabs>
       
       <Card>
         <CardHeader>
-          <CardTitle className="text-xl flex items-center gap-2"><Plane className="text-sky-500"/>Registro General de Vacaciones</CardTitle>
+          <CardTitle className="text-xl flex items-center gap-2"><Plane className="text-sky-500"/>Registro General de Vacaciones (Ejemplo)</CardTitle>
         </CardHeader>
         <CardContent>
             <Table>
