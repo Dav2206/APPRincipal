@@ -1,20 +1,21 @@
 
 "use client";
 
-import type { Appointment, Professional, Location } from '@/types';
-import React, { useState, useEffect, useMemo } from 'react';
+import type { Appointment, Professional, Location, Service } from '@/types';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { useAuth } from '@/contexts/auth-provider';
 import { useAppState } from '@/contexts/app-state-provider';
-import { getAppointments, getProfessionals, getLocations } from '@/lib/data';
+import { getAppointments, getProfessionals, getLocations, getServices } from '@/lib/data';
 import { USER_ROLES, APPOINTMENT_STATUS, LocationId } from '@/lib/constants';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow, TableFooter } from '@/components/ui/table';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow, TableFooter as TableFooterComponent } from '@/components/ui/table';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { format, startOfMonth, endOfMonth, eachDayOfInterval, getYear, getMonth, setYear, setMonth, addDays, isAfter, getDate, parseISO } from 'date-fns';
 import { es } from 'date-fns/locale';
-import { ListChecks, Loader2, AlertTriangle, ChevronLeft, ChevronRight, Shuffle } from 'lucide-react';
+import { ListChecks, Loader2, AlertTriangle, ChevronLeft, ChevronRight, Shuffle, UserSquare, CalendarIcon, CreditCard, XIcon } from 'lucide-react';
 import { useRouter } from 'next/navigation';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogClose } from '@/components/ui/dialog';
 
 interface CorroborationReportData {
   [professionalId: string]: {
@@ -38,6 +39,20 @@ interface ExternalProductionReportData {
   }
 }
 
+interface ProfessionalDetails {
+  professionalId: string;
+  professionalName: string;
+  period: string; // The date clicked
+  details: {
+    appointmentDateTime: string;
+    patientName: string;
+    serviceName: string;
+    locationName: string;
+    totalValue: number;
+    paymentMethod?: string | null;
+  }[];
+}
+
 
 const ALL_PROFESSIONALS_VALUE = "all";
 
@@ -56,12 +71,17 @@ export default function CorroborationPage() {
   const [reportData, setReportData] = useState<CorroborationReportData>({});
   const [externalReportData, setExternalReportData] = useState<ExternalProductionReportData>({});
   const [locations, setLocations] = useState<Location[]>([]);
+  const [allServices, setAllServices] = useState<Service[]>([]);
+  const [rawAppointmentsForPeriod, setRawAppointmentsForPeriod] = useState<Appointment[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   
   const [selectedYear, setSelectedYear] = useState<number>(getYear(new Date()));
   const [selectedMonth, setSelectedMonth] = useState<number>(getMonth(new Date()));
   const [selectedQuincena, setSelectedQuincena] = useState<1 | 2>(getDate(new Date()) <= 15 ? 1 : 2);
   const [selectedProfessional, setSelectedProfessional] = useState<string>(ALL_PROFESSIONALS_VALUE);
+
+  const [isDetailsModalOpen, setIsDetailsModalOpen] = useState(false);
+  const [selectedProfessionalForDetails, setSelectedProfessionalForDetails] = useState<ProfessionalDetails | null>(null);
 
   
   const effectiveLocationId = useMemo(() => {
@@ -78,11 +98,15 @@ export default function CorroborationPage() {
   }, [user, authIsLoading, router]);
 
   useEffect(() => {
-    async function loadLocations() {
-      const fetchedLocations = await getLocations();
+    async function loadStaticData() {
+      const [fetchedLocations, fetchedServices] = await Promise.all([
+          getLocations(),
+          getServices()
+      ]);
       setLocations(fetchedLocations);
+      setAllServices(fetchedServices);
     }
-    loadLocations();
+    loadStaticData();
   }, []);
 
   useEffect(() => {
@@ -104,6 +128,8 @@ export default function CorroborationPage() {
         ]);
         
         const appointments = allAppointmentsResponse.appointments || [];
+        setRawAppointmentsForPeriod(appointments); // Store raw appointments
+        
         const newReportData: CorroborationReportData = {};
         const newExternalReportData: ExternalProductionReportData = {};
         const nativeProfessionalsIds = effectiveLocationId 
@@ -176,6 +202,46 @@ export default function CorroborationPage() {
     }
     generateReport();
   }, [user, effectiveLocationId, selectedYear, selectedMonth, selectedQuincena, locations]);
+
+  const handleOpenDetailsModal = (professionalId: string, professionalName: string, dateKey: string) => {
+    const details: ProfessionalDetails['details'] = [];
+    const targetDate = parseISO(dateKey);
+
+    rawAppointmentsForPeriod.forEach(appt => {
+      const apptDate = parseISO(appt.appointmentDateTime);
+      if (!isSameDay(apptDate, targetDate)) return;
+
+      const processService = (profId: string | null | undefined, amount: number | null | undefined, serviceName: string, serviceType: 'Principal' | 'Adicional') => {
+        if (profId !== professionalId || !amount || amount <= 0) return;
+        details.push({
+          appointmentDateTime: appt.appointmentDateTime,
+          patientName: `${appt.patient?.firstName || ''} ${appt.patient?.lastName || 'Paciente'}`.trim(),
+          serviceName: serviceType === 'Adicional' ? `(Adicional) ${serviceName}` : serviceName,
+          locationName: locations.find(l => l.id === appt.locationId)?.name || 'Sede Desc.',
+          totalValue: amount,
+          paymentMethod: appt.paymentMethod,
+        });
+      };
+
+      processService(appt.professionalId, appt.amountPaid, appt.service?.name || 'Servicio Desc.', 'Principal');
+      
+      appt.addedServices?.forEach(added => {
+        const profForAdded = added.professionalId || appt.professionalId;
+        const addedServiceName = allServices.find(s => s.id === added.serviceId)?.name || 'Serv. Adicional Desc.';
+        processService(profForAdded, added.amountPaid, addedServiceName, 'Adicional');
+      });
+    });
+
+    details.sort((a,b) => parseISO(a.appointmentDateTime).getTime() - parseISO(b.appointmentDateTime).getTime());
+    
+    setSelectedProfessionalForDetails({
+      professionalId,
+      professionalName,
+      period: format(targetDate, 'PPP', {locale: es}),
+      details,
+    });
+    setIsDetailsModalOpen(true);
+  };
 
   const professionalsWithActivity = useMemo(() => {
     return Object.entries(reportData).map(([profId, profData]) => ({
@@ -337,8 +403,12 @@ export default function CorroborationPage() {
                           const dayKey = format(date, 'yyyy-MM-dd');
                           const total = profData.dailyTotals[dayKey] || 0;
                           return (
-                            <TableCell key={dayKey} className="text-center">
-                              {total > 0 ? total.toFixed(2) : '-'}
+                            <TableCell 
+                              key={dayKey} 
+                              className="text-center"
+                              onClick={() => total > 0 && handleOpenDetailsModal(profId, profData.professionalName, dayKey)}
+                            >
+                              {total > 0 ? <span className="font-medium cursor-pointer hover:text-primary underline-offset-4 hover:underline">{total.toFixed(2)}</span> : '-'}
                             </TableCell>
                           );
                         })}
@@ -346,7 +416,7 @@ export default function CorroborationPage() {
                       </TableRow>
                     ))}
                   </TableBody>
-                  <TableFooter>
+                  <TableFooterComponent>
                      <TableRow className="bg-muted/80">
                         <TableCell colSpan={2} className="sticky left-0 bg-muted/80 z-10 font-bold text-lg">Total Diario</TableCell>
                          {dateHeaders.map(date => {
@@ -359,7 +429,7 @@ export default function CorroborationPage() {
                          })}
                          <TableCell className="text-right font-bold text-lg">S/ {grandTotal.toFixed(2)}</TableCell>
                      </TableRow>
-                  </TableFooter>
+                  </TableFooterComponent>
                 </Table>
             </div>
           )}
@@ -404,6 +474,61 @@ export default function CorroborationPage() {
          </Card>
       )}
 
+      {/* Details Modal */}
+      <Dialog open={isDetailsModalOpen} onOpenChange={setIsDetailsModalOpen}>
+        <DialogContent className="sm:max-w-4xl">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <ListChecks size={20} />
+              Detalle de Citas de {selectedProfessionalForDetails?.professionalName}
+            </DialogTitle>
+            <DialogDescription>
+              Mostrando el detalle de citas completadas el día {selectedProfessionalForDetails?.period}.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="max-h-[60vh] overflow-y-auto">
+            {selectedProfessionalForDetails && selectedProfessionalForDetails.details.length > 0 ? (
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead><CalendarIcon size={14} className="inline-block mr-1"/>Hora</TableHead>
+                    <TableHead><UserSquare size={14} className="inline-block mr-1"/>Paciente</TableHead>
+                    <TableHead>Servicio</TableHead>
+                    <TableHead><CreditCard size={14} className="inline-block mr-1"/>Método de Pago</TableHead>
+                    <TableHead className="text-right">Valor (S/)</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {selectedProfessionalForDetails.details.map((detail, index) => (
+                    <TableRow key={index}>
+                      <TableCell className="text-xs">{format(parseISO(detail.appointmentDateTime), "HH:mm", { locale: es })}</TableCell>
+                      <TableCell>{detail.patientName}</TableCell>
+                      <TableCell>{detail.serviceName}</TableCell>
+                      <TableCell>{detail.paymentMethod || 'N/A'}</TableCell>
+                      <TableCell className="text-right font-medium">{detail.totalValue.toFixed(2)}</TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+                <TableFooterComponent>
+                  <TableRow className="font-bold bg-muted/50">
+                    <TableCell colSpan={4}>Total del Día</TableCell>
+                    <TableCell className="text-right text-lg">
+                      S/ {selectedProfessionalForDetails.details.reduce((sum, d) => sum + d.totalValue, 0).toFixed(2)}
+                    </TableCell>
+                  </TableRow>
+                </TableFooterComponent>
+              </Table>
+            ) : (
+              <p className="text-center text-muted-foreground py-8">No se encontraron detalles de citas para esta selección.</p>
+            )}
+          </div>
+          <DialogFooter>
+            <DialogClose asChild>
+              <Button variant="outline">Cerrar</Button>
+            </DialogClose>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
