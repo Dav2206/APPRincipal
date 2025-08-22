@@ -1,5 +1,5 @@
 
-
+      
 "use client";
 
 import Link from 'next/link';
@@ -31,6 +31,7 @@ import {
   CreditCard,
   Package, // Added icon for materials
   PieChartIcon,
+  Calendar, // Added icon for rotations
 } from 'lucide-react';
 import { USER_ROLES } from '@/lib/constants';
 
@@ -44,6 +45,7 @@ const navItems = [
   { href: '/data', label: 'Análisis', icon: PieChartIcon, roles: [USER_ROLES.ADMIN, USER_ROLES.CONTADOR] },
   { href: '/professionals', label: 'Profesionales', icon: Briefcase, roles: [USER_ROLES.ADMIN, USER_ROLES.CONTADOR] },
   { href: '/contracts', label: 'Contratos', icon: FileSpreadsheet, roles: [USER_ROLES.ADMIN, USER_ROLES.CONTADOR] },
+  { href: '/rotations', label: 'Rotaciones', icon: Calendar, roles: [USER_ROLES.ADMIN, USER_ROLES.CONTADOR] },
   { href: '/percentages', label: 'Porcentajes', icon: TrendingUp, roles: [USER_ROLES.CONTADOR, USER_ROLES.LOCATION_STAFF] },
   { href: '/services', label: 'Servicios', icon: ClipboardList, roles: [USER_ROLES.ADMIN, USER_ROLES.CONTADOR] }, 
   { href: '/materials', label: 'Insumos', icon: Package, roles: [USER_ROLES.ADMIN, USER_ROLES.CONTADOR] },
@@ -98,7 +100,7 @@ export function AppSidebar() {
                 finalIsActive = false;
               }
               
-              const specificExactMatchRoutes = ['/appointments', '/schedule', '/finanzas', '/services', '/registry', '/contracts', '/reminders', '/test-function', '/dictation', '/percentages', '/corroboration', '/pagos', '/materials', '/data'];
+              const specificExactMatchRoutes = ['/appointments', '/schedule', '/finanzas', '/services', '/registry', '/contracts', '/reminders', '/test-function', '/dictation', '/percentages', '/corroboration', '/pagos', '/materials', '/data', '/rotations'];
               if (specificExactMatchRoutes.includes(href)) {
                 finalIsActive = pathname === href || pathname.startsWith(`${href}/`);
               }
@@ -128,3 +130,5 @@ export function AppSidebar() {
     </>
   );
 }
+      
+    
