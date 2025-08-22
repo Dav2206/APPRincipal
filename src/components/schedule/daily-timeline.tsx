@@ -57,6 +57,7 @@ interface RenderableServiceBlock {
   bookingObservations?: string | null;
   groupColor: string;
   originalAppointmentData: Appointment;
+  amountPaid?: number | null; // For added services
 }
 
 const isOverlapping = (blockA: RenderableServiceBlock, blockB: RenderableServiceBlock): boolean => {
@@ -178,6 +179,7 @@ const DailyTimelineComponent = ({ professionals, appointments, timeSlots, onAppo
                     isTravelBlock: false,
                     groupColor: apptGroupColor,
                     originalAppointmentData: appt,
+                    amountPaid: addedSvc.amountPaid
                 });
                 previousBlockEndTimeForSequence = addMinutes(addedServiceStartTime, addedSvcDuration);
             }
@@ -491,6 +493,13 @@ const DailyTimelineComponent = ({ professionals, appointments, timeSlots, onAppo
                                       ) : null}
                                   </div>
                                 }
+                                
+                                {!block.isMainService && block.amountPaid && block.amountPaid > 0 && (
+                                    <div className='flex items-center gap-0.5 text-teal-800 mt-0.5'>
+                                        <PaymentMethodIcon method={block.originalAppointmentData.paymentMethod} />
+                                        <p className='text-[10px] font-semibold'>{block.amountPaid.toFixed(2)}</p>
+                                    </div>
+                                )}
                                 
                                 {block.durationMinutes > (block.isMainService && block.originalAppointmentData.addedServices && block.originalAppointmentData.addedServices.length > 0 ? 15 : 30) && (
                                   <p className="text-[10px] leading-tight opacity-80 mt-0.5">
