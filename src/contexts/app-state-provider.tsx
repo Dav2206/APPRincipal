@@ -11,6 +11,8 @@ interface AppStateContextType {
   setSelectedLocationId: (locationId: LocationId | 'all' | null) => void;
   sidebarOpen: boolean;
   setSidebarOpen: (open: boolean) => void;
+  isScheduleBasicMode: boolean;
+  setIsScheduleBasicMode: (isBasic: boolean) => void;
 }
 
 const AppStateContext = createContext<AppStateContextType | undefined>(undefined);
@@ -18,9 +20,14 @@ const AppStateContext = createContext<AppStateContextType | undefined>(undefined
 export const AppStateProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const [selectedLocationId, setSelectedLocationId] = useState<LocationId | 'all' | null>(null);
   const [sidebarOpen, setSidebarOpen] = useState(true);
-  
+  const [isScheduleBasicMode, setIsScheduleBasicModeState] = useState(true); // Default to true
+
   useEffect(() => {
-    
+    // Load persisted basic mode setting
+    const savedMode = localStorage.getItem('scheduleBasicMode');
+    // Set to true if not found, otherwise use saved value
+    setIsScheduleBasicModeState(savedMode === null ? true : savedMode === 'true');
+
     async function setDefaultLocation() {
         if(selectedLocationId === null) {
             try {
@@ -39,13 +46,20 @@ export const AppStateProvider: React.FC<{ children: ReactNode }> = ({ children }
     setDefaultLocation();
   }, []); 
 
+  const setIsScheduleBasicMode = (isBasic: boolean) => {
+    localStorage.setItem('scheduleBasicMode', String(isBasic));
+    setIsScheduleBasicModeState(isBasic);
+  };
+
 
   return (
     <AppStateContext.Provider value={{ 
       selectedLocationId, 
       setSelectedLocationId,
       sidebarOpen,
-      setSidebarOpen 
+      setSidebarOpen,
+      isScheduleBasicMode,
+      setIsScheduleBasicMode,
     }}>
       {children}
     </AppStateContext.Provider>

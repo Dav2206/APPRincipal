@@ -30,7 +30,7 @@ const timeSlotsForView = TIME_SLOTS.filter(slot => parseInt(slot.split(':')[0]) 
 
 export default function SchedulePage() {
   const { user, isLoading: authIsLoading } = useAuth();
-  const { selectedLocationId: adminSelectedLocation } = useAppState();
+  const { selectedLocationId: adminSelectedLocation, isScheduleBasicMode, setIsScheduleBasicMode } = useAppState();
   const { toast } = useToast();
 
   const [appointments, setAppointments] = useState<Appointment[]>([]);
@@ -44,7 +44,6 @@ export default function SchedulePage() {
   const [isNewAppointmentFormOpen, setIsNewAppointmentFormOpen] = useState(false);
   const [isDragDropEnabled, setIsDragDropEnabled] = useState(false);
   const [isVerticalDragEnabled, setIsVerticalDragEnabled] = useState(false);
-  const [isBasicMode, setIsBasicMode] = useState(true);
 
   // State for image modal
   const [selectedImageForModal, setSelectedImageForModal] = useState<string | null>(null);
@@ -482,8 +481,8 @@ const fetchData = useCallback(async (isBackgroundFetch = false) => {
               <div className="flex items-center space-x-2">
                 <Switch
                   id="basic-mode-switch"
-                  checked={isBasicMode}
-                  onCheckedChange={setIsBasicMode}
+                  checked={isScheduleBasicMode}
+                  onCheckedChange={setIsScheduleBasicMode}
                 />
                 <Label htmlFor="basic-mode-switch" className="text-xs flex items-center gap-1">
                   <Zap className="h-4 w-4" />
@@ -543,7 +542,7 @@ const fetchData = useCallback(async (isBackgroundFetch = false) => {
           defaultDate={currentDate}
           allProfessionals={allSystemProfessionals} 
           currentLocationProfessionals={allSystemProfessionals.filter(p => p.locationId === actualEffectiveLocationId)}
-          isBasicMode={isBasicMode}
+          isBasicMode={isScheduleBasicMode}
         />
       )}
 

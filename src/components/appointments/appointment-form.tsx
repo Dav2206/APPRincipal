@@ -43,7 +43,7 @@ interface AppointmentFormProps {
   defaultDate?: Date;
   allProfessionals: Professional[];
   currentLocationProfessionals: Professional[];
-  isBasicMode?: boolean;
+  isBasicMode: boolean;
 }
 
 const ANY_PROFESSIONAL_VALUE = "_any_professional_placeholder_";
