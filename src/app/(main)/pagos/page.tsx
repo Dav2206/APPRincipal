@@ -201,7 +201,7 @@ export default function PaymentsPage() {
             const seguro = prof.seguro ?? 101.7;
 
             const baseSalaryQuincenal = baseSalaryMensual / 2;
-            const netoQuincenal = baseSalaryQuincenal - (afp / 2); // Corrected: only AFP is deducted
+            const netoQuincenal = baseSalaryQuincenal - (afp / 2);
             const discounts = prof.discounts || 0;
             const totalPayment = netoQuincenal + commission - discounts;
 
