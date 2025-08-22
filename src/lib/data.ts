@@ -1953,24 +1953,83 @@ export async function cleanupOrphanedTravelBlocks(): Promise<number> {
   return deletedCount;
 }
 
-export async function findPotentialDuplicatePatients(): Promise<Patient[][]> {
+const getPhoneticCode = (word: string) => {
+    if (!word) return '';
+    let code = word[0].toUpperCase();
+    const map: { [key: string]: string } = {
+        'B': '1', 'F': '1', 'P': '1', 'V': '1',
+        'C': '2', 'G': '2', 'J': '2', 'K': '2', 'Q': '2', 'S': '2', 'X': '2', 'Z': '2',
+        'D': '3', 'T': '3',
+        'L': '4',
+        'M': '5', 'N': '5',
+        'R': '6'
+    };
+    let prevCode = map[code as keyof typeof map] || '';
+    for (let i = 1; i < word.length; i++) {
+        const char = word[i].toUpperCase();
+        const currentCode = map[char as keyof typeof map];
+        if (currentCode && currentCode !== prevCode) {
+            code += currentCode;
+        }
+        prevCode = currentCode || (['A','E','I','O','U','H','W','Y'].includes(char) ? '' : prevCode);
+    }
+    return (code + '000').slice(0, 4);
+};
+
+export async function findPotentialDuplicatePatients(): Promise<{ group: Patient[], reason: string }[]> {
   if (!firestore) return [];
+
   const patientsCol = collection(firestore, 'pacientes');
   const snapshot = await getDocs(patientsCol);
   const allPatients = snapshot.docs.map(d => ({ ...d.data(), id: d.id } as Patient));
 
-  const patientGroups: { [key: string]: Patient[] } = {};
+  const normalize = (str: string) => {
+      return (str || '')
+          .trim()
+          .toLowerCase()
+          .normalize("NFD")
+          .replace(/[\u0300-\u036f]/g, "")
+          .replace(/\s+(de|la|los|del)\s+/g, ' ');
+  };
+  
+  const groups: { [key: string]: { patients: Patient[], reason: string } } = {};
 
-  for (const p of allPatients) {
-    const normalizedName = `${(p.firstName || '').trim().toLowerCase()} ${(p.lastName || '').trim().toLowerCase()}`;
-    if (!patientGroups[normalizedName]) {
-      patientGroups[normalizedName] = [];
+  for (const patient of allPatients) {
+    const fullName = `${patient.firstName || ''} ${patient.lastName || ''}`;
+    const normalizedName = normalize(fullName);
+    const phoneticCode = getPhoneticCode(normalizedName.replace(/\s/g, ''));
+    
+    // Group by normalized name
+    if (normalizedName) {
+        if (!groups[normalizedName]) groups[normalizedName] = { patients: [], reason: "Coincidencia de Nombre Normalizado" };
+        groups[normalizedName].patients.push(patient);
     }
-    patientGroups[normalizedName].push(p);
+    
+    // Group by phonetic code
+    if (phoneticCode) {
+        if (!groups[phoneticCode]) groups[phoneticCode] = { patients: [], reason: "Coincidencia Fonética" };
+        groups[phoneticCode].patients.push(patient);
+    }
   }
 
-  return Object.values(patientGroups).filter(group => group.length > 1);
+  // Filter groups with more than one patient and merge results, avoiding duplicate groups.
+  const finalResultMap = new Map<string, { group: Patient[], reason: string }>();
+
+  Object.values(groups).forEach(groupData => {
+      if (groupData.patients.length > 1) {
+          const uniquePatientIds = new Set(groupData.patients.map(p => p.id));
+          if (uniquePatientIds.size > 1) {
+              const sortedIds = Array.from(uniquePatientIds).sort().join(',');
+              if (!finalResultMap.has(sortedIds)) {
+                  finalResultMap.set(sortedIds, { group: Array.from(new Map(groupData.patients.map(p => [p.id, p])).values()), reason: groupData.reason });
+              }
+          }
+      }
+  });
+
+  return Array.from(finalResultMap.values());
 }
+
 
 export async function mergePatients(primaryPatientId: string, duplicateIds: string[]): Promise<void> {
   if (!firestore) throw new Error("Firestore not initialized.");

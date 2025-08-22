@@ -89,7 +89,7 @@ export default function PatientsPage() {
   
   // State for merging duplicates
   const [isMergeModalOpen, setIsMergeModalOpen] = useState(false);
-  const [potentialDuplicates, setPotentialDuplicates] = useState<Patient[][]>([]);
+  const [potentialDuplicates, setPotentialDuplicates] = useState<{group: Patient[], reason: string}[]>([]);
   const [isLoadingDuplicates, setIsLoadingDuplicates] = useState(false);
   const [mergingGroup, setMergingGroup] = useState<Patient[] | null>(null);
   const [primaryPatientId, setPrimaryPatientId] = useState<string | null>(null);
@@ -287,7 +287,10 @@ export default function PatientsPage() {
       // Reset state and refetch data
       setMergingGroup(null);
       setPrimaryPatientId(null);
-      setPotentialDuplicates(prev => prev.filter(g => g[0].firstName !== mergingGroup[0].firstName || g[0].lastName !== mergingGroup[0].lastName));
+      setPotentialDuplicates(prev => prev.filter(g => {
+        const currentGroupIds = new Set(mergingGroup.map(p => p.id));
+        return g.group.every(p => !currentGroupIds.has(p.id));
+      }));
       fetchPatientsData(1); // Refetch all patients
     } catch (error) {
       console.error("Merge error:", error);
@@ -528,7 +531,7 @@ export default function PatientsPage() {
         <DialogContent className="max-w-3xl">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2"><GitMerge /> Fusionar Pacientes Duplicados</DialogTitle>
-            <DialogDescription>Se encontraron los siguientes grupos de pacientes con nombres idénticos. Revise y fusione los que correspondan a la misma persona.</DialogDescription>
+            <DialogDescription>Se encontraron los siguientes grupos de pacientes con nombres que podrían ser iguales. Revise y fusione los que correspondan a la misma persona.</DialogDescription>
           </DialogHeader>
           <div className="max-h-[60vh] overflow-y-auto p-1">
             {isLoadingDuplicates && <div className="flex justify-center items-center h-40"><Loader2 className="h-10 w-10 animate-spin text-primary" /></div>}
@@ -536,19 +539,19 @@ export default function PatientsPage() {
               <div className="text-center py-10">
                 <CheckCircle className="mx-auto h-12 w-12 text-green-500" />
                 <p className="mt-2 font-semibold">¡Excelente!</p>
-                <p className="text-muted-foreground">No se encontraron pacientes duplicados con nombres idénticos.</p>
+                <p className="text-muted-foreground">No se encontraron pacientes duplicados.</p>
               </div>
             )}
             {!isLoadingDuplicates && potentialDuplicates.length > 0 && (
               <div className="space-y-4">
-                {potentialDuplicates.map((group, index) => (
+                {potentialDuplicates.map((groupData, index) => (
                   <Card key={index} className="bg-muted/50">
                     <CardHeader>
-                      <CardTitle className="text-lg">Grupo: {group[0].firstName} {group[0].lastName}</CardTitle>
-                      <CardDescription>{group.length} perfiles encontrados.</CardDescription>
+                      <CardTitle className="text-lg">Grupo: {groupData.group[0].firstName} {groupData.group[0].lastName}</CardTitle>
+                      <CardDescription>{groupData.group.length} perfiles encontrados. ({groupData.reason})</CardDescription>
                     </CardHeader>
                     <CardContent className="space-y-2">
-                       {group.map(p => (
+                       {groupData.group.map(p => (
                          <div key={p.id} className="text-sm p-2 border rounded-md flex justify-between items-center">
                             <div>
                                 <p><strong>ID:</strong> {p.id}</p>
@@ -558,7 +561,7 @@ export default function PatientsPage() {
                        ))}
                     </CardContent>
                     <CardFooter>
-                      <Button onClick={() => handleStartMerge(group)}>Revisar y Fusionar</Button>
+                      <Button onClick={() => handleStartMerge(groupData.group)}>Revisar y Fusionar</Button>
                     </CardFooter>
                   </Card>
                 ))}
