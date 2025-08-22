@@ -8,7 +8,7 @@ import { Button } from '@/components/ui/button';
 import { APPOINTMENT_STATUS, USER_ROLES, SERVICES as ALL_SERVICES_CONSTANTS, APPOINTMENT_STATUS_DISPLAY } from '@/lib/constants';
 import { format, parseISO } from 'date-fns';
 import { es } from 'date-fns/locale';
-import { CalendarIcon, ClockIcon, UserIcon, StethoscopeIcon, DollarSignIcon, EditIcon, Info, Paperclip, ShoppingBag, Shuffle, Navigation } from 'lucide-react';
+import { CalendarIcon, ClockIcon, UserIcon, StethoscopeIcon, DollarSignIcon, EditIcon, Info, Paperclip, ShoppingBag, Shuffle, Navigation, Heart } from 'lucide-react';
 import { useAuth } from '@/contexts/auth-provider';
 import React, { useState, useEffect, useRef } from 'react';
 import Image from 'next/image';
@@ -174,6 +174,11 @@ const AppointmentCardComponent = ({ appointment, onUpdate, onImageClick }: Appoi
     );
   }
 
+  const patientFullName = `${appointment.patient?.firstName || ''} ${appointment.patient?.lastName || ''}`.trim();
+  const wasSpecificallyRequested = appointment.preferredProfessionalId && 
+                                   appointment.preferredProfessionalId === appointment.professionalId &&
+                                   !patientFullName.toLowerCase().includes('cliente de paso');
+
 
   return (
     <>
@@ -195,7 +200,7 @@ const AppointmentCardComponent = ({ appointment, onUpdate, onImageClick }: Appoi
           <div className="flex justify-between items-start">
             <div>
               <CardTitle className="text-lg flex items-center gap-2">
-                <UserIcon className="text-primary" />
+                {wasSpecificallyRequested ? <Heart size={16} className="text-red-500 shrink-0" /> : <UserIcon className="text-primary shrink-0" />}
                 {appointment.patient?.firstName} {appointment.patient?.lastName}
               </CardTitle>
               <CardDescription>{appointment.service?.name} <span className="text-xs text-muted-foreground">({locations.find(l=>l.id === appointment.locationId)?.name})</span></CardDescription>
@@ -313,5 +318,3 @@ const AppointmentCardComponent = ({ appointment, onUpdate, onImageClick }: Appoi
 }
 
 export const AppointmentCard = React.memo(AppointmentCardComponent);
-
-    
