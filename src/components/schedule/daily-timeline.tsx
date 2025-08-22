@@ -428,7 +428,10 @@ const DailyTimelineComponent = ({ professionals, appointments, timeSlots, onAppo
                       let blockTextClass = 'text-slate-800';
                       let blockBorderColorClass = 'border-slate-300';
                       
-                      const wasSpecificallyRequested = block.isMainService && block.originalAppointmentData.preferredProfessionalId && block.originalAppointmentData.preferredProfessionalId === block.assignedProfessionalId && !block.patientName.toLowerCase().includes('cliente de paso');
+                      const wasSpecificallyRequested = block.isMainService && 
+                                                 block.originalAppointmentData.preferredProfessionalId && 
+                                                 block.originalAppointmentData.preferredProfessionalId === block.assignedProfessionalId && 
+                                                 !block.patientName.toLowerCase().includes('cliente de paso');
 
                       const status = block.originalAppointmentData.status;
                       if (status === APPOINTMENT_STATUS.COMPLETED) {
