@@ -1,4 +1,5 @@
 
+
 "use client";
 
 import React, { useState, useEffect, useMemo } from 'react';
@@ -12,10 +13,11 @@ import type { Professional, Location, LocationId } from '@/types';
 import { useAuth } from '@/contexts/auth-provider';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 
 
-// --- Data for Higuereta ---
-const domingosDataHiguereta = [
+// --- Initial Data (will be part of state now) ---
+const initialDomingosDataHiguereta = [
     { fecha: "29-Jun", feriado: true, grupo: 1, encargada: 'Isabel' },
     { fecha: "6-Jul", feriado: false, grupo: 1, encargada: 'Liz' },
     { fecha: "13-Jul", feriado: false, grupo: 2, encargada: 'Gloria' },
@@ -38,8 +40,8 @@ const domingosDataHiguereta = [
 const feriadosGrupo1 = ['PILAR', 'ISABEL', 'HEIDDY', 'GLORIA', 'LUCILA'];
 const feriadosGrupo2 = ['ANGELA', 'LIZ', 'LEYDI', 'VICTORIA', 'LUCY'];
 
-// --- Data for San Antonio ---
-const domingosDataSanAntonio = [
+
+const initialDomingosDataSanAntonio = [
   { fecha: "7-Set", grupo: 1 },
   { fecha: "14-Set", grupo: 2 },
   { fecha: "21-Set", grupo: 3 },
@@ -54,7 +56,6 @@ const domingosDataSanAntonio = [
   { fecha: "23-Nov", grupo: 3 },
 ];
 
-// --- General Data ---
 const vacaciones = [
   { nombre: 'CARMEN', periodo: '02/05 - 08/05 (7dias)', regreso: '' },
   { nombre: 'LEYDI', periodo: '08/05 - 22/05 (15dias)', regreso: '' },
@@ -86,6 +87,9 @@ export default function RotationsPage() {
 
   const [rotationGroups, setRotationGroups] = useState<Record<LocationId, RotationGroup[]>>({} as Record<LocationId, RotationGroup[]>);
   const [unassignedProfessionals, setUnassignedProfessionals] = useState<Record<LocationId, Professional[]>>({} as Record<LocationId, Professional[]>);
+
+  const [domingosHiguereta, setDomingosHiguereta] = useState(initialDomingosDataHiguereta);
+  const [domingosSanAntonio, setDomingosSanAntonio] = useState(initialDomingosDataSanAntonio);
 
   useEffect(() => {
     async function loadInitialData() {
@@ -197,6 +201,14 @@ export default function RotationsPage() {
      }
   }
 
+  const handleUpdateDomingoGroup = (fecha: string, newGroup: number, locationId: LocationId) => {
+    if (locationId === 'higuereta') {
+        setDomingosHiguereta(prev => prev.map(d => d.fecha === fecha ? {...d, grupo: newGroup} : d));
+    } else if (locationId === 'san_antonio') {
+        setDomingosSanAntonio(prev => prev.map(d => d.fecha === fecha ? {...d, grupo: newGroup} : d));
+    }
+  };
+
 
   const RotationPlanner = ({ location }: { location: Location }) => {
     const groups = rotationGroups[location.id] || [];
@@ -298,10 +310,25 @@ export default function RotationsPage() {
                     <Table>
                     <TableHeader><TableRow><TableHead>Domingo</TableHead><TableHead>Grupo Asignado</TableHead><TableHead>Encargada</TableHead></TableRow></TableHeader>
                     <TableBody>
-                        {domingosDataHiguereta.map(d => (
+                        {domingosHiguereta.map(d => (
                         <TableRow key={d.fecha}>
                             <TableCell>{d.fecha} {d.feriado && <Badge variant="destructive">FERIADO</Badge>}</TableCell>
-                            <TableCell><Badge variant={d.grupo === 1 ? 'default' : 'secondary'}>GRUPO {d.grupo}</Badge></TableCell>
+                            <TableCell>
+                                <DropdownMenu>
+                                    <DropdownMenuTrigger asChild>
+                                        <Button variant="outline" size="sm" className="w-24">
+                                            Grupo {d.grupo}
+                                        </Button>
+                                    </DropdownMenuTrigger>
+                                    <DropdownMenuContent>
+                                        {[1, 2].map(groupNum => (
+                                             <DropdownMenuItem key={groupNum} onSelect={() => handleUpdateDomingoGroup(d.fecha, groupNum, 'higuereta')}>
+                                                Grupo {groupNum}
+                                             </DropdownMenuItem>
+                                        ))}
+                                    </DropdownMenuContent>
+                                </DropdownMenu>
+                            </TableCell>
                             <TableCell>{d.encargada}</TableCell>
                         </TableRow>
                         ))}
@@ -337,10 +364,25 @@ export default function RotationsPage() {
                     <Table>
                     <TableHeader><TableRow><TableHead>Domingo</TableHead><TableHead>Grupo Asignado</TableHead></TableRow></TableHeader>
                     <TableBody>
-                        {domingosDataSanAntonio.map(d => (
+                        {domingosSanAntonio.map(d => (
                         <TableRow key={d.fecha}>
                             <TableCell>{d.fecha}</TableCell>
-                            <TableCell><Badge variant={d.grupo === 1 ? 'default' : (d.grupo === 2 ? 'secondary' : 'outline')}>GRUPO {d.grupo}</Badge></TableCell>
+                            <TableCell>
+                                <DropdownMenu>
+                                    <DropdownMenuTrigger asChild>
+                                        <Button variant="outline" size="sm" className="w-24">
+                                            Grupo {d.grupo}
+                                        </Button>
+                                    </DropdownMenuTrigger>
+                                    <DropdownMenuContent>
+                                        {[1, 2, 3].map(groupNum => (
+                                             <DropdownMenuItem key={groupNum} onSelect={() => handleUpdateDomingoGroup(d.fecha, groupNum, 'san_antonio')}>
+                                                Grupo {groupNum}
+                                             </DropdownMenuItem>
+                                        ))}
+                                    </DropdownMenuContent>
+                                </DropdownMenu>
+                            </TableCell>
                         </TableRow>
                         ))}
                     </TableBody>
@@ -386,3 +428,4 @@ export default function RotationsPage() {
     </div>
   );
 }
+
