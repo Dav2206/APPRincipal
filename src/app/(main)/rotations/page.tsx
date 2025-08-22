@@ -1,35 +1,20 @@
 
 "use client";
 
-import React from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
-import { Users, Calendar, Plane, Sun, Star } from 'lucide-react';
+import { Users, Calendar, Plane, Sun, Star, Loader2, GripVertical } from 'lucide-react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { getProfessionals, getContractDisplayStatus, getLocations } from '@/lib/data';
+import type { Professional, Location, LocationId } from '@/types';
+import { useAuth } from '@/contexts/auth-provider';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 
 
 // --- Data for Higuereta ---
-const descanosGrupo1Higuereta = [
-  { nombre: 'ISABEL', dia: 'lunes' },
-  { nombre: 'GLORIA', dia: 'martes' },
-  { nombre: 'LEYDI', dia: 'miércoles' },
-  { nombre: 'ANGELA', dia: 'miércoles' },
-  { nombre: 'HEIDDY', dia: 'jueves' },
-  { nombre: 'GLADY', dia: 'miércoles' },
-  { nombre: 'GUISSEL', dia: 'N/A' },
-];
-
-const descanosGrupo2Higuereta = [
-  { nombre: 'LIZ', dia: 'lunes' },
-  { nombre: 'VICTORIA', dia: 'martes' },
-  { nombre: 'PILAR', dia: 'martes' },
-  { nombre: 'LUCILA', dia: 'miércoles' },
-  { nombre: 'LUCY', dia: 'jueves' },
-  { nombre: 'ROSSY', dia: 'miércoles' },
-  { nombre: 'ENITH', dia: 'N/A' },
-];
-
 const domingosDataHiguereta = [
     { fecha: "29-Jun", feriado: true, grupo: 1, encargada: 'Isabel' },
     { fecha: "6-Jul", feriado: false, grupo: 1, encargada: 'Liz' },
@@ -54,19 +39,6 @@ const feriadosGrupo1 = ['PILAR', 'ISABEL', 'HEIDDY', 'GLORIA', 'LUCILA'];
 const feriadosGrupo2 = ['ANGELA', 'LIZ', 'LEYDI', 'VICTORIA', 'LUCY'];
 
 // --- Data for San Antonio ---
-const descanosGrupo1SanAntonio = [
-  { nombre: 'JUDITH', dia: 'lunes' },
-  { nombre: 'MARISOL', dia: 'martes' },
-];
-const descanosGrupo2SanAntonio = [
-  { nombre: 'JAZMIN', dia: 'lunes' },
-  { nombre: 'YOSHI', dia: 'martes' },
-];
-const descanosGrupo3SanAntonio = [
-  { nombre: 'NATHALY', dia: 'lunes' },
-  { nombre: 'FLOR', dia: 'jueves' },
-];
-
 const domingosDataSanAntonio = [
   { fecha: "7-Set", grupo: 1 },
   { fecha: "14-Set", grupo: 2 },
@@ -100,7 +72,175 @@ const vacaciones = [
 ];
 
 
+interface RotationGroup {
+  id: string;
+  name: string;
+  professionals: Professional[];
+}
+
 export default function RotationsPage() {
+  const { user } = useAuth();
+  const [activeProfessionals, setActiveProfessionals] = useState<Professional[]>([]);
+  const [locations, setLocations] = useState<Location[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+
+  const [rotationGroups, setRotationGroups] = useState<Record<LocationId, RotationGroup[]>>({} as Record<LocationId, RotationGroup[]>);
+  const [unassignedProfessionals, setUnassignedProfessionals] = useState<Record<LocationId, Professional[]>>({} as Record<LocationId, Professional[]>);
+
+  useEffect(() => {
+    async function loadInitialData() {
+      setIsLoading(true);
+      try {
+        const [allProfs, allLocations] = await Promise.all([getProfessionals(), getLocations()]);
+        
+        const activeProfs = allProfs.filter(prof => {
+          const status = getContractDisplayStatus(prof.currentContract);
+          return status === 'Activo' || status === 'Próximo a Vencer';
+        });
+
+        setActiveProfessionals(activeProfs);
+        setLocations(allLocations);
+        
+        const initialGroups: Record<LocationId, RotationGroup[]> = {} as Record<LocationId, RotationGroup[]>;
+        const initialUnassigned: Record<LocationId, Professional[]> = {} as Record<LocationId, Professional[]>;
+        
+        allLocations.forEach(loc => {
+          initialGroups[loc.id] = [{ id: 'g1', name: 'Grupo 1', professionals: [] }, { id: 'g2', name: 'Grupo 2', professionals: [] }];
+          initialUnassigned[loc.id] = activeProfs.filter(p => p.locationId === loc.id);
+        });
+
+        setRotationGroups(initialGroups);
+        setUnassignedProfessionals(initialUnassigned);
+
+      } catch (error) {
+        console.error("Error loading initial rotation data:", error);
+      } finally {
+        setIsLoading(false);
+      }
+    }
+    loadInitialData();
+  }, []);
+
+  const handleDragStart = (e: React.DragEvent<HTMLDivElement>, prof: Professional, origin: string) => {
+    e.dataTransfer.setData("application/json", JSON.stringify({ profId: prof.id, origin }));
+  };
+
+  const handleDragOver = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+  };
+
+  const handleDrop = (e: React.DragEvent<HTMLDivElement>, targetGroupId: string, locationId: LocationId) => {
+    e.preventDefault();
+    const { profId, origin } = JSON.parse(e.dataTransfer.getData("application/json"));
+    
+    setUnassignedProfessionals(prev => {
+        const newUnassigned = {...prev};
+        if(newUnassigned[locationId]) {
+            newUnassigned[locationId] = newUnassigned[locationId].filter(p => p.id !== profId);
+        }
+        return newUnassigned;
+    });
+
+    setRotationGroups(prev => {
+        const newGroups = {...prev};
+        if (newGroups[locationId]) {
+             // Remove from any group it might be in already
+            newGroups[locationId] = newGroups[locationId].map(g => ({...g, professionals: g.professionals.filter(p => p.id !== profId)}));
+            
+            // Add to the new group
+            const targetGroupIndex = newGroups[locationId].findIndex(g => g.id === targetGroupId);
+            if (targetGroupIndex !== -1) {
+                const profToAdd = activeProfessionals.find(p => p.id === profId);
+                if (profToAdd) {
+                    newGroups[locationId][targetGroupIndex].professionals.push(profToAdd);
+                }
+            }
+        }
+        return newGroups;
+    });
+  };
+
+  const handleDropOnUnassigned = (e: React.DragEvent<HTMLDivElement>, locationId: LocationId) => {
+     e.preventDefault();
+     const { profId } = JSON.parse(e.dataTransfer.getData("application/json"));
+     
+     const profToMove = activeProfessionals.find(p => p.id === profId);
+     if (!profToMove) return;
+
+     setRotationGroups(prev => {
+        const newGroups = {...prev};
+        if (newGroups[locationId]) {
+            newGroups[locationId] = newGroups[locationId].map(g => ({...g, professionals: g.professionals.filter(p => p.id !== profId)}));
+        }
+        return newGroups;
+     });
+
+     setUnassignedProfessionals(prev => {
+        const newUnassigned = {...prev};
+        if (newUnassigned[locationId] && !newUnassigned[locationId].some(p => p.id === profId)) {
+            newUnassigned[locationId] = [...newUnassigned[locationId], profToMove];
+        }
+        return newUnassigned;
+     });
+  }
+
+
+  const RotationPlanner = ({ location }: { location: Location }) => {
+    const groups = rotationGroups[location.id] || [];
+    const unassigned = unassignedProfessionals[location.id] || [];
+
+    return (
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+        <div 
+          className="md:col-span-1 p-4 border rounded-lg bg-muted/30"
+          onDragOver={handleDragOver}
+          onDrop={(e) => handleDropOnUnassigned(e, location.id)}
+        >
+          <h3 className="font-semibold mb-2">Profesionales Sin Asignar ({unassigned.length})</h3>
+          <div className="space-y-2">
+            {unassigned.map(prof => (
+              <div 
+                key={prof.id} 
+                draggable
+                onDragStart={(e) => handleDragStart(e, prof, 'unassigned')}
+                className="flex items-center gap-2 p-2 bg-background rounded-md shadow-sm cursor-grab border"
+              >
+                <GripVertical className="h-4 w-4 text-muted-foreground"/>
+                <span className="text-sm font-medium">{prof.firstName} {prof.lastName}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+        <div className="md:col-span-3 grid grid-cols-1 sm:grid-cols-2 gap-4">
+          {groups.map(group => (
+            <div 
+              key={group.id} 
+              className="p-4 border rounded-lg"
+              onDragOver={handleDragOver}
+              onDrop={(e) => handleDrop(e, group.id, location.id)}
+            >
+              <h3 className="font-semibold mb-2">{group.name} ({group.professionals.length})</h3>
+              <div className="space-y-2 min-h-[50px]">
+                {group.professionals.map(prof => (
+                   <div 
+                    key={prof.id} 
+                    draggable
+                    onDragStart={(e) => handleDragStart(e, prof, group.id)}
+                    className="flex items-center gap-2 p-2 bg-background rounded-md shadow-sm cursor-grab border"
+                   >
+                     <GripVertical className="h-4 w-4 text-muted-foreground"/>
+                     <span className="text-sm font-medium">{prof.firstName} {prof.lastName}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  };
+
+
   return (
     <div className="container mx-auto py-8 px-4 md:px-0 space-y-8">
       <Card className="shadow-lg">
@@ -115,6 +255,30 @@ export default function RotationsPage() {
         </CardHeader>
       </Card>
       
+      <Card>
+        <CardHeader>
+          <CardTitle>Planificador de Grupos de Rotación</CardTitle>
+          <CardDescription>Arrastre y suelte a los profesionales para asignarlos a los grupos de rotación de cada sede.</CardDescription>
+        </CardHeader>
+        <CardContent>
+          {isLoading ? (
+            <div className="flex justify-center items-center h-40"><Loader2 className="h-8 w-8 animate-spin" /></div>
+          ) : (
+             <Tabs defaultValue={locations[0]?.id || 'loading'} className="w-full">
+                <TabsList>
+                  {locations.map(loc => <TabsTrigger key={loc.id} value={loc.id}>{loc.name}</TabsTrigger>)}
+                </TabsList>
+                {locations.map(loc => (
+                  <TabsContent key={loc.id} value={loc.id} className="mt-4">
+                    <RotationPlanner location={loc}/>
+                  </TabsContent>
+                ))}
+            </Tabs>
+          )}
+        </CardContent>
+      </Card>
+
+
       <Tabs defaultValue="higuereta" className="w-full">
         <TabsList className="grid w-full grid-cols-2">
           <TabsTrigger value="higuereta">Sede Higuereta</TabsTrigger>
@@ -123,49 +287,22 @@ export default function RotationsPage() {
         <TabsContent value="higuereta">
           <Card>
             <CardHeader>
-              <CardTitle className="text-xl flex items-center gap-2"><Sun className="text-amber-500"/>Rotación de Domingos (Higuereta)</CardTitle>
-              <CardDescription>Grupos de descanso y asignación de domingos y feriados.</CardDescription>
+              <CardTitle className="text-xl flex items-center gap-2"><Sun className="text-amber-500"/>Asignación de Domingos (Higuereta)</CardTitle>
+              <CardDescription>Esta sección es una réplica visual. Próximamente se conectará al planificador.</CardDescription>
             </CardHeader>
-            <CardContent className="grid grid-cols-1 md:grid-cols-3 gap-6">
-              <div className="md:col-span-1 space-y-4">
-                <Card>
-                  <CardHeader className="pb-2"><CardTitle className="text-lg">Grupo 1</CardTitle></CardHeader>
-                  <CardContent>
-                    <Table>
-                      <TableHeader><TableRow><TableHead>Profesional</TableHead><TableHead>Día Descanso</TableHead></TableRow></TableHeader>
-                      <TableBody>{descanosGrupo1Higuereta.map(p => (<TableRow key={`g1-${p.nombre}`}><TableCell>{p.nombre}</TableCell><TableCell className="capitalize">{p.dia}</TableCell></TableRow>))}</TableBody>
-                    </Table>
-                  </CardContent>
-                </Card>
-                <Card>
-                  <CardHeader className="pb-2"><CardTitle className="text-lg">Grupo 2</CardTitle></CardHeader>
-                  <CardContent>
-                    <Table>
-                      <TableHeader><TableRow><TableHead>Profesional</TableHead><TableHead>Día Descanso</TableHead></TableRow></TableHeader>
-                      <TableBody>{descanosGrupo2Higuereta.map(p => (<TableRow key={`g2-${p.nombre}`}><TableCell>{p.nombre}</TableCell><TableCell className="capitalize">{p.dia}</TableCell></TableRow>))}</TableBody>
-                    </Table>
-                  </CardContent>
-                </Card>
-              </div>
-              <div className="md:col-span-2">
-                <Card>
-                    <CardHeader className="pb-2"><CardTitle className="text-lg">Asignación de Domingos</CardTitle></CardHeader>
-                    <CardContent>
-                        <Table>
-                        <TableHeader><TableRow><TableHead>Domingo</TableHead><TableHead>Grupo Asignado</TableHead><TableHead>Encargada</TableHead></TableRow></TableHeader>
-                        <TableBody>
-                            {domingosDataHiguereta.map(d => (
-                            <TableRow key={d.fecha}>
-                                <TableCell>{d.fecha} {d.feriado && <Badge variant="destructive">FERIADO</Badge>}</TableCell>
-                                <TableCell><Badge variant={d.grupo === 1 ? 'default' : 'secondary'}>GRUPO {d.grupo}</Badge></TableCell>
-                                <TableCell>{d.encargada}</TableCell>
-                            </TableRow>
-                            ))}
-                        </TableBody>
-                        </Table>
-                    </CardContent>
-                </Card>
-              </div>
+            <CardContent>
+              <Table>
+              <TableHeader><TableRow><TableHead>Domingo</TableHead><TableHead>Grupo Asignado</TableHead><TableHead>Encargada</TableHead></TableRow></TableHeader>
+              <TableBody>
+                  {domingosDataHiguereta.map(d => (
+                  <TableRow key={d.fecha}>
+                      <TableCell>{d.fecha} {d.feriado && <Badge variant="destructive">FERIADO</Badge>}</TableCell>
+                      <TableCell><Badge variant={d.grupo === 1 ? 'default' : 'secondary'}>GRUPO {d.grupo}</Badge></TableCell>
+                      <TableCell>{d.encargada}</TableCell>
+                  </TableRow>
+                  ))}
+              </TableBody>
+              </Table>
             </CardContent>
           </Card>
           
@@ -188,57 +325,21 @@ export default function RotationsPage() {
         <TabsContent value="san_antonio">
            <Card>
             <CardHeader>
-              <CardTitle className="text-xl flex items-center gap-2"><Sun className="text-amber-500"/>Rotación de Domingos (San Antonio)</CardTitle>
-              <CardDescription>Grupos de descanso y asignación de domingos para San Antonio.</CardDescription>
+              <CardTitle className="text-xl flex items-center gap-2"><Sun className="text-amber-500"/>Asignación de Domingos (San Antonio)</CardTitle>
+              <CardDescription>Esta sección es una réplica visual. Próximamente se conectará al planificador.</CardDescription>
             </CardHeader>
-            <CardContent className="grid grid-cols-1 md:grid-cols-3 gap-6">
-              <div className="md:col-span-1 space-y-4">
-                 <Card>
-                  <CardHeader className="pb-2"><CardTitle className="text-lg">Grupo 1</CardTitle></CardHeader>
-                  <CardContent>
-                    <Table>
-                      <TableHeader><TableRow><TableHead>Profesional</TableHead><TableHead>Día Descanso</TableHead></TableRow></TableHeader>
-                      <TableBody>{descanosGrupo1SanAntonio.map(p => (<TableRow key={`sa-g1-${p.nombre}`}><TableCell>{p.nombre}</TableCell><TableCell className="capitalize">{p.dia}</TableCell></TableRow>))}</TableBody>
-                    </Table>
-                  </CardContent>
-                </Card>
-                 <Card>
-                  <CardHeader className="pb-2"><CardTitle className="text-lg">Grupo 2</CardTitle></CardHeader>
-                  <CardContent>
-                    <Table>
-                      <TableHeader><TableRow><TableHead>Profesional</TableHead><TableHead>Día Descanso</TableHead></TableRow></TableHeader>
-                      <TableBody>{descanosGrupo2SanAntonio.map(p => (<TableRow key={`sa-g2-${p.nombre}`}><TableCell>{p.nombre}</TableCell><TableCell className="capitalize">{p.dia}</TableCell></TableRow>))}</TableBody>
-                    </Table>
-                  </CardContent>
-                </Card>
-                 <Card>
-                  <CardHeader className="pb-2"><CardTitle className="text-lg">Grupo 3</CardTitle></CardHeader>
-                  <CardContent>
-                    <Table>
-                      <TableHeader><TableRow><TableHead>Profesional</TableHead><TableHead>Día Descanso</TableHead></TableRow></TableHeader>
-                      <TableBody>{descanosGrupo3SanAntonio.map(p => (<TableRow key={`sa-g3-${p.nombre}`}><TableCell>{p.nombre}</TableCell><TableCell className="capitalize">{p.dia}</TableCell></TableRow>))}</TableBody>
-                    </Table>
-                  </CardContent>
-                </Card>
-              </div>
-              <div className="md:col-span-2">
-                 <Card>
-                    <CardHeader className="pb-2"><CardTitle className="text-lg">Asignación de Domingos</CardTitle></CardHeader>
-                    <CardContent>
-                        <Table>
-                        <TableHeader><TableRow><TableHead>Domingo</TableHead><TableHead>Grupo Asignado</TableHead></TableRow></TableHeader>
-                        <TableBody>
-                            {domingosDataSanAntonio.map(d => (
-                            <TableRow key={d.fecha}>
-                                <TableCell>{d.fecha}</TableCell>
-                                <TableCell><Badge variant={d.grupo === 1 ? 'default' : (d.grupo === 2 ? 'secondary' : 'outline')}>GRUPO {d.grupo}</Badge></TableCell>
-                            </TableRow>
-                            ))}
-                        </TableBody>
-                        </Table>
-                    </CardContent>
-                 </Card>
-              </div>
+            <CardContent>
+              <Table>
+              <TableHeader><TableRow><TableHead>Domingo</TableHead><TableHead>Grupo Asignado</TableHead></TableRow></TableHeader>
+              <TableBody>
+                  {domingosDataSanAntonio.map(d => (
+                  <TableRow key={d.fecha}>
+                      <TableCell>{d.fecha}</TableCell>
+                      <TableCell><Badge variant={d.grupo === 1 ? 'default' : (d.grupo === 2 ? 'secondary' : 'outline')}>GRUPO {d.grupo}</Badge></TableCell>
+                  </TableRow>
+                  ))}
+              </TableBody>
+              </Table>
             </CardContent>
           </Card>
         </TabsContent>
@@ -277,5 +378,3 @@ export default function RotationsPage() {
     </div>
   );
 }
-
-    
