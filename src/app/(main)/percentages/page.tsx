@@ -14,7 +14,7 @@ import { Calendar } from '@/components/ui/calendar';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow, TableFooter } from '@/components/ui/table';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { format, startOfDay, parseISO, isEqual, addDays, subDays, startOfMonth, endOfMonth, getDate, getYear, getMonth, setYear, setMonth, isAfter, subMonths } from 'date-fns';
+import { format, startOfDay, parseISO, isEqual, addDays, subDays, startOfMonth, endOfMonth, getDate, getYear, getMonth, setYear, setMonth, isAfter } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { CalendarIcon, ChevronLeftIcon, ChevronRightIcon, AlertTriangle, Loader2, TrendingUp, DollarSign, Building, Info, Briefcase, Clock } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -88,11 +88,15 @@ export default function PercentagesPage() {
 
       const incomeMap = new Map<string, ProfessionalIncomeReport>();
       
+      const today = startOfDay(new Date());
+
       allProfessionals.forEach(prof => {
           let workedDays = 0;
-          if(effectiveLocationId){ // Only calculate worked days if a specific location is selected
+          if(effectiveLocationId){
               let currentDate = startDate;
-              while (currentDate <= endDate) {
+              const loopEndDate = isAfter(endDate, today) ? today : endDate;
+
+              while (currentDate <= loopEndDate) {
                   const availability = getProfessionalAvailabilityForDate(prof, currentDate);
                   if (availability?.isWorking && availability.workingLocationId === effectiveLocationId) {
                       workedDays++;
