@@ -13,7 +13,7 @@ import { Button } from '@/components/ui/button';
 import { Calendar } from '@/components/ui/calendar';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { format, addDays, subDays, startOfDay, isEqual, parseISO } from 'date-fns';
+import { format, addDays, subDays, startOfDay, isEqual, parseISO, startOfMonth, endOfMonth, getDate } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { CalendarIcon, ChevronLeftIcon, ChevronRightIcon, PlusCircleIcon, AlertTriangle, Loader2, ZoomIn, ZoomOut, RefreshCw, XIcon, DollarSign } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -60,12 +60,34 @@ export function AppointmentsDisplay() {
     if (!user) return;
     setIsLoading(true);
     
-    try {
-      const fetchedData = await getAppointments({
+    let options: Parameters<typeof getAppointments>[0] = {
         locationId: effectiveLocationId,
-        date: currentDate,
-      });
-      const sortedAppointments = (fetchedData.appointments || []).sort(
+    };
+
+    if (filterPendingPayment) {
+        const today = new Date();
+        const currentDayInMonth = getDate(today);
+        const quincenaStart = currentDayInMonth <= 15 ? startOfMonth(today) : addDays(startOfMonth(today), 15);
+        const quincenaEnd = currentDayInMonth <= 15 ? addDays(startOfMonth(today), 14) : endOfMonth(today);
+        
+        options.dateRange = { start: quincenaStart, end: quincenaEnd };
+        options.statuses = [APPOINTMENT_STATUS.COMPLETED];
+    } else {
+        options.date = currentDate;
+    }
+
+    try {
+      const fetchedData = await getAppointments(options);
+
+      let resultingAppointments = fetchedData.appointments || [];
+
+      if (filterPendingPayment) {
+        resultingAppointments = resultingAppointments.filter(
+            (appt) => !appt.amountPaid || appt.amountPaid <= 0 || !appt.paymentMethod
+        );
+      }
+
+      const sortedAppointments = resultingAppointments.sort(
         (a, b) => parseISO(a.appointmentDateTime).getTime() - parseISO(b.appointmentDateTime).getTime()
       );
       setAppointments(sortedAppointments);
@@ -75,7 +97,7 @@ export function AppointmentsDisplay() {
     } finally {
       setIsLoading(false);
     }
-  }, [user, effectiveLocationId, currentDate]);
+  }, [user, effectiveLocationId, currentDate, filterPendingPayment]);
 
   const fetchProfessionalData = useCallback(async () => {
     setIsLoadingProfessionals(true);
@@ -108,19 +130,10 @@ export function AppointmentsDisplay() {
     return allSystemProfessionals.filter(p => p.locationId === effectiveLocationId);
   }, [allSystemProfessionals, effectiveLocationId]);
 
-  const filteredAppointments = useMemo(() => {
-    if (filterPendingPayment) {
-      return appointments.filter(
-        (appt) => appt.status === APPOINTMENT_STATUS.COMPLETED && (!appt.amountPaid || appt.amountPaid <= 0 || !appt.paymentMethod)
-      );
-    }
-    return appointments;
-  }, [appointments, filterPendingPayment]);
-
-
   const handleDateChange = (date: Date | undefined) => {
     if (date) {
       setCurrentDate(startOfDay(date));
+      setFilterPendingPayment(false); // Reset filter when changing date
     }
   };
 
@@ -193,7 +206,7 @@ export function AppointmentsDisplay() {
         <h3 className="text-xl font-semibold mb-2">{filterPendingPayment ? "No hay Citas con Pagos Pendientes" : "No hay citas programadas"}</h3>
         <p className="text-muted-foreground mb-4">
           {filterPendingPayment
-            ? "No se encontraron citas completadas sin pago registrado para la fecha seleccionada."
+            ? "No se encontraron citas completadas sin pago registrado para la quincena actual."
             : `No se encontraron citas para ${effectiveLocationId ? locations.find(l => l.id === effectiveLocationId)?.name : 'todas las sedes'} en la fecha seleccionada.`}
         </p>
         {(user?.role === USER_ROLES.ADMIN || user?.role === USER_ROLES.LOCATION_STAFF || user?.role === USER_ROLES.CONTADOR) && (
@@ -219,7 +232,7 @@ export function AppointmentsDisplay() {
         <CardHeader>
           <div className="flex flex-col md:flex-row justify-between items-center gap-4">
             <CardTitle className="text-2xl">
-              Citas para {format(currentDate, "PPP", { locale: es })}
+              {filterPendingPayment ? 'Pagos Pendientes de la Quincena' : `Citas para ${format(currentDate, "PPP", { locale: es })}`}
             </CardTitle>
             <div className="flex items-center gap-2 w-full md:w-auto">
               <Button variant="outline" size="icon" onClick={() => handleDateChange(subDays(currentDate, 1))}>
@@ -268,16 +281,16 @@ export function AppointmentsDisplay() {
               className="w-full md:w-auto"
             >
               <DollarSign className="mr-2 h-4 w-4" />
-              {filterPendingPayment ? "Mostrar Todas las Citas" : "Ver Pagos Pendientes"}
+              {filterPendingPayment ? "Mostrar Citas del Día" : "Ver Pagos Pendientes (Quincena)"}
             </Button>
           </div>
           {isLoading ? (
             <LoadingState />
-          ) : filteredAppointments.length === 0 ? (
+          ) : appointments.length === 0 ? (
             <NoAppointmentsCard />
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-              {filteredAppointments.map(appt => (
+              {appointments.map(appt => (
                 <AppointmentCard key={appt.id} appointment={appt} onUpdate={handleAppointmentUpdate} onImageClick={handleImageClick} />
               ))}
             </div>

@@ -1,3 +1,4 @@
+
 "use client";
 
 import { AppointmentsDisplay } from '@/components/appointments/appointments-display';
