@@ -261,6 +261,7 @@ const DailyTimelineComponent = ({ professionals, appointments, timeSlots, onAppo
 
   const handleTouchMove = (e: React.TouchEvent<HTMLDivElement>) => {
     if (!draggedItemId) return;
+    e.preventDefault();
     const touch = e.touches[0];
     const targetElement = document.elementFromPoint(touch.clientX, touch.clientY);
     
