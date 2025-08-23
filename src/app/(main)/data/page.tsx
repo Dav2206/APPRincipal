@@ -146,41 +146,57 @@ export default function DataPage() {
   
   const averageRevenuePerProfessionalByDayData = useMemo(() => {
     const revenueByDay: number[] = Array(7).fill(0);
-    const workingProfessionalsByDay: Set<string>[] = Array.from({ length: 7 }, () => new Set());
+    const professionalWorkDaysByDayOfWeek: number[] = Array(7).fill(0);
+    const processedDays = new Set<string>(); // "YYYY-MM-DD"
+    
+    // Iterate through each day in the selected period
+    const baseDate = setMonth(setYear(new Date(), selectedYear), selectedMonth);
+    let startDate: Date;
+    let endDate: Date;
+    if (selectedQuincena === '1') {
+        startDate = startOfMonth(baseDate);
+        endDate = addDays(startDate, 14);
+    } else if (selectedQuincena === '2') {
+        startDate = addDays(startOfMonth(baseDate), 15);
+        endDate = endOfMonth(baseDate);
+    } else {
+        startDate = startOfMonth(baseDate);
+        endDate = endOfMonth(baseDate);
+    }
+
+    for (let day = startDate; day <= endDate; day = addDays(day, 1)) {
+        const dayOfWeekIndex = getDay(day);
+        let professionalsWorkingOnThisDay = 0;
+        
+        allProfessionals.forEach(prof => {
+            // Check against effectiveLocationId if one is selected
+            if (!selectedLocationId || selectedLocationId === 'all' || prof.locationId === selectedLocationId) {
+                const availability = getProfessionalAvailabilityForDate(prof, day);
+                if (availability?.isWorking) {
+                    professionalsWorkingOnThisDay++;
+                }
+            }
+        });
+        professionalWorkDaysByDayOfWeek[dayOfWeekIndex] += professionalsWorkingOnThisDay;
+    }
   
+    // Calculate total revenue for each day of the week
     filteredAppointments.forEach(appt => {
         const appointmentDate = parseISO(appt.appointmentDateTime);
         const dayIndex = getDay(appointmentDate);
-        
         const totalRevenue = (appt.amountPaid || 0) + (appt.addedServices?.reduce((sum, as) => sum + (as.amountPaid || 0), 0) || 0);
         revenueByDay[dayIndex] += totalRevenue;
-        
-        // Count professionals who worked on that day
-        const processProfessional = (profId?: string | null) => {
-            if (profId) {
-                const professional = allProfessionals.find(p => p.id === profId);
-                if (professional) {
-                    const availability = getProfessionalAvailabilityForDate(professional, appointmentDate);
-                    if (availability?.isWorking) {
-                        workingProfessionalsByDay[dayIndex].add(profId);
-                    }
-                }
-            }
-        }
-        
-        processProfessional(appt.professionalId);
-        appt.addedServices?.forEach(as => processProfessional(as.professionalId));
     });
   
     return DAYS_OF_WEEK_DISPLAY.map((dayName, index) => {
       const totalRevenue = revenueByDay[index];
-      const professionalCount = workingProfessionalsByDay[index].size;
+      const totalWorkDays = professionalWorkDaysByDayOfWeek[index];
       return {
         name: dayName,
-        average: professionalCount > 0 ? totalRevenue / professionalCount : 0,
+        average: totalWorkDays > 0 ? totalRevenue / totalWorkDays : 0,
       };
     });
-  }, [filteredAppointments, allProfessionals]);
+  }, [filteredAppointments, allProfessionals, selectedYear, selectedMonth, selectedQuincena, selectedLocationId]);
 
 
   const locationPerformanceData = useMemo(() => {
@@ -361,5 +377,3 @@ export default function DataPage() {
     </div>
   );
 }
-
-    
