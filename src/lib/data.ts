@@ -1953,29 +1953,6 @@ export async function cleanupOrphanedTravelBlocks(): Promise<number> {
   return deletedCount;
 }
 
-const getPhoneticCode = (word: string) => {
-    if (!word) return '';
-    let code = word[0].toUpperCase();
-    const map: { [key: string]: string } = {
-        'B': '1', 'F': '1', 'P': '1', 'V': '1',
-        'C': '2', 'G': '2', 'J': '2', 'K': '2', 'Q': '2', 'S': '2', 'X': '2', 'Z': '2',
-        'D': '3', 'T': '3',
-        'L': '4',
-        'M': '5', 'N': '5',
-        'R': '6'
-    };
-    let prevCode = map[code as keyof typeof map] || '';
-    for (let i = 1; i < word.length; i++) {
-        const char = word[i].toUpperCase();
-        const currentCode = map[char as keyof typeof map];
-        if (currentCode && currentCode !== prevCode) {
-            code += currentCode;
-        }
-        prevCode = currentCode || (['A','E','I','O','U','H','W','Y'].includes(char) ? '' : prevCode);
-    }
-    return (code + '000').slice(0, 4);
-};
-
 export async function findPotentialDuplicatePatients(): Promise<{ group: Patient[], reason: string }[]> {
   if (!firestore) return [];
 
@@ -1983,51 +1960,89 @@ export async function findPotentialDuplicatePatients(): Promise<{ group: Patient
   const snapshot = await getDocs(patientsCol);
   const allPatients = snapshot.docs.map(d => ({ ...d.data(), id: d.id } as Patient));
 
-  const normalize = (str: string) => {
-      return (str || '')
-          .trim()
-          .toLowerCase()
-          .normalize("NFD")
-          .replace(/[\u0300-\u036f]/g, "")
-          .replace(/\s+(de|la|los|del)\s+/g, ' ');
+  const normalize = (str: string | null | undefined) => {
+    return (str || '')
+      .trim()
+      .toLowerCase()
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .replace(/\s+(de|la|los|del|las)\s+/g, ' ') // Remove common articles
+      .replace(/\s+/g, ' '); // Collapse multiple spaces
   };
-  
-  const groups: { [key: string]: { patients: Patient[], reason: string } } = {};
 
-  for (const patient of allPatients) {
-    const fullName = `${patient.firstName || ''} ${patient.lastName || ''}`;
-    const normalizedName = normalize(fullName);
-    const phoneticCode = getPhoneticCode(normalizedName.replace(/\s/g, ''));
-    
-    // Group by normalized name
-    if (normalizedName) {
-        if (!groups[normalizedName]) groups[normalizedName] = { patients: [], reason: "Coincidencia de Nombre Normalizado" };
-        groups[normalizedName].patients.push(patient);
+  const groups: { [key: string]: { patients: Set<string>, reason: string } } = {};
+
+  const addPatientToGroup = (key: string, patient: Patient, reason: string) => {
+    if (!key) return;
+    if (!groups[key]) {
+      groups[key] = { patients: new Set(), reason };
     }
-    
-    // Group by phonetic code
-    if (phoneticCode) {
-        if (!groups[phoneticCode]) groups[phoneticCode] = { patients: [], reason: "Coincidencia Fonética" };
-        groups[phoneticCode].patients.push(patient);
+    groups[key].patients.add(patient.id);
+  };
+
+  // Create initial groups based on different keys
+  allPatients.forEach(patient => {
+    const fullName = normalize(`${patient.firstName} ${patient.lastName}`);
+    const nameParts = fullName.split(' ');
+    const firstName = nameParts[0];
+    const lastName = nameParts.slice(1).join(' ');
+    const phone = patient.phone ? patient.phone.replace(/\s/g, '') : null;
+
+    addPatientToGroup(fullName, patient, 'Coincidencia de Nombre Similar');
+    addPatientToGroup(`${firstName} ${lastName}`, patient, 'Coincidencia de Nombre y Apellido');
+    addPatientToGroup(`${lastName} ${firstName}`, patient, 'Coincidencia de Apellido y Nombre');
+    if (phone && phone.length > 5) {
+      addPatientToGroup(`phone:${phone}`, patient, 'Mismo Número de Teléfono');
     }
-  }
-
-  // Filter groups with more than one patient and merge results, avoiding duplicate groups.
-  const finalResultMap = new Map<string, { group: Patient[], reason: string }>();
-
-  Object.values(groups).forEach(groupData => {
-      if (groupData.patients.length > 1) {
-          const uniquePatientIds = new Set(groupData.patients.map(p => p.id));
-          if (uniquePatientIds.size > 1) {
-              const sortedIds = Array.from(uniquePatientIds).sort().join(',');
-              if (!finalResultMap.has(sortedIds)) {
-                  finalResultMap.set(sortedIds, { group: Array.from(new Map(groupData.patients.map(p => [p.id, p])).values()), reason: groupData.reason });
-              }
-          }
-      }
   });
 
-  return Array.from(finalResultMap.values());
+  // Merge overlapping groups
+  const mergedGroups: Set<string>[] = [];
+  const patientToGroupMap = new Map<string, Set<string>>();
+
+  Object.values(groups).forEach(groupData => {
+    if (groupData.patients.size > 1) {
+      let mergedTo: Set<string> | undefined;
+      for (const patientId of groupData.patients) {
+        if (patientToGroupMap.has(patientId)) {
+          mergedTo = patientToGroupMap.get(patientId);
+          break;
+        }
+      }
+
+      if (!mergedTo) {
+        mergedTo = new Set(groupData.patients);
+        mergedGroups.push(mergedTo);
+      } else {
+        for (const patientId of groupData.patients) {
+          mergedTo.add(patientId);
+        }
+      }
+
+      for (const patientId of groupData.patients) {
+        patientToGroupMap.set(patientId, mergedTo);
+      }
+    }
+  });
+  
+  // Format the final result
+  const finalResult = mergedGroups.map(patientIdSet => {
+    const patientGroup = Array.from(patientIdSet)
+      .map(id => allPatients.find(p => p.id === id))
+      .filter((p): p is Patient => p !== undefined)
+      .sort((a,b) => (a.lastName || '').localeCompare(b.lastName || ''));
+
+    // Determine the most likely reason for grouping
+    let reason = "Coincidencia de Nombre Similar";
+    const phones = new Set(patientGroup.map(p => p.phone).filter(Boolean));
+    if (patientGroup.length > phones.size) {
+        reason = "Mismo Número de Teléfono"
+    }
+    
+    return { group: patientGroup, reason };
+  }).filter(g => g.group.length > 1);
+
+  return finalResult;
 }
 
 
@@ -2057,3 +2072,4 @@ export async function mergePatients(primaryPatientId: string, duplicateIds: stri
 }
 
 // --- End Maintenance ---
+
