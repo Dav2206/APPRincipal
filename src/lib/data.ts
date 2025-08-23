@@ -1965,9 +1965,9 @@ export async function findPotentialDuplicatePatients(): Promise<{ group: Patient
       .trim()
       .toLowerCase()
       .normalize("NFD")
-      .replace(/[\u0300-\u036f]/g, "")
+      .replace(/[\u0300-\u036f]/g, "") // Remove accents
       .replace(/\s+(de|la|los|del|las)\s+/g, ' ') // Remove common articles
-      .replace(/\s+/g, ' '); // Collapse multiple spaces
+      .replace(/\s+/g, ''); // Remove all spaces to handle cases like "Maria Luisa" vs "Marialuisa"
   };
 
   const groups: { [key: string]: { patients: Set<string>, reason: string } } = {};
@@ -1983,14 +1983,10 @@ export async function findPotentialDuplicatePatients(): Promise<{ group: Patient
   // Create initial groups based on different keys
   allPatients.forEach(patient => {
     const fullName = normalize(`${patient.firstName} ${patient.lastName}`);
-    const nameParts = fullName.split(' ');
-    const firstName = nameParts[0];
-    const lastName = nameParts.slice(1).join(' ');
     const phone = patient.phone ? patient.phone.replace(/\s/g, '') : null;
 
     addPatientToGroup(fullName, patient, 'Coincidencia de Nombre Similar');
-    addPatientToGroup(`${firstName} ${lastName}`, patient, 'Coincidencia de Nombre y Apellido');
-    addPatientToGroup(`${lastName} ${firstName}`, patient, 'Coincidencia de Apellido y Nombre');
+    
     if (phone && phone.length > 5) {
       addPatientToGroup(`phone:${phone}`, patient, 'Mismo Número de Teléfono');
     }
@@ -2035,7 +2031,7 @@ export async function findPotentialDuplicatePatients(): Promise<{ group: Patient
     // Determine the most likely reason for grouping
     let reason = "Coincidencia de Nombre Similar";
     const phones = new Set(patientGroup.map(p => p.phone).filter(Boolean));
-    if (patientGroup.length > phones.size) {
+    if (patientGroup.length > phones.size && phones.size > 0) {
         reason = "Mismo Número de Teléfono"
     }
     
@@ -2072,4 +2068,5 @@ export async function mergePatients(primaryPatientId: string, duplicateIds: stri
 }
 
 // --- End Maintenance ---
+
 
