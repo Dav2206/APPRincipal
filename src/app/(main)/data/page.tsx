@@ -143,61 +143,6 @@ export default function DataPage() {
       revenue: revenue[index],
     }));
   }, [filteredAppointments]);
-  
-  const averageRevenuePerProfessionalByDayData = useMemo(() => {
-    const revenueByDay: number[] = Array(7).fill(0);
-    const professionalWorkDaysByDayOfWeek: number[] = Array(7).fill(0);
-    const processedDays = new Set<string>(); // "YYYY-MM-DD"
-    
-    // Iterate through each day in the selected period
-    const baseDate = setMonth(setYear(new Date(), selectedYear), selectedMonth);
-    let startDate: Date;
-    let endDate: Date;
-    if (selectedQuincena === '1') {
-        startDate = startOfMonth(baseDate);
-        endDate = addDays(startDate, 14);
-    } else if (selectedQuincena === '2') {
-        startDate = addDays(startOfMonth(baseDate), 15);
-        endDate = endOfMonth(baseDate);
-    } else {
-        startDate = startOfMonth(baseDate);
-        endDate = endOfMonth(baseDate);
-    }
-
-    for (let day = startDate; day <= endDate; day = addDays(day, 1)) {
-        const dayOfWeekIndex = getDay(day);
-        let professionalsWorkingOnThisDay = 0;
-        
-        allProfessionals.forEach(prof => {
-            // Check against effectiveLocationId if one is selected
-            if (!selectedLocationId || selectedLocationId === 'all' || prof.locationId === selectedLocationId) {
-                const availability = getProfessionalAvailabilityForDate(prof, day);
-                if (availability?.isWorking) {
-                    professionalsWorkingOnThisDay++;
-                }
-            }
-        });
-        professionalWorkDaysByDayOfWeek[dayOfWeekIndex] += professionalsWorkingOnThisDay;
-    }
-  
-    // Calculate total revenue for each day of the week
-    filteredAppointments.forEach(appt => {
-        const appointmentDate = parseISO(appt.appointmentDateTime);
-        const dayIndex = getDay(appointmentDate);
-        const totalRevenue = (appt.amountPaid || 0) + (appt.addedServices?.reduce((sum, as) => sum + (as.amountPaid || 0), 0) || 0);
-        revenueByDay[dayIndex] += totalRevenue;
-    });
-  
-    return DAYS_OF_WEEK_DISPLAY.map((dayName, index) => {
-      const totalRevenue = revenueByDay[index];
-      const totalWorkDays = professionalWorkDaysByDayOfWeek[index];
-      return {
-        name: dayName,
-        average: totalWorkDays > 0 ? totalRevenue / totalWorkDays : 0,
-      };
-    });
-  }, [filteredAppointments, allProfessionals, selectedYear, selectedMonth, selectedQuincena, selectedLocationId]);
-
 
   const locationPerformanceData = useMemo(() => {
     const performance: { [locationId: string]: { name: string, appointments: number, revenue: number } } = {};
@@ -322,23 +267,6 @@ export default function DataPage() {
                             <YAxis />
                             <Tooltip content={<CustomTooltip/>}/>
                             <Bar dataKey="revenue" fill="hsl(var(--accent))" name="revenue" />
-                        </BarChart>
-                    </ChartContainer>
-                </CardContent>
-            </Card>
-            
-             <Card>
-                <CardHeader>
-                    <CardTitle className="text-lg flex items-center gap-2"><DollarSign size={20}/>Productividad Media por Profesional por Día</CardTitle>
-                </CardHeader>
-                <CardContent>
-                     <ChartContainer config={{}} className="h-[300px] w-full">
-                        <BarChart data={averageRevenuePerProfessionalByDayData}>
-                            <CartesianGrid strokeDasharray="3 3" />
-                            <XAxis dataKey="name" tick={{ fontSize: 12 }}/>
-                            <YAxis />
-                            <Tooltip content={<CustomTooltip/>}/>
-                            <Bar dataKey="average" fill="hsl(var(--accent))" name="average" />
                         </BarChart>
                     </ChartContainer>
                 </CardContent>
