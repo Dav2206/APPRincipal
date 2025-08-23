@@ -144,33 +144,55 @@ export default function DataPage() {
     }));
   }, [filteredAppointments]);
 
-  const averageRevenuePerProfessionalByDayData = useMemo(() => {
-    const revenueByDay: number[] = Array(7).fill(0);
-    const professionalsByDay: Set<string>[] = Array.from({ length: 7 }, () => new Set());
-    
+ const averageRevenuePerProfessionalByDayData = useMemo(() => {
+    // Stores total revenue for each day of the week (0=Domingo, 1=Lunes, ...)
+    const revenueByDayOfWeek: number[] = Array(7).fill(0);
+    // Stores total count of professional "work-days" for each day of the week
+    const professionalWorkDaysByDayOfWeek: number[] = Array(7).fill(0);
+    // Keeps track of which professionals worked on which specific date (e.g., '2023-10-26')
+    const professionalsBySpecificDate = new Map<string, Set<string>>();
+
     filteredAppointments.forEach(appt => {
         const date = parseISO(appt.appointmentDateTime);
-        const dayIndex = getDay(date);
+        const dateKey = format(date, 'yyyy-MM-dd'); // e.g., '2023-10-26'
         
-        const totalRevenue = (appt.amountPaid || 0) + (appt.addedServices?.reduce((sum, as) => sum + (as.amountPaid || 0), 0) || 0);
-        revenueByDay[dayIndex] += totalRevenue;
+        // Add professional to the set for the specific date
+        if (!professionalsBySpecificDate.has(dateKey)) {
+            professionalsBySpecificDate.set(dateKey, new Set<string>());
+        }
+        const professionalsOnDate = professionalsBySpecificDate.get(dateKey)!;
 
         // Count main professional
-        if(appt.professionalId) {
-            professionalsByDay[dayIndex].add(appt.professionalId);
-        }
+        if(appt.professionalId) professionalsOnDate.add(appt.professionalId);
         // Count professionals from added services
         appt.addedServices?.forEach(as => {
-            if(as.professionalId) professionalsByDay[dayIndex].add(as.professionalId);
+            if(as.professionalId) professionalsOnDate.add(as.professionalId);
         });
+
+        // Sum up total revenue for the day of the week
+        const dayIndex = getDay(date); // 0=Domingo, 1=Lunes, ...
+        const totalRevenue = (appt.amountPaid || 0) + (appt.addedServices?.reduce((sum, as) => sum + (as.amountPaid || 0), 0) || 0);
+        revenueByDayOfWeek[dayIndex] += totalRevenue;
+    });
+
+    // Count how many times each day of the week occurred and sum up total professional work-days
+    const dayOfWeekOccurrences: number[] = Array(7).fill(0);
+    professionalsBySpecificDate.forEach((professionalsSet, dateKey) => {
+        const date = parseISO(dateKey);
+        const dayIndex = getDay(date);
+        dayOfWeekOccurrences[dayIndex]++;
+        professionalWorkDaysByDayOfWeek[dayIndex] += professionalsSet.size;
     });
 
     return DAYS_OF_WEEK_DISPLAY.map((dayName, index) => {
-        const totalRevenue = revenueByDay[index];
-        const professionalCount = professionalsByDay[index].size;
+        const totalRevenue = revenueByDayOfWeek[index];
+        const totalWorkDays = professionalWorkDaysByDayOfWeek[index];
+        const occurrences = dayOfWeekOccurrences[index];
+
         return {
             name: dayName,
-            average: professionalCount > 0 ? totalRevenue / professionalCount : 0,
+            average: totalWorkDays > 0 ? totalRevenue / totalWorkDays : 0,
+            averageProfessionals: occurrences > 0 ? totalWorkDays / occurrences : 0,
         };
     });
 }, [filteredAppointments]);
@@ -194,13 +216,21 @@ export default function DataPage() {
 
   const CustomTooltip = ({ active, payload, label }: any) => {
     if (active && payload && payload.length) {
+      const data = payload[0].payload; // Access the full data object for the bar
       return (
-        <div className="p-2 bg-background border rounded-md shadow-lg">
-          <p className="font-bold">{label}</p>
-          {payload.map((p: any) => (
-             <p key={p.name} style={{ color: p.color }}>
-                {`${p.name}: ${p.name.includes('revenue') || p.name.includes('average') ? `S/ ${p.value.toFixed(2)}` : p.value}`}
-             </p>
+        <div className="p-2 bg-background border rounded-md shadow-lg text-sm">
+          <p className="font-bold mb-2">{label}</p>
+          {payload.map((p: any, index: number) => (
+             <div key={index} style={{ color: p.color }}>
+                {p.dataKey === 'revenue' && <p>Ingreso Total: S/ {p.value.toFixed(2)}</p>}
+                {p.dataKey === 'count' && <p>Nº Citas: {p.value}</p>}
+                {p.dataKey === 'average' && (
+                    <>
+                        <p>Ingreso Prom./Día: S/ {p.value.toFixed(2)}</p>
+                        <p className="text-xs text-muted-foreground">Profesionales Prom./Día: {data.averageProfessionals?.toFixed(1)}</p>
+                    </>
+                )}
+             </div>
           ))}
         </div>
       );
@@ -297,7 +327,7 @@ export default function DataPage() {
                             <XAxis dataKey="name" tick={{ fontSize: 12 }}/>
                             <YAxis />
                             <Tooltip content={<CustomTooltip/>}/>
-                            <Bar dataKey="revenue" fill="hsl(var(--accent))" name="revenue" />
+                            <Bar dataKey="revenue" fill="hsl(var(--accent))" name="Ingreso Total" />
                         </BarChart>
                     </ChartContainer>
                 </CardContent>
@@ -314,7 +344,7 @@ export default function DataPage() {
                             <XAxis dataKey="name" tick={{ fontSize: 12 }}/>
                             <YAxis />
                             <Tooltip content={<CustomTooltip/>}/>
-                            <Bar dataKey="average" fill="hsl(var(--accent))" name="average" />
+                            <Bar dataKey="average" fill="hsl(var(--accent))" name="Ingreso Prom./Día" />
                         </BarChart>
                     </ChartContainer>
                 </CardContent>
