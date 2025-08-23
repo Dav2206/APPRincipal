@@ -145,57 +145,54 @@ export default function DataPage() {
   }, [filteredAppointments]);
 
  const averageRevenuePerProfessionalByDayData = useMemo(() => {
-    // Stores total revenue for each day of the week (0=Domingo, 1=Lunes, ...)
-    const revenueByDayOfWeek: number[] = Array(7).fill(0);
-    // Stores total count of professional "work-days" for each day of the week
-    const professionalWorkDaysByDayOfWeek: number[] = Array(7).fill(0);
-    // Keeps track of which professionals worked on which specific date (e.g., '2023-10-26')
+    const dailyData: { [dayIndex: number]: { totalRevenue: number, professionalWorkDays: number, occurrences: number } } = {
+        0: { totalRevenue: 0, professionalWorkDays: 0, occurrences: 0 }, 1: { totalRevenue: 0, professionalWorkDays: 0, occurrences: 0 },
+        2: { totalRevenue: 0, professionalWorkDays: 0, occurrences: 0 }, 3: { totalRevenue: 0, professionalWorkDays: 0, occurrences: 0 },
+        4: { totalRevenue: 0, professionalWorkDays: 0, occurrences: 0 }, 5: { totalRevenue: 0, professionalWorkDays: 0, occurrences: 0 },
+        6: { totalRevenue: 0, professionalWorkDays: 0, occurrences: 0 },
+    };
+
     const professionalsBySpecificDate = new Map<string, Set<string>>();
 
     filteredAppointments.forEach(appt => {
         const date = parseISO(appt.appointmentDateTime);
-        const dateKey = format(date, 'yyyy-MM-dd'); // e.g., '2023-10-26'
+        const dateKey = format(date, 'yyyy-MM-dd');
         
-        // Add professional to the set for the specific date
         if (!professionalsBySpecificDate.has(dateKey)) {
             professionalsBySpecificDate.set(dateKey, new Set<string>());
         }
         const professionalsOnDate = professionalsBySpecificDate.get(dateKey)!;
 
-        // Count main professional
-        if(appt.professionalId) professionalsOnDate.add(appt.professionalId);
-        // Count professionals from added services
+        if (appt.professionalId) professionalsOnDate.add(appt.professionalId);
         appt.addedServices?.forEach(as => {
-            if(as.professionalId) professionalsOnDate.add(as.professionalId);
+            if (as.professionalId) professionalsOnDate.add(as.professionalId);
         });
 
-        // Sum up total revenue for the day of the week
-        const dayIndex = getDay(date); // 0=Domingo, 1=Lunes, ...
+        const dayIndex = getDay(date);
         const totalRevenue = (appt.amountPaid || 0) + (appt.addedServices?.reduce((sum, as) => sum + (as.amountPaid || 0), 0) || 0);
-        revenueByDayOfWeek[dayIndex] += totalRevenue;
+        dailyData[dayIndex].totalRevenue += totalRevenue;
     });
 
-    // Count how many times each day of the week occurred and sum up total professional work-days
-    const dayOfWeekOccurrences: number[] = Array(7).fill(0);
     professionalsBySpecificDate.forEach((professionalsSet, dateKey) => {
         const date = parseISO(dateKey);
         const dayIndex = getDay(date);
-        dayOfWeekOccurrences[dayIndex]++;
-        professionalWorkDaysByDayOfWeek[dayIndex] += professionalsSet.size;
+        dailyData[dayIndex].occurrences++;
+        dailyData[dayIndex].professionalWorkDays += professionalsSet.size;
     });
 
     return DAYS_OF_WEEK_DISPLAY.map((dayName, index) => {
-        const totalRevenue = revenueByDayOfWeek[index];
-        const totalWorkDays = professionalWorkDaysByDayOfWeek[index];
-        const occurrences = dayOfWeekOccurrences[index];
-
+        const data = dailyData[index];
+        const averageRevenuePerOccurrence = data.occurrences > 0 ? data.totalRevenue / data.occurrences : 0;
+        const averageProfessionalsPerOccurrence = data.occurrences > 0 ? data.professionalWorkDays / data.occurrences : 0;
+        
         return {
             name: dayName,
-            average: totalWorkDays > 0 ? totalRevenue / totalWorkDays : 0,
-            averageProfessionals: occurrences > 0 ? totalWorkDays / occurrences : 0,
+            average: averageRevenuePerOccurrence,
+            averageProfessionals: averageProfessionalsPerOccurrence,
         };
     });
 }, [filteredAppointments]);
+
 
   const locationPerformanceData = useMemo(() => {
     const performance: { [locationId: string]: { name: string, appointments: number, revenue: number } } = {};
