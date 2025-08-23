@@ -2,10 +2,10 @@
 "use client";
 
 import React, { useState, useEffect, useMemo } from 'react';
-import type { Appointment, Service, Location } from '@/types';
+import type { Appointment, Service, Location, Professional } from '@/types';
 import { useAuth } from '@/contexts/auth-provider';
 import { useAppState } from '@/contexts/app-state-provider';
-import { getAppointments, getServices, getLocations } from '@/lib/data';
+import { getAppointments, getServices, getLocations, getProfessionals, getProfessionalAvailabilityForDate } from '@/lib/data';
 import { USER_ROLES, APPOINTMENT_STATUS } from '@/lib/constants';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -36,6 +36,7 @@ export default function DataPage() {
 
   const [allAppointments, setAllAppointments] = useState<Appointment[]>([]);
   const [allServices, setAllServices] = useState<Service[]>([]);
+  const [allProfessionals, setAllProfessionals] = useState<Professional[]>([]);
   const [locations, setLocations] = useState<Location[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [selectedYear, setSelectedYear] = useState<number>(getYear(new Date()));
@@ -44,12 +45,14 @@ export default function DataPage() {
 
   useEffect(() => {
     async function loadStaticData() {
-      const [servicesData, locationsData] = await Promise.all([
+      const [servicesData, locationsData, professionalsData] = await Promise.all([
         getServices(),
-        getLocations()
+        getLocations(),
+        getProfessionals()
       ]);
       setAllServices(servicesData);
       setLocations(locationsData);
+      setAllProfessionals(professionalsData);
     }
     loadStaticData();
   }, []);
@@ -140,6 +143,45 @@ export default function DataPage() {
       revenue: revenue[index],
     }));
   }, [filteredAppointments]);
+  
+  const averageRevenuePerProfessionalByDayData = useMemo(() => {
+    const revenueByDay: number[] = Array(7).fill(0);
+    const workingProfessionalsByDay: Set<string>[] = Array.from({ length: 7 }, () => new Set());
+  
+    filteredAppointments.forEach(appt => {
+        const appointmentDate = parseISO(appt.appointmentDateTime);
+        const dayIndex = getDay(appointmentDate);
+        
+        const totalRevenue = (appt.amountPaid || 0) + (appt.addedServices?.reduce((sum, as) => sum + (as.amountPaid || 0), 0) || 0);
+        revenueByDay[dayIndex] += totalRevenue;
+        
+        // Count professionals who worked on that day
+        const processProfessional = (profId?: string | null) => {
+            if (profId) {
+                const professional = allProfessionals.find(p => p.id === profId);
+                if (professional) {
+                    const availability = getProfessionalAvailabilityForDate(professional, appointmentDate);
+                    if (availability?.isWorking) {
+                        workingProfessionalsByDay[dayIndex].add(profId);
+                    }
+                }
+            }
+        }
+        
+        processProfessional(appt.professionalId);
+        appt.addedServices?.forEach(as => processProfessional(as.professionalId));
+    });
+  
+    return DAYS_OF_WEEK_DISPLAY.map((dayName, index) => {
+      const totalRevenue = revenueByDay[index];
+      const professionalCount = workingProfessionalsByDay[index].size;
+      return {
+        name: dayName,
+        average: professionalCount > 0 ? totalRevenue / professionalCount : 0,
+      };
+    });
+  }, [filteredAppointments, allProfessionals]);
+
 
   const locationPerformanceData = useMemo(() => {
     const performance: { [locationId: string]: { name: string, appointments: number, revenue: number } } = {};
@@ -165,7 +207,7 @@ export default function DataPage() {
           <p className="font-bold">{label}</p>
           {payload.map((p: any) => (
              <p key={p.name} style={{ color: p.color }}>
-                {`${p.name}: ${p.name === 'revenue' ? `S/ ${p.value.toFixed(2)}` : p.value}`}
+                {`${p.name}: ${p.name.includes('revenue') || p.name.includes('average') ? `S/ ${p.value.toFixed(2)}` : p.value}`}
              </p>
           ))}
         </div>
@@ -268,9 +310,26 @@ export default function DataPage() {
                     </ChartContainer>
                 </CardContent>
             </Card>
+            
+             <Card>
+                <CardHeader>
+                    <CardTitle className="text-lg flex items-center gap-2"><DollarSign size={20}/>Productividad Media por Profesional por Día</CardTitle>
+                </CardHeader>
+                <CardContent>
+                     <ChartContainer config={{}} className="h-[300px] w-full">
+                        <BarChart data={averageRevenuePerProfessionalByDayData}>
+                            <CartesianGrid strokeDasharray="3 3" />
+                            <XAxis dataKey="name" tick={{ fontSize: 12 }}/>
+                            <YAxis />
+                            <Tooltip content={<CustomTooltip/>}/>
+                            <Bar dataKey="average" fill="hsl(var(--accent))" name="average" />
+                        </BarChart>
+                    </ChartContainer>
+                </CardContent>
+            </Card>
            
             {selectedLocationId === 'all' && (
-                <Card>
+                <Card className="lg:col-span-2">
                     <CardHeader>
                         <CardTitle className="text-lg flex items-center gap-2"><Users size={20}/>Rendimiento por Sede</CardTitle>
                     </CardHeader>
@@ -303,3 +362,4 @@ export default function DataPage() {
   );
 }
 
+    
