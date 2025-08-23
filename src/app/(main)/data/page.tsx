@@ -332,7 +332,7 @@ export default function DataPage() {
 
              <Card>
                 <CardHeader>
-                    <CardTitle className="text-lg flex items-center gap-2"><TrendingUp size={20}/>Productividad Media por Profesional por Día</CardTitle>
+                    <CardTitle className="text-lg flex items-center gap-2"><TrendingUp size={20}/>Productividad Media por Día</CardTitle>
                 </CardHeader>
                 <CardContent>
                      <ChartContainer config={{}} className="h-[300px] w-full">
