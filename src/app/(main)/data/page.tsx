@@ -1,4 +1,5 @@
 
+
 "use client";
 
 import React, { useState, useEffect, useMemo } from 'react';
@@ -144,8 +145,8 @@ export default function DataPage() {
     }));
   }, [filteredAppointments]);
 
- const averageRevenuePerProfessionalByDayData = useMemo(() => {
-    const dailyData: { [dayIndex: number]: { totalRevenue: number, professionalWorkDays: number, occurrences: number } } = {
+ const averageRevenueByDayData = useMemo(() => {
+    const dailyData: { [dayIndex: number]: { totalRevenue: number; professionalWorkDays: number; occurrences: number } } = {
         0: { totalRevenue: 0, professionalWorkDays: 0, occurrences: 0 }, 1: { totalRevenue: 0, professionalWorkDays: 0, occurrences: 0 },
         2: { totalRevenue: 0, professionalWorkDays: 0, occurrences: 0 }, 3: { totalRevenue: 0, professionalWorkDays: 0, occurrences: 0 },
         4: { totalRevenue: 0, professionalWorkDays: 0, occurrences: 0 }, 5: { totalRevenue: 0, professionalWorkDays: 0, occurrences: 0 },
@@ -187,11 +188,23 @@ export default function DataPage() {
         
         return {
             name: dayName,
-            average: averageRevenuePerOccurrence,
+            averageRevenue: averageRevenuePerOccurrence,
             averageProfessionals: averageProfessionalsPerOccurrence,
         };
     });
 }, [filteredAppointments]);
+
+  const averageProductivityPerProfessionalData = useMemo(() => {
+    return averageRevenueByDayData.map(data => {
+      const productivity = data.averageProfessionals > 0 ? data.averageRevenue / data.averageProfessionals : 0;
+      return {
+        name: data.name,
+        productivity,
+        averageRevenue: data.averageRevenue,
+        averageProfessionals: data.averageProfessionals
+      };
+    });
+  }, [averageRevenueByDayData]);
 
 
   const locationPerformanceData = useMemo(() => {
@@ -221,10 +234,16 @@ export default function DataPage() {
              <div key={index} style={{ color: p.color }}>
                 {p.dataKey === 'revenue' && <p>Ingreso Total: S/ {p.value.toFixed(2)}</p>}
                 {p.dataKey === 'count' && <p>Nº Citas: {p.value}</p>}
-                {p.dataKey === 'average' && (
+                {p.dataKey === 'averageRevenue' && (
                     <>
                         <p>Ingreso Prom./Día: S/ {p.value.toFixed(2)}</p>
                         <p className="text-xs text-muted-foreground">Profesionales Prom./Día: {data.averageProfessionals?.toFixed(1)}</p>
+                    </>
+                )}
+                 {p.dataKey === 'productivity' && (
+                    <>
+                        <p>Productividad por Profesional: S/ {p.value.toFixed(2)}</p>
+                        <p className="text-xs text-muted-foreground mt-1">Cálculo: Ingreso Prom./Día (S/ {data.averageRevenue.toFixed(2)}) / Profesionales Prom./Día ({data.averageProfessionals?.toFixed(1)})</p>
                     </>
                 )}
              </div>
@@ -336,12 +355,29 @@ export default function DataPage() {
                 </CardHeader>
                 <CardContent>
                      <ChartContainer config={{}} className="h-[300px] w-full">
-                        <BarChart data={averageRevenuePerProfessionalByDayData}>
+                        <BarChart data={averageRevenueByDayData}>
                             <CartesianGrid strokeDasharray="3 3" />
                             <XAxis dataKey="name" tick={{ fontSize: 12 }}/>
                             <YAxis />
                             <Tooltip content={<CustomTooltip/>}/>
-                            <Bar dataKey="average" fill="hsl(var(--accent))" name="Ingreso Prom./Día" />
+                            <Bar dataKey="averageRevenue" fill="hsl(var(--accent))" name="Ingreso Prom./Día" />
+                        </BarChart>
+                    </ChartContainer>
+                </CardContent>
+            </Card>
+
+            <Card>
+                <CardHeader>
+                    <CardTitle className="text-lg flex items-center gap-2"><TrendingUp size={20}/>Productividad Media por Profesional por Día</CardTitle>
+                </CardHeader>
+                <CardContent>
+                     <ChartContainer config={{}} className="h-[300px] w-full">
+                        <BarChart data={averageProductivityPerProfessionalData}>
+                            <CartesianGrid strokeDasharray="3 3" />
+                            <XAxis dataKey="name" tick={{ fontSize: 12 }}/>
+                            <YAxis />
+                            <Tooltip content={<CustomTooltip/>}/>
+                            <Bar dataKey="productivity" fill="hsl(var(--accent))" name="Productividad por Profesional" />
                         </BarChart>
                     </ChartContainer>
                 </CardContent>
@@ -380,3 +416,4 @@ export default function DataPage() {
     </div>
   );
 }
+
