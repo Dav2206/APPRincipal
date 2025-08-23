@@ -13,7 +13,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Bar, BarChart, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { format, getYear, getMonth, setYear, setMonth, startOfMonth, endOfMonth, parseISO, getDay, addDays } from 'date-fns';
 import { es } from 'date-fns/locale';
-import { Loader2, AlertTriangle, PieChartIcon, DollarSign, Users, LineChart, Clock } from 'lucide-react';
+import { Loader2, AlertTriangle, PieChartIcon, DollarSign, Users, LineChart, Clock, TrendingUp } from 'lucide-react';
 import {
   ChartContainer,
   ChartTooltip as ChartTooltipComponent,
@@ -144,6 +144,37 @@ export default function DataPage() {
     }));
   }, [filteredAppointments]);
 
+  const averageRevenuePerProfessionalByDayData = useMemo(() => {
+    const revenueByDay: number[] = Array(7).fill(0);
+    const professionalsByDay: Set<string>[] = Array.from({ length: 7 }, () => new Set());
+    
+    filteredAppointments.forEach(appt => {
+        const date = parseISO(appt.appointmentDateTime);
+        const dayIndex = getDay(date);
+        
+        const totalRevenue = (appt.amountPaid || 0) + (appt.addedServices?.reduce((sum, as) => sum + (as.amountPaid || 0), 0) || 0);
+        revenueByDay[dayIndex] += totalRevenue;
+
+        // Count main professional
+        if(appt.professionalId) {
+            professionalsByDay[dayIndex].add(appt.professionalId);
+        }
+        // Count professionals from added services
+        appt.addedServices?.forEach(as => {
+            if(as.professionalId) professionalsByDay[dayIndex].add(as.professionalId);
+        });
+    });
+
+    return DAYS_OF_WEEK_DISPLAY.map((dayName, index) => {
+        const totalRevenue = revenueByDay[index];
+        const professionalCount = professionalsByDay[index].size;
+        return {
+            name: dayName,
+            average: professionalCount > 0 ? totalRevenue / professionalCount : 0,
+        };
+    });
+}, [filteredAppointments]);
+
   const locationPerformanceData = useMemo(() => {
     const performance: { [locationId: string]: { name: string, appointments: number, revenue: number } } = {};
     allAppointments.forEach(appt => { // Use all appointments before filtering
@@ -267,6 +298,23 @@ export default function DataPage() {
                             <YAxis />
                             <Tooltip content={<CustomTooltip/>}/>
                             <Bar dataKey="revenue" fill="hsl(var(--accent))" name="revenue" />
+                        </BarChart>
+                    </ChartContainer>
+                </CardContent>
+            </Card>
+
+             <Card>
+                <CardHeader>
+                    <CardTitle className="text-lg flex items-center gap-2"><TrendingUp size={20}/>Productividad Media por Profesional por Día</CardTitle>
+                </CardHeader>
+                <CardContent>
+                     <ChartContainer config={{}} className="h-[300px] w-full">
+                        <BarChart data={averageRevenuePerProfessionalByDayData}>
+                            <CartesianGrid strokeDasharray="3 3" />
+                            <XAxis dataKey="name" tick={{ fontSize: 12 }}/>
+                            <YAxis />
+                            <Tooltip content={<CustomTooltip/>}/>
+                            <Bar dataKey="average" fill="hsl(var(--accent))" name="average" />
                         </BarChart>
                     </ChartContainer>
                 </CardContent>
