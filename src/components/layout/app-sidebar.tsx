@@ -42,7 +42,7 @@ const navItems = [
   { href: '/history', label: 'Historial', icon: History, roles: [USER_ROLES.ADMIN, USER_ROLES.LOCATION_STAFF, USER_ROLES.CONTADOR] },
   { href: '/patients', label: 'Pacientes', icon: Users, roles: [USER_ROLES.ADMIN, USER_ROLES.LOCATION_STAFF, USER_ROLES.CONTADOR] },
   { href: '/registry', label: 'Registro Diario', icon: FileText, roles: [USER_ROLES.LOCATION_STAFF, USER_ROLES.CONTADOR] },
-  { href: '/data', label: 'Análisis', icon: PieChartIcon, roles: [USER_ROLES.ADMIN, USER_ROLES.CONTADOR] },
+  { href: '/data', label: 'Análisis', icon: PieChartIcon, roles: [USER_ROLES.CONTADOR] },
   { href: '/professionals', label: 'Profesionales', icon: Briefcase, roles: [USER_ROLES.ADMIN, USER_ROLES.CONTADOR] },
   { href: '/contracts', label: 'Contratos', icon: FileSpreadsheet, roles: [USER_ROLES.ADMIN, USER_ROLES.CONTADOR] },
   { href: '/rotations', label: 'Rotaciones', icon: Calendar, roles: [USER_ROLES.ADMIN, USER_ROLES.CONTADOR] },
