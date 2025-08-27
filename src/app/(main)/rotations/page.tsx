@@ -13,7 +13,7 @@ import { useAuth } from '@/contexts/auth-provider';
 import { Button } from '@/components/ui/button';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { cn } from '@/lib/utils';
-import { format, startOfWeek, endOfWeek, addDays, eachDayOfInterval } from 'date-fns';
+import { format, startOfWeek, endOfWeek, addDays, eachDayOfInterval, getHours } from 'date-fns';
 import { es } from 'date-fns/locale';
 
 // --- Data Structures ---
@@ -28,11 +28,6 @@ interface VacationInfo {
   periodo: string;
   regreso: string;
   estado?: string;
-}
-
-interface PlannerTimeSlot {
-    time: string;
-    schedule: { names: (string | { name: string; status: 'vacation' | 'rest' | 'cover' })[] }[];
 }
 
 // --- Initial Data (will be part of state now) ---
@@ -90,18 +85,23 @@ const vacaciones: VacationInfo[] = [
 ];
 
 
+// --- Helper Types & Enums ---
+type Shift = 'morning1' | 'morning2' | 'afternoon1' | 'afternoon2';
+
+interface NameBadgeProps {
+  name: string;
+  status: 'working' | 'resting' | 'vacation' | 'cover';
+}
+
 // --- Components ---
-const NameBadge = ({ item }: { item: { name: string; status: 'working' | 'rest' | 'vacation' | 'cover' | 'transfer_in' | 'transfer_out' } }) => {
-    const { name, status } = item;
-    const colorClasses = {
-        working: 'bg-green-100 text-green-800',
-        rest: 'bg-yellow-100 text-yellow-800',
-        vacation: 'bg-orange-100 text-orange-800',
-        cover: 'bg-blue-100 text-blue-800',
-        transfer_in: 'bg-indigo-100 text-indigo-800',
-        transfer_out: 'bg-pink-100 text-pink-800',
-    };
-    return <div className={cn('p-1 text-xs rounded-md', colorClasses[status])}>{name}</div>;
+const NameBadge = ({ name, status }: NameBadgeProps) => {
+  const colorClasses = {
+    working: 'bg-white text-gray-800',
+    resting: 'bg-yellow-300 text-yellow-900',
+    vacation: 'bg-orange-400 text-white',
+    cover: 'bg-green-200 text-green-900',
+  };
+  return <div className={cn('p-1 text-sm font-semibold rounded-md', colorClasses[status])}>{name}</div>;
 };
 
 // --- Page Component ---
@@ -121,8 +121,7 @@ export default function RotationsPage() {
 
   const displayedWeek = useMemo(() => {
       const start = startOfWeek(viewDate, { weekStartsOn: 1 }); // Monday
-      const end = endOfWeek(viewDate, { weekStartsOn: 1 }); // Sunday
-      return { start, end, days: eachDayOfInterval({ start, end }) };
+      return { start, days: eachDayOfInterval({ start, end: addDays(start, 6) }) };
   }, [viewDate]);
 
   useEffect(() => {
@@ -139,15 +138,14 @@ export default function RotationsPage() {
         setActiveProfessionals(activeProfs);
         setLocations(allLocations);
         
+        // Initialize rotation groups and unassigned professionals for each location
         const initialGroups: Record<LocationId, RotationGroup[]> = {} as Record<LocationId, RotationGroup[]>;
         const initialUnassigned: Record<LocationId, Professional[]> = {} as Record<LocationId, Professional[]>;
         
         allLocations.forEach(loc => {
             const groupCount = loc.id === 'san_antonio' ? 3 : 2;
             initialGroups[loc.id] = Array.from({ length: groupCount }, (_, i) => ({
-                id: `g${i + 1}`,
-                name: `Grupo ${i + 1}`,
-                professionals: []
+                id: `g${i + 1}`, name: `Grupo ${i + 1}`, professionals: []
             }));
             initialUnassigned[loc.id] = activeProfs.filter(p => p.locationId === loc.id);
         });
@@ -164,223 +162,28 @@ export default function RotationsPage() {
     loadInitialData();
   }, []);
 
-  const handleDragStart = (e: React.DragEvent<HTMLDivElement>, prof: Professional, origin: string) => {
-    e.dataTransfer.setData("application/json", JSON.stringify({ profId: prof.id, origin }));
-  };
+  const getProfessionalsForShift = (professionals: Professional[], day: Date, shift: Shift): NameBadgeProps[] => {
+    const shiftHours = {
+      morning1: { start: 9, end: 10 },
+      morning2: { start: 10, end: 11 },
+      afternoon1: { start: 11, end: 12.5 },
+      afternoon2: { start: 12.5, end: 14 },
+    };
+    const { start: shiftStartHour, end: shiftEndHour } = shiftHours[shift];
 
-  const handleDragOver = (e: React.DragEvent<HTMLDivElement>) => {
-    e.preventDefault();
-  };
+    return professionals.map(prof => {
+      const availability = getProfessionalAvailabilityForDate(prof, day);
+      if (availability?.isWorking && availability.startTime && availability.endTime) {
+        const workStartHour = parseInt(availability.startTime.split(':')[0], 10);
+        const workEndHour = parseInt(availability.endTime.split(':')[0], 10);
 
-  const handleDrop = (e: React.DragEvent<HTMLDivElement>, targetGroupId: string, locationId: LocationId) => {
-    e.preventDefault();
-    const { profId, origin } = JSON.parse(e.dataTransfer.getData("application/json"));
-    
-    const profToMove = activeProfessionals.find(p => p.id === profId);
-    if (!profToMove) return;
-
-    setUnassignedProfessionals(prev => {
-        const newUnassigned = {...prev};
-        if(newUnassigned[locationId]) {
-            newUnassigned[locationId] = newUnassigned[locationId].filter(p => p.id !== profId);
+        if (workStartHour < shiftEndHour && workEndHour >= shiftStartHour) {
+          return { name: prof.firstName, status: 'working' };
         }
-        return newUnassigned;
-    });
-
-    setRotationGroups(prev => {
-        const newGroups = {...prev};
-        if (newGroups[locationId]) {
-            Object.keys(newGroups).forEach(locId => {
-                newGroups[locId as LocationId] = newGroups[locId as LocationId].map(g => ({...g, professionals: g.professionals.filter(p => p.id !== profId)}));
-            });
-            
-            const targetGroupIndex = newGroups[locationId].findIndex(g => g.id === targetGroupId);
-            if (targetGroupIndex !== -1 && !newGroups[locationId][targetGroupIndex].professionals.some(p => p.id === profId)) {
-               newGroups[locationId][targetGroupIndex].professionals.push(profToMove);
-            }
-        }
-        return newGroups;
-    });
+      }
+      return null;
+    }).filter((item): item is NameBadgeProps => item !== null);
   };
-
-  const handleDropOnUnassigned = (e: React.DragEvent<HTMLDivElement>, locationId: LocationId) => {
-     e.preventDefault();
-     const { profId } = JSON.parse(e.dataTransfer.getData("application/json"));
-     
-     const profToMove = activeProfessionals.find(p => p.id === profId);
-     if (!profToMove) return;
-
-     setRotationGroups(prev => {
-        const newGroups = {...prev};
-        Object.keys(newGroups).forEach(locId => {
-            newGroups[locId as LocationId] = newGroups[locId as LocationId].map(g => ({...g, professionals: g.professionals.filter(p => p.id !== profId)}));
-        });
-        return newGroups;
-     });
-    
-     if (profToMove.locationId === locationId) {
-        setUnassignedProfessionals(prev => {
-            const newUnassigned = {...prev};
-            if (newUnassigned[locationId] && !newUnassigned[locationId].some(p => p.id === profId)) {
-                newUnassigned[locationId] = [...newUnassigned[locationId], profToMove];
-            }
-            return newUnassigned;
-        });
-     }
-  }
-
-  const handleUpdateDomingoGroup = (fecha: string, newGroup: number, locationId: LocationId) => {
-    if (locationId === 'higuereta') {
-        setDomingosHiguereta(prev => prev.map(d => d.fecha === fecha ? {...d, grupo: newGroup} : d));
-    } else if (locationId === 'san_antonio') {
-        setDomingosSanAntonio(prev => prev.map(d => d.fecha === fecha ? {...d, grupo: newGroup} : d));
-    }
-  };
-
-  // --- Components ---
-  const RotationPlanner = ({ location }: { location: Location }) => {
-    const groups = rotationGroups[location.id] || [];
-    const unassigned = unassignedProfessionals[location.id] || [];
-
-    return (
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-        <div 
-          className="md:col-span-1 p-4 border rounded-lg bg-muted/30"
-          onDragOver={handleDragOver}
-          onDrop={(e) => handleDropOnUnassigned(e, location.id)}
-        >
-          <h3 className="font-semibold mb-2">Profesionales Sin Asignar ({unassigned.length})</h3>
-          <div className="space-y-2">
-            {unassigned.map(prof => (
-              <div 
-                key={prof.id} 
-                draggable
-                onDragStart={(e) => handleDragStart(e, prof, 'unassigned')}
-                className="flex items-center gap-2 p-2 bg-background rounded-md shadow-sm cursor-grab border"
-              >
-                <GripVertical className="h-4 w-4 text-muted-foreground"/>
-                <span className="text-sm font-medium">{prof.firstName} {prof.lastName}</span>
-              </div>
-            ))}
-          </div>
-        </div>
-        <div className="md:col-span-3 grid grid-cols-1 sm:grid-cols-3 gap-4">
-          {groups.map(group => (
-            <div 
-              key={group.id} 
-              className="p-4 border rounded-lg"
-              onDragOver={handleDragOver}
-              onDrop={(e) => handleDrop(e, group.id, location.id)}
-            >
-              <h3 className="font-semibold mb-2">{group.name} ({group.professionals.length})</h3>
-              <div className="space-y-2 min-h-[50px]">
-                {group.professionals.map(prof => (
-                   <div 
-                    key={prof.id} 
-                    draggable
-                    onDragStart={(e) => handleDragStart(e, prof, group.id)}
-                    className="flex items-center gap-2 p-2 bg-background rounded-md shadow-sm cursor-grab border"
-                   >
-                     <GripVertical className="h-4 w-4 text-muted-foreground"/>
-                     <span className="text-sm font-medium">{prof.firstName} {prof.lastName}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          ))}
-        </div>
-      </div>
-    );
-  };
-  
-  const VisualPlanner = () => {
-    const professionalsByLocation: Record<LocationId, Professional[]> = locations.reduce((acc, loc) => {
-        acc[loc.id] = activeProfessionals.filter(p => p.locationId === loc.id);
-        return acc;
-    }, {} as Record<LocationId, Professional[]>);
-
-    return (
-        <Card>
-            <CardHeader>
-                <CardTitle className="text-xl">Planificador Semanal Visual</CardTitle>
-                <div className="flex items-center justify-between">
-                  <CardDescription>
-                      Vista de la semana del {format(displayedWeek.start, "d 'de' LLLL", {locale: es})} al {format(displayedWeek.end, "d 'de' LLLL", {locale: es})}.
-                  </CardDescription>
-                  <div className="flex items-center gap-2">
-                      <Button variant="outline" size="icon" onClick={() => setViewDate(prev => addDays(prev, -7))}><ChevronLeft/></Button>
-                      <Button variant="outline" size="sm" onClick={() => setViewDate(new Date())}>Esta Semana</Button>
-                      <Button variant="outline" size="icon" onClick={() => setViewDate(prev => addDays(prev, 7))}><ChevronRight/></Button>
-                  </div>
-                </div>
-            </CardHeader>
-            <CardContent>
-                <div className="border rounded-lg overflow-x-auto">
-                    <Table className="min-w-max">
-                        <TableHeader>
-                            <TableRow>
-                                <TableHead className="w-[150px] font-semibold sticky left-0 bg-background z-10">PROFESIONAL</TableHead>
-                                {displayedWeek.days.map(day => (
-                                    <TableHead key={day.toISOString()} className="text-center font-semibold">
-                                        <span className="capitalize">{format(day, "EEEE", {locale: es})}</span>
-                                        <br/>
-                                        <span className="text-xs text-muted-foreground">{format(day, "dd/MM")}</span>
-                                    </TableHead>
-                                ))}
-                            </TableRow>
-                        </TableHeader>
-                        <TableBody>
-                            {locations.map(loc => (
-                                <React.Fragment key={loc.id}>
-                                    <TableRow className="bg-muted/50 hover:bg-muted/50">
-                                        <TableCell colSpan={8} className="font-bold text-primary sticky left-0 bg-muted/50 z-10">{loc.name}</TableCell>
-                                    </TableRow>
-                                    {(professionalsByLocation[loc.id] || []).map(prof => (
-                                        <TableRow key={prof.id}>
-                                            <TableCell className="font-semibold sticky left-0 bg-background z-10">{prof.firstName} {prof.lastName}</TableCell>
-                                            {displayedWeek.days.map(day => {
-                                                const availability = getProfessionalAvailabilityForDate(prof, day);
-                                                let status: 'working' | 'rest' | 'vacation' | 'transfer_out' | 'transfer_in' = 'rest';
-                                                let text = "Descansa";
-                                                
-                                                if (availability?.isWorking) {
-                                                    if (availability.workingLocationId === loc.id) {
-                                                        status = 'working';
-                                                        text = `${availability.startTime}-${availability.endTime}`;
-                                                    } else {
-                                                        status = 'transfer_out';
-                                                        text = `Traslado a ${locations.find(l=> l.id === availability.workingLocationId)?.name || '...'}`;
-                                                    }
-                                                } else if (availability?.reason?.toLowerCase().includes('vacaciones')) {
-                                                    status = 'vacation';
-                                                    text = "Vacaciones";
-                                                }
-
-                                                return (
-                                                    <TableCell key={day.toISOString()} className="text-center p-1 align-middle">
-                                                        <NameBadge item={{name: text, status}}/>
-                                                    </TableCell>
-                                                )
-                                            })}
-                                        </TableRow>
-                                    ))}
-                                </React.Fragment>
-                            ))}
-                        </TableBody>
-                    </Table>
-                </div>
-                 <div className="mt-4 flex flex-wrap gap-x-4 gap-y-2 text-sm">
-                    <div className="flex items-center gap-2"><div className="w-3 h-3 rounded-full bg-green-100 border border-green-300"/><span>Trabajando</span></div>
-                    <div className="flex items-center gap-2"><div className="w-3 h-3 rounded-full bg-yellow-100 border border-yellow-300"/><span>Descanso</span></div>
-                    <div className="flex items-center gap-2"><div className="w-3 h-3 rounded-full bg-orange-100 border border-orange-300"/><span>Vacaciones</span></div>
-                    <div className="flex items-center gap-2"><div className="w-3 h-3 rounded-full bg-indigo-100 border border-indigo-300"/><span>Traslado (Entrante)</span></div>
-                    <div className="flex items-center gap-2"><div className="w-3 h-3 rounded-full bg-pink-100 border border-pink-300"/><span>Traslado (Saliente)</span></div>
-                </div>
-            </CardContent>
-        </Card>
-    );
-  };
-
 
   return (
     <div className="container mx-auto py-8 px-4 md:px-0 space-y-8">
@@ -396,150 +199,67 @@ export default function RotationsPage() {
         </CardHeader>
       </Card>
       
-      {isLoading ? <div className="flex justify-center p-8"><Loader2 className="h-10 w-10 animate-spin"/></div> : <VisualPlanner />}
-      
-      <Tabs defaultValue={locations[0]?.id || 'loading'} className="w-full">
-        <TabsList>
-          {isLoading ? <Loader2 className="h-4 w-4 animate-spin"/> : locations.map(loc => <TabsTrigger key={loc.id} value={loc.id}>{loc.name}</TabsTrigger>)}
-        </TabsList>
-        
-        {isLoading ? <div className="flex justify-center items-center h-40"><Loader2 className="h-8 w-8 animate-spin" /></div> : 
-        
-        locations.map(loc => (
-          <TabsContent key={loc.id} value={loc.id} className="mt-4 space-y-8">
-            <Card>
-              <CardHeader>
-                <CardTitle>Planificador de Grupos de Rotación para {loc.name}</CardTitle>
-                <CardDescription>Arrastre y suelte a los profesionales para asignarlos a los grupos de rotación de esta sede.</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <RotationPlanner location={loc}/>
-              </CardContent>
-            </Card>
-
-            {loc.id === 'higuereta' && (
-              <>
-                <Card>
-                  <CardHeader>
-                    <CardTitle className="text-xl flex items-center gap-2"><Sun className="text-amber-500"/>Asignación de Domingos (Ejemplo)</CardTitle>
-                    <CardDescription>Esta tabla muestra un ejemplo de cómo se aplicarían los grupos a los domingos.</CardDescription>
-                  </CardHeader>
-                  <CardContent>
-                    <Table>
-                    <TableHeader><TableRow><TableHead>Domingo</TableHead><TableHead>Grupo Asignado</TableHead><TableHead>Encargada</TableHead></TableRow></TableHeader>
-                    <TableBody>
-                        {domingosHiguereta.map(d => (
-                        <TableRow key={d.fecha}>
-                            <TableCell>{d.fecha} {d.feriado && <Badge variant="destructive">FERIADO</Badge>}</TableCell>
-                            <TableCell>
-                                <DropdownMenu>
-                                    <DropdownMenuTrigger asChild>
-                                        <Button variant="outline" size="sm" className="w-24">
-                                            Grupo {d.grupo}
-                                        </Button>
-                                    </DropdownMenuTrigger>
-                                    <DropdownMenuContent>
-                                        {[1, 2].map(groupNum => (
-                                             <DropdownMenuItem key={groupNum} onSelect={() => handleUpdateDomingoGroup(d.fecha, groupNum, 'higuereta')}>
-                                                Grupo {groupNum}
-                                             </DropdownMenuItem>
-                                        ))}
-                                    </DropdownMenuContent>
-                                </DropdownMenu>
-                            </TableCell>
-                            <TableCell>{d.encargada}</TableCell>
-                        </TableRow>
-                        ))}
-                    </TableBody>
-                    </Table>
-                  </CardContent>
-                </Card>
-                <Card>
-                  <CardHeader>
-                    <CardTitle className="text-xl flex items-center gap-2"><Star className="text-yellow-500"/>Rotación de Feriados (Ejemplo)</CardTitle>
-                  </CardHeader>
-                  <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                      <Card>
-                          <CardHeader className="pb-2"><CardTitle className="text-lg">Grupo 1 Feriados</CardTitle></CardHeader>
-                          <CardContent><ul className="list-disc list-inside">{feriadosGrupo1.map(p => <li key={`f1-${p}`}>{p}</li>)}</ul></CardContent>
-                      </Card>
-                      <Card>
-                          <CardHeader className="pb-2"><CardTitle className="text-lg">Grupo 2 Feriados</CardTitle></CardHeader>
-                          <CardContent><ul className="list-disc list-inside">{feriadosGrupo2.map(p => <li key={`f2-${p}`}>{p}</li>)}</ul></CardContent>
-                      </Card>
-                  </CardContent>
-                </Card>
-              </>
-            )}
-
-            {loc.id === 'san_antonio' && (
-                <Card>
-                  <CardHeader>
-                    <CardTitle className="text-xl flex items-center gap-2"><Sun className="text-amber-500"/>Asignación de Domingos (Ejemplo)</CardTitle>
-                    <CardDescription>Esta tabla muestra un ejemplo de cómo se aplicarían los grupos a los domingos.</CardDescription>
-                  </CardHeader>
-                  <CardContent>
-                    <Table>
-                    <TableHeader><TableRow><TableHead>Domingo</TableHead><TableHead>Grupo Asignado</TableHead></TableRow></TableHeader>
-                    <TableBody>
-                        {domingosSanAntonio.map(d => (
-                        <TableRow key={d.fecha}>
-                            <TableCell>{d.fecha}</TableCell>
-                            <TableCell>
-                                <DropdownMenu>
-                                    <DropdownMenuTrigger asChild>
-                                        <Button variant="outline" size="sm" className="w-24">
-                                            Grupo {d.grupo}
-                                        </Button>
-                                    </DropdownMenuTrigger>
-                                    <DropdownMenuContent>
-                                        {[1, 2, 3].map(groupNum => (
-                                             <DropdownMenuItem key={groupNum} onSelect={() => handleUpdateDomingoGroup(d.fecha, groupNum, 'san_antonio')}>
-                                                Grupo {groupNum}
-                                             </DropdownMenuItem>
-                                        ))}
-                                    </DropdownMenuContent>
-                                </DropdownMenu>
-                            </TableCell>
-                        </TableRow>
-                        ))}
-                    </TableBody>
-                    </Table>
-                  </CardContent>
-                </Card>
-            )}
-
-          </TabsContent>
-        ))}
-      </Tabs>
-      
       <Card>
         <CardHeader>
-          <CardTitle className="text-xl flex items-center gap-2"><Plane className="text-sky-500"/>Registro General de Vacaciones (Ejemplo)</CardTitle>
+            <div className="flex items-center justify-between">
+              <div>
+                  <CardTitle className="text-xl">Planificador Semanal Visual</CardTitle>
+                  <CardDescription>
+                      Vista de la semana del {format(displayedWeek.start, "d 'de' LLLL", {locale: es})} al {format(addDays(displayedWeek.start, 6), "d 'de' LLLL", {locale: es})}.
+                  </CardDescription>
+              </div>
+              <div className="flex items-center gap-2">
+                  <Button variant="outline" size="icon" onClick={() => setViewDate(prev => addDays(prev, -7))}><ChevronLeft/></Button>
+                  <Button variant="outline" size="sm" onClick={() => setViewDate(new Date())}>Esta Semana</Button>
+                  <Button variant="outline" size="icon" onClick={() => setViewDate(prev => addDays(prev, 7))}><ChevronRight/></Button>
+              </div>
+            </div>
         </CardHeader>
         <CardContent>
-            <Table>
-                <TableHeader>
-                    <TableRow>
-                        <TableHead>Profesional</TableHead>
-                        <TableHead>Período de Vacaciones</TableHead>
-                        <TableHead>Regreso</TableHead>
-                        <TableHead>Estado</TableHead>
-                    </TableRow>
-                </TableHeader>
-                <TableBody>
-                    {vacaciones.map((v, i) => (
-                        <TableRow key={`${v.nombre}-${i}`} className={v.estado ? 'bg-yellow-50' : ''}>
-                            <TableCell>{v.nombre}</TableCell>
-                            <TableCell>{v.periodo}</TableCell>
-                            <TableCell>{v.regreso}</TableCell>
-                            <TableCell>
-                                {v.estado && <Badge variant="outline" className="border-yellow-400 text-yellow-700">{v.estado}</Badge>}
-                            </TableCell>
+            {isLoading ? <div className="flex justify-center p-8"><Loader2 className="h-10 w-10 animate-spin"/></div> :
+            <div className="border rounded-lg overflow-x-auto">
+                <Table className="min-w-max">
+                    <TableHeader>
+                        <TableRow>
+                            <TableHead className="w-[100px] text-center font-semibold text-base">HORA</TableHead>
+                            {displayedWeek.days.map(day => (
+                                <TableHead key={day.toISOString()} className="w-[180px] text-center font-semibold text-base capitalize">
+                                    {format(day, "EEEE", {locale: es})}<br/>
+                                    <span className="text-sm font-normal">{format(day, "dd/MM")}</span>
+                                </TableHead>
+                            ))}
                         </TableRow>
-                    ))}
-                </TableBody>
-            </Table>
+                    </TableHeader>
+                    <TableBody>
+                        {['9am', '10am', '11am', '12:30pm'].map(time => (
+                             <TableRow key={time}>
+                                <TableCell className="font-bold text-center align-middle bg-muted/50">{time}</TableCell>
+                                {displayedWeek.days.map(day => {
+                                    const professionalsAtLocation = activeProfessionals.filter(p => p.locationId === 'higuereta');
+                                    let professionalsInSlot: NameBadgeProps[] = [];
+
+                                    if (time === '9am') professionalsInSlot = getProfessionalsForShift(professionalsAtLocation, day, 'morning1');
+                                    else if (time === '10am') professionalsInSlot = getProfessionalsForShift(professionalsAtLocation, day, 'morning2');
+                                    else if (time === '11am') professionalsInSlot = getProfessionalsForShift(professionalsAtLocation, day, 'afternoon1');
+                                    else if (time === '12:30pm') professionalsInSlot = getProfessionalsForShift(professionalsAtLocation, day, 'afternoon2');
+
+                                    return (
+                                        <TableCell key={day.toISOString()} className="p-1 align-top h-24">
+                                            <div className="space-y-1">
+                                                {professionalsInSlot.length > 0 ? 
+                                                    professionalsInSlot.map((item, index) => <NameBadge key={index} {...item} />) : 
+                                                    (<div className="text-center text-muted-foreground text-xs p-2">--</div>)
+                                                }
+                                            </div>
+                                        </TableCell>
+                                    );
+                                })}
+                            </TableRow>
+                        ))}
+                    </TableBody>
+                </Table>
+            </div>
+            }
         </CardContent>
       </Card>
 
