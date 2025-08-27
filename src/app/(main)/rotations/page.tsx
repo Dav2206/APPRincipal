@@ -82,7 +82,7 @@ export default function RotationsPage() {
     loadInitialData();
   }, []);
 
- const getProfessionalsForShift = (professionals: Professional[], day: Date, shift: Shift): NameBadgeProps[] => {
+ const getProfessionalsForShift = useCallback((professionals: Professional[], day: Date, shift: Shift): NameBadgeProps[] => {
     const shiftHours: Record<Shift, { start: number; end: number }> = {
       '9am': { start: 9, end: 10 },
       '10am': { start: 10, end: 11 },
@@ -105,9 +105,9 @@ export default function RotationsPage() {
       }
       return null;
     }).filter((item): item is NameBadgeProps => item !== null);
-  };
+  }, []);
   
-  const getRestingProfessionalsForDay = (professionals: Professional[], day: Date): NameBadgeProps[] => {
+  const getRestingProfessionalsForDay = useCallback((professionals: Professional[], day: Date): NameBadgeProps[] => {
       return professionals.map(prof => {
           const availability = getProfessionalAvailabilityForDate(prof, day);
           if (!availability || !availability.isWorking) {
@@ -119,7 +119,7 @@ export default function RotationsPage() {
           }
           return null;
       }).filter((item): item is NameBadgeProps => item !== null);
-  };
+  }, []);
 
   return (
     <div className="container mx-auto py-8 px-4 md:px-0 space-y-8">
