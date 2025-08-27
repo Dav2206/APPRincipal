@@ -203,8 +203,9 @@ export default function EditProfessionalPage() {
                 <Form {...form}>
                     <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-1 py-4 pr-2">
                     <Accordion type="multiple" defaultValue={['personal-info', 'base-schedule']} className="w-full">
+                        
                         <AccordionItem value="personal-info">
-                            <AccordionTrigger className="text-lg font-semibold">Información Personal y Sueldo</AccordionTrigger>
+                            <AccordionTrigger className="text-lg font-semibold">Información Principal y Contrato</AccordionTrigger>
                             <AccordionContent className="space-y-4 pt-2">
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                 <FormField control={form.control} name="firstName" render={({ field }) => (
@@ -214,115 +215,175 @@ export default function EditProfessionalPage() {
                                 <FormItem><FormLabel>Apellido(s)</FormLabel><FormControl><Input placeholder="Ej: Pérez" {...field} /></FormControl><FormMessage /></FormItem>
                                 )}/>
                             </div>
+                            <FormField control={form.control} name="locationId" render={({ field }) => (
+                                <FormItem><FormLabel>Sede Base</FormLabel>
+                                <Select onValueChange={field.onChange} value={field.value} disabled={isContadorOnly}>
+                                    <FormControl><SelectTrigger><SelectValue placeholder="Seleccionar sede" /></SelectTrigger></FormControl>
+                                    <SelectContent>{locations.map(loc => (<SelectItem key={loc.id} value={loc.id}>{loc.name}</SelectItem>))}</SelectContent>
+                                </Select><FormMessage />
+                                </FormItem>
+                            )}/>
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                <FormField control={form.control} name="locationId" render={({ field }) => (
-                                    <FormItem><FormLabel>Sede Base</FormLabel>
-                                    <Select onValueChange={field.onChange} value={field.value} disabled={isContadorOnly}>
-                                        <FormControl><SelectTrigger><SelectValue placeholder="Seleccionar sede" /></SelectTrigger></FormControl>
-                                        <SelectContent>{locations.map(loc => (<SelectItem key={loc.id} value={loc.id}>{loc.name}</SelectItem>))}</SelectContent>
-                                    </Select><FormMessage />
+                                <FormField control={form.control} name="phone" render={({ field }) => (
+                                    <FormItem><FormLabel>Teléfono (Opcional)</FormLabel><FormControl><Input type="tel" placeholder="Ej: 987654321" {...field} value={field.value ?? ''} /></FormControl><FormMessage /></FormItem>
+                                )}/>
+                                <div className="grid grid-cols-2 gap-2">
+                                     <FormField
+                                        control={form.control}
+                                        name="birthDay"
+                                        render={({ field }) => (
+                                        <FormItem>
+                                            <FormLabel className="flex items-center gap-1"><Gift size={16}/>Día</FormLabel>
+                                            <Select onValueChange={(value) => field.onChange(value === NO_SPECIFY_BIRTHDAY_ITEM_VALUE ? null : parseInt(value))} value={field.value === null ? NO_SPECIFY_BIRTHDAY_ITEM_VALUE : (field.value?.toString() || NO_SPECIFY_BIRTHDAY_ITEM_VALUE)}>
+                                            <FormControl><SelectTrigger><SelectValue placeholder="Día" /></SelectTrigger></FormControl>
+                                            <SelectContent>
+                                                <SelectItem value={NO_SPECIFY_BIRTHDAY_ITEM_VALUE}>No especificar</SelectItem>
+                                                {days.map(d => <SelectItem key={`day-${d.value}`} value={d.value.toString()}>{d.label}</SelectItem>)}
+                                            </SelectContent>
+                                            </Select>
+                                            <FormMessage />
+                                        </FormItem>
+                                        )}
+                                    />
+                                    <FormField
+                                        control={form.control}
+                                        name="birthMonth"
+                                        render={({ field }) => (
+                                        <FormItem>
+                                            <FormLabel className="flex items-center gap-1"><CalendarIconLucide size={16}/>Mes</FormLabel>
+                                            <Select onValueChange={(value) => field.onChange(value === NO_SPECIFY_BIRTHDAY_ITEM_VALUE ? null : parseInt(value))} value={field.value === null ? NO_SPECIFY_BIRTHDAY_ITEM_VALUE : (field.value?.toString() || NO_SPECIFY_BIRTHDAY_ITEM_VALUE)}>
+                                            <FormControl><SelectTrigger><SelectValue placeholder="Mes" /></SelectTrigger></FormControl>
+                                            <SelectContent>
+                                                <SelectItem value={NO_SPECIFY_BIRTHDAY_ITEM_VALUE}>No especificar</SelectItem>
+                                                {months.map(m => <SelectItem key={`month-${m.value}`} value={m.value.toString()}>{m.label}</SelectItem>)}
+                                            </SelectContent>
+                                            </Select>
+                                            <FormMessage />
+                                        </FormItem>
+                                        )}
+                                    />
+                                </div>
+                            </div>
+                             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <FormField control={form.control} name="currentContract_startDate" render={({ field }) => (
+                                    <FormItem className="flex flex-col">
+                                        <FormLabel>Fecha Inicio Contrato</FormLabel>
+                                        <Popover>
+                                            <PopoverTrigger asChild>
+                                                <FormControl>
+                                                    <Button variant={"outline"} className={cn("w-full pl-3 text-left font-normal", !field.value && "text-muted-foreground")}>
+                                                        {field.value ? format(field.value, "PPP", {locale: es}) : <span>Seleccionar fecha</span>}
+                                                        <CalendarIconLucide className="ml-auto h-4 w-4 opacity-50" />
+                                                    </Button>
+                                                </FormControl>
+                                            </PopoverTrigger>
+                                            <PopoverContent className="w-auto p-0" align="start">
+                                                <Calendar mode="single" selected={field.value} onSelect={field.onChange} initialFocus />
+                                            </PopoverContent>
+                                        </Popover>
+                                        <FormMessage />
                                     </FormItem>
                                 )}/>
-                                <FormField control={form.control} name="baseSalary" render={({ field }) => (
-                                    <FormItem>
-                                        <FormLabel className="flex items-center gap-1"><DollarSign size={16}/>Sueldo Base Mensual (S/)</FormLabel>
-                                        <FormControl><Input type="number" placeholder="Ej: 1025.00" {...field} value={field.value ?? ''} onChange={e => field.onChange(e.target.value === '' ? null : parseFloat(e.target.value) || null)}/></FormControl>
+                                <FormField control={form.control} name="currentContract_endDate" render={({ field }) => (
+                                    <FormItem className="flex flex-col">
+                                        <FormLabel>Fecha Fin Contrato</FormLabel>
+                                        <Popover>
+                                            <PopoverTrigger asChild>
+                                                <FormControl>
+                                                    <Button variant={"outline"} className={cn("w-full pl-3 text-left font-normal", !field.value && "text-muted-foreground")}>
+                                                        {field.value ? format(field.value, "PPP", {locale: es}) : <span>Seleccionar fecha</span>}
+                                                        <CalendarIconLucide className="ml-auto h-4 w-4 opacity-50" />
+                                                    </Button>
+                                                </FormControl>
+                                            </PopoverTrigger>
+                                            <PopoverContent className="w-auto p-0" align="start">
+                                                <Calendar mode="single" selected={field.value} onSelect={field.onChange} disabled={(date) => form.getValues("currentContract_startDate") ? date < form.getValues("currentContract_startDate")! : false} initialFocus />
+                                            </PopoverContent>
+                                        </Popover>
                                         <FormMessage />
                                     </FormItem>
                                 )}/>
                             </div>
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                            <FormField control={form.control} name="commissionDeductible" render={({ field }) => (
+                            <FormField control={form.control} name="currentContract_empresa" render={({ field }) => (
                                 <FormItem>
-                                    <FormLabel className="flex items-center gap-1"><DollarSign size={16}/>Monto a Deducir para Comisión (S/)</FormLabel>
-                                    <FormControl><Input type="number" placeholder="Ej: 1800" {...field} value={field.value ?? ''} onChange={e => field.onChange(e.target.value === '' ? null : parseFloat(e.target.value) || null)}/></FormControl>
+                                    <FormLabel className="flex items-center gap-1"><Building size={16}/>Empresa (Opcional)</FormLabel>
+                                    <FormControl><Input placeholder="Ej: Footprints SAC" {...field} value={field.value ?? ''}/></FormControl>
                                     <FormMessage />
                                 </FormItem>
                             )}/>
-                            <FormField control={form.control} name="commissionRate" render={({ field }) => (
+                            <FormField control={form.control} name="currentContract_notes" render={({ field }) => (
                                 <FormItem>
-                                    <FormLabel className="flex items-center gap-1"><Percent size={16}/>Tasa de Comisión (%)</FormLabel>
-                                    <FormControl><Input type="number" placeholder="Ej: 20" {...field} value={field.value ?? ''} onChange={e => field.onChange(e.target.value === '' ? null : parseFloat(e.target.value) || null)}/></FormControl>
+                                    <FormLabel>Notas del Contrato (Opcional)</FormLabel>
+                                    <FormControl><Textarea placeholder="Ej: Renovación, Contrato temporal, etc." {...field} value={field.value ?? ''}/></FormControl>
                                     <FormMessage />
                                 </FormItem>
                             )}/>
-                            </div>
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                            <FormField control={form.control} name="afp" render={({ field }) => (
-                                <FormItem>
-                                    <FormLabel className="flex items-center gap-1">AFP Mensual (S/)</FormLabel>
-                                    <FormControl><Input type="number" placeholder="Ej: 128.50" {...field} value={field.value ?? ''} onChange={e => field.onChange(e.target.value === '' ? null : parseFloat(e.target.value) || null)}/></FormControl>
-                                    <FormMessage />
-                                </FormItem>
-                            )}/>
-                            <FormField control={form.control} name="seguro" render={({ field }) => (
-                                <FormItem>
-                                    <FormLabel className="flex items-center gap-1">Seguro Mensual (S/)</FormLabel>
-                                    <FormControl><Input type="number" placeholder="Ej: 101.70" {...field} value={field.value ?? ''} onChange={e => field.onChange(e.target.value === '' ? null : parseFloat(e.target.value) || null)}/></FormControl>
-                                    <FormMessage />
-                                </FormItem>
-                            )}/>
-                            </div>
-                            <FormField control={form.control} name="phone" render={({ field }) => (
-                                <FormItem><FormLabel>Teléfono (Opcional)</FormLabel><FormControl><Input type="tel" placeholder="Ej: 987654321" {...field} value={field.value ?? ''} /></FormControl><FormMessage /></FormItem>
-                            )}/>
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                            <FormField
+                             <FormField
                                 control={form.control}
-                                name="birthDay"
+                                name="isManager"
                                 render={({ field }) => (
-                                <FormItem>
-                                    <FormLabel className="flex items-center gap-1"><Gift size={16}/>Día de Cumpleaños (Opcional)</FormLabel>
-                                    <Select onValueChange={(value) => field.onChange(value === NO_SPECIFY_BIRTHDAY_ITEM_VALUE ? null : parseInt(value))} value={field.value === null ? NO_SPECIFY_BIRTHDAY_ITEM_VALUE : (field.value?.toString() || NO_SPECIFY_BIRTHDAY_ITEM_VALUE)}>
-                                    <FormControl><SelectTrigger><SelectValue placeholder="Día" /></SelectTrigger></FormControl>
-                                    <SelectContent>
-                                        <SelectItem value={NO_SPECIFY_BIRTHDAY_ITEM_VALUE}>No especificar</SelectItem>
-                                        {days.map(d => <SelectItem key={`day-${d.value}`} value={d.value.toString()}>{d.label}</SelectItem>)}
-                                    </SelectContent>
-                                    </Select>
+                                    <FormItem className="flex flex-row items-center space-x-3 space-y-0 rounded-md border p-3 shadow-sm">
+                                    <FormControl>
+                                        <Checkbox
+                                        checked={field.value}
+                                        onCheckedChange={field.onChange}
+                                        />
+                                    </FormControl>
+                                    <div className="space-y-1 leading-none">
+                                        <FormLabel>¿Es Gerente de Sede?</FormLabel>
+                                        <FormDescription className="text-xs">
+                                        Los gerentes pueden atender citas pero no aparecerán como una columna en la Agenda Horaria.
+                                        </FormDescription>
+                                    </div>
                                     <FormMessage />
-                                </FormItem>
+                                    </FormItem>
                                 )}
                             />
-                            <FormField
-                                control={form.control}
-                                name="birthMonth"
-                                render={({ field }) => (
-                                <FormItem>
-                                    <FormLabel className="flex items-center gap-1"><CalendarIconLucide size={16}/>Mes de Cumpleaños (Opcional)</FormLabel>
-                                    <Select onValueChange={(value) => field.onChange(value === NO_SPECIFY_BIRTHDAY_ITEM_VALUE ? null : parseInt(value))} value={field.value === null ? NO_SPECIFY_BIRTHDAY_ITEM_VALUE : (field.value?.toString() || NO_SPECIFY_BIRTHDAY_ITEM_VALUE)}>
-                                    <FormControl><SelectTrigger><SelectValue placeholder="Mes" /></SelectTrigger></FormControl>
-                                    <SelectContent>
-                                        <SelectItem value={NO_SPECIFY_BIRTHDAY_ITEM_VALUE}>No especificar</SelectItem>
-                                        {months.map(m => <SelectItem key={`month-${m.value}`} value={m.value.toString()}>{m.label}</SelectItem>)}
-                                    </SelectContent>
-                                    </Select>
-                                    <FormMessage />
-                                </FormItem>
-                                )}
-                            />
-                            </div>
-                            <FormField
-                            control={form.control}
-                            name="isManager"
-                            render={({ field }) => (
-                                <FormItem className="flex flex-row items-center space-x-3 space-y-0 rounded-md border p-3 shadow-sm">
-                                <FormControl>
-                                    <Checkbox
-                                    checked={field.value}
-                                    onCheckedChange={field.onChange}
-                                    />
-                                </FormControl>
-                                <div className="space-y-1 leading-none">
-                                    <FormLabel>¿Es Gerente de Sede?</FormLabel>
-                                    <FormDescription className="text-xs">
-                                    Los gerentes pueden atender citas pero no aparecerán como una columna en la Agenda Horaria.
-                                    </FormDescription>
+                            </AccordionContent>
+                        </AccordionItem>
+
+                        <AccordionItem value="financial-params">
+                            <AccordionTrigger className="text-lg font-semibold">Parámetros Financieros</AccordionTrigger>
+                            <AccordionContent className="space-y-4 pt-2">
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                     <FormField control={form.control} name="baseSalary" render={({ field }) => (
+                                        <FormItem>
+                                            <FormLabel className="flex items-center gap-1"><DollarSign size={16}/>Sueldo Base Mensual (S/)</FormLabel>
+                                            <FormControl><Input type="number" placeholder="Ej: 1025.00" {...field} value={field.value ?? ''} onChange={e => field.onChange(e.target.value === '' ? null : parseFloat(e.target.value) || null)}/></FormControl>
+                                            <FormMessage />
+                                        </FormItem>
+                                    )}/>
+                                    <FormField control={form.control} name="commissionRate" render={({ field }) => (
+                                        <FormItem>
+                                            <FormLabel className="flex items-center gap-1"><Percent size={16}/>Tasa de Comisión (%)</FormLabel>
+                                            <FormControl><Input type="number" placeholder="Ej: 20" {...field} value={field.value ?? ''} onChange={e => field.onChange(e.target.value === '' ? null : parseFloat(e.target.value) || null)}/></FormControl>
+                                            <FormMessage />
+                                        </FormItem>
+                                    )}/>
                                 </div>
-                                <FormMessage />
-                                </FormItem>
-                            )}
-                            />
+                                 <FormField control={form.control} name="commissionDeductible" render={({ field }) => (
+                                    <FormItem>
+                                        <FormLabel className="flex items-center gap-1"><DollarSign size={16}/>Monto a Deducir para Comisión (S/)</FormLabel>
+                                        <FormControl><Input type="number" placeholder="Ej: 1800" {...field} value={field.value ?? ''} onChange={e => field.onChange(e.target.value === '' ? null : parseFloat(e.target.value) || null)}/></FormControl>
+                                        <FormMessage />
+                                    </FormItem>
+                                )}/>
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                    <FormField control={form.control} name="afp" render={({ field }) => (
+                                        <FormItem>
+                                            <FormLabel className="flex items-center gap-1">AFP Mensual (S/)</FormLabel>
+                                            <FormControl><Input type="number" placeholder="Ej: 128.50" {...field} value={field.value ?? ''} onChange={e => field.onChange(e.target.value === '' ? null : parseFloat(e.target.value) || null)}/></FormControl>
+                                            <FormMessage />
+                                        </FormItem>
+                                    )}/>
+                                    <FormField control={form.control} name="seguro" render={({ field }) => (
+                                        <FormItem>
+                                            <FormLabel className="flex items-center gap-1">Seguro Mensual (S/)</FormLabel>
+                                            <FormControl><Input type="number" placeholder="Ej: 101.70" {...field} value={field.value ?? ''} onChange={e => field.onChange(e.target.value === '' ? null : parseFloat(e.target.value) || null)}/></FormControl>
+                                            <FormMessage />
+                                        </FormItem>
+                                    )}/>
+                                </div>
                             </AccordionContent>
                         </AccordionItem>
 
@@ -481,65 +542,6 @@ export default function EditProfessionalPage() {
                             </AccordionContent>
                         </AccordionItem>
 
-                        <AccordionItem value="contract-info">
-                            <AccordionTrigger className="text-lg font-semibold flex items-center gap-2"><FileText /> Información del Contrato</AccordionTrigger>
-                            <AccordionContent className="space-y-4 pt-2">
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                    <FormField control={form.control} name="currentContract_startDate" render={({ field }) => (
-                                        <FormItem className="flex flex-col">
-                                            <FormLabel>Fecha Inicio Contrato</FormLabel>
-                                            <Popover>
-                                                <PopoverTrigger asChild>
-                                                    <FormControl>
-                                                        <Button variant={"outline"} className={cn("w-full pl-3 text-left font-normal", !field.value && "text-muted-foreground")}>
-                                                            {field.value ? format(field.value, "PPP", {locale: es}) : <span>Seleccionar fecha</span>}
-                                                            <CalendarIconLucide className="ml-auto h-4 w-4 opacity-50" />
-                                                        </Button>
-                                                    </FormControl>
-                                                </PopoverTrigger>
-                                                <PopoverContent className="w-auto p-0" align="start">
-                                                    <Calendar mode="single" selected={field.value} onSelect={field.onChange} initialFocus />
-                                                </PopoverContent>
-                                            </Popover>
-                                            <FormMessage />
-                                        </FormItem>
-                                    )}/>
-                                    <FormField control={form.control} name="currentContract_endDate" render={({ field }) => (
-                                        <FormItem className="flex flex-col">
-                                            <FormLabel>Fecha Fin Contrato</FormLabel>
-                                            <Popover>
-                                                <PopoverTrigger asChild>
-                                                    <FormControl>
-                                                        <Button variant={"outline"} className={cn("w-full pl-3 text-left font-normal", !field.value && "text-muted-foreground")}>
-                                                            {field.value ? format(field.value, "PPP", {locale: es}) : <span>Seleccionar fecha</span>}
-                                                            <CalendarIconLucide className="ml-auto h-4 w-4 opacity-50" />
-                                                        </Button>
-                                                    </FormControl>
-                                                </PopoverTrigger>
-                                                <PopoverContent className="w-auto p-0" align="start">
-                                                    <Calendar mode="single" selected={field.value} onSelect={field.onChange} disabled={(date) => form.getValues("currentContract_startDate") ? date < form.getValues("currentContract_startDate")! : false} initialFocus />
-                                                </PopoverContent>
-                                            </Popover>
-                                            <FormMessage />
-                                        </FormItem>
-                                    )}/>
-                                </div>
-                                <FormField control={form.control} name="currentContract_empresa" render={({ field }) => (
-                                    <FormItem>
-                                        <FormLabel className="flex items-center gap-1"><Building size={16}/>Empresa (Opcional)</FormLabel>
-                                        <FormControl><Input placeholder="Ej: Footprints SAC" {...field} value={field.value ?? ''}/></FormControl>
-                                        <FormMessage />
-                                    </FormItem>
-                                )}/>
-                                <FormField control={form.control} name="currentContract_notes" render={({ field }) => (
-                                    <FormItem>
-                                        <FormLabel>Notas del Contrato (Opcional)</FormLabel>
-                                        <FormControl><Textarea placeholder="Ej: Renovación, Contrato temporal, etc." {...field} value={field.value ?? ''}/></FormControl>
-                                        <FormMessage />
-                                    </FormItem>
-                                )}/>
-                            </AccordionContent>
-                        </AccordionItem>
                     </Accordion>
                     <div className="flex justify-end gap-2 pt-6">
                         <Button type="button" variant="outline" onClick={() => router.push('/professionals')}>Cancelar</Button>
