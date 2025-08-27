@@ -252,11 +252,13 @@ const DailyTimelineComponent = ({ professionals, appointments, timeSlots, onAppo
   // --- Touch Event Handlers ---
   const handleTouchStart = (e: React.TouchEvent<HTMLDivElement>, blockId: string, appointmentId: string, serviceId: string, isMainService: boolean) => {
     if (isVerticalDragEnabled && !isDragDropEnabled) {
+      // Prevent default only for vertical drag to avoid page scroll
       e.preventDefault();
     }
     if (scrollAreaRef.current) {
-      const viewport = scrollAreaRef.current.querySelector<HTMLDivElement>('div[style*="overflow"]');
-      if (viewport) viewport.style.overflowX = 'hidden';
+        // Prevent horizontal scrolling of the timeline while dragging
+        const viewport = scrollAreaRef.current.querySelector<HTMLDivElement>('div[style*="overflow"]');
+        if (viewport) viewport.style.overflowX = 'hidden';
     }
     const startY = e.touches[0].clientY;
     setDraggedItemId(JSON.stringify({ blockId, appointmentId, serviceId, isMainService, startY }));
@@ -265,7 +267,10 @@ const DailyTimelineComponent = ({ professionals, appointments, timeSlots, onAppo
   const handleTouchMove = (e: React.TouchEvent<HTMLDivElement>) => {
     if (!draggedItemId) return;
     
-    e.preventDefault();
+    // This is crucial to prevent the page from scrolling on mobile while dragging vertically
+    if (isVerticalDragEnabled) {
+        e.preventDefault();
+    }
 
     const touch = e.touches[0];
     const targetElement = document.elementFromPoint(touch.clientX, touch.clientY);
@@ -286,6 +291,7 @@ const DailyTimelineComponent = ({ professionals, appointments, timeSlots, onAppo
     if (!draggedItemId) return;
   
     if (scrollAreaRef.current) {
+      // Re-enable horizontal scrolling
       const viewport = scrollAreaRef.current.querySelector<HTMLDivElement>('div[style*="overflow"]');
       if (viewport) viewport.style.overflowX = 'auto';
     }
@@ -330,7 +336,7 @@ const DailyTimelineComponent = ({ professionals, appointments, timeSlots, onAppo
 
   return (
     <TooltipProvider>
-      <ScrollArea ref={scrollAreaRef} className="w-full whitespace-nowrap rounded-md border">
+      <ScrollArea ref={scrollAreaRef} className={cn("w-full whitespace-nowrap rounded-md border", isVerticalDragEnabled && draggedItemId ? 'overflow-y-hidden' : '')}>
         <div className="flex relative" ref={timelineRef}>
           <div className="sticky left-0 z-20 bg-background border-r">
             <div className="h-16 flex items-center justify-center font-semibold border-b px-2 text-sm">Hora</div>
