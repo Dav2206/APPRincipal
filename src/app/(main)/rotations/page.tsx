@@ -1,12 +1,11 @@
 
-
 "use client";
 
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
-import { Users, Calendar, Plane, Sun, Star, Loader2, GripVertical, ChevronLeft, ChevronRight, MoveVertical, Edit2, Moon, Coffee, Sunrise, Sunset, Palette } from 'lucide-react';
+import { Users, Calendar, Plane, Sun, Star, Loader2, GripVertical, ChevronLeft, ChevronRight, MoveVertical, Edit2, Moon, Coffee, Sunrise, Sunset, Palette, MousePointerClick } from 'lucide-react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { getProfessionals, getContractDisplayStatus, getLocations, getProfessionalAvailabilityForDate, updateProfessional } from '@/lib/data';
 import type { Professional, Location, LocationId, ProfessionalFormData } from '@/types';
@@ -37,11 +36,12 @@ type NameBadgeStatus = 'working' | 'resting' | 'vacation' | 'cover' | 'transfer'
 interface NameBadgeProps {
   name: string;
   status: NameBadgeStatus;
+  professionalId: string;
 }
 
 
-const NameBadge = ({ name, status }: NameBadgeProps) => {
-  const colorClasses: Record<NameBadgeStatus, string> = {
+const NameBadge = ({ name, status }: Omit<NameBadgeProps, 'professionalId'>) => {
+   const colorClasses: Record<NameBadgeStatus, string> = {
     working: 'bg-white text-gray-800 border border-gray-200',
     resting: 'bg-cyan-200 text-cyan-900 font-semibold',
     vacation: 'bg-orange-400 text-white font-semibold',
@@ -58,7 +58,9 @@ export default function RotationsPage() {
   const [allProfessionals, setAllProfessionals] = useState<Professional[]>([]);
   const [locations, setLocations] = useState<Location[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [draggedItem, setDraggedItem] = useState<{ professionalId: string } | null>(null);
+  
+  const [isDragDropMode, setIsDragDropMode] = useState(false);
+  const [draggedItem, setDraggedItem] = useState<{ professionalId: string, shift: Shift } | null>(null);
 
   const [viewDate, setViewDate] = useState(new Date());
   const { toast } = useToast();
@@ -99,40 +101,42 @@ export default function RotationsPage() {
     '12:30pm': { start: 12, end: 13, display: '12:30' },
   };
 
-  const getProfessionalsForShift = useCallback((day: Date, shift: Shift): Omit<NameBadgeProps, 'onDoubleClick'>[] => {
+  const getProfessionalsForShift = useCallback((day: Date, shift: Shift): NameBadgeProps[] => {
     if (!selectedLocationId || selectedLocationId === 'all') return [];
 
-    const { start: shiftStartHour, end: shiftEndHour } = shiftTimes[shift];
+    const { start: shiftStartHour } = shiftTimes[shift];
 
-    return allProfessionals.map(prof => {
-      const availability = getProfessionalAvailabilityForDate(prof, day);
+    return allProfessionals
+        .map(prof => {
+            const availability = getProfessionalAvailabilityForDate(prof, day);
+            
+            if (availability?.isWorking && availability.workingLocationId === selectedLocationId && availability.startTime) {
+                const workStartHour = parseInt(availability.startTime.split(':')[0], 10);
+                
+                if (workStartHour === shiftStartHour) {
+                    let status: NameBadgeStatus = 'working';
+                    const isTransfer = prof.locationId !== availability.workingLocationId;
+                    const isSpecialShift = availability.reason && availability.reason !== 'Horario base';
 
-      if (availability?.isWorking && availability.workingLocationId === selectedLocationId && availability.startTime) {
-        const workStartHour = parseInt(availability.startTime.split(':')[0], 10);
-        
-        if (workStartHour >= shiftStartHour && workStartHour < shiftEndHour) {
-          let status: NameBadgeStatus = 'working';
-          const isTransfer = prof.locationId !== availability.workingLocationId;
-          const isSpecialShift = availability.reason?.toLowerCase().includes('especial') || availability.reason?.toLowerCase().includes('habitual');
-
-          if (isTransfer) {
-            status = 'transfer';
-          } else if (isSpecialShift) {
-             status = 'cover';
-          }
-
-          return { name: prof.firstName, status, professionalId: prof.id };
-        }
-      }
-      return null;
-    }).filter((item): item is Omit<NameBadgeProps, 'onDoubleClick'> => item !== null);
+                    if (isTransfer) {
+                        status = 'transfer';
+                    } else if (isSpecialShift) {
+                        status = 'cover';
+                    }
+                    return { name: prof.firstName, status, professionalId: prof.id };
+                }
+            }
+            return null;
+        })
+        .filter((item): item is NameBadgeProps => item !== null);
   }, [allProfessionals, selectedLocationId, shiftTimes]);
   
-  const getRestingProfessionalsForDay = useCallback((day: Date): Omit<NameBadgeProps, 'onDoubleClick'>[] => {
+  const getRestingProfessionalsForDay = useCallback((day: Date): NameBadgeProps[] => {
       if (!selectedLocationId || selectedLocationId === 'all') return [];
 
       return allProfessionals
         .filter(prof => {
+            // Filter for professionals whose base location matches the selected one
             return prof.locationId === selectedLocationId;
         })
         .map(prof => {
@@ -146,7 +150,7 @@ export default function RotationsPage() {
               return { name: prof.firstName, status, professionalId: prof.id };
           }
           return null;
-      }).filter((item): item is Omit<NameBadgeProps, 'onDoubleClick'> => item !== null);
+      }).filter((item): item is NameBadgeProps => item !== null);
   }, [allProfessionals, selectedLocationId]);
 
   const handleAction = async (professionalId: string, day: Date, action: 'rest' | 'vacation' | 'special_shift' | 'transfer', details?: { locationId?: LocationId, startTime?: string, endTime?: string }) => {
