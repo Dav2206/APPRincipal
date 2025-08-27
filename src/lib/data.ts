@@ -432,8 +432,8 @@ export async function updateProfessional (id: string, data: Partial<Professional
       }
     });
     
-    if (data.hasOwnProperty('commissionRate')) {
-      firestoreUpdateData.commissionRate = data.commissionRate != null ? data.commissionRate / 100 : null;
+    if (data.hasOwnProperty('commissionRate') && typeof data.commissionRate === 'number') {
+      firestoreUpdateData.commissionRate = data.commissionRate / 100;
     }
     
     if (data.workSchedule) {
@@ -450,6 +450,7 @@ export async function updateProfessional (id: string, data: Partial<Professional
     if (data.customScheduleOverrides) {
       firestoreUpdateData.customScheduleOverrides = (data.customScheduleOverrides || []).map(ov => ({
         ...ov,
+        // The date coming from the form is already a string 'yyyy-MM-dd' or a Date object. toFirestoreTimestamp handles both.
         date: toFirestoreTimestamp(ov.date),
         notes: ov.notes ?? null,
       }));
@@ -1994,6 +1995,57 @@ export async function mergePatients(primaryPatientId: string, duplicateIds: stri
 }
 
 // --- End Maintenance ---
+
+// --- Rotations ---
+export async function markDayAsHoliday(day: Date): Promise<number> {
+    if (!firestore) {
+        console.error("Firestore not initialized.");
+        throw new Error("Firestore not initialized.");
+    }
+
+    const professionals = await getProfessionals();
+    const activeProfessionals = professionals.filter(prof => {
+        const status = getContractDisplayStatus(prof.currentContract, day);
+        return status === 'Activo' || status === 'Próximo a Vencer';
+    });
+
+    const batch = writeBatch(firestore);
+    const dateISO = format(day, "yyyy-MM-dd");
+
+    activeProfessionals.forEach(prof => {
+        const profRef = doc(firestore, 'profesionales', prof.id);
+        const existingOverrides = prof.customScheduleOverrides || [];
+        
+        const existingOverrideIndex = existingOverrides.findIndex(ov => format(parseISO(ov.date), 'yyyy-MM-dd') === dateISO);
+
+        const newOverride = {
+            id: existingOverrideIndex > -1 ? existingOverrides[existingOverrideIndex].id : `override_${generateId()}`,
+            date: dateISO,
+            overrideType: 'descanso' as const,
+            isWorking: false,
+            notes: 'Feriado',
+        };
+
+        if (existingOverrideIndex > -1) {
+            existingOverrides[existingOverrideIndex] = newOverride;
+        } else {
+            existingOverrides.push(newOverride);
+        }
+
+        const firestoreOverrides = existingOverrides.map(ov => ({
+            ...ov,
+            date: toFirestoreTimestamp(ov.date),
+        }));
+
+        batch.update(profRef, { customScheduleOverrides: firestoreOverrides });
+    });
+
+    await batch.commit();
+    return activeProfessionals.length;
+}
+
+
+// --- End Rotations ---
 
 
 

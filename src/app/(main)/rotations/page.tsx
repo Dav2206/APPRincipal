@@ -8,7 +8,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Badge } from '@/components/ui/badge';
 import { Users, Calendar, Plane, Sun, Star, Loader2, GripVertical, ChevronLeft, ChevronRight, MoveVertical, Edit2, Moon, Coffee, Sunrise, Sunset, Palette, MousePointerClick, RefreshCcw } from 'lucide-react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { getProfessionals, getContractDisplayStatus, getLocations, getProfessionalAvailabilityForDate, updateProfessional } from '@/lib/data';
+import { getProfessionals, getContractDisplayStatus, getLocations, getProfessionalAvailabilityForDate, updateProfessional, markDayAsHoliday } from '@/lib/data';
 import type { Professional, Location, LocationId, ProfessionalFormData } from '@/types';
 import { useAuth } from '@/contexts/auth-provider';
 import { useAppState } from '@/contexts/app-state-provider';
@@ -21,6 +21,17 @@ import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
 import { type DayOfWeekId, DAYS_OF_WEEK } from '@/lib/constants';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 
 // --- Data Structures ---
 interface VacationInfo {
@@ -59,6 +70,7 @@ export default function RotationsPage() {
   const [allProfessionals, setAllProfessionals] = useState<Professional[]>([]);
   const [locations, setLocations] = useState<Location[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [isProcessing, setIsProcessing] = useState(false);
   
   const [isDragDropMode, setIsDragDropMode] = useState(false);
   const [draggedItem, setDraggedItem] = useState<{ professionalId: string, shift: Shift } | null>(null);
@@ -159,7 +171,7 @@ export default function RotationsPage() {
              // Show as resting if they are NOT working, OR if they are working but transferred to another location
              if (!availability || !availability.isWorking || (availability.isWorking && availability.workingLocationId !== selectedLocationId)) {
                 let status: NameBadgeStatus = 'resting';
-                if (availability?.reason?.toLowerCase().includes('vacaciones')) {
+                if (availability?.reason?.toLowerCase().includes('vacaciones') || availability?.reason?.toLowerCase().includes('feriado')) {
                     status = 'vacation';
                 }
                 return { name: prof.firstName, status, professionalId: prof.id };
@@ -175,10 +187,10 @@ export default function RotationsPage() {
     if (!professional) return;
     
     // Correctly format the date to avoid timezone issues
-    const dateISO = format(day, "yyyy-MM-dd'T'12:00:00.000'Z'");
+    const dateISO = format(day, "yyyy-MM-dd");
     
     const existingOverrideIndex = (professional.customScheduleOverrides || []).findIndex(
-      ov => format(parseISO(ov.date), 'yyyy-MM-dd') === format(parseISO(dateISO), 'yyyy-MM-dd')
+      ov => format(parseISO(ov.date), 'yyyy-MM-dd') === dateISO
     );
 
     let updatedOverrides = [...(professional.customScheduleOverrides || [])];
@@ -292,6 +304,22 @@ export default function RotationsPage() {
     }
   };
 
+  const handleMarkAsHoliday = async (day: Date) => {
+    setIsProcessing(true);
+    toast({title: "Procesando...", description: `Marcando el ${format(day, 'd LLLL', {locale: es})} como feriado.`});
+    try {
+        const affectedCount = await markDayAsHoliday(day);
+        toast({title: "Día Feriado Registrado", description: `Se marcó el día como descanso para ${affectedCount} profesionales activos.`});
+        await loadAllData();
+    } catch (error) {
+        console.error("Error marking day as holiday:", error);
+        toast({ title: "Error", description: "No se pudo marcar el día como feriado.", variant: "destructive"});
+    } finally {
+        setIsProcessing(false);
+    }
+  };
+
+
   const handleDrop = async (e: React.DragEvent<HTMLDivElement>, newStartTime: Shift, day: Date) => {
     e.preventDefault();
     if (!isDragDropMode) return;
@@ -359,12 +387,37 @@ export default function RotationsPage() {
                             <TableHead className="w-[100px] text-center font-bold text-base border border-gray-300 align-middle">HORA</TableHead>
                             {displayedWeek.days.map(day => (
                                 <TableHead key={day.toISOString()} className="w-[180px] text-center font-bold text-base capitalize border border-gray-300 align-middle">
-                                    {format(day, "EEEE d", {locale: es})}
+                                    <div className="flex items-center justify-center gap-2">
+                                        <span>{format(day, "EEEE d", {locale: es})}</span>
+                                        <AlertDialog>
+                                            <AlertDialogTrigger asChild>
+                                                <Button variant="ghost" size="icon" className="h-6 w-6 text-amber-500 hover:text-amber-400 hover:bg-amber-100/50" title="Marcar como feriado">
+                                                    <Star size={16}/>
+                                                </Button>
+                                            </AlertDialogTrigger>
+                                            <AlertDialogContent>
+                                                <AlertDialogHeader>
+                                                <AlertDialogTitle>¿Marcar como Feriado?</AlertDialogTitle>
+                                                <AlertDialogDescription>
+                                                    Esta acción asignará un descanso por "Feriado" a todos los profesionales activos para el día {format(day, "d 'de' LLLL", {locale: es})}. ¿Desea continuar?
+                                                </AlertDialogDescription>
+                                                </AlertDialogHeader>
+                                                <AlertDialogFooter>
+                                                <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                                                <AlertDialogAction onClick={() => handleMarkAsHoliday(day)}>Sí, marcar como feriado</AlertDialogAction>
+                                                </AlertDialogFooter>
+                                            </AlertDialogContent>
+                                        </AlertDialog>
+                                    </div>
                                 </TableHead>
                             ))}
                         </TableRow>
                     </TableHeader>
                     <TableBody>
+                        {isProcessing ? (
+                            <TableRow><TableCell colSpan={8} className="text-center p-8"><Loader2 className="h-8 w-8 animate-spin mx-auto"/> Aplicando feriado...</TableCell></TableRow>
+                        ) : (
+                        <>
                         {displayedShifts.map(time => (
                              <TableRow key={time}>
                                 <TableCell className="font-bold text-center align-middle bg-blue-100 border border-gray-300">{shiftTimes[time].display}</TableCell>
@@ -464,11 +517,13 @@ export default function RotationsPage() {
                                );
                              })}
                         </TableRow>
+                        </>
+                        )}
                     </TableBody>
                 </Table>
                  <div className="p-4 mt-4 flex items-center gap-6 text-sm">
                     <h4 className="font-bold">Leyenda:</h4>
-                    <div className="flex items-center gap-2"><div className="w-5 h-5 bg-orange-400 rounded-sm"></div><span>Vacaciones</span></div>
+                    <div className="flex items-center gap-2"><div className="w-5 h-5 bg-orange-400 rounded-sm"></div><span>Vacaciones / Feriado</span></div>
                     <div className="flex items-center gap-2"><div className="w-5 h-5 bg-cyan-200 rounded-sm"></div><span>Descanso</span></div>
                     <div className="flex items-center gap-2"><div className="w-5 h-5 bg-purple-200 rounded-sm"></div><span>Traslado</span></div>
                     <div className="flex items-center gap-2"><div className="w-5 h-5 bg-green-200 rounded-sm"></div><span>Cubre / Turno Especial</span></div>
