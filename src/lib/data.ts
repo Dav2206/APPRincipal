@@ -1402,10 +1402,16 @@ export async function updateAppointment(
     });
   }
 
-  
-  if (data.appointmentDate && data.appointmentTime) {
+  // Special logic for appointmentDateTime
+  let finalDateObject;
+  if (data.status === APPOINTMENT_STATUS.CONFIRMED && data.actualArrivalTime) {
+      const datePart = data.appointmentDate || parseISO(oldAppointmentData.appointmentDateTime);
+      const [hours, minutes] = data.actualArrivalTime.split(':').map(Number);
+      finalDateObject = setMinutes(setHours(datePart, hours), minutes);
+      firestoreUpdateData.appointmentDateTime = toFirestoreTimestamp(finalDateObject);
+  } else if (data.appointmentDate && data.appointmentTime) {
       const [hours, minutes] = data.appointmentTime.split(':').map(Number);
-      const finalDateObject = setMinutes(setHours(data.appointmentDate, hours), minutes);
+      finalDateObject = setMinutes(setHours(data.appointmentDate, hours), minutes);
       firestoreUpdateData.appointmentDateTime = toFirestoreTimestamp(finalDateObject);
   } else if (firestoreUpdateData.appointmentDateTime) {
     firestoreUpdateData.appointmentDateTime = toFirestoreTimestamp(firestoreUpdateData.appointmentDateTime);
@@ -1450,7 +1456,7 @@ export async function updateAppointment(
   const finalUpdatedDataForTravelBlock = { 
     ...oldAppointmentData, 
     ...firestoreUpdateData, 
-    appointmentDateTime: formatISO(data.appointmentDate || parseISO(oldAppointmentData.appointmentDateTime)) // Use ISO string for logic
+    appointmentDateTime: finalDateObject ? formatISO(finalDateObject) : oldAppointmentData.appointmentDateTime
   };
 
   await manageRelatedTravelBlock(batch, id, finalUpdatedDataForTravelBlock, oldAppointmentData);
@@ -1966,8 +1972,7 @@ export async function findPotentialDuplicatePatients(): Promise<{ group: Patient
       .toLowerCase()
       .normalize("NFD")
       .replace(/[\u0300-\u036f]/g, "") // Remove accents
-      .replace(/\s+(de|la|los|del|las)\s+/g, ' ') // Remove common articles
-      .replace(/\s+/g, ''); // Remove all spaces to handle cases like "Maria Luisa" vs "Marialuisa"
+      .replace(/\s+/g, ''); // Remove all spaces
   };
 
   const groups: { [key: string]: { patients: Set<string>, reason: string } } = {};
@@ -2068,5 +2073,6 @@ export async function mergePatients(primaryPatientId: string, duplicateIds: stri
 }
 
 // --- End Maintenance ---
+
 
 

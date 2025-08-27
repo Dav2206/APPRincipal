@@ -349,7 +349,12 @@ export function AppointmentEditDialog({ appointment, isOpen, onOpenChange, onApp
     
     // Construct the optimistic update data
     const datePart = data.appointmentDate || parseISO(appointment.appointmentDateTime);
-    const timePart = data.appointmentTime || format(parseISO(appointment.appointmentDateTime), 'HH:mm');
+    let timePart = data.appointmentTime || format(parseISO(appointment.appointmentDateTime), 'HH:mm');
+    
+    if (data.status === APPOINTMENT_STATUS.CONFIRMED && data.actualArrivalTime) {
+      timePart = data.actualArrivalTime;
+    }
+
     const [hours, minutes] = timePart.split(':').map(Number);
     const finalDateObject = setMinutes(setHours(datePart, hours), minutes);
 
@@ -775,3 +780,4 @@ export function AppointmentEditDialog({ appointment, isOpen, onOpenChange, onApp
     </>
   );
 }
+
