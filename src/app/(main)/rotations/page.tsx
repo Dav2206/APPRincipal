@@ -11,6 +11,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { getProfessionals, getContractDisplayStatus, getLocations, getProfessionalAvailabilityForDate, updateProfessional } from '@/lib/data';
 import type { Professional, Location, LocationId, ProfessionalFormData } from '@/types';
 import { useAuth } from '@/contexts/auth-provider';
+import { useAppState } from '@/contexts/app-state-provider';
 import { Button } from '@/components/ui/button';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { cn } from '@/lib/utils';
@@ -53,6 +54,7 @@ const NameBadge = ({ name, status, professionalId }: NameBadgeProps) => {
 // --- Page Component ---
 export default function RotationsPage() {
   const { user } = useAuth();
+  const { selectedLocationId } = useAppState();
   const [allProfessionals, setAllProfessionals] = useState<Professional[]>([]);
   const [locations, setLocations] = useState<Location[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -89,6 +91,13 @@ export default function RotationsPage() {
   useEffect(() => {
     loadAllData();
   }, [loadAllData]);
+  
+  const professionalsForSelectedLocation = useMemo(() => {
+    if (!selectedLocationId || selectedLocationId === 'all') {
+      return [];
+    }
+    return allProfessionals.filter(p => p.locationId === selectedLocationId);
+  }, [allProfessionals, selectedLocationId]);
 
   const shiftTimes: Record<Shift, { start: number; end: number, display: string }> = {
     '9am': { start: 9, end: 10, display: '09:00' },
@@ -205,6 +214,11 @@ export default function RotationsPage() {
     }
   };
 
+  const currentViewLocationName = useMemo(() => {
+    if (!selectedLocationId || selectedLocationId === 'all') return null;
+    return locations.find(l => l.id === selectedLocationId)?.name;
+  }, [selectedLocationId, locations]);
+
   return (
     <div className="container mx-auto py-8 px-4 md:px-0 space-y-8">
       <Card className="shadow-lg">
@@ -214,7 +228,7 @@ export default function RotationsPage() {
             Gestión de Rotaciones y Descansos
           </CardTitle>
           <CardDescription>
-            Visualización de los grupos de trabajo, turnos y descansos del personal.
+            Visualización de los grupos de trabajo, turnos y descansos del personal por sede.
           </CardDescription>
         </CardHeader>
       </Card>
@@ -223,7 +237,7 @@ export default function RotationsPage() {
         <CardHeader>
             <div className="flex items-center justify-between flex-wrap gap-4">
               <div>
-                  <CardTitle className="text-xl">Planificador Semanal Visual (Higuereta)</CardTitle>
+                  <CardTitle className="text-xl">Planificador Semanal Visual ({currentViewLocationName || 'Seleccione Sede'})</CardTitle>
                    <CardDescription>
                       Semana del {format(displayedWeek.start, "d 'de' LLLL", {locale: es})} al {format(addDays(displayedWeek.start, 6), "d 'de' LLLL 'de' yyyy", {locale: es})}.
                   </CardDescription>
@@ -247,6 +261,7 @@ export default function RotationsPage() {
         </CardHeader>
         <CardContent>
             {isLoading ? <div className="flex justify-center p-8"><Loader2 className="h-10 w-10 animate-spin"/></div> :
+             !currentViewLocationName ? <div className="text-center py-10 text-muted-foreground">Por favor, seleccione una sede específica desde el menú superior para ver el planificador.</div> :
             <div className="border rounded-lg overflow-x-auto">
                 <Table className="min-w-max border-collapse">
                     <TableHeader>
@@ -264,8 +279,7 @@ export default function RotationsPage() {
                              <TableRow key={time}>
                                 <TableCell className="font-bold text-center align-middle bg-blue-100 border border-gray-300">{shiftTimes[time].display}</TableCell>
                                 {displayedWeek.days.map(day => {
-                                    const professionalsAtLocation = allProfessionals.filter(p => p.locationId === 'higuereta');
-                                    const professionalsInSlot = getProfessionalsForShift(professionalsAtLocation, day, time);
+                                    const professionalsInSlot = getProfessionalsForShift(professionalsForSelectedLocation, day, time);
                                     return (
                                         <TableCell 
                                           key={`${day.toISOString()}-${time}`} 
@@ -296,8 +310,7 @@ export default function RotationsPage() {
                          <TableRow>
                              <TableCell colSpan={1} className="border-r border-gray-300"></TableCell>
                              {displayedWeek.days.map(day => {
-                                const professionalsAtLocation = allProfessionals.filter(p => p.locationId === 'higuereta');
-                                const restingProfessionals = getRestingProfessionalsForDay(professionalsAtLocation, day);
+                                const restingProfessionals = getRestingProfessionalsForDay(professionalsForSelectedLocation, day);
                                  return (
                                      <TableCell key={`resting-${day.toISOString()}`} className="p-1 align-top border-x border-gray-300">
                                          <div className="space-y-1">
