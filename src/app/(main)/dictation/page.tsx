@@ -1,16 +1,18 @@
+
 "use client";
 
 import React, { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Loader2, Send, Terminal, CheckCircle } from 'lucide-react';
+import { Loader2, Send, Terminal, CheckCircle, MessageSquareQuote, Copy } from 'lucide-react';
 import { processDictation, type DictationOutput } from '@/ai/flows/dictation-bot';
-import { addAppointment } from '@/lib/data'; // Importar la función para ejecutar la acción
+import { addAppointment, getAppointments } from '@/lib/data'; // Importar la función para ejecutar la acción
 import { Alert, AlertTitle, AlertDescription } from '@/components/ui/alert';
 import { useToast } from '@/hooks/use-toast';
 import { useAppState } from '@/contexts/app-state-provider';
-import { format } from 'date-fns';
+import { format, parseISO } from 'date-fns';
+import { APPOINTMENT_STATUS } from '@/lib/constants';
 
 export default function DictationPage() {
   const [command, setCommand] = useState('');
@@ -18,6 +20,10 @@ export default function DictationPage() {
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [isConfirming, setIsConfirming] = useState(false);
+  
+  const [whatsAppMessage, setWhatsAppMessage] = useState('');
+  const [isGenerating, setIsGenerating] = useState(false);
+
   const { toast } = useToast();
   const { selectedLocationId } = useAppState();
 
@@ -80,6 +86,55 @@ export default function DictationPage() {
         setError(err.message || "No se pudo completar la acción. Intente de nuevo.");
     } finally {
         setIsConfirming(false);
+    }
+  };
+  
+  const handleGenerateWhatsAppSummary = async () => {
+    if (!selectedLocationId || selectedLocationId === 'all') {
+        toast({ title: "Error", description: "Por favor, seleccione una sede específica para generar el resumen.", variant: "destructive" });
+        return;
+    }
+    setIsGenerating(true);
+    setWhatsAppMessage('');
+    try {
+        const { appointments } = await getAppointments({
+            date: new Date(),
+            locationId: selectedLocationId,
+            statuses: [APPOINTMENT_STATUS.BOOKED, APPOINTMENT_STATUS.CONFIRMED],
+        });
+        
+        if (appointments.length === 0) {
+            setWhatsAppMessage("No hay citas programadas para hoy en esta sede.");
+            return;
+        }
+        
+        const sortedAppointments = appointments.sort((a,b) => parseISO(a.appointmentDateTime).getTime() - parseISO(b.appointmentDateTime).getTime());
+        
+        const messageLines = sortedAppointments.map(appt => {
+            const time = format(parseISO(appt.appointmentDateTime), 'HH:mm');
+            const patientName = `${appt.patient?.firstName || ''} ${appt.patient?.lastName || ''}`.trim();
+            const serviceName = appt.service?.name || 'Servicio';
+            const professionalName = appt.professional ? `${appt.professional.firstName} ${appt.professional.lastName.charAt(0)}.` : 'N/A';
+            return `${time} - ${patientName} - ${serviceName} (${professionalName})`;
+        });
+        
+        const locationName = appointments[0].location?.name || 'Sede';
+        const fullMessage = `*Resumen de Citas para ${locationName} - ${format(new Date(), 'PPP', {locale: es})}*\n\n${messageLines.join('\n')}`;
+        
+        setWhatsAppMessage(fullMessage);
+        
+    } catch(err) {
+        console.error("Error generating WhatsApp summary:", err);
+        toast({ title: "Error", description: "No se pudo generar el resumen de citas.", variant: "destructive" });
+    } finally {
+        setIsGenerating(false);
+    }
+  };
+
+  const handleCopyToClipboard = () => {
+    if (whatsAppMessage) {
+        navigator.clipboard.writeText(whatsAppMessage);
+        toast({ title: "Copiado", description: "El resumen ha sido copiado al portapapeles." });
     }
   };
 
@@ -148,24 +203,33 @@ export default function DictationPage() {
       </Card>
       <Card className="shadow-md">
         <CardHeader>
-            <CardTitle className="text-lg">Ejemplos de Comandos (Formato Corto)</CardTitle>
+            <CardTitle className="text-xl flex items-center gap-2">
+                <MessageSquareQuote className="text-primary"/>
+                Generador de Resumen para WhatsApp
+            </CardTitle>
+             <CardDescription>
+                Crea un resumen de las citas del día para la sede seleccionada, listo para copiar y enviar.
+            </CardDescription>
         </CardHeader>
-        <CardContent className="text-sm space-y-2 text-muted-foreground font-mono">
-            <p>
-                <strong className="text-foreground">Formato Básico:</strong> `[HORA] [NOMBRE PACIENTE] [SERVICIO]`
-            </p>
-            <p>
-                <strong className="text-foreground">Ej:</strong> `9 carlos sanchez podo` (9 AM, Podología)
-            </p>
-             <p>
-                <strong className="text-foreground">Ej:</strong> `3 30 ana torres refle` (3:30 PM, Reflexología)
-            </p>
-             <p>
-                <strong className="text-foreground">Ej:</strong> `5 sofia lopez podo mañana` (5 PM, Mañana)
-            </p>
-            <p className="text-xs italic mt-2">
-                Nota: Horas de 1 a 8 se asumen como PM (13:00 a 20:00).
-            </p>
+        <CardContent className="space-y-4">
+            <Button onClick={handleGenerateWhatsAppSummary} disabled={isGenerating}>
+                {isGenerating ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <Send className="mr-2 h-4 w-4"/>}
+                Generar Resumen del Día
+            </Button>
+            {whatsAppMessage && (
+                 <div className="space-y-2">
+                    <Label htmlFor="whatsapp-summary">Resumen generado:</Label>
+                    <Textarea 
+                        id="whatsapp-summary"
+                        readOnly
+                        value={whatsAppMessage}
+                        className="font-mono text-sm h-64 bg-secondary"
+                    />
+                    <Button onClick={handleCopyToClipboard} variant="outline" size="sm">
+                        <Copy className="mr-2 h-4 w-4"/> Copiar Texto
+                    </Button>
+                </div>
+            )}
         </CardContent>
       </Card>
     </div>
