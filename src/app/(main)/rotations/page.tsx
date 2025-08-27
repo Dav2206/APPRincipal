@@ -92,13 +92,6 @@ export default function RotationsPage() {
     loadAllData();
   }, [loadAllData]);
   
-  const professionalsForSelectedLocation = useMemo(() => {
-    if (!selectedLocationId || selectedLocationId === 'all') {
-      return [];
-    }
-    return allProfessionals.filter(p => p.locationId === selectedLocationId);
-  }, [allProfessionals, selectedLocationId]);
-
   const shiftTimes: Record<Shift, { start: number; end: number, display: string }> = {
     '9am': { start: 9, end: 10, display: '09:00' },
     '10am': { start: 10, end: 11, display: '10:00' },
@@ -106,19 +99,25 @@ export default function RotationsPage() {
     '12:30pm': { start: 12, end: 13, display: '12:30' },
   };
 
-  const getProfessionalsForShift = useCallback((professionals: Professional[], day: Date, shift: Shift): NameBadgeProps[] => {
+  const getProfessionalsForShift = useCallback((day: Date, shift: Shift): NameBadgeProps[] => {
+    if (!selectedLocationId || selectedLocationId === 'all') return [];
+
     const { start: shiftStartHour, end: shiftEndHour } = shiftTimes[shift];
 
-    return professionals.map(prof => {
+    return allProfessionals.map(prof => {
       const availability = getProfessionalAvailabilityForDate(prof, day);
-      if (availability?.isWorking && availability.startTime) {
+
+      // A professional is working this shift if:
+      // 1. They are working today.
+      // 2. Their working location for today matches the selected location.
+      // 3. Their start time falls within the shift's time bracket.
+      if (availability?.isWorking && availability.workingLocationId === selectedLocationId && availability.startTime) {
         const workStartHour = parseInt(availability.startTime.split(':')[0], 10);
         
         if (workStartHour >= shiftStartHour && workStartHour < shiftEndHour) {
           let status: NameBadgeStatus = 'working';
-          if (availability.reason && availability.reason.toLowerCase().includes('traslado')) {
-             status = 'cover';
-           } else if (availability.reason && availability.reason.toLowerCase().includes('turno especial')) {
+          // A "cover" status means they are not at their base location or it's a special shift
+          if (prof.locationId !== availability.workingLocationId || availability.reason?.toLowerCase().includes('especial')) {
              status = 'cover';
            }
           return { name: prof.firstName, status, professionalId: prof.id };
@@ -126,12 +125,20 @@ export default function RotationsPage() {
       }
       return null;
     }).filter((item): item is NameBadgeProps => item !== null);
-  }, [shiftTimes]);
+  }, [allProfessionals, selectedLocationId, shiftTimes]);
   
-  const getRestingProfessionalsForDay = useCallback((professionals: Professional[], day: Date): NameBadgeProps[] => {
-      return professionals.map(prof => {
+  const getRestingProfessionalsForDay = useCallback((day: Date): NameBadgeProps[] => {
+      if (!selectedLocationId || selectedLocationId === 'all') return [];
+
+      return allProfessionals
+        .filter(prof => {
+            // Only consider professionals whose base location is the one being viewed
+            return prof.locationId === selectedLocationId;
+        })
+        .map(prof => {
           const availability = getProfessionalAvailabilityForDate(prof, day);
-          if (!availability || !availability.isWorking) {
+          // Show as resting only if they are NOT working at the selected location
+          if (!availability || !availability.isWorking || availability.workingLocationId !== selectedLocationId) {
               const reason = availability?.reason || 'Descansa';
               let status: NameBadgeStatus = 'resting';
               if (reason.toLowerCase().includes('vacaciones')) {
@@ -141,7 +148,7 @@ export default function RotationsPage() {
           }
           return null;
       }).filter((item): item is NameBadgeProps => item !== null);
-  }, []);
+  }, [allProfessionals, selectedLocationId]);
 
   const handleDragStart = (e: React.DragEvent<HTMLDivElement>, professionalId: string, day: Date) => {
     if (!isDragAndDropEnabled) return;
@@ -279,7 +286,7 @@ export default function RotationsPage() {
                              <TableRow key={time}>
                                 <TableCell className="font-bold text-center align-middle bg-blue-100 border border-gray-300">{shiftTimes[time].display}</TableCell>
                                 {displayedWeek.days.map(day => {
-                                    const professionalsInSlot = getProfessionalsForShift(professionalsForSelectedLocation, day, time);
+                                    const professionalsInSlot = getProfessionalsForShift(day, time);
                                     return (
                                         <TableCell 
                                           key={`${day.toISOString()}-${time}`} 
@@ -310,7 +317,7 @@ export default function RotationsPage() {
                          <TableRow>
                              <TableCell colSpan={1} className="border-r border-gray-300"></TableCell>
                              {displayedWeek.days.map(day => {
-                                const restingProfessionals = getRestingProfessionalsForDay(professionalsForSelectedLocation, day);
+                                const restingProfessionals = getRestingProfessionalsForDay(day);
                                  return (
                                      <TableCell key={`resting-${day.toISOString()}`} className="p-1 align-top border-x border-gray-300">
                                          <div className="space-y-1">
