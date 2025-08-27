@@ -20,7 +20,7 @@ import { es } from 'date-fns/locale';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
-import type { DayOfWeekId } from '@/lib/constants';
+import { type DayOfWeekId, DAYS_OF_WEEK } from '@/lib/constants';
 
 // --- Data Structures ---
 interface VacationInfo {
@@ -133,33 +133,32 @@ export default function RotationsPage() {
         .filter((item): item is NameBadgeProps => item !== null);
   }, [allProfessionals, selectedLocationId, shiftTimes]);
   
- const getRestingProfessionalsForDay = useCallback((day: Date): NameBadgeProps[] => {
-      if (!selectedLocationId || selectedLocationId === 'all') return [];
+  const getRestingProfessionalsForDay = useCallback((day: Date): NameBadgeProps[] => {
+    if (!selectedLocationId || selectedLocationId === 'all') return [];
 
-      return allProfessionals
-        .filter(prof => !prof.isManager) // Exclude managers
-        .map(prof => {
-            const availability = getProfessionalAvailabilityForDate(prof, day);
-            // This professional's BASE location must be the selected one to appear in the resting list.
-            if (prof.locationId === selectedLocationId && (!availability || !availability.isWorking)) {
-              let status: NameBadgeStatus = 'resting';
-              if (availability?.reason?.toLowerCase().includes('vacaciones')) {
-                  status = 'vacation';
-              }
-              return { name: prof.firstName, status, professionalId: prof.id };
+    return allProfessionals
+      .filter(prof => !prof.isManager)
+      .map(prof => {
+          const availability = getProfessionalAvailabilityForDate(prof, day);
+          if (prof.locationId === selectedLocationId && (!availability || !availability.isWorking)) {
+            let status: NameBadgeStatus = 'resting';
+            if (availability?.reason?.toLowerCase().includes('vacaciones')) {
+                status = 'vacation';
             }
-            return null;
-        }).filter((item): item is NameBadgeProps => item !== null);
+            return { name: prof.firstName, status, professionalId: prof.id };
+          }
+          return null;
+      }).filter((item): item is NameBadgeProps => item !== null);
   }, [allProfessionals, selectedLocationId]);
+
 
   const handleAction = async (professionalId: string, day: Date, action: 'rest' | 'vacation' | 'special_shift' | 'transfer', details?: { locationId?: LocationId, startTime?: string, endTime?: string }) => {
     const professional = allProfessionals.find(p => p.id === professionalId);
     if (!professional) return;
     
-    // Use `formatISO` from 'date-fns' with `representation: 'date'` to get 'YYYY-MM-DD'
-    const dateISO = format(day, 'yyyy-MM-dd');
+    const dateISO = format(day, "yyyy-MM-dd'T'12:00:00.000'Z'"); // Use a neutral time to avoid timezone shifts
     const existingOverrideIndex = (professional.customScheduleOverrides || []).findIndex(
-      ov => format(parseISO(ov.date), 'yyyy-MM-dd') === dateISO
+      ov => format(parseISO(ov.date), 'yyyy-MM-dd') === format(parseISO(dateISO), 'yyyy-MM-dd')
     );
 
     let updatedOverrides = [...(professional.customScheduleOverrides || [])];
@@ -167,7 +166,7 @@ export default function RotationsPage() {
     const createOrUpdateOverride = (type: 'descanso' | 'turno_especial' | 'traslado', notes: string) => {
         const newOverride: any = {
             id: existingOverrideIndex > -1 ? updatedOverrides[existingOverrideIndex].id : `override_${Date.now()}`,
-            date: dateISO, // Keep as string
+            date: dateISO,
             overrideType: type,
             isWorking: type !== 'descanso',
             startTime: type === 'descanso' ? undefined : details?.startTime,
@@ -225,9 +224,10 @@ export default function RotationsPage() {
 
     try {
       await updateProfessional(professional.id, { workSchedule: updatedWorkSchedule as any });
+      const dayName = DAYS_OF_WEEK.find(d => d.id === dayOfWeek)?.name || 'día';
       toast({
         title: "Horario Base Actualizado",
-        description: `El horario de ${professional.firstName} para los ${format(new Date(2024,0,getDay(new Date(2024,0,1)) === 0 ? 1 : 2 - getDay(new Date())), 'EEEE', {locale:es})} ha sido actualizado.`,
+        description: `El horario de ${professional.firstName} para los ${dayName} ha sido actualizado.`,
       });
       loadAllData();
     } catch (error) {
@@ -241,9 +241,9 @@ export default function RotationsPage() {
     const professional = allProfessionals.find(p => p.id === professionalId);
     if (!professional) return;
     
-    const dateISOToClear = format(day, 'yyyy-MM-dd');
+    const dateToClear = format(day, 'yyyy-MM-dd');
     const updatedOverrides = (professional.customScheduleOverrides || []).filter(
-      ov => format(parseISO(ov.date), 'yyyy-MM-dd') !== dateISOToClear
+      ov => format(parseISO(ov.date), 'yyyy-MM-dd') !== dateToClear
     );
 
     try {
