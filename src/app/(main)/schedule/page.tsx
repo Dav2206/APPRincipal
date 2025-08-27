@@ -429,7 +429,7 @@ const fetchData = useCallback(async (isBackgroundFetch = false) => {
               </div>
             )}
           </div>
-          <div className="mt-4 flex flex-col sm:flex-row gap-4 justify-between items-center">
+          <div className="mt-4 flex flex-col sm:flex-row gap-4 justify-between items-center flex-wrap">
              <div className="flex items-center gap-1 rounded-lg border p-1 bg-muted/50 w-full sm:w-auto justify-center">
               <Button variant="ghost" size="icon" onClick={() => handleDateChange(subDays(currentDate, 1))} className="h-8 w-8">
                 <ChevronLeft className="h-5 w-5" />
@@ -456,39 +456,41 @@ const fetchData = useCallback(async (isBackgroundFetch = false) => {
                 Hoy
               </Button>
             </div>
-             <div className="flex items-center space-x-2">
-                <Switch
-                  id="drag-drop-switch"
-                  checked={isDragDropEnabled}
-                  onCheckedChange={setIsDragDropEnabled}
-                />
-                <Label htmlFor="drag-drop-switch" className="text-xs flex items-center gap-1">
-                  <MousePointerClick className="h-4 w-4" />
-                  Mover Profesional
-                </Label>
-              </div>
-              <div className="flex items-center space-x-2">
-                <Switch
-                  id="vertical-drag-switch"
-                  checked={isVerticalDragEnabled}
-                  onCheckedChange={setIsVerticalDragEnabled}
-                />
-                <Label htmlFor="vertical-drag-switch" className="text-xs flex items-center gap-1">
-                  <MoveVertical className="h-4 w-4" />
-                  Mover Horario
-                </Label>
-              </div>
-              <div className="flex items-center space-x-2">
-                <Switch
-                  id="basic-mode-switch"
-                  checked={isScheduleBasicMode}
-                  onCheckedChange={setIsScheduleBasicMode}
-                />
-                <Label htmlFor="basic-mode-switch" className="text-xs flex items-center gap-1">
-                  <Zap className="h-4 w-4" />
-                  Modo Básico
-                </Label>
-              </div>
+             <div className="flex items-center gap-x-4 gap-y-2 justify-center flex-wrap">
+                <div className="flex items-center space-x-2">
+                    <Switch
+                    id="drag-drop-switch"
+                    checked={isDragDropEnabled}
+                    onCheckedChange={setIsDragDropEnabled}
+                    />
+                    <Label htmlFor="drag-drop-switch" className="text-xs flex items-center gap-1">
+                    <MousePointerClick className="h-4 w-4" />
+                    Mover Profesional
+                    </Label>
+                </div>
+                <div className="flex items-center space-x-2">
+                    <Switch
+                    id="vertical-drag-switch"
+                    checked={isVerticalDragEnabled}
+                    onCheckedChange={setIsVerticalDragEnabled}
+                    />
+                    <Label htmlFor="vertical-drag-switch" className="text-xs flex items-center gap-1">
+                    <MoveVertical className="h-4 w-4" />
+                    Mover Horario
+                    </Label>
+                </div>
+                <div className="flex items-center space-x-2">
+                    <Switch
+                    id="basic-mode-switch"
+                    checked={isScheduleBasicMode}
+                    onCheckedChange={setIsScheduleBasicMode}
+                    />
+                    <Label htmlFor="basic-mode-switch" className="text-xs flex items-center gap-1">
+                    <Zap className="h-4 w-4" />
+                    Modo Básico
+                    </Label>
+                </div>
+             </div>
             <div className="text-xs text-muted-foreground text-center sm:text-right w-full sm:w-auto">
              Viendo para: <span className="font-semibold">{displayLocationName}</span>
           </div>
