@@ -15,8 +15,7 @@ import { useAppState } from '@/contexts/app-state-provider';
 import { Button } from '@/components/ui/button';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator, DropdownMenuSub, DropdownMenuSubTrigger, DropdownMenuSubContent, DropdownMenuPortal } from '@/components/ui/dropdown-menu';
 import { cn } from '@/lib/utils';
-import { format, startOfWeek, endOfWeek, addDays, eachDayOfInterval, getHours, parse, getDay, startOfDay, parseISO } from 'date-fns';
-import { format as formatTz } from 'date-fns-tz';
+import { format, startOfWeek, endOfWeek, addDays, eachDayOfInterval, getHours, parse, getDay, startOfDay, parseISO, formatISO as dateFnsFormatISO } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
@@ -32,7 +31,7 @@ interface VacationInfo {
 }
 
 // --- Helper Types & Enums ---
-type Shift = '9am' | '10am' | '11am' | '12:30pm';
+type Shift = '9am' | '10am' | '10:30am' | '11am' | '12:30pm';
 type NameBadgeStatus = 'working' | 'resting' | 'vacation' | 'cover' | 'transfer';
 
 interface NameBadgeProps {
@@ -79,7 +78,7 @@ export default function RotationsPage() {
       const [allProfs, allLocations] = await Promise.all([getProfessionals(), getLocations()]);
       
       const activeProfs = allProfs.filter(prof => {
-        const status = getContractDisplayStatus(prof.currentContract);
+        const status = getContractDisplayStatus(prof.currentContract, viewDate);
         return (status === 'Activo' || status === 'Próximo a Vencer')
       });
 
@@ -90,43 +89,59 @@ export default function RotationsPage() {
     } finally {
       setIsLoading(false);
     }
-  }, []);
+  }, [viewDate]);
 
   useEffect(() => {
     loadAllData();
   }, [loadAllData, viewDate]);
-  
+
   const shiftTimes: Record<Shift, { start: number; end: number, display: string }> = {
     '9am': { start: 9, end: 10, display: '09:00' },
     '10am': { start: 10, end: 11, display: '10:00' },
+    '10:30am': { start: 10.5, end: 11.5, display: '10:30' },
     '11am': { start: 11, end: 12, display: '11:00' },
-    '12:30pm': { start: 12, end: 13, display: '12:30' },
+    '12:30pm': { start: 12.5, end: 13.5, display: '12:30' },
   };
+
+  const shiftsForLocation: Record<LocationId, Shift[]> = {
+    'san_antonio': ['9am', '10am', '10:30am'],
+    // Define specific shifts for other locations if needed, otherwise they use the default
+    'higuereta': ['9am', '10am', '11am', '12:30pm'],
+    'eden_benavides': ['9am', '10am', '11am', '12:30pm'],
+    'crucetas': ['9am', '10am', '11am', '12:30pm'],
+    'carpaccio': ['9am', '10am', '11am', '12:30pm'],
+    'vista_alegre': ['9am', '10am', '11am', '12:30pm'],
+  };
+
+  const displayedShifts = useMemo(() => {
+    if (selectedLocationId && selectedLocationId !== 'all' && shiftsForLocation[selectedLocationId]) {
+      return shiftsForLocation[selectedLocationId];
+    }
+    // Default shifts if no location is selected or if it's not in the specific map
+    return ['9am', '10am', '11am', '12:30pm'];
+  }, [selectedLocationId]);
+
 
   const getProfessionalsForShift = useCallback((day: Date, shift: Shift): NameBadgeProps[] => {
     if (!selectedLocationId || selectedLocationId === 'all') return [];
 
-    const { start: shiftStartHour } = shiftTimes[shift];
+    const shiftStartTime = shiftTimes[shift].display; // "HH:mm"
 
     return allProfessionals
         .map(prof => {
             const availability = getProfessionalAvailabilityForDate(prof, day);
             
-            if (availability?.isWorking && availability.workingLocationId === selectedLocationId && availability.startTime) {
-                const workStartHour = parseInt(availability.startTime.split(':')[0], 10);
-                
-                if (workStartHour === shiftStartHour) {
-                    let status: NameBadgeStatus = 'working';
-                    const isTransfer = prof.locationId !== availability.workingLocationId;
-                    const isSpecialShift = availability.reason && availability.reason !== 'Horario base';
+            if (availability?.isWorking && availability.workingLocationId === selectedLocationId && availability.startTime === shiftStartTime) {
+                let status: NameBadgeStatus = 'working';
+                const isTransfer = prof.locationId !== availability.workingLocationId;
+                const isSpecialShift = availability.reason && availability.reason !== 'Horario base';
 
-                    if (isTransfer) {
-                        status = 'transfer';
-                    } else if (isSpecialShift && !availability.reason?.toLowerCase().includes('vacaciones')) {
-                        status = 'cover';
-                    }
-                    return { name: prof.firstName, status, professionalId: prof.id };
+                if (isTransfer) {
+                    status = 'transfer';
+                } else if (isSpecialShift && !availability.reason?.toLowerCase().includes('vacaciones')) {
+                    status = 'cover';
                 }
+                return { name: prof.firstName, status, professionalId: prof.id };
             }
             return null;
         })
@@ -138,13 +153,17 @@ export default function RotationsPage() {
 
     return allProfessionals
       .map(prof => {
-          const availability = getProfessionalAvailabilityForDate(prof, day);
-          if (prof.locationId === selectedLocationId && (!availability || !availability.isWorking)) {
-            let status: NameBadgeStatus = 'resting';
-            if (availability?.reason?.toLowerCase().includes('vacaciones')) {
-                status = 'vacation';
-            }
-            return { name: prof.firstName, status, professionalId: prof.id };
+          // Check if the professional's base location is the one being viewed
+          if (prof.locationId === selectedLocationId) {
+             const availability = getProfessionalAvailabilityForDate(prof, day);
+             // Show as resting if they are NOT working, OR if they are working but transferred to another location
+             if (!availability || !availability.isWorking || (availability.isWorking && availability.workingLocationId !== selectedLocationId)) {
+                let status: NameBadgeStatus = 'resting';
+                if (availability?.reason?.toLowerCase().includes('vacaciones')) {
+                    status = 'vacation';
+                }
+                return { name: prof.firstName, status, professionalId: prof.id };
+             }
           }
           return null;
       }).filter((item): item is NameBadgeProps => item !== null);
@@ -155,8 +174,8 @@ export default function RotationsPage() {
     const professional = allProfessionals.find(p => p.id === professionalId);
     if (!professional) return;
     
-    // Use a method that is not affected by timezone to get the date string
-    const dateISO = formatTz(day, "yyyy-MM-dd'T'12:00:00.000'Z'", { timeZone: 'UTC' });
+    // Correctly format the date to avoid timezone issues
+    const dateISO = format(day, "yyyy-MM-dd'T'12:00:00.000'Z'");
     
     const existingOverrideIndex = (professional.customScheduleOverrides || []).findIndex(
       ov => format(parseISO(ov.date), 'yyyy-MM-dd') === format(parseISO(dateISO), 'yyyy-MM-dd')
@@ -199,7 +218,11 @@ export default function RotationsPage() {
     
     try {
       const updatePayload: Partial<ProfessionalFormData> = {
-        customScheduleOverrides: updatedOverrides
+        customScheduleOverrides: updatedOverrides.map(ov => ({
+          ...ov,
+          // When sending to DB, ensure date is just the string
+          date: format(parseISO(ov.date), 'yyyy-MM-dd'),
+        }) as any)
       };
       await updateProfessional(professional.id, updatePayload);
       toast({ title: "Horario Actualizado", description: `Se actualizó el estado de ${professional.firstName} para el ${format(day, 'PPPP', {locale: es})}.`});
@@ -213,17 +236,24 @@ export default function RotationsPage() {
   const handleUpdateBaseSchedule = async (professionalId: string, dayOfWeek: DayOfWeekId, newStartTime: string, newEndTime: string) => {
     const professional = allProfessionals.find(p => p.id === professionalId);
     if (!professional) return;
-
-    // Create a deep copy of the entire work schedule
+  
+    // Create a deep copy of the entire work schedule to avoid mutation issues
     const newWorkSchedule = JSON.parse(JSON.stringify(professional.workSchedule || {}));
-
+  
+    // Ensure all days of the week are initialized
+    DAYS_OF_WEEK.forEach(day => {
+      if (!newWorkSchedule[day.id]) {
+        newWorkSchedule[day.id] = { isWorking: false, startTime: "00:00", endTime: "00:00" };
+      }
+    });
+  
     // Update only the specific day
     newWorkSchedule[dayOfWeek] = {
       isWorking: true,
       startTime: newStartTime,
       endTime: newEndTime,
     };
-
+  
     try {
       await updateProfessional(professional.id, { workSchedule: newWorkSchedule });
       
@@ -251,7 +281,7 @@ export default function RotationsPage() {
 
     try {
       const updatePayload: Partial<ProfessionalFormData> = {
-        customScheduleOverrides: updatedOverrides
+        customScheduleOverrides: updatedOverrides.map(ov => ({...ov, date: format(parseISO(ov.date), 'yyyy-MM-dd')}) as any)
       };
        await updateProfessional(professional.id, updatePayload);
        toast({ title: "Horario Restaurado", description: `Se eliminó la excepción para ${professional.firstName} el ${format(day, 'PPPP', {locale: es})}.`});
@@ -335,7 +365,7 @@ export default function RotationsPage() {
                         </TableRow>
                     </TableHeader>
                     <TableBody>
-                        {(Object.keys(shiftTimes) as Shift[]).map(time => (
+                        {displayedShifts.map(time => (
                              <TableRow key={time}>
                                 <TableCell className="font-bold text-center align-middle bg-blue-100 border border-gray-300">{shiftTimes[time].display}</TableCell>
                                 {displayedWeek.days.map(day => {
@@ -358,6 +388,7 @@ export default function RotationsPage() {
                                                                 <DropdownMenuSubContent>
                                                                     <DropdownMenuItem onClick={() => handleAction(item.professionalId, day, 'special_shift', { startTime: '09:00', endTime: '18:00' })}>09:00 - 18:00</DropdownMenuItem>
                                                                     <DropdownMenuItem onClick={() => handleAction(item.professionalId, day, 'special_shift', { startTime: '10:00', endTime: '19:00' })}>10:00 - 19:00</DropdownMenuItem>
+                                                                    <DropdownMenuItem onClick={() => handleAction(item.professionalId, day, 'special_shift', { startTime: '10:30', endTime: '19:30' })}>10:30 - 19:30</DropdownMenuItem>
                                                                     <DropdownMenuItem onClick={() => handleAction(item.professionalId, day, 'special_shift', { startTime: '11:00', endTime: '20:00' })}>11:00 - 20:00</DropdownMenuItem>
                                                                     <DropdownMenuItem onClick={() => handleAction(item.professionalId, day, 'special_shift', { startTime: '12:30', endTime: '21:30' })}>12:30 - 21:30</DropdownMenuItem>
                                                                 </DropdownMenuSubContent>
@@ -367,6 +398,7 @@ export default function RotationsPage() {
                                                                 <DropdownMenuSubContent>
                                                                      <DropdownMenuItem onClick={() => handleUpdateBaseSchedule(item.professionalId, dayOfWeekId, '09:00', '18:00')}>09:00 - 18:00</DropdownMenuItem>
                                                                      <DropdownMenuItem onClick={() => handleUpdateBaseSchedule(item.professionalId, dayOfWeekId, '10:00', '19:00')}>10:00 - 19:00</DropdownMenuItem>
+                                                                     <DropdownMenuItem onClick={() => handleUpdateBaseSchedule(item.professionalId, dayOfWeekId, '10:30', '19:30')}>10:30 - 19:30</DropdownMenuItem>
                                                                      <DropdownMenuItem onClick={() => handleUpdateBaseSchedule(item.professionalId, dayOfWeekId, '11:00', '20:00')}>11:00 - 20:00</DropdownMenuItem>
                                                                      <DropdownMenuItem onClick={() => handleUpdateBaseSchedule(item.professionalId, dayOfWeekId, '12:30', '21:30')}>12:30 - 21:30</DropdownMenuItem>
                                                                 </DropdownMenuSubContent>
@@ -418,6 +450,7 @@ export default function RotationsPage() {
                                                <DropdownMenuSubContent>
                                                  <DropdownMenuItem onClick={() => handleAction(item.professionalId, day, 'special_shift', { startTime: '09:00', endTime: '18:00' })}>09:00 - 18:00</DropdownMenuItem>
                                                  <DropdownMenuItem onClick={() => handleAction(item.professionalId, day, 'special_shift', { startTime: '10:00', endTime: '19:00' })}>10:00 - 19:00</DropdownMenuItem>
+                                                 <DropdownMenuItem onClick={() => handleAction(item.professionalId, day, 'special_shift', { startTime: '10:30', endTime: '19:30' })}>10:30 - 19:30</DropdownMenuItem>
                                                </DropdownMenuSubContent>
                                              </DropdownMenuSub>
                                              <DropdownMenuSeparator />
@@ -448,3 +481,4 @@ export default function RotationsPage() {
     </div>
   );
 }
+
