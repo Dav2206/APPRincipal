@@ -137,7 +137,6 @@ export default function RotationsPage() {
 
       return allProfessionals
         .filter(prof => {
-            // Filter for professionals whose base location matches the selected one
             return prof.locationId === selectedLocationId;
         })
         .map(prof => {
@@ -259,13 +258,6 @@ export default function RotationsPage() {
     return locations.find(l => l.id === selectedLocationId)?.name;
   }, [selectedLocationId, locations]);
 
-  const restingProfessionalsForWeek = useMemo(() => {
-    return displayedWeek.days.map(day => ({
-        day,
-        professionals: getRestingProfessionalsForDay(day)
-    }));
-  }, [displayedWeek, getRestingProfessionalsForDay]);
-
 
   return (
     <div className="container mx-auto py-8 px-4 md:px-0 space-y-8">
@@ -367,34 +359,37 @@ export default function RotationsPage() {
                          </TableRow>
                          <TableRow>
                              <TableCell colSpan={1} className="border-r border-gray-300"></TableCell>
-                             {restingProfessionalsForWeek.map(({ day, professionals }) => (
-                                <TableCell key={`resting-${day.toISOString()}`} className="p-1 align-top border-x border-gray-300">
-                                    <div className="space-y-1">
-                                        {professionals.map((item, index) => (
-                                        <DropdownMenu key={`${item.professionalId}-${index}`}>
-                                            <DropdownMenuTrigger asChild>
-                                                <div onDoubleClick={(e) => e.preventDefault()} className="cursor-pointer">
-                                                    <NameBadge {...item} />
-                                                </div>
-                                            </DropdownMenuTrigger>
-                                            <DropdownMenuPortal>
-                                                <DropdownMenuContent>
-                                                <DropdownMenuSub>
-                                                    <DropdownMenuSubTrigger>Asignar Turno Especial</DropdownMenuSubTrigger>
-                                                    <DropdownMenuSubContent>
-                                                    <DropdownMenuItem onClick={() => handleAction(item.professionalId, day, 'special_shift', { startTime: '09:00', endTime: '18:00' })}>09:00 - 18:00</DropdownMenuItem>
-                                                    <DropdownMenuItem onClick={() => handleAction(item.professionalId, day, 'special_shift', { startTime: '10:00', endTime: '19:00' })}>10:00 - 19:00</DropdownMenuItem>
-                                                    </DropdownMenuSubContent>
-                                                </DropdownMenuSub>
-                                                <DropdownMenuSeparator />
-                                                <DropdownMenuItem className="text-destructive" onClick={() => handleClearException(item.professionalId, day)}>Limpiar Excepción</DropdownMenuItem>
-                                                </DropdownMenuContent>
-                                            </DropdownMenuPortal>
-                                        </DropdownMenu>
-                                        ))}
-                                    </div>
-                                </TableCell>
-                             ))}
+                             {displayedWeek.days.map((day) => {
+                               const restingProfessionals = getRestingProfessionalsForDay(day);
+                               return (
+                                 <TableCell key={`resting-${day.toISOString()}`} className="p-1 align-top border-x border-gray-300">
+                                   <div className="space-y-1">
+                                     {restingProfessionals.map((item, index) => (
+                                       <DropdownMenu key={`${item.professionalId}-${index}`}>
+                                         <DropdownMenuTrigger asChild>
+                                           <div onDoubleClick={(e) => e.preventDefault()} className="cursor-pointer">
+                                             <NameBadge {...item} />
+                                           </div>
+                                         </DropdownMenuTrigger>
+                                         <DropdownMenuPortal>
+                                           <DropdownMenuContent>
+                                             <DropdownMenuSub>
+                                               <DropdownMenuSubTrigger>Asignar Turno Especial</DropdownMenuSubTrigger>
+                                               <DropdownMenuSubContent>
+                                                 <DropdownMenuItem onClick={() => handleAction(item.professionalId, day, 'special_shift', { startTime: '09:00', endTime: '18:00' })}>09:00 - 18:00</DropdownMenuItem>
+                                                 <DropdownMenuItem onClick={() => handleAction(item.professionalId, day, 'special_shift', { startTime: '10:00', endTime: '19:00' })}>10:00 - 19:00</DropdownMenuItem>
+                                               </DropdownMenuSubContent>
+                                             </DropdownMenuSub>
+                                             <DropdownMenuSeparator />
+                                             <DropdownMenuItem className="text-destructive" onClick={() => handleClearException(item.professionalId, day)}>Limpiar Excepción</DropdownMenuItem>
+                                           </DropdownMenuContent>
+                                         </DropdownMenuPortal>
+                                       </DropdownMenu>
+                                     ))}
+                                   </div>
+                                 </TableCell>
+                               );
+                             })}
                         </TableRow>
                     </TableBody>
                 </Table>
