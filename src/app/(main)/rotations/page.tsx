@@ -231,6 +231,27 @@ export default function RotationsPage() {
     }
   };
 
+  const handleDrop = async (e: React.DragEvent<HTMLDivElement>, newStartTime: Shift, day: Date) => {
+    e.preventDefault();
+    if (!isDragDropMode) return;
+    try {
+      const { professionalId, shift } = JSON.parse(e.dataTransfer.getData("application/json"));
+      if (shift === newStartTime) return; // No change
+      
+      const newShiftDetails = shiftTimes[newStartTime];
+      const endTime = format(addDays(parse(newShiftDetails.display, 'HH:mm', new Date()), 0), 'HH:mm'); // Simplified end time logic for now
+
+      // This logic needs to be more robust, for now, let's assume a standard 9-hour shift
+      const endHour = parseInt(newShiftDetails.display.split(':')[0],10) + 9;
+      const finalEndTime = `${endHour.toString().padStart(2,'0')}:${newShiftDetails.display.split(':')[1]}`;
+
+
+      await handleAction(professionalId, day, 'special_shift', { startTime: newShiftDetails.display, endTime: finalEndTime });
+
+    } catch (error) {
+      console.error("Error handling drop:", error);
+    }
+  };
 
   const currentViewLocationName = useMemo(() => {
     if (!selectedLocationId || selectedLocationId === 'all') return null;
