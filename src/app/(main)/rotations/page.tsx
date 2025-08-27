@@ -20,7 +20,7 @@ import { es } from 'date-fns/locale';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
-import { formatISO } from 'date-fns/formatISO';
+import { formatISO, format as formatTz } from 'date-fns-tz';
 import type { DayOfWeekId } from '@/lib/constants';
 
 // --- Data Structures ---
@@ -80,7 +80,7 @@ export default function RotationsPage() {
       
       const activeProfs = allProfs.filter(prof => {
         const status = getContractDisplayStatus(prof.currentContract);
-        return (status === 'Activo' || status === 'Próximo a Vencer');
+        return (status === 'Activo' || status === 'Próximo a Vencer')
       });
 
       setAllProfessionals(activeProfs);
@@ -139,6 +139,7 @@ export default function RotationsPage() {
       return allProfessionals
         .filter(prof => {
             const availability = getProfessionalAvailabilityForDate(prof, day);
+            // This professional's BASE location must be the selected one to appear in the resting list.
             return prof.locationId === selectedLocationId && (!availability || !availability.isWorking);
         })
         .map(prof => {
@@ -156,9 +157,10 @@ export default function RotationsPage() {
     const professional = allProfessionals.find(p => p.id === professionalId);
     if (!professional) return;
     
-    const dateISO = formatISO(day, { representation: 'date' });
+    // Correctly format the date to 'YYYY-MM-DD' regardless of timezone issues
+    const dateISO = formatTz(day, 'yyyy-MM-dd', { timeZone: 'UTC' });
     const existingOverrideIndex = (professional.customScheduleOverrides || []).findIndex(
-      ov => startOfDay(new Date(ov.date)).getTime() === startOfDay(day).getTime()
+      ov => formatTz(parseISO(ov.date), 'yyyy-MM-dd', { timeZone: 'UTC' }) === dateISO
     );
 
     let updatedOverrides = [...(professional.customScheduleOverrides || [])];
@@ -175,7 +177,7 @@ export default function RotationsPage() {
             notes: notes
         };
         if (existingOverrideIndex > -1) {
-            updatedOverrides[existingOverrideIndex] = { ...updatedOverrides[existingOverrideIndex], ...newOverride };
+            updatedOverrides[existingOverrideIndex] = { ...updatedOverrides[existingOverrideIndex], ...newOverride, date: dateISO };
         } else {
             updatedOverrides.push(newOverride as any);
         }
@@ -213,10 +215,9 @@ export default function RotationsPage() {
     const professional = allProfessionals.find(p => p.id === professionalId);
     if (!professional) return;
     
-    // Correctly merge with existing schedule to avoid deleting other days
     const updatedWorkSchedule = {
-      ...(professional.workSchedule || {}), // Start with the existing full schedule
-      [dayOfWeek]: { // Override just the specific day
+      ...(professional.workSchedule || {}), 
+      [dayOfWeek]: { 
         isWorking: true,
         startTime: newStartTime,
         endTime: newEndTime,
@@ -241,8 +242,9 @@ export default function RotationsPage() {
     const professional = allProfessionals.find(p => p.id === professionalId);
     if (!professional) return;
     
+    const dateISOToClear = formatTz(day, 'yyyy-MM-dd', { timeZone: 'UTC' });
     const updatedOverrides = (professional.customScheduleOverrides || []).filter(
-      ov => startOfDay(new Date(ov.date)).getTime() !== startOfDay(day).getTime()
+      ov => formatTz(parseISO(ov.date), 'yyyy-MM-dd', { timeZone: 'UTC' }) !== dateISOToClear
     );
 
     try {
@@ -266,9 +268,8 @@ export default function RotationsPage() {
       if (shift === newStartTime) return; // No change
       
       const newShiftDetails = shiftTimes[newStartTime];
-      const endTime = format(addDays(parse(newShiftDetails.display, 'HH:mm', new Date()), 0), 'HH:mm'); // Simplified end time logic for now
+      const endTime = format(addDays(parse(newShiftDetails.display, 'HH:mm', new Date()), 0), 'HH:mm'); 
 
-      // This logic needs to be more robust, for now, let's assume a standard 9-hour shift
       const endHour = parseInt(newShiftDetails.display.split(':')[0],10) + 9;
       const finalEndTime = `${endHour.toString().padStart(2,'0')}:${newShiftDetails.display.split(':')[1]}`;
 
