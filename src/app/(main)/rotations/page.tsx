@@ -14,6 +14,7 @@ import { useAuth } from '@/contexts/auth-provider';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
+import { cn } from '@/lib/utils';
 
 
 // --- Initial Data (will be part of state now) ---
@@ -71,6 +72,68 @@ const vacaciones = [
   { nombre: 'LUCY', periodo: '16/09 - 30/09 (15dias)', regreso: '1-Oct' },
   { nombre: 'HEIDDY', periodo: '', regreso: '' },
 ];
+
+// --- New Data Structure for Visual Planner ---
+const scheduleData = {
+    "higuereta": {
+        "days": ["LUNES 1", "MARTES 2", "MIERCOLES 3", "JUEVES 4", "VIERNES 5"],
+        "timeSlots": [
+            {
+                "time": "9am",
+                "schedule": [
+                    { "names": ["Pilar", { "name": "Lucila", "status": "vacation" }] },
+                    { "names": ["Pilar", { "name": "Lucila", "status": "vacation" }] },
+                    { "names": ["Pilar", { "name": "Lucila", "status": "vacation" }] },
+                    { "names": ["Pilar", { "name": "Lucila", "status": "vacation" }] },
+                    { "names": ["Pilar", { "name": "Lucila", "status": "vacation" }] }
+                ]
+            },
+            {
+                "time": "10am",
+                "schedule": [
+                    { "names": ["Liz", "Leydi"] },
+                    { "names": ["Liz", "Leydi"] },
+                    { "names": ["Liz", { "name": "Leydi", "status": "rest" }] },
+                    { "names": ["Liz", "Leydi", { "name": "Lucy", "status": "cover" }] },
+                    { "names": ["Liz", "Leydi", { "name": "Lucy", "status": "cover" }] }
+                ]
+            },
+            {
+                "time": "11am",
+                "schedule": [
+                    { "names": ["Victoria", "Angela", "Gloria"] },
+                    { "names": ["Victoria", "Angela", { "name": "Gloria", "status": "rest" }] },
+                    { "names": ["Victoria", { "name": "Angela", "status": "rest" }, "Gloria"] },
+                    { "names": ["Victoria", "Angela", "Gloria"] },
+                    { "names": ["Victoria", "Angela", "Gloria"] }
+                ]
+            },
+            {
+                "time": "12:30pm",
+                "schedule": [
+                    { "names": [{ "name": "Isabel", "status": "rest" }, "Heiddy"] },
+                    { "names": ["Isabel", "Heiddy"] },
+                    { "names": [{ "name": "Isabel", "status": "rest" }, "Heiddy"] },
+                    { "names": ["Isabel", { "name": "Heiddy", "status": "rest" }] },
+                    { "names": ["Isabel", { "name": "Heiddy", "status": "rest" }] }
+                ]
+            }
+        ]
+    }
+};
+
+const NameBadge = ({ item }: { item: string | { name: string; status: 'vacation' | 'rest' | 'cover' } }) => {
+    if (typeof item === 'string') {
+        return <div className="p-1">{item}</div>;
+    }
+    const { name, status } = item;
+    const colorClasses = {
+        vacation: 'bg-orange-200 text-orange-800',
+        rest: 'bg-yellow-200 text-yellow-800',
+        cover: 'bg-green-200 text-green-800',
+    };
+    return <div className={cn('p-1 rounded-md', colorClasses[status])}>{name}</div>;
+};
 
 
 interface RotationGroup {
@@ -264,6 +327,55 @@ export default function RotationsPage() {
       </div>
     );
   };
+  
+  const VisualPlanner = ({ locationId }: { locationId: 'higuereta' }) => {
+    const data = scheduleData[locationId];
+    if (!data) return null;
+
+    return (
+        <Card>
+            <CardHeader>
+                <CardTitle>Planificador Semanal Visual (Ejemplo Higuereta)</CardTitle>
+                <CardDescription>
+                    Vista de la semana del 1 al 5 de Septiembre, mostrando los turnos y estados del personal.
+                </CardDescription>
+            </CardHeader>
+            <CardContent>
+                <div className="border rounded-lg overflow-x-auto">
+                    <Table className="min-w-max">
+                        <TableHeader>
+                            <TableRow>
+                                <TableHead className="w-[100px] font-semibold sticky left-0 bg-background z-10">HORA</TableHead>
+                                {data.days.map(day => <TableHead key={day} className="text-center font-semibold">{day}</TableHead>)}
+                            </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                            {data.timeSlots.map(slot => (
+                                <TableRow key={slot.time}>
+                                    <TableCell className="font-semibold sticky left-0 bg-background z-10">{slot.time}</TableCell>
+                                    {slot.schedule.map((daySchedule, index) => (
+                                        <TableCell key={index} className="text-center p-1 align-top">
+                                            <div className="space-y-1">
+                                                {daySchedule.names.map((item, nameIndex) => (
+                                                    <NameBadge key={nameIndex} item={item} />
+                                                ))}
+                                            </div>
+                                        </TableCell>
+                                    ))}
+                                </TableRow>
+                            ))}
+                        </TableBody>
+                    </Table>
+                </div>
+                <div className="mt-4 flex flex-wrap gap-x-4 gap-y-2 text-sm">
+                    <div className="flex items-center gap-2"><div className="w-4 h-4 rounded-full bg-orange-200"/><span>Vacaciones</span></div>
+                    <div className="flex items-center gap-2"><div className="w-4 h-4 rounded-full bg-yellow-200"/><span>Descanso</span></div>
+                    <div className="flex items-center gap-2"><div className="w-4 h-4 rounded-full bg-green-200"/><span>Cubre Turno</span></div>
+                </div>
+            </CardContent>
+        </Card>
+    );
+  };
 
 
   return (
@@ -279,6 +391,8 @@ export default function RotationsPage() {
           </CardDescription>
         </CardHeader>
       </Card>
+
+      <VisualPlanner locationId="higuereta" />
       
       <Tabs defaultValue={locations[0]?.id || 'loading'} className="w-full">
         <TabsList>
@@ -428,4 +542,3 @@ export default function RotationsPage() {
     </div>
   );
 }
-
