@@ -12,7 +12,9 @@ import { Alert, AlertTitle, AlertDescription } from '@/components/ui/alert';
 import { useToast } from '@/hooks/use-toast';
 import { useAppState } from '@/contexts/app-state-provider';
 import { format, parseISO } from 'date-fns';
+import { es } from 'date-fns/locale';
 import { APPOINTMENT_STATUS } from '@/lib/constants';
+import { Label } from '@/components/ui/label';
 
 export default function DictationPage() {
   const [command, setCommand] = useState('');
