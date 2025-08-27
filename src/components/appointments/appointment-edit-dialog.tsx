@@ -45,7 +45,7 @@ import { useToast } from '@/hooks/use-toast';
 import Image from 'next/image';
 import { cn } from '@/lib/utils';
 import { storage } from '@/lib/firebase-config';
-import { ref, uploadBytes, getDownloadURL, deleteObject } from 'firebase/storage';
+import { ref, uploadString, getDownloadURL, deleteObject } from 'firebase/storage';
 import { Calendar } from '@/components/ui/calendar';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 
@@ -561,7 +561,17 @@ export function AppointmentEditDialog({ appointment, isOpen, onOpenChange, onApp
                     <FormItem>
                         <FormLabel className="flex items-center gap-1"><ConciergeBell size={16}/>Servicio Principal</FormLabel>
                         <Select
-                        onValueChange={field.onChange} value={field.value === DEFAULT_SERVICE_ID_PLACEHOLDER && allServices && allServices.length > 0 ? allServices[0].id : field.value}
+                        onValueChange={(value) => {
+                            field.onChange(value);
+                            const selectedService = allServices?.find(s => s.id === value);
+                            if (selectedService?.defaultDuration) {
+                                form.setValue('duration', {
+                                    hours: Math.floor(selectedService.defaultDuration / 60),
+                                    minutes: selectedService.defaultDuration % 60,
+                                });
+                            }
+                        }}
+                        value={field.value === DEFAULT_SERVICE_ID_PLACEHOLDER && allServices && allServices.length > 0 ? allServices[0].id : field.value}
                         disabled={isLoadingServices || (allServices && !allServices.length)}
                         >
                         <FormControl><SelectTrigger><SelectValue placeholder={isLoadingServices ? "Cargando..." : "Seleccionar servicio"} /></SelectTrigger></FormControl>
@@ -688,7 +698,7 @@ export function AppointmentEditDialog({ appointment, isOpen, onOpenChange, onApp
                   <FormField control={form.control} name={`addedServices.${index}.serviceId`} render={({ field }) => (
                       <FormItem className="col-span-full"><FormLabel className="text-xs">Servicio Adicional {index + 1}</FormLabel>
                         <Select onValueChange={field.onChange} value={field.value || ''} disabled={!allServices?.length}>
-                          <FormControl><SelectTrigger><SelectValue placeholder={servicesList?.length ? "Seleccionar servicio" : "No hay servicios"} /></SelectTrigger></FormControl>
+                          <FormControl><SelectTrigger><SelectValue placeholder={allServices?.length ? "Seleccionar servicio" : "No hay servicios"} /></SelectTrigger></FormControl>
                           <SelectContent>{allServices?.map(s => <SelectItem key={`added-${s.id}-${index}`} value={s.id}>{s.name}</SelectItem>)}</SelectContent>
                         </Select><FormMessage />
                       </FormItem>
