@@ -164,7 +164,7 @@ export type ProfessionalFormData = z.infer<typeof ProfessionalFormSchema>;
 
 
 export const AppointmentUpdateSchema = z.object({
-  status: z.string().refine(val => appointmentStatusKeys.includes(val as any), {message: "Estado inválido"}),
+  status: z.string().refine(val => appointmentStatusKeys.includes(val as any), {message: "Estado inválido"}).optional(),
   serviceId: z.string().min(1, "Servicio es requerido.").optional(),
   appointmentDate: z.date({ required_error: "Fecha de la cita es requerida."}).optional(),
   appointmentTime: z.string().regex(/^([01]\d|2[0-3]):([0-5]\d)$/, "Hora inválida. Use formato HH:MM.").optional(),
