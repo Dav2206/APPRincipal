@@ -251,6 +251,10 @@ const DailyTimelineComponent = ({ professionals, appointments, timeSlots, onAppo
 
   // --- Touch Event Handlers ---
   const handleTouchStart = (e: React.TouchEvent<HTMLDivElement>, blockId: string, appointmentId: string, serviceId: string, isMainService: boolean) => {
+    // Crucial fix: Prevent page scroll when starting a vertical drag
+    if (isVerticalDragEnabled && !isDragDropEnabled) {
+      e.preventDefault();
+    }
     if (scrollAreaRef.current) {
       const viewport = scrollAreaRef.current.querySelector<HTMLDivElement>('div[style*="overflow"]');
       if (viewport) viewport.style.overflowX = 'hidden';
@@ -262,7 +266,7 @@ const DailyTimelineComponent = ({ professionals, appointments, timeSlots, onAppo
   const handleTouchMove = (e: React.TouchEvent<HTMLDivElement>) => {
     if (!draggedItemId) return;
     
-    // Prevent the default touch action (scrolling) ONLY when dragging is active.
+    // This is the key fix: prevent default scroll/zoom actions WHILE dragging
     e.preventDefault();
 
     const touch = e.touches[0];
