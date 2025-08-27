@@ -261,7 +261,10 @@ const DailyTimelineComponent = ({ professionals, appointments, timeSlots, onAppo
 
   const handleTouchMove = (e: React.TouchEvent<HTMLDivElement>) => {
     if (!draggedItemId) return;
+    
+    // Prevent the default touch action (scrolling) ONLY when dragging is active.
     e.preventDefault();
+
     const touch = e.touches[0];
     const targetElement = document.elementFromPoint(touch.clientX, touch.clientY);
     
