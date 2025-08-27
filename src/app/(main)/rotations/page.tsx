@@ -1,21 +1,39 @@
 
-
 "use client";
 
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
-import { Users, Calendar, Plane, Sun, Star, Loader2, GripVertical } from 'lucide-react';
+import { Users, Calendar, Plane, Sun, Star, Loader2, GripVertical, ChevronLeft, ChevronRight } from 'lucide-react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { getProfessionals, getContractDisplayStatus, getLocations } from '@/lib/data';
+import { getProfessionals, getContractDisplayStatus, getLocations, getProfessionalAvailabilityForDate } from '@/lib/data';
 import type { Professional, Location, LocationId } from '@/types';
 import { useAuth } from '@/contexts/auth-provider';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { cn } from '@/lib/utils';
+import { format, startOfWeek, endOfWeek, addDays, eachDayOfInterval } from 'date-fns';
+import { es } from 'date-fns/locale';
 
+// --- Data Structures ---
+interface RotationGroup {
+  id: string;
+  name: string;
+  professionals: Professional[];
+}
+
+interface VacationInfo {
+  nombre: string;
+  periodo: string;
+  regreso: string;
+  estado?: string;
+}
+
+interface PlannerTimeSlot {
+    time: string;
+    schedule: { names: (string | { name: string; status: 'vacation' | 'rest' | 'cover' })[] }[];
+}
 
 // --- Initial Data (will be part of state now) ---
 const initialDomingosDataHiguereta = [
@@ -37,10 +55,8 @@ const initialDomingosDataHiguereta = [
     { fecha: "19-Oct", feriado: false, grupo: 2, encargada: '' },
 ];
 
-
 const feriadosGrupo1 = ['PILAR', 'ISABEL', 'HEIDDY', 'GLORIA', 'LUCILA'];
 const feriadosGrupo2 = ['ANGELA', 'LIZ', 'LEYDI', 'VICTORIA', 'LUCY'];
-
 
 const initialDomingosDataSanAntonio = [
   { fecha: "7-Set", grupo: 1 },
@@ -57,7 +73,7 @@ const initialDomingosDataSanAntonio = [
   { fecha: "23-Nov", grupo: 3 },
 ];
 
-const vacaciones = [
+const vacaciones: VacationInfo[] = [
   { nombre: 'CARMEN', periodo: '02/05 - 08/05 (7dias)', regreso: '' },
   { nombre: 'LEYDI', periodo: '08/05 - 22/05 (15dias)', regreso: '' },
   { nombre: 'ISABEL', periodo: '30/06 - 05/07 (6dias)', regreso: '6-Jul' },
@@ -73,75 +89,22 @@ const vacaciones = [
   { nombre: 'HEIDDY', periodo: '', regreso: '' },
 ];
 
-// --- New Data Structure for Visual Planner ---
-const scheduleData = {
-    "higuereta": {
-        "days": ["LUNES 1", "MARTES 2", "MIERCOLES 3", "JUEVES 4", "VIERNES 5"],
-        "timeSlots": [
-            {
-                "time": "9am",
-                "schedule": [
-                    { "names": ["Pilar", { "name": "Lucila", "status": "vacation" }] },
-                    { "names": ["Pilar", { "name": "Lucila", "status": "vacation" }] },
-                    { "names": ["Pilar", { "name": "Lucila", "status": "vacation" }] },
-                    { "names": ["Pilar", { "name": "Lucila", "status": "vacation" }] },
-                    { "names": ["Pilar", { "name": "Lucila", "status": "vacation" }] }
-                ]
-            },
-            {
-                "time": "10am",
-                "schedule": [
-                    { "names": ["Liz", "Leydi"] },
-                    { "names": ["Liz", "Leydi"] },
-                    { "names": ["Liz", { "name": "Leydi", "status": "rest" }] },
-                    { "names": ["Liz", "Leydi", { "name": "Lucy", "status": "cover" }] },
-                    { "names": ["Liz", "Leydi", { "name": "Lucy", "status": "cover" }] }
-                ]
-            },
-            {
-                "time": "11am",
-                "schedule": [
-                    { "names": ["Victoria", "Angela", "Gloria"] },
-                    { "names": ["Victoria", "Angela", { "name": "Gloria", "status": "rest" }] },
-                    { "names": ["Victoria", { "name": "Angela", "status": "rest" }, "Gloria"] },
-                    { "names": ["Victoria", "Angela", "Gloria"] },
-                    { "names": ["Victoria", "Angela", "Gloria"] }
-                ]
-            },
-            {
-                "time": "12:30pm",
-                "schedule": [
-                    { "names": [{ "name": "Isabel", "status": "rest" }, "Heiddy"] },
-                    { "names": ["Isabel", "Heiddy"] },
-                    { "names": [{ "name": "Isabel", "status": "rest" }, "Heiddy"] },
-                    { "names": ["Isabel", { "name": "Heiddy", "status": "rest" }] },
-                    { "names": ["Isabel", { "name": "Heiddy", "status": "rest" }] }
-                ]
-            }
-        ]
-    }
-};
 
-const NameBadge = ({ item }: { item: string | { name: string; status: 'vacation' | 'rest' | 'cover' } }) => {
-    if (typeof item === 'string') {
-        return <div className="p-1">{item}</div>;
-    }
+// --- Components ---
+const NameBadge = ({ item }: { item: { name: string; status: 'working' | 'rest' | 'vacation' | 'cover' | 'transfer_in' | 'transfer_out' } }) => {
     const { name, status } = item;
     const colorClasses = {
-        vacation: 'bg-orange-200 text-orange-800',
-        rest: 'bg-yellow-200 text-yellow-800',
-        cover: 'bg-green-200 text-green-800',
+        working: 'bg-green-100 text-green-800',
+        rest: 'bg-yellow-100 text-yellow-800',
+        vacation: 'bg-orange-100 text-orange-800',
+        cover: 'bg-blue-100 text-blue-800',
+        transfer_in: 'bg-indigo-100 text-indigo-800',
+        transfer_out: 'bg-pink-100 text-pink-800',
     };
-    return <div className={cn('p-1 rounded-md', colorClasses[status])}>{name}</div>;
+    return <div className={cn('p-1 text-xs rounded-md', colorClasses[status])}>{name}</div>;
 };
 
-
-interface RotationGroup {
-  id: string;
-  name: string;
-  professionals: Professional[];
-}
-
+// --- Page Component ---
 export default function RotationsPage() {
   const { user } = useAuth();
   const [activeProfessionals, setActiveProfessionals] = useState<Professional[]>([]);
@@ -153,6 +116,14 @@ export default function RotationsPage() {
 
   const [domingosHiguereta, setDomingosHiguereta] = useState(initialDomingosDataHiguereta);
   const [domingosSanAntonio, setDomingosSanAntonio] = useState(initialDomingosDataSanAntonio);
+
+  const [viewDate, setViewDate] = useState(new Date());
+
+  const displayedWeek = useMemo(() => {
+      const start = startOfWeek(viewDate, { weekStartsOn: 1 }); // Monday
+      const end = endOfWeek(viewDate, { weekStartsOn: 1 }); // Sunday
+      return { start, end, days: eachDayOfInterval({ start, end }) };
+  }, [viewDate]);
 
   useEffect(() => {
     async function loadInitialData() {
@@ -181,7 +152,6 @@ export default function RotationsPage() {
             initialUnassigned[loc.id] = activeProfs.filter(p => p.locationId === loc.id);
         });
 
-
         setRotationGroups(initialGroups);
         setUnassignedProfessionals(initialUnassigned);
 
@@ -209,7 +179,6 @@ export default function RotationsPage() {
     const profToMove = activeProfessionals.find(p => p.id === profId);
     if (!profToMove) return;
 
-    // Remove from unassigned list for that location
     setUnassignedProfessionals(prev => {
         const newUnassigned = {...prev};
         if(newUnassigned[locationId]) {
@@ -221,12 +190,10 @@ export default function RotationsPage() {
     setRotationGroups(prev => {
         const newGroups = {...prev};
         if (newGroups[locationId]) {
-             // Remove from any group it might be in already across all locations
             Object.keys(newGroups).forEach(locId => {
                 newGroups[locId as LocationId] = newGroups[locId as LocationId].map(g => ({...g, professionals: g.professionals.filter(p => p.id !== profId)}));
             });
             
-            // Add to the new group
             const targetGroupIndex = newGroups[locationId].findIndex(g => g.id === targetGroupId);
             if (targetGroupIndex !== -1 && !newGroups[locationId][targetGroupIndex].professionals.some(p => p.id === profId)) {
                newGroups[locationId][targetGroupIndex].professionals.push(profToMove);
@@ -243,7 +210,6 @@ export default function RotationsPage() {
      const profToMove = activeProfessionals.find(p => p.id === profId);
      if (!profToMove) return;
 
-     // Remove from any group it might be in
      setRotationGroups(prev => {
         const newGroups = {...prev};
         Object.keys(newGroups).forEach(locId => {
@@ -252,7 +218,6 @@ export default function RotationsPage() {
         return newGroups;
      });
     
-     // Add to unassigned ONLY if it belongs to that location
      if (profToMove.locationId === locationId) {
         setUnassignedProfessionals(prev => {
             const newUnassigned = {...prev};
@@ -272,7 +237,7 @@ export default function RotationsPage() {
     }
   };
 
-
+  // --- Components ---
   const RotationPlanner = ({ location }: { location: Location }) => {
     const groups = rotationGroups[location.id] || [];
     const unassigned = unassignedProfessionals[location.id] || [];
@@ -328,49 +293,88 @@ export default function RotationsPage() {
     );
   };
   
-  const VisualPlanner = ({ locationId }: { locationId: 'higuereta' }) => {
-    const data = scheduleData[locationId];
-    if (!data) return null;
+  const VisualPlanner = () => {
+    const professionalsByLocation: Record<LocationId, Professional[]> = locations.reduce((acc, loc) => {
+        acc[loc.id] = activeProfessionals.filter(p => p.locationId === loc.id);
+        return acc;
+    }, {} as Record<LocationId, Professional[]>);
 
     return (
         <Card>
             <CardHeader>
-                <CardTitle>Planificador Semanal Visual (Ejemplo Higuereta)</CardTitle>
-                <CardDescription>
-                    Vista de la semana del 1 al 5 de Septiembre, mostrando los turnos y estados del personal.
-                </CardDescription>
+                <CardTitle className="text-xl">Planificador Semanal Visual</CardTitle>
+                <div className="flex items-center justify-between">
+                  <CardDescription>
+                      Vista de la semana del {format(displayedWeek.start, "d 'de' LLLL", {locale: es})} al {format(displayedWeek.end, "d 'de' LLLL", {locale: es})}.
+                  </CardDescription>
+                  <div className="flex items-center gap-2">
+                      <Button variant="outline" size="icon" onClick={() => setViewDate(prev => addDays(prev, -7))}><ChevronLeft/></Button>
+                      <Button variant="outline" size="sm" onClick={() => setViewDate(new Date())}>Esta Semana</Button>
+                      <Button variant="outline" size="icon" onClick={() => setViewDate(prev => addDays(prev, 7))}><ChevronRight/></Button>
+                  </div>
+                </div>
             </CardHeader>
             <CardContent>
                 <div className="border rounded-lg overflow-x-auto">
                     <Table className="min-w-max">
                         <TableHeader>
                             <TableRow>
-                                <TableHead className="w-[100px] font-semibold sticky left-0 bg-background z-10">HORA</TableHead>
-                                {data.days.map(day => <TableHead key={day} className="text-center font-semibold">{day}</TableHead>)}
+                                <TableHead className="w-[150px] font-semibold sticky left-0 bg-background z-10">PROFESIONAL</TableHead>
+                                {displayedWeek.days.map(day => (
+                                    <TableHead key={day.toISOString()} className="text-center font-semibold">
+                                        <span className="capitalize">{format(day, "EEEE", {locale: es})}</span>
+                                        <br/>
+                                        <span className="text-xs text-muted-foreground">{format(day, "dd/MM")}</span>
+                                    </TableHead>
+                                ))}
                             </TableRow>
                         </TableHeader>
                         <TableBody>
-                            {data.timeSlots.map(slot => (
-                                <TableRow key={slot.time}>
-                                    <TableCell className="font-semibold sticky left-0 bg-background z-10">{slot.time}</TableCell>
-                                    {slot.schedule.map((daySchedule, index) => (
-                                        <TableCell key={index} className="text-center p-1 align-top">
-                                            <div className="space-y-1">
-                                                {daySchedule.names.map((item, nameIndex) => (
-                                                    <NameBadge key={nameIndex} item={item} />
-                                                ))}
-                                            </div>
-                                        </TableCell>
+                            {locations.map(loc => (
+                                <React.Fragment key={loc.id}>
+                                    <TableRow className="bg-muted/50 hover:bg-muted/50">
+                                        <TableCell colSpan={8} className="font-bold text-primary sticky left-0 bg-muted/50 z-10">{loc.name}</TableCell>
+                                    </TableRow>
+                                    {(professionalsByLocation[loc.id] || []).map(prof => (
+                                        <TableRow key={prof.id}>
+                                            <TableCell className="font-semibold sticky left-0 bg-background z-10">{prof.firstName} {prof.lastName}</TableCell>
+                                            {displayedWeek.days.map(day => {
+                                                const availability = getProfessionalAvailabilityForDate(prof, day);
+                                                let status: 'working' | 'rest' | 'vacation' | 'transfer_out' | 'transfer_in' = 'rest';
+                                                let text = "Descansa";
+                                                
+                                                if (availability?.isWorking) {
+                                                    if (availability.workingLocationId === loc.id) {
+                                                        status = 'working';
+                                                        text = `${availability.startTime}-${availability.endTime}`;
+                                                    } else {
+                                                        status = 'transfer_out';
+                                                        text = `Traslado a ${locations.find(l=> l.id === availability.workingLocationId)?.name || '...'}`;
+                                                    }
+                                                } else if (availability?.reason?.toLowerCase().includes('vacaciones')) {
+                                                    status = 'vacation';
+                                                    text = "Vacaciones";
+                                                }
+
+                                                return (
+                                                    <TableCell key={day.toISOString()} className="text-center p-1 align-middle">
+                                                        <NameBadge item={{name: text, status}}/>
+                                                    </TableCell>
+                                                )
+                                            })}
+                                        </TableRow>
                                     ))}
-                                </TableRow>
+                                </React.Fragment>
                             ))}
                         </TableBody>
                     </Table>
                 </div>
-                <div className="mt-4 flex flex-wrap gap-x-4 gap-y-2 text-sm">
-                    <div className="flex items-center gap-2"><div className="w-4 h-4 rounded-full bg-orange-200"/><span>Vacaciones</span></div>
-                    <div className="flex items-center gap-2"><div className="w-4 h-4 rounded-full bg-yellow-200"/><span>Descanso</span></div>
-                    <div className="flex items-center gap-2"><div className="w-4 h-4 rounded-full bg-green-200"/><span>Cubre Turno</span></div>
+                 <div className="mt-4 flex flex-wrap gap-x-4 gap-y-2 text-sm">
+                    <div className="flex items-center gap-2"><div className="w-3 h-3 rounded-full bg-green-100 border border-green-300"/><span>Trabajando</span></div>
+                    <div className="flex items-center gap-2"><div className="w-3 h-3 rounded-full bg-yellow-100 border border-yellow-300"/><span>Descanso</span></div>
+                    <div className="flex items-center gap-2"><div className="w-3 h-3 rounded-full bg-orange-100 border border-orange-300"/><span>Vacaciones</span></div>
+                    <div className="flex items-center gap-2"><div className="w-3 h-3 rounded-full bg-indigo-100 border border-indigo-300"/><span>Traslado (Entrante)</span></div>
+                    <div className="flex items-center gap-2"><div className="w-3 h-3 rounded-full bg-pink-100 border border-pink-300"/><span>Traslado (Saliente)</span></div>
                 </div>
             </CardContent>
         </Card>
@@ -391,8 +395,8 @@ export default function RotationsPage() {
           </CardDescription>
         </CardHeader>
       </Card>
-
-      <VisualPlanner locationId="higuereta" />
+      
+      {isLoading ? <div className="flex justify-center p-8"><Loader2 className="h-10 w-10 animate-spin"/></div> : <VisualPlanner />}
       
       <Tabs defaultValue={locations[0]?.id || 'loading'} className="w-full">
         <TabsList>
