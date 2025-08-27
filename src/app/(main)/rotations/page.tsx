@@ -16,6 +16,7 @@ import { Button } from '@/components/ui/button';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator, DropdownMenuSub, DropdownMenuSubTrigger, DropdownMenuSubContent, DropdownMenuPortal } from '@/components/ui/dropdown-menu';
 import { cn } from '@/lib/utils';
 import { format, startOfWeek, endOfWeek, addDays, eachDayOfInterval, getHours, parse, getDay, startOfDay, parseISO } from 'date-fns';
+import { format as formatTz } from 'date-fns-tz';
 import { es } from 'date-fns/locale';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
@@ -93,7 +94,7 @@ export default function RotationsPage() {
 
   useEffect(() => {
     loadAllData();
-  }, [loadAllData]);
+  }, [loadAllData, viewDate]);
   
   const shiftTimes: Record<Shift, { start: number; end: number, display: string }> = {
     '9am': { start: 9, end: 10, display: '09:00' },
@@ -108,7 +109,6 @@ export default function RotationsPage() {
     const { start: shiftStartHour } = shiftTimes[shift];
 
     return allProfessionals
-        .filter(prof => !prof.isManager) // Exclude managers
         .map(prof => {
             const availability = getProfessionalAvailabilityForDate(prof, day);
             
@@ -137,7 +137,6 @@ export default function RotationsPage() {
     if (!selectedLocationId || selectedLocationId === 'all') return [];
 
     return allProfessionals
-      .filter(prof => !prof.isManager)
       .map(prof => {
           const availability = getProfessionalAvailabilityForDate(prof, day);
           if (prof.locationId === selectedLocationId && (!availability || !availability.isWorking)) {
@@ -156,7 +155,9 @@ export default function RotationsPage() {
     const professional = allProfessionals.find(p => p.id === professionalId);
     if (!professional) return;
     
-    const dateISO = format(day, "yyyy-MM-dd'T'12:00:00.000'Z'"); // Use a neutral time to avoid timezone shifts
+    // Use a method that is not affected by timezone to get the date string
+    const dateISO = formatTz(day, "yyyy-MM-dd'T'12:00:00.000'Z'", { timeZone: 'UTC' });
+    
     const existingOverrideIndex = (professional.customScheduleOverrides || []).findIndex(
       ov => format(parseISO(ov.date), 'yyyy-MM-dd') === format(parseISO(dateISO), 'yyyy-MM-dd')
     );
@@ -212,29 +213,31 @@ export default function RotationsPage() {
   const handleUpdateBaseSchedule = async (professionalId: string, dayOfWeek: DayOfWeekId, newStartTime: string, newEndTime: string) => {
     const professional = allProfessionals.find(p => p.id === professionalId);
     if (!professional) return;
-    
-    const updatedWorkSchedule = {
-      ...(professional.workSchedule || {}), 
-      [dayOfWeek]: { 
-        isWorking: true,
-        startTime: newStartTime,
-        endTime: newEndTime,
-      },
+
+    // Create a deep copy of the entire work schedule
+    const newWorkSchedule = JSON.parse(JSON.stringify(professional.workSchedule || {}));
+
+    // Update only the specific day
+    newWorkSchedule[dayOfWeek] = {
+      isWorking: true,
+      startTime: newStartTime,
+      endTime: newEndTime,
     };
 
     try {
-      await updateProfessional(professional.id, { workSchedule: updatedWorkSchedule as any });
-      const dayName = DAYS_OF_WEEK.find(d => d.id === dayOfWeek)?.name || 'día';
+      await updateProfessional(professional.id, { workSchedule: newWorkSchedule });
+      
+      const dayName = DAYS_OF_WEEK.find(d => d.id === dayOfWeek)?.name || 'día de la semana';
       toast({
         title: "Horario Base Actualizado",
-        description: `El horario de ${professional.firstName} para los ${dayName} ha sido actualizado.`,
+        description: `El horario de ${professional.firstName} para los ${dayName} ha sido actualizado a ${newStartTime} - ${newEndTime}.`,
       });
-      loadAllData();
+      await loadAllData(); // Await the data refresh to ensure UI is up-to-date
     } catch (error) {
       console.error("Error updating base schedule:", error);
       toast({ title: "Error", description: "No se pudo actualizar el horario base.", variant: "destructive"});
     }
-  };
+};
 
 
   const handleClearException = async (professionalId: string, day: Date) => {
@@ -337,7 +340,7 @@ export default function RotationsPage() {
                                 <TableCell className="font-bold text-center align-middle bg-blue-100 border border-gray-300">{shiftTimes[time].display}</TableCell>
                                 {displayedWeek.days.map(day => {
                                     const professionalsInSlot = getProfessionalsForShift(day, time);
-                                    const dayOfWeekId = format(day, 'EEEE', { locale: es }).toLowerCase() as DayOfWeekId;
+                                    const dayOfWeekId = DAYS_OF_WEEK[(getDay(day) + 6) % 7].id;
                                     return (
                                         <TableCell key={`${day.toISOString()}-${time}`} className="p-1 align-top h-24 border border-gray-300">
                                             <div className="space-y-1">
@@ -398,7 +401,6 @@ export default function RotationsPage() {
                              <TableCell colSpan={1} className="border-r border-gray-300"></TableCell>
                              {displayedWeek.days.map((day) => {
                                const restingProfessionals = getRestingProfessionalsForDay(day);
-                               const dayOfWeekId = format(day, 'EEEE', { locale: es }).toLowerCase() as DayOfWeekId;
                                return (
                                  <TableCell key={`resting-${day.toISOString()}`} className="p-1 align-top border-x border-gray-300">
                                    <div className="space-y-1">
