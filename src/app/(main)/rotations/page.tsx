@@ -76,7 +76,7 @@ export default function RotationsPage() {
       
       const activeProfs = allProfs.filter(prof => {
         const status = getContractDisplayStatus(prof.currentContract);
-        return (status === 'Activo' || status === 'Próximo a Vencer') && !prof.isManager;
+        return (status === 'Activo' || status === 'Próximo a Vencer');
       });
 
       setAllProfessionals(activeProfs);
@@ -141,7 +141,7 @@ export default function RotationsPage() {
           }
           return null;
       }).filter((item): item is NameBadgeProps => item !== null);
-  }, [allProfessionals, selectedLocationId]);
+  }, [allProfessionals, selectedLocationId, viewDate]);
 
   const handleDragStart = (e: React.DragEvent<HTMLDivElement>, professionalId: string, day: Date) => {
     if (!isDragAndDropEnabled) return;
