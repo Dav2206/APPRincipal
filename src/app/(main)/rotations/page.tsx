@@ -56,7 +56,7 @@ export default function RotationsPage() {
 
   const displayedWeek = useMemo(() => {
       const start = startOfWeek(viewDate, { weekStartsOn: 1 }); // Monday
-      const days = eachDayOfInterval({ start, end: addDays(start, 6) }).slice(0, 5); // Only Mon-Fri
+      const days = eachDayOfInterval({ start, end: addDays(start, 6) }); // Mon-Sun
       return { start, days };
   }, [viewDate]);
 
@@ -141,7 +141,7 @@ export default function RotationsPage() {
               <div>
                   <CardTitle className="text-xl">Planificador Semanal Visual (Higuereta)</CardTitle>
                    <CardDescription>
-                      Vista de la semana del {format(displayedWeek.start, "d 'de' LLLL", {locale: es})} al {format(addDays(displayedWeek.start, 4), "d 'de' LLLL 'de' yyyy", {locale: es})}.
+                      Vista de la semana del {format(displayedWeek.start, "d 'de' LLLL", {locale: es})} al {format(addDays(displayedWeek.start, 6), "d 'de' LLLL 'de' yyyy", {locale: es})}.
                   </CardDescription>
               </div>
               <div className="flex items-center gap-2">
@@ -183,7 +183,7 @@ export default function RotationsPage() {
                             </TableRow>
                         ))}
                          <TableRow>
-                            <TableCell className="font-bold text-center align-middle bg-blue-100 border-y border-gray-300" colSpan={6}>Descansos del Día</TableCell>
+                            <TableCell className="font-bold text-center align-middle bg-blue-100 border-y border-gray-300" colSpan={8}>Descansos del Día</TableCell>
                          </TableRow>
                          <TableRow>
                              <TableCell colSpan={1} className="border-r border-gray-300"></TableCell>
