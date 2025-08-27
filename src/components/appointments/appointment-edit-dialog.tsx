@@ -107,6 +107,7 @@ export function AppointmentEditDialog({ appointment, isOpen, onOpenChange, onApp
 
   const watchedAmountPaid = form.watch('amountPaid');
   const watchedAddedServices = form.watch('addedServices');
+  const watchedServiceId = form.watch('serviceId');
 
   const totalAmount = useMemo(() => {
     const mainAmount = Number(watchedAmountPaid) || 0;
@@ -287,6 +288,17 @@ export function AppointmentEditDialog({ appointment, isOpen, onOpenChange, onApp
       });
     }
   }, [isOpen, appointment, allServices, form]);
+
+  useEffect(() => {
+    if (watchedServiceId && allServices) {
+      const selectedService = allServices.find(s => s.id === watchedServiceId);
+      if (selectedService && selectedService.defaultDuration) {
+        const hours = Math.floor(selectedService.defaultDuration / 60);
+        const minutes = selectedService.defaultDuration % 60;
+        form.setValue('duration', { hours, minutes });
+      }
+    }
+  }, [watchedServiceId, allServices, form]);
 
 
   const fileToDataUri = (file: File): Promise<string> => {
@@ -616,7 +628,7 @@ export function AppointmentEditDialog({ appointment, isOpen, onOpenChange, onApp
                       render={({ field }) => (
                         <FormItem>
                           <FormLabel className="text-sm">Monto {serviceName} (S/)</FormLabel>
-                          <FormControl><Input type="number" step="0.01" {...field} value={field.value ?? ""} onChange={e => field.onChange(parseFloat(e.target.value) || undefined)}/></FormControl>
+                          <FormControl><Input type="number" step="0.01" {...field} value={field.value ?? ""} onChange={e => field.onChange(e.target.value ? parseFloat(e.target.value) : undefined)}/></FormControl>
                           <FormMessage />
                         </FormItem>
                       )}
@@ -665,7 +677,7 @@ export function AppointmentEditDialog({ appointment, isOpen, onOpenChange, onApp
           </div>
           
            {/* -- Section: Servicios Adicionales -- */}
-           {(form.watch('status') === APPOINTMENT_STATUS.CONFIRMED || form.watch('status') === APPOINTMENT_STATUS.COMPLETED) && !isLoadingServices && allServices && (
+           {(form.watch('status') === APPOINTMENT_STATUS.BOOKED || form.watch('status') === APPOINTMENT_STATUS.CONFIRMED || form.watch('status') === APPOINTMENT_STATUS.COMPLETED) && !isLoadingServices && allServices && (
              <div className="space-y-3 p-3 border rounded-lg bg-muted/30">
               <div className="flex justify-between items-center"><h4 className="text-md font-semibold flex items-center gap-2"><ShoppingBag/> Servicios Adicionales</h4>
                 <Button type="button" size="sm" variant="outline" onClick={() => appendAddedService({ serviceId: allServices?.length ? allServices[0].id : DEFAULT_SERVICE_ID_PLACEHOLDER, professionalId: NO_SELECTION_PLACEHOLDER, amountPaid: undefined, startTime: undefined })}><PlusCircle className="mr-2 h-4 w-4" /> Agregar</Button>
@@ -699,7 +711,7 @@ export function AppointmentEditDialog({ appointment, isOpen, onOpenChange, onApp
                     )}/>
                   )}
                    <FormField control={form.control} name={`addedServices.${index}.startTime`} render={({ field }) => (
-                      <FormItem><FormLabel className="text-xs">Hora Inicio</FormLabel>
+                      <FormItem><FormLabel className="text-xs">Hora de Inicio (Opcional)</FormLabel>
                         <FormControl><Input type="time" {...field} value={field.value || ''} /></FormControl><FormMessage />
                       </FormItem>
                   )}/>
