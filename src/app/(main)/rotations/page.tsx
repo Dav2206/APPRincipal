@@ -6,7 +6,7 @@ import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
-import { Users, Calendar, Plane, Sun, Star, Loader2, GripVertical, ChevronLeft, ChevronRight, MoveVertical, Edit2, Moon, Coffee, Sunrise, Sunset, Palette, MousePointerClick } from 'lucide-react';
+import { Users, Calendar, Plane, Sun, Star, Loader2, GripVertical, ChevronLeft, ChevronRight, MoveVertical, Edit2, Moon, Coffee, Sunrise, Sunset, Palette, MousePointerClick, RefreshCcw } from 'lucide-react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { getProfessionals, getContractDisplayStatus, getLocations, getProfessionalAvailabilityForDate, updateProfessional } from '@/lib/data';
 import type { Professional, Location, LocationId, ProfessionalFormData } from '@/types';
@@ -21,6 +21,7 @@ import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
 import { formatISO } from 'date-fns/formatISO';
+import type { DayOfWeekId } from '@/lib/constants';
 
 // --- Data Structures ---
 interface VacationInfo {
@@ -137,19 +138,17 @@ export default function RotationsPage() {
 
       return allProfessionals
         .filter(prof => {
-            return prof.locationId === selectedLocationId;
+            const availability = getProfessionalAvailabilityForDate(prof, day);
+            return prof.locationId === selectedLocationId && (!availability || !availability.isWorking);
         })
         .map(prof => {
           const availability = getProfessionalAvailabilityForDate(prof, day);
-          if (!availability || !availability.isWorking) {
-              const reason = availability?.reason || 'Descansa';
-              let status: NameBadgeStatus = 'resting';
-              if (reason.toLowerCase().includes('vacaciones')) {
-                 status = 'vacation';
-              }
-              return { name: prof.firstName, status, professionalId: prof.id };
+          const reason = availability?.reason || 'Descansa';
+          let status: NameBadgeStatus = 'resting';
+          if (reason.toLowerCase().includes('vacaciones')) {
+              status = 'vacation';
           }
-          return null;
+          return { name: prof.firstName, status, professionalId: prof.id };
       }).filter((item): item is NameBadgeProps => item !== null);
   }, [allProfessionals, selectedLocationId]);
 
@@ -209,6 +208,33 @@ export default function RotationsPage() {
       toast({ title: "Error", description: "No se pudo actualizar el horario.", variant: "destructive"});
     }
   };
+
+  const handleUpdateBaseSchedule = async (professionalId: string, dayOfWeek: DayOfWeekId, newStartTime: string, newEndTime: string) => {
+    const professional = allProfessionals.find(p => p.id === professionalId);
+    if (!professional) return;
+    
+    const updatedWorkSchedule = {
+      ...professional.workSchedule,
+      [dayOfWeek]: {
+        isWorking: true,
+        startTime: newStartTime,
+        endTime: newEndTime,
+      },
+    };
+
+    try {
+      await updateProfessional(professional.id, { workSchedule: updatedWorkSchedule as any });
+      toast({
+        title: "Horario Base Actualizado",
+        description: `El horario de ${professional.firstName} para los ${dayOfWeek} ha sido actualizado.`,
+      });
+      loadAllData();
+    } catch (error) {
+      console.error("Error updating base schedule:", error);
+      toast({ title: "Error", description: "No se pudo actualizar el horario base.", variant: "destructive"});
+    }
+  };
+
 
   const handleClearException = async (professionalId: string, day: Date) => {
     const professional = allProfessionals.find(p => p.id === professionalId);
@@ -310,6 +336,7 @@ export default function RotationsPage() {
                                 <TableCell className="font-bold text-center align-middle bg-blue-100 border border-gray-300">{shiftTimes[time].display}</TableCell>
                                 {displayedWeek.days.map(day => {
                                     const professionalsInSlot = getProfessionalsForShift(day, time);
+                                    const dayOfWeekId = format(day, 'EEEE', { locale: es }).toLowerCase() as DayOfWeekId;
                                     return (
                                         <TableCell key={`${day.toISOString()}-${time}`} className="p-1 align-top h-24 border border-gray-300">
                                             <div className="space-y-1">
@@ -323,7 +350,7 @@ export default function RotationsPage() {
                                                         <DropdownMenuPortal>
                                                           <DropdownMenuContent>
                                                             <DropdownMenuSub>
-                                                                <DropdownMenuSubTrigger>Cambiar Horario Habitual (Este Día)</DropdownMenuSubTrigger>
+                                                                <DropdownMenuSubTrigger>Cambiar Horario (Solo este día)</DropdownMenuSubTrigger>
                                                                 <DropdownMenuSubContent>
                                                                     <DropdownMenuItem onClick={() => handleAction(item.professionalId, day, 'special_shift', { startTime: '09:00', endTime: '18:00' })}>09:00 - 18:00</DropdownMenuItem>
                                                                     <DropdownMenuItem onClick={() => handleAction(item.professionalId, day, 'special_shift', { startTime: '10:00', endTime: '19:00' })}>10:00 - 19:00</DropdownMenuItem>
@@ -332,7 +359,16 @@ export default function RotationsPage() {
                                                                 </DropdownMenuSubContent>
                                                             </DropdownMenuSub>
                                                             <DropdownMenuSub>
-                                                                <DropdownMenuSubTrigger>Traslado a Sede</DropdownMenuSubTrigger>
+                                                                <DropdownMenuSubTrigger>Actualizar Horario Base (Semanal)</DropdownMenuSubTrigger>
+                                                                <DropdownMenuSubContent>
+                                                                     <DropdownMenuItem onClick={() => handleUpdateBaseSchedule(item.professionalId, dayOfWeekId, '09:00', '18:00')}>09:00 - 18:00</DropdownMenuItem>
+                                                                     <DropdownMenuItem onClick={() => handleUpdateBaseSchedule(item.professionalId, dayOfWeekId, '10:00', '19:00')}>10:00 - 19:00</DropdownMenuItem>
+                                                                     <DropdownMenuItem onClick={() => handleUpdateBaseSchedule(item.professionalId, dayOfWeekId, '11:00', '20:00')}>11:00 - 20:00</DropdownMenuItem>
+                                                                     <DropdownMenuItem onClick={() => handleUpdateBaseSchedule(item.professionalId, dayOfWeekId, '12:30', '21:30')}>12:30 - 21:30</DropdownMenuItem>
+                                                                </DropdownMenuSubContent>
+                                                            </DropdownMenuSub>
+                                                            <DropdownMenuSub>
+                                                                <DropdownMenuSubTrigger>Trasladar a Sede (Solo este día)</DropdownMenuSubTrigger>
                                                                 <DropdownMenuSubContent>
                                                                     {locations.filter(l => l.id !== selectedLocationId).map(loc => (
                                                                         <DropdownMenuItem key={loc.id} onClick={() => handleAction(item.professionalId, day, 'transfer', { locationId: loc.id, startTime: '10:00', endTime: '19:00' })}>{loc.name}</DropdownMenuItem>
@@ -343,7 +379,7 @@ export default function RotationsPage() {
                                                             <DropdownMenuItem onClick={() => handleAction(item.professionalId, day, 'rest')}>Marcar Descanso</DropdownMenuItem>
                                                             <DropdownMenuItem onClick={() => handleAction(item.professionalId, day, 'vacation')}>Marcar Vacaciones</DropdownMenuItem>
                                                             <DropdownMenuSeparator />
-                                                            <DropdownMenuItem className="text-destructive" onClick={() => handleClearException(item.professionalId, day)}>Limpiar Excepción</DropdownMenuItem>
+                                                            <DropdownMenuItem className="text-destructive focus:text-destructive" onClick={() => handleClearException(item.professionalId, day)}><RefreshCcw className="mr-2 h-4 w-4" />Limpiar Excepción</DropdownMenuItem>
                                                           </DropdownMenuContent>
                                                         </DropdownMenuPortal>
                                                     </DropdownMenu>
@@ -361,6 +397,7 @@ export default function RotationsPage() {
                              <TableCell colSpan={1} className="border-r border-gray-300"></TableCell>
                              {displayedWeek.days.map((day) => {
                                const restingProfessionals = getRestingProfessionalsForDay(day);
+                               const dayOfWeekId = format(day, 'EEEE', { locale: es }).toLowerCase() as DayOfWeekId;
                                return (
                                  <TableCell key={`resting-${day.toISOString()}`} className="p-1 align-top border-x border-gray-300">
                                    <div className="space-y-1">
@@ -374,14 +411,14 @@ export default function RotationsPage() {
                                          <DropdownMenuPortal>
                                            <DropdownMenuContent>
                                              <DropdownMenuSub>
-                                               <DropdownMenuSubTrigger>Asignar Turno Especial</DropdownMenuSubTrigger>
+                                               <DropdownMenuSubTrigger>Asignar Turno Especial (Solo este día)</DropdownMenuSubTrigger>
                                                <DropdownMenuSubContent>
                                                  <DropdownMenuItem onClick={() => handleAction(item.professionalId, day, 'special_shift', { startTime: '09:00', endTime: '18:00' })}>09:00 - 18:00</DropdownMenuItem>
                                                  <DropdownMenuItem onClick={() => handleAction(item.professionalId, day, 'special_shift', { startTime: '10:00', endTime: '19:00' })}>10:00 - 19:00</DropdownMenuItem>
                                                </DropdownMenuSubContent>
                                              </DropdownMenuSub>
                                              <DropdownMenuSeparator />
-                                             <DropdownMenuItem className="text-destructive" onClick={() => handleClearException(item.professionalId, day)}>Limpiar Excepción</DropdownMenuItem>
+                                             <DropdownMenuItem className="text-destructive focus:text-destructive" onClick={() => handleClearException(item.professionalId, day)}><RefreshCcw className="mr-2 h-4 w-4" />Limpiar Excepción</DropdownMenuItem>
                                            </DropdownMenuContent>
                                          </DropdownMenuPortal>
                                        </DropdownMenu>
