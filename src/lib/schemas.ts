@@ -1,7 +1,7 @@
 
 
 import { z } from 'zod';
-import { TIME_SLOTS, APPOINTMENT_STATUS_DISPLAY, DAYS_OF_WEEK } from '@/lib/constants';
+import { TIME_SLOTS, APPOINTMENT_STATUS, APPOINTMENT_STATUS_DISPLAY, DAYS_OF_WEEK } from '@/lib/constants';
 import type { DayOfWeekId, LocationId } from '@/lib/constants';
 import { getDay, differenceInCalendarDays, parseISO } from 'date-fns';
 
@@ -11,7 +11,7 @@ export const LoginSchema = z.object({
 });
 export type LoginFormData = z.infer<typeof LoginSchema>;
 
-const appointmentStatusKeys = Object.keys(APPOINTMENT_STATUS_DISPLAY) as (keyof typeof APPOINTMENT_STATUS_DISPLAY)[];
+const appointmentStatusKeys = Object.keys(APPOINTMENT_STATUS) as (keyof typeof APPOINTMENT_STATUS)[];
 const dayOfWeekIds = DAYS_OF_WEEK.map(day => day.id);
 
 

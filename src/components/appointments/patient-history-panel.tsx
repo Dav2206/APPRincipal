@@ -199,8 +199,8 @@ const PatientHistoryPanelComponent = ({ patient, onImageClick }: PatientHistoryP
                     <li key={appt.id} className="p-2 border-b last:border-b-0 text-xs">
                       <div className="flex justify-between items-center">
                         <span>{format(parseISO(appt.appointmentDateTime), "dd/MM/yy HH:mm", { locale: es })} - {appt.service?.name}</span>
-                        <Badge variant={appt.status === APPOINTMENT_STATUS.COMPLETED ? 'default' : 'destructive'} className={cn('capitalize text-xs', APPOINTMENT_STATUS_DISPLAY[appt.status as AppointmentStatus] === APPOINTMENT_STATUS_DISPLAY.Completado ? 'bg-green-600 text-white' : '')}>
-                          {APPOINTMENT_STATUS_DISPLAY[appt.status as AppointmentStatus] || appt.status}
+                        <Badge variant={appt.status === APPOINTMENT_STATUS.COMPLETED ? 'default' : 'destructive'} className={cn('capitalize text-xs', APPOINTMENT_STATUS_DISPLAY[appt.status as keyof typeof APPOINTMENT_STATUS_DISPLAY] === APPOINTMENT_STATUS_DISPLAY.Completado ? 'bg-green-600 text-white' : '')}>
+                          {APPOINTMENT_STATUS_DISPLAY[appt.status as keyof typeof APPOINTMENT_STATUS_DISPLAY] || appt.status}
                         </Badge>
                       </div>
                       {appt.professional && <p className="text-muted-foreground text-xs">Atendido por: {appt.professional.firstName} {appt.professional.lastName}</p>}

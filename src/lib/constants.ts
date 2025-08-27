@@ -1,4 +1,5 @@
 
+
       
 
 
@@ -43,7 +44,6 @@ export const APPOINTMENT_STATUS = {
   COMPLETED: 'completed', // Service finished and paid
   CANCELLED_CLIENT: 'cancelled_client',
   NO_SHOW: 'no_show',
-  CANCELLED_STAFF: 'cancelled_staff',
 } as const;
 
 export type AppointmentStatus = typeof APPOINTMENT_STATUS[keyof typeof APPOINTMENT_STATUS];
@@ -54,7 +54,6 @@ export const APPOINTMENT_STATUS_DISPLAY: Record<AppointmentStatus, string> = {
   [APPOINTMENT_STATUS.COMPLETED]: 'Completado',
   [APPOINTMENT_STATUS.CANCELLED_CLIENT]: 'Cancelado',
   [APPOINTMENT_STATUS.NO_SHOW]: 'No se presentó',
-  [APPOINTMENT_STATUS.CANCELLED_STAFF]: 'Cancelado por Staff',
 };
 
 

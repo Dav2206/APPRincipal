@@ -1,4 +1,5 @@
 
+
 "use client";
 
 import type { Appointment, Service, AppointmentStatus, Professional, Location } from '@/types';
@@ -82,7 +83,6 @@ const AppointmentCardComponent = ({ appointment, onUpdate, onImageClick }: Appoi
       case APPOINTMENT_STATUS.CONFIRMED: return 'default';
       case APPOINTMENT_STATUS.COMPLETED: return 'default';
       case APPOINTMENT_STATUS.CANCELLED_CLIENT:
-      case APPOINTMENT_STATUS.CANCELLED_STAFF:
       case APPOINTMENT_STATUS.NO_SHOW: return 'destructive';
       default: return 'secondary';
     }
@@ -209,7 +209,7 @@ const AppointmentCardComponent = ({ appointment, onUpdate, onImageClick }: Appoi
               variant={getStatusBadgeVariant(appointment.status)}
               className={`capitalize text-xs h-fit ${APPOINTMENT_STATUS_DISPLAY[appointment.status as AppointmentStatus] === APPOINTMENT_STATUS_DISPLAY.Completado ? 'bg-green-600 text-white' : '' }`}
             >
-              {APPOINTMENT_STATUS_DISPLAY[appointment.status as AppointmentStatus] || appointment.status}
+              {APPOINTMENT_STATUS_DISPLAY[appointment.status as keyof typeof APPOINTMENT_STATUS_DISPLAY] || appointment.status}
             </Badge>
           </div>
         </CardHeader>

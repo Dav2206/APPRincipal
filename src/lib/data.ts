@@ -870,7 +870,7 @@ interface GetAppointmentsOptions {
   patientId?: string;
   date?: Date;
   dateRange?: { start: Date; end: Date };
-  statuses?: AppointmentStatus[];
+  statuses?: (keyof typeof APPOINTMENT_STATUS)[];
   professionalIds?: string[];
 }
 
@@ -2073,6 +2073,7 @@ export async function mergePatients(primaryPatientId: string, duplicateIds: stri
 }
 
 // --- End Maintenance ---
+
 
 
 

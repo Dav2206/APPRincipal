@@ -3,7 +3,7 @@
 "use client";
 
 import type { Appointment, Service, AppointmentStatus, Professional, Location } from '@/types';
-import { PAYMENT_METHODS, USER_ROLES, APPOINTMENT_STATUS_DISPLAY, TIME_SLOTS, APPOINTMENT_STATUS } from '@/lib/constants';
+import { PAYMENT_METHODS, USER_ROLES, APPOINTMENT_STATUS, APPOINTMENT_STATUS_DISPLAY, TIME_SLOTS } from '@/lib/constants';
 import { format, parseISO, setHours, setMinutes, formatISO } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { CameraIcon, Loader2, PlusCircle, Trash2, ShoppingBag, ConciergeBell, Clock, CalendarIcon as CalendarIconLucide, XCircle, RefreshCcw, DollarSign, Edit, Info, Shuffle, StethoscopeIcon } from 'lucide-react';
@@ -749,7 +749,7 @@ export function AppointmentEditDialog({ appointment, isOpen, onOpenChange, onApp
                 </AlertDialog>
               )}
             </div>
-            <div className="flex flex-col-reverse sm:flex-row sm:justify-end sm:space-x-2">
+            <div className="flex flex-col-reverse sm:flex-row sm:justify-end sm:gap-2">
               <DialogClose asChild><Button type="button" variant="outline" className="w-full sm:w-auto">Cerrar</Button></DialogClose>
               <Button type="submit" className="w-full sm:w-auto" disabled={isUploadingImage || isLoadingServices || isDeleting}>
                 {(isUploadingImage || isLoadingServices || isDeleting) && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
