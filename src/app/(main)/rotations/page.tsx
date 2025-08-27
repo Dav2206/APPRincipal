@@ -15,12 +15,11 @@ import { useAppState } from '@/contexts/app-state-provider';
 import { Button } from '@/components/ui/button';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator, DropdownMenuSub, DropdownMenuSubTrigger, DropdownMenuSubContent, DropdownMenuPortal } from '@/components/ui/dropdown-menu';
 import { cn } from '@/lib/utils';
-import { format, startOfWeek, endOfWeek, addDays, eachDayOfInterval, getHours, parse, getDay, startOfDay } from 'date-fns';
+import { format, startOfWeek, endOfWeek, addDays, eachDayOfInterval, getHours, parse, getDay, startOfDay, parseISO } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
-import { formatISO, format as formatTz } from 'date-fns-tz';
 import type { DayOfWeekId } from '@/lib/constants';
 
 // --- Data Structures ---
@@ -109,6 +108,7 @@ export default function RotationsPage() {
     const { start: shiftStartHour } = shiftTimes[shift];
 
     return allProfessionals
+        .filter(prof => !prof.isManager) // Exclude managers
         .map(prof => {
             const availability = getProfessionalAvailabilityForDate(prof, day);
             
@@ -122,7 +122,7 @@ export default function RotationsPage() {
 
                     if (isTransfer) {
                         status = 'transfer';
-                    } else if (isSpecialShift) {
+                    } else if (isSpecialShift && !availability.reason?.toLowerCase().includes('vacaciones')) {
                         status = 'cover';
                     }
                     return { name: prof.firstName, status, professionalId: prof.id };
@@ -133,42 +133,41 @@ export default function RotationsPage() {
         .filter((item): item is NameBadgeProps => item !== null);
   }, [allProfessionals, selectedLocationId, shiftTimes]);
   
-  const getRestingProfessionalsForDay = useCallback((day: Date): NameBadgeProps[] => {
+ const getRestingProfessionalsForDay = useCallback((day: Date): NameBadgeProps[] => {
       if (!selectedLocationId || selectedLocationId === 'all') return [];
 
       return allProfessionals
-        .filter(prof => {
+        .filter(prof => !prof.isManager) // Exclude managers
+        .map(prof => {
             const availability = getProfessionalAvailabilityForDate(prof, day);
             // This professional's BASE location must be the selected one to appear in the resting list.
-            return prof.locationId === selectedLocationId && (!availability || !availability.isWorking);
-        })
-        .map(prof => {
-          const availability = getProfessionalAvailabilityForDate(prof, day);
-          const reason = availability?.reason || 'Descansa';
-          let status: NameBadgeStatus = 'resting';
-          if (reason.toLowerCase().includes('vacaciones')) {
-              status = 'vacation';
-          }
-          return { name: prof.firstName, status, professionalId: prof.id };
-      }).filter((item): item is NameBadgeProps => item !== null);
+            if (prof.locationId === selectedLocationId && (!availability || !availability.isWorking)) {
+              let status: NameBadgeStatus = 'resting';
+              if (availability?.reason?.toLowerCase().includes('vacaciones')) {
+                  status = 'vacation';
+              }
+              return { name: prof.firstName, status, professionalId: prof.id };
+            }
+            return null;
+        }).filter((item): item is NameBadgeProps => item !== null);
   }, [allProfessionals, selectedLocationId]);
 
   const handleAction = async (professionalId: string, day: Date, action: 'rest' | 'vacation' | 'special_shift' | 'transfer', details?: { locationId?: LocationId, startTime?: string, endTime?: string }) => {
     const professional = allProfessionals.find(p => p.id === professionalId);
     if (!professional) return;
     
-    // Correctly format the date to 'YYYY-MM-DD' regardless of timezone issues
-    const dateISO = formatTz(day, 'yyyy-MM-dd', { timeZone: 'UTC' });
+    // Use `formatISO` from 'date-fns' with `representation: 'date'` to get 'YYYY-MM-DD'
+    const dateISO = format(day, 'yyyy-MM-dd');
     const existingOverrideIndex = (professional.customScheduleOverrides || []).findIndex(
-      ov => formatTz(parseISO(ov.date), 'yyyy-MM-dd', { timeZone: 'UTC' }) === dateISO
+      ov => format(parseISO(ov.date), 'yyyy-MM-dd') === dateISO
     );
 
     let updatedOverrides = [...(professional.customScheduleOverrides || [])];
 
     const createOrUpdateOverride = (type: 'descanso' | 'turno_especial' | 'traslado', notes: string) => {
-        const newOverride = {
-            id: `override_${Date.now()}`,
-            date: dateISO,
+        const newOverride: any = {
+            id: existingOverrideIndex > -1 ? updatedOverrides[existingOverrideIndex].id : `override_${Date.now()}`,
+            date: dateISO, // Keep as string
             overrideType: type,
             isWorking: type !== 'descanso',
             startTime: type === 'descanso' ? undefined : details?.startTime,
@@ -177,9 +176,9 @@ export default function RotationsPage() {
             notes: notes
         };
         if (existingOverrideIndex > -1) {
-            updatedOverrides[existingOverrideIndex] = { ...updatedOverrides[existingOverrideIndex], ...newOverride, date: dateISO };
+            updatedOverrides[existingOverrideIndex] = newOverride;
         } else {
-            updatedOverrides.push(newOverride as any);
+            updatedOverrides.push(newOverride);
         }
     };
     
@@ -200,7 +199,7 @@ export default function RotationsPage() {
     
     try {
       const updatePayload: Partial<ProfessionalFormData> = {
-        customScheduleOverrides: updatedOverrides.map(ov => ({...ov, date: new Date(ov.date)}))
+        customScheduleOverrides: updatedOverrides
       };
       await updateProfessional(professional.id, updatePayload);
       toast({ title: "Horario Actualizado", description: `Se actualizó el estado de ${professional.firstName} para el ${format(day, 'PPPP', {locale: es})}.`});
@@ -228,7 +227,7 @@ export default function RotationsPage() {
       await updateProfessional(professional.id, { workSchedule: updatedWorkSchedule as any });
       toast({
         title: "Horario Base Actualizado",
-        description: `El horario de ${professional.firstName} para los ${dayOfWeek} ha sido actualizado.`,
+        description: `El horario de ${professional.firstName} para los ${format(new Date(2024,0,getDay(new Date(2024,0,1)) === 0 ? 1 : 2 - getDay(new Date())), 'EEEE', {locale:es})} ha sido actualizado.`,
       });
       loadAllData();
     } catch (error) {
@@ -242,14 +241,14 @@ export default function RotationsPage() {
     const professional = allProfessionals.find(p => p.id === professionalId);
     if (!professional) return;
     
-    const dateISOToClear = formatTz(day, 'yyyy-MM-dd', { timeZone: 'UTC' });
+    const dateISOToClear = format(day, 'yyyy-MM-dd');
     const updatedOverrides = (professional.customScheduleOverrides || []).filter(
-      ov => formatTz(parseISO(ov.date), 'yyyy-MM-dd', { timeZone: 'UTC' }) !== dateISOToClear
+      ov => format(parseISO(ov.date), 'yyyy-MM-dd') !== dateISOToClear
     );
 
     try {
       const updatePayload: Partial<ProfessionalFormData> = {
-        customScheduleOverrides: updatedOverrides.map(ov => ({...ov, date: new Date(ov.date)}))
+        customScheduleOverrides: updatedOverrides
       };
        await updateProfessional(professional.id, updatePayload);
        toast({ title: "Horario Restaurado", description: `Se eliminó la excepción para ${professional.firstName} el ${format(day, 'PPPP', {locale: es})}.`});

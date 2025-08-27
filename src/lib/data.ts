@@ -457,7 +457,7 @@ export async function updateProfessional (id: string, data: Partial<Professional
       professionalToUpdate.customScheduleOverrides = (data.customScheduleOverrides || []).map(ov => ({
         ...ov,
         id: ov.id || generateId(),
-        date: typeof ov.date === 'string' ? ov.date : formatISO(ov.date, { representation: 'date' }),
+        date: typeof ov.date === 'string' ? ov.date : format(ov.date, 'yyyy-MM-dd'),
         overrideType: ov.overrideType || 'descanso',
         isWorking: ov.overrideType !== 'descanso',
         startTime: ov.overrideType !== 'descanso' ? ov.startTime : undefined,
@@ -1355,7 +1355,7 @@ export async function updateAppointment(
     const photosToDelete = originalPhotoUrls.filter(originalUrl => !existingPhotoUrlsFromForm.includes(originalUrl));
     
     if (photosToDelete.length > 0) {
-      console.log(`[data.ts] Fotos marcadas para eliminar de Storage:`, photosToDelete);
+      console.log(`[data.ts] Fotos marcadas para eliminación de Storage:`, photosToDelete);
       await Promise.all(photosToDelete.map(async (url) => {
         try {
           if (url && url.startsWith('http')) {
@@ -1611,11 +1611,11 @@ export async function getPatientAppointmentHistory(patientId: string): Promise<{
 
 // --- Professional Availability ---
 export function getProfessionalAvailabilityForDate(professional: Professional, targetDate: Date): { startTime: string; endTime: string; isWorking: boolean; reason?: string, notes?: string, workingLocationId?: LocationId | null } | null {
-  const targetDateISO = formatISO(targetDate, { representation: 'date' });
+  const targetDateISO = format(targetDate, 'yyyy-MM-dd');
 
   // First, check for a specific override for the target date.
   const customOverride = professional.customScheduleOverrides?.find(
-    (override) => parseISO(override.date).toISOString().split('T')[0] === targetDateISO
+    (override) => format(parseISO(override.date), 'yyyy-MM-dd') === targetDateISO
   );
 
   if (customOverride) {
@@ -2073,6 +2073,7 @@ export async function mergePatients(primaryPatientId: string, duplicateIds: stri
 }
 
 // --- End Maintenance ---
+
 
 
 
