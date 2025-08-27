@@ -1,5 +1,4 @@
 
-
 "use client";
 
 import type { Professional, ProfessionalFormData, Contract, Location } from '@/types';
@@ -27,7 +26,7 @@ import {
   DialogDescription,
 } from '@/components/ui/dialog';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage, FormDescription } from "@/components/ui/form";
-import { PlusCircle, Edit2, Users, Search, Loader2, CalendarDays, Clock, Trash2, Calendar as CalendarIconLucide, AlertTriangle, Moon, ChevronsDown, FileText, Building, Gift, Briefcase as BriefcaseIcon, ChevronLeft, ChevronRight, Bed, DollarSign, Percent, Save } from 'lucide-react';
+import { PlusCircle, Edit2, Users, Search, Loader2, CalendarDays, Clock, Trash2, Calendar as CalendarIconLucide, AlertTriangle, Moon, ChevronsDown, FileText, Building, Gift, Briefcase as BriefcaseIcon, ChevronLeft, ChevronRight, Bed, DollarSign, Percent, Save, Layers } from 'lucide-react';
 import { useForm, useFieldArray, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { ProfessionalFormSchema } from '@/lib/schemas';
@@ -45,6 +44,19 @@ import Link from 'next/link';
 
 
 const NO_SPECIFY_BIRTHDAY_ITEM_VALUE = "_no_specify_birthday_";
+
+interface GroupedException {
+    id: string;
+    startDate: Date;
+    endDate: Date;
+    overrideType: 'descanso' | 'turno_especial' | 'traslado';
+    notes?: string | null;
+    locationId?: LocationId | null;
+    startTime?: string | null;
+    endTime?: string | null;
+    originalIndices: number[];
+}
+
 
 export default function NewProfessionalPage() {
     const { user } = useAuth();
@@ -118,6 +130,57 @@ export default function NewProfessionalPage() {
         name: "customScheduleOverrides"
     });
     
+     const groupedExceptions = useMemo(() => {
+        const sortedFields = [...customScheduleFields]
+            .map((field, index) => ({ ...field, originalIndex: index }))
+            .filter(field => isSameMonth(field.date, overrideDisplayDate))
+            .sort((a, b) => a.date.getTime() - b.date.getTime());
+
+        if (sortedFields.length === 0) return [];
+
+        const groups: GroupedException[] = [];
+        let currentGroup: GroupedException | null = null;
+
+        for (const field of sortedFields) {
+            const isSameGroup =
+                currentGroup &&
+                field.overrideType === currentGroup.overrideType &&
+                (field.notes || null) === (currentGroup.notes || null) &&
+                (field.locationId || null) === (currentGroup.locationId || null) &&
+                (field.startTime || null) === (currentGroup.startTime || null) &&
+                (field.endTime || null) === (currentGroup.endTime || null) &&
+                differenceInDays(field.date, currentGroup.endDate) === 1;
+
+            if (isSameGroup) {
+                currentGroup.endDate = field.date;
+                currentGroup.originalIndices.push(field.originalIndex);
+            } else {
+                if (currentGroup) groups.push(currentGroup);
+                currentGroup = {
+                    id: field.id,
+                    startDate: field.date,
+                    endDate: field.date,
+                    overrideType: field.overrideType,
+                    notes: field.notes,
+                    locationId: field.locationId,
+                    startTime: field.startTime,
+                    endTime: field.endTime,
+                    originalIndices: [field.originalIndex],
+                };
+            }
+        }
+        if (currentGroup) groups.push(currentGroup);
+        return groups;
+    }, [customScheduleFields, overrideDisplayDate]);
+
+    const handleRemoveGroup = (group: GroupedException) => {
+        // Sort indices in descending order to avoid shifting issues
+        const indicesToRemove = [...group.originalIndices].sort((a, b) => b - a);
+        indicesToRemove.forEach(index => {
+            removeCustomSchedule(index);
+        });
+    };
+
     const generateId = () => Math.random().toString(36).substring(2, 11);
 
     const onSubmit = async (data: ProfessionalFormData) => {
@@ -426,80 +489,41 @@ export default function NewProfessionalPage() {
                                     </div>
                                 </div>
                                 
-                                {customScheduleFields.filter(field => isSameMonth(field.date, overrideDisplayDate)).map((field, index) => {
-                                const overrideType = form.watch(`customScheduleOverrides.${index}.overrideType`);
-                                return (
-                                <div key={field.id} className="p-4 border rounded-lg space-y-3 relative bg-muted/30">
-                                    <Button type="button" variant="ghost" size="icon" className="absolute top-2 right-2 h-7 w-7" onClick={() => removeCustomSchedule(index)}>
-                                        <Trash2 className="h-4 w-4 text-destructive" /> <span className="sr-only">Eliminar Excepción</span>
-                                    </Button>
-                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                    <FormField control={form.control} name={`customScheduleOverrides.${index}.date`} render={({ field: dateField }) => (
-                                        <FormItem className="flex flex-col"><FormLabel>Fecha Específica</FormLabel>
-                                        <Popover><PopoverTrigger asChild><FormControl>
-                                            <Button variant={"outline"} className={cn("w-full pl-3 text-left font-normal", !dateField.value && "text-muted-foreground")}>
-                                                {dateField.value ? format(dateField.value, "PPP", {locale: es}) : <span>Seleccionar fecha</span>} <CalendarIconLucide className="ml-auto h-4 w-4 opacity-50" />
-                                            </Button></FormControl></PopoverTrigger>
-                                            <PopoverContent className="w-auto p-0" align="start"><Calendar mode="single" selected={dateField.value} onSelect={dateField.onChange} initialFocus month={overrideDisplayDate} /></PopoverContent>
-                                        </Popover><FormMessage /></FormItem>
-                                    )}/>
-                                    <FormField control={form.control} name={`customScheduleOverrides.${index}.overrideType`} render={({ field: typeField }) => (
-                                        <FormItem><FormLabel>Tipo de Excepción</FormLabel>
-                                        <Select onValueChange={typeField.onChange} value={typeField.value}>
-                                            <FormControl><SelectTrigger><SelectValue placeholder="Seleccionar tipo" /></SelectTrigger></FormControl>
-                                            <SelectContent>
-                                                <SelectItem value="descanso">Descanso (No trabaja)</SelectItem>
-                                                <SelectItem value="turno_especial">Turno Especial (en Sede Base)</SelectItem>
-                                                <SelectItem value="traslado">Traslado (a otra Sede)</SelectItem>
-                                            </SelectContent>
-                                        </Select><FormMessage /></FormItem>
-                                    )}/>
-                                    </div>
-
-                                    {overrideType === 'traslado' && (
-                                    <FormField control={form.control} name={`customScheduleOverrides.${index}.locationId`} render={({ field: locField }) => (
-                                        <FormItem><FormLabel className="text-xs">Sede de Destino</FormLabel>
-                                        <Select onValueChange={locField.onChange} value={locField.value || ""}>
-                                            <FormControl><SelectTrigger><SelectValue placeholder="Seleccionar sede de destino" /></SelectTrigger></FormControl>
-                                            <SelectContent>
-                                                {locations.map(loc => (<SelectItem key={`ov-loc-${loc.id}-${index}`} value={loc.id}>{loc.name}</SelectItem>))}
-                                            </SelectContent>
-                                        </Select>
-                                        <FormMessage /></FormItem>
-                                    )}/>
-                                    )}
-
-                                    {(overrideType === 'turno_especial' || overrideType === 'traslado') && (
-                                    <div className="grid grid-cols-2 gap-3">
-                                        <FormField control={form.control} name={`customScheduleOverrides.${index}.startTime`} render={({ field: stField }) => (
-                                        <FormItem><FormLabel className="text-xs">Hora Inicio</FormLabel>
-                                            <Select onValueChange={stField.onChange} value={stField.value || ""}><FormControl><SelectTrigger><SelectValue placeholder="HH:MM"/></SelectTrigger></FormControl>
-                                            <SelectContent>{TIME_SLOTS.map(slot => (<SelectItem key={`cs-start-${slot}`} value={slot}>{slot}</SelectItem>))}</SelectContent>
-                                            </Select><FormMessage /></FormItem>
-                                        )}/>
-                                        <FormField control={form.control} name={`customScheduleOverrides.${index}.endTime`} render={({ field: etField }) => (
-                                        <FormItem><FormLabel className="text-xs">Hora Fin</FormLabel>
-                                            <Select onValueChange={etField.onChange} value={etField.value || ""}><FormControl><SelectTrigger><SelectValue placeholder="HH:MM"/></SelectTrigger></FormControl>
-                                            <SelectContent>{TIME_SLOTS.map(slot => (<SelectItem key={`cs-end-${slot}`} value={slot}>{slot}</SelectItem>))}</SelectContent>
-                                            </Select><FormMessage /></FormItem>
-                                        )}/>
-                                    </div>
-                                    )}
-                                    <FormField control={form.control} name={`customScheduleOverrides.${index}.notes`} render={({ field: notesField }) => (
-                                    <FormItem><FormLabel className="text-xs">Notas (Razón del descanso, detalle del turno, etc.)</FormLabel><FormControl><Textarea placeholder="Ej: Vacaciones, Cita médica, Turno especial tarde" {...notesField} value={notesField.value ?? ''} /></FormControl><FormMessage /></FormItem>
-                                    )}/>
-                                </div>
-                                )
-                                })}
-                                {customScheduleFields.filter(field => isSameMonth(field.date, overrideDisplayDate)).length === 0 && (
+                                <div className="space-y-2">
+                                {groupedExceptions.length > 0 ? (
+                                    groupedExceptions.map((group) => (
+                                        <div key={group.id} className="p-3 border rounded-lg space-y-1 relative bg-muted/50">
+                                            <Button type="button" variant="ghost" size="icon" className="absolute top-1 right-1 h-7 w-7" onClick={() => handleRemoveGroup(group)}>
+                                                <Trash2 className="h-4 w-4 text-destructive" />
+                                            </Button>
+                                            <div className="font-semibold text-sm flex items-center gap-2">
+                                                {group.overrideType === 'descanso' ? <Bed size={16} className="text-cyan-600"/> : group.overrideType === 'traslado' ? <BriefcaseIcon size={16} className="text-purple-600"/> : <Clock size={16} className="text-blue-600" />}
+                                                <Badge variant="outline" className="capitalize">{group.overrideType.replace('_', ' ')}</Badge>
+                                            </div>
+                                            <p className="text-sm">
+                                                {isSameDay(group.startDate, group.endDate)
+                                                    ? format(group.startDate, "PPP", { locale: es })
+                                                    : `Del ${format(group.startDate, "d 'de' LLL", { locale: es })} al ${format(group.endDate, "d 'de' LLL, yyyy", { locale: es })}`
+                                                }
+                                            </p>
+                                            {group.overrideType !== 'descanso' && (
+                                                <p className="text-xs text-muted-foreground">{group.startTime} - {group.endTime}</p>
+                                            )}
+                                            {group.locationId && <p className="text-xs text-muted-foreground">Sede: {locations.find(l => l.id === group.locationId)?.name}</p>}
+                                            {group.notes && <p className="text-xs text-muted-foreground italic">Nota: {group.notes}</p>}
+                                        </div>
+                                    ))
+                                ) : (
                                     <p className="text-sm text-muted-foreground text-center py-4">No hay excepciones para {format(overrideDisplayDate, 'MMMM yyyy', { locale: es })}.</p>
                                 )}
+                                </div>
+
                                 <div className="flex gap-2">
                                     <Button type="button" variant="outline" size="sm" className="mt-4" onClick={() => appendCustomSchedule({ id: generateId(), date: startOfMonth(overrideDisplayDate), overrideType: 'descanso', notes: 'Descanso' })}>
-                                    <PlusCircle className="mr-2 h-4 w-4" /> Agregar Excepción
+                                    <PlusCircle className="mr-2 h-4 w-4" /> Agregar Excepción Manual
                                     </Button>
                                     <Button type="button" variant="secondary" size="sm" className="mt-4" onClick={() => setIsVacationModalOpen(true)}>
-                                    <Bed className="mr-2 h-4 w-4" /> Registrar Ausencia por Período
+                                    <Layers className="mr-2 h-4 w-4" /> Registrar Ausencia por Período
                                     </Button>
                                 </div>
                                 </AccordionContent>
