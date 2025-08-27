@@ -80,7 +80,7 @@ export default function RotationsPage() {
       
       const activeProfs = allProfs.filter(prof => {
         const status = getContractDisplayStatus(prof.currentContract);
-        return (status === 'Activo' || status === 'Próximo a Vencer');
+        return (status === 'Activo' || status === 'Próximo a Vencer') && !prof.isManager;
       });
 
       setAllProfessionals(activeProfs);
@@ -213,9 +213,10 @@ export default function RotationsPage() {
     const professional = allProfessionals.find(p => p.id === professionalId);
     if (!professional) return;
     
+    // Correctly merge with existing schedule to avoid deleting other days
     const updatedWorkSchedule = {
-      ...professional.workSchedule,
-      [dayOfWeek]: {
+      ...(professional.workSchedule || {}), // Start with the existing full schedule
+      [dayOfWeek]: { // Override just the specific day
         isWorking: true,
         startTime: newStartTime,
         endTime: newEndTime,
@@ -445,3 +446,4 @@ export default function RotationsPage() {
     </div>
   );
 }
+
