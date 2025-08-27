@@ -13,7 +13,7 @@ import type { Professional, Location, LocationId, ProfessionalFormData } from '@
 import { useAuth } from '@/contexts/auth-provider';
 import { useAppState } from '@/contexts/app-state-provider';
 import { Button } from '@/components/ui/button';
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator, DropdownMenuSub, DropdownMenuSubTrigger, DropdownMenuSubContent } from '@/components/ui/dropdown-menu';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator, DropdownMenuSub, DropdownMenuSubTrigger, DropdownMenuSubContent, DropdownMenuPortal } from '@/components/ui/dropdown-menu';
 import { cn } from '@/lib/utils';
 import { format, startOfWeek, endOfWeek, addDays, eachDayOfInterval, getHours, parse, getDay, startOfDay } from 'date-fns';
 import { es } from 'date-fns/locale';
@@ -37,12 +37,10 @@ type NameBadgeStatus = 'working' | 'resting' | 'vacation' | 'cover' | 'transfer'
 interface NameBadgeProps {
   name: string;
   status: NameBadgeStatus;
-  professionalId: string;
-  onDoubleClick: (event: React.MouseEvent) => void;
 }
 
-// --- Components ---
-const NameBadge = ({ name, status, professionalId, onDoubleClick }: NameBadgeProps) => {
+
+const NameBadge = ({ name, status }: NameBadgeProps) => {
   const colorClasses: Record<NameBadgeStatus, string> = {
     working: 'bg-white text-gray-800 border border-gray-200',
     resting: 'bg-cyan-200 text-cyan-900 font-semibold',
@@ -50,7 +48,7 @@ const NameBadge = ({ name, status, professionalId, onDoubleClick }: NameBadgePro
     cover: 'bg-green-200 text-green-900 font-semibold',
     transfer: 'bg-purple-200 text-purple-900 font-semibold',
   };
-  return <div className={cn('p-1 text-sm rounded-sm text-center', colorClasses[status])} onDoubleClick={onDoubleClick}>{name}</div>;
+  return <div className={cn('p-1 text-sm rounded-sm text-center', colorClasses[status])}>{name}</div>;
 };
 
 // --- Page Component ---
@@ -60,6 +58,7 @@ export default function RotationsPage() {
   const [allProfessionals, setAllProfessionals] = useState<Professional[]>([]);
   const [locations, setLocations] = useState<Location[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [draggedItem, setDraggedItem] = useState<{ professionalId: string } | null>(null);
 
   const [viewDate, setViewDate] = useState(new Date());
   const { toast } = useToast();
@@ -114,7 +113,7 @@ export default function RotationsPage() {
         if (workStartHour >= shiftStartHour && workStartHour < shiftEndHour) {
           let status: NameBadgeStatus = 'working';
           const isTransfer = prof.locationId !== availability.workingLocationId;
-          const isSpecialShift = availability.reason?.toLowerCase().includes('especial');
+          const isSpecialShift = availability.reason?.toLowerCase().includes('especial') || availability.reason?.toLowerCase().includes('habitual');
 
           if (isTransfer) {
             status = 'transfer';
@@ -138,7 +137,7 @@ export default function RotationsPage() {
         })
         .map(prof => {
           const availability = getProfessionalAvailabilityForDate(prof, day);
-          if (!availability || !availability.isWorking || availability.workingLocationId !== selectedLocationId) {
+          if (!availability || !availability.isWorking) {
               const reason = availability?.reason || 'Descansa';
               let status: NameBadgeStatus = 'resting';
               if (reason.toLowerCase().includes('vacaciones')) {
@@ -286,40 +285,41 @@ export default function RotationsPage() {
                                 {displayedWeek.days.map(day => {
                                     const professionalsInSlot = getProfessionalsForShift(day, time);
                                     return (
-                                        <TableCell 
-                                          key={`${day.toISOString()}-${time}`} 
-                                          className="p-1 align-top h-24 border border-gray-300"
-                                        >
+                                        <TableCell key={`${day.toISOString()}-${time}`} className="p-1 align-top h-24 border border-gray-300">
                                             <div className="space-y-1">
                                                 {professionalsInSlot.map((item, index) => (
                                                     <DropdownMenu key={`${item.professionalId}-${index}`}>
                                                         <DropdownMenuTrigger asChild>
-                                                            <div className="cursor-pointer">
-                                                                <NameBadge {...item} onDoubleClick={() => {}} />
+                                                            <div onDoubleClick={(e) => e.preventDefault()} className="cursor-pointer">
+                                                                <NameBadge {...item} />
                                                             </div>
                                                         </DropdownMenuTrigger>
-                                                        <DropdownMenuContent>
-                                                          <DropdownMenuSub>
-                                                            <DropdownMenuSubTrigger>Turno Especial</DropdownMenuSubTrigger>
-                                                            <DropdownMenuSubContent>
-                                                              <DropdownMenuItem onClick={() => handleAction(item.professionalId, day, 'special_shift', { startTime: '09:00', endTime: '18:00' })}>09:00 - 18:00</DropdownMenuItem>
-                                                              <DropdownMenuItem onClick={() => handleAction(item.professionalId, day, 'special_shift', { startTime: '10:00', endTime: '19:00' })}>10:00 - 19:00</DropdownMenuItem>
-                                                            </DropdownMenuSubContent>
-                                                          </DropdownMenuSub>
-                                                           <DropdownMenuSub>
-                                                              <DropdownMenuSubTrigger>Traslado a Sede</DropdownMenuSubTrigger>
-                                                              <DropdownMenuSubContent>
-                                                                  {locations.filter(l => l.id !== selectedLocationId).map(loc => (
-                                                                      <DropdownMenuItem key={loc.id} onClick={() => handleAction(item.professionalId, day, 'transfer', { locationId: loc.id, startTime: '10:00', endTime: '19:00' })}>{loc.name}</DropdownMenuItem>
-                                                                  ))}
-                                                              </DropdownMenuSubContent>
-                                                          </DropdownMenuSub>
-                                                          <DropdownMenuSeparator />
-                                                          <DropdownMenuItem onClick={() => handleAction(item.professionalId, day, 'rest')}>Marcar Descanso</DropdownMenuItem>
-                                                          <DropdownMenuItem onClick={() => handleAction(item.professionalId, day, 'vacation')}>Marcar Vacaciones</DropdownMenuItem>
-                                                          <DropdownMenuSeparator />
-                                                          <DropdownMenuItem className="text-destructive" onClick={() => handleClearException(item.professionalId, day)}>Limpiar Excepción</DropdownMenuItem>
-                                                        </DropdownMenuContent>
+                                                        <DropdownMenuPortal>
+                                                          <DropdownMenuContent>
+                                                            <DropdownMenuSub>
+                                                                <DropdownMenuSubTrigger>Cambiar Horario Habitual (Este Día)</DropdownMenuSubTrigger>
+                                                                <DropdownMenuSubContent>
+                                                                    <DropdownMenuItem onClick={() => handleAction(item.professionalId, day, 'special_shift', { startTime: '09:00', endTime: '18:00' })}>09:00 - 18:00</DropdownMenuItem>
+                                                                    <DropdownMenuItem onClick={() => handleAction(item.professionalId, day, 'special_shift', { startTime: '10:00', endTime: '19:00' })}>10:00 - 19:00</DropdownMenuItem>
+                                                                    <DropdownMenuItem onClick={() => handleAction(item.professionalId, day, 'special_shift', { startTime: '11:00', endTime: '20:00' })}>11:00 - 20:00</DropdownMenuItem>
+                                                                    <DropdownMenuItem onClick={() => handleAction(item.professionalId, day, 'special_shift', { startTime: '12:30', endTime: '21:30' })}>12:30 - 21:30</DropdownMenuItem>
+                                                                </DropdownMenuSubContent>
+                                                            </DropdownMenuSub>
+                                                            <DropdownMenuSub>
+                                                                <DropdownMenuSubTrigger>Traslado a Sede</DropdownMenuSubTrigger>
+                                                                <DropdownMenuSubContent>
+                                                                    {locations.filter(l => l.id !== selectedLocationId).map(loc => (
+                                                                        <DropdownMenuItem key={loc.id} onClick={() => handleAction(item.professionalId, day, 'transfer', { locationId: loc.id, startTime: '10:00', endTime: '19:00' })}>{loc.name}</DropdownMenuItem>
+                                                                    ))}
+                                                                </DropdownMenuSubContent>
+                                                            </DropdownMenuSub>
+                                                            <DropdownMenuSeparator />
+                                                            <DropdownMenuItem onClick={() => handleAction(item.professionalId, day, 'rest')}>Marcar Descanso</DropdownMenuItem>
+                                                            <DropdownMenuItem onClick={() => handleAction(item.professionalId, day, 'vacation')}>Marcar Vacaciones</DropdownMenuItem>
+                                                            <DropdownMenuSeparator />
+                                                            <DropdownMenuItem className="text-destructive" onClick={() => handleClearException(item.professionalId, day)}>Limpiar Excepción</DropdownMenuItem>
+                                                          </DropdownMenuContent>
+                                                        </DropdownMenuPortal>
                                                     </DropdownMenu>
                                                 ))}
                                             </div>
@@ -341,21 +341,23 @@ export default function RotationsPage() {
                                              {restingProfessionals.map((item, index) => (
                                                 <DropdownMenu key={`${item.professionalId}-${index}`}>
                                                     <DropdownMenuTrigger asChild>
-                                                        <div className="cursor-pointer">
-                                                            <NameBadge {...item} onDoubleClick={() => {}} />
+                                                        <div onDoubleClick={(e) => e.preventDefault()} className="cursor-pointer">
+                                                            <NameBadge {...item} />
                                                         </div>
                                                     </DropdownMenuTrigger>
-                                                    <DropdownMenuContent>
-                                                      <DropdownMenuSub>
-                                                        <DropdownMenuSubTrigger>Asignar Turno Especial</DropdownMenuSubTrigger>
-                                                        <DropdownMenuSubContent>
-                                                          <DropdownMenuItem onClick={() => handleAction(item.professionalId, day, 'special_shift', { startTime: '09:00', endTime: '18:00' })}>09:00 - 18:00</DropdownMenuItem>
-                                                          <DropdownMenuItem onClick={() => handleAction(item.professionalId, day, 'special_shift', { startTime: '10:00', endTime: '19:00' })}>10:00 - 19:00</DropdownMenuItem>
-                                                        </DropdownMenuSubContent>
-                                                      </DropdownMenuSub>
-                                                      <DropdownMenuSeparator />
-                                                      <DropdownMenuItem className="text-destructive" onClick={() => handleClearException(item.professionalId, day)}>Limpiar Excepción</DropdownMenuItem>
-                                                    </DropdownMenuContent>
+                                                    <DropdownMenuPortal>
+                                                      <DropdownMenuContent>
+                                                        <DropdownMenuSub>
+                                                          <DropdownMenuSubTrigger>Asignar Turno Especial</DropdownMenuSubTrigger>
+                                                          <DropdownMenuSubContent>
+                                                            <DropdownMenuItem onClick={() => handleAction(item.professionalId, day, 'special_shift', { startTime: '09:00', endTime: '18:00' })}>09:00 - 18:00</DropdownMenuItem>
+                                                            <DropdownMenuItem onClick={() => handleAction(item.professionalId, day, 'special_shift', { startTime: '10:00', endTime: '19:00' })}>10:00 - 19:00</DropdownMenuItem>
+                                                          </DropdownMenuSubContent>
+                                                        </DropdownMenuSub>
+                                                        <DropdownMenuSeparator />
+                                                        <DropdownMenuItem className="text-destructive" onClick={() => handleClearException(item.professionalId, day)}>Limpiar Excepción</DropdownMenuItem>
+                                                      </DropdownMenuContent>
+                                                    </DropdownMenuPortal>
                                                 </DropdownMenu>
                                              ))}
                                          </div>
