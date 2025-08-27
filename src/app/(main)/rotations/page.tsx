@@ -1,4 +1,5 @@
 
+
 "use client";
 
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
@@ -13,7 +14,7 @@ import { useAuth } from '@/contexts/auth-provider';
 import { Button } from '@/components/ui/button';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { cn } from '@/lib/utils';
-import { format, startOfWeek, endOfWeek, addDays, eachDayOfInterval, getHours } from 'date-fns';
+import { format, startOfWeek, endOfWeek, addDays, eachDayOfInterval, getHours, parse } from 'date-fns';
 import { es } from 'date-fns/locale';
 
 // --- Data Structures ---
@@ -173,16 +174,40 @@ export default function RotationsPage() {
 
     return professionals.map(prof => {
       const availability = getProfessionalAvailabilityForDate(prof, day);
-      if (availability?.isWorking && availability.startTime && availability.endTime) {
+      if (availability?.isWorking && availability.startTime) {
         const workStartHour = parseInt(availability.startTime.split(':')[0], 10);
-        const workEndHour = parseInt(availability.endTime.split(':')[0], 10);
+        const workStartMinutes = parseInt(availability.startTime.split(':')[1], 10) / 60;
+        const workStartTime = workStartHour + workStartMinutes;
 
-        if (workStartHour < shiftEndHour && workEndHour >= shiftStartHour) {
+        if (workStartTime >= shiftStartHour && workStartTime < shiftEndHour) {
+           if (availability.reason && availability.reason.toLowerCase().includes('vacaciones')) {
+             return { name: prof.firstName, status: 'vacation' };
+           }
+           if (availability.reason && availability.reason.toLowerCase().includes('descansando')) {
+             return { name: prof.firstName, status: 'resting' };
+           }
+            if (availability.reason && availability.reason.toLowerCase().includes('traslado')) {
+             return { name: prof.firstName, status: 'cover' };
+           }
           return { name: prof.firstName, status: 'working' };
         }
       }
       return null;
     }).filter((item): item is NameBadgeProps => item !== null);
+  };
+  
+  const getRestingProfessionals = (professionals: Professional[], day: Date): NameBadgeProps[] => {
+      return professionals.map(prof => {
+          const availability = getProfessionalAvailabilityForDate(prof, day);
+          if (!availability || !availability.isWorking) {
+              const reason = availability?.reason || 'Descansa';
+              if (reason.toLowerCase().includes('vacaciones')) {
+                 return { name: prof.firstName, status: 'vacation' };
+              }
+              return { name: prof.firstName, status: 'resting' };
+          }
+          return null;
+      }).filter((item): item is NameBadgeProps => item !== null);
   };
 
   return (
@@ -256,6 +281,23 @@ export default function RotationsPage() {
                                 })}
                             </TableRow>
                         ))}
+                         <TableRow>
+                            <TableCell className="font-bold text-center align-middle bg-muted/50">Descansos</TableCell>
+                             {displayedWeek.days.map(day => {
+                                const professionalsAtLocation = activeProfessionals.filter(p => p.locationId === 'higuereta');
+                                const restingProfessionals = getRestingProfessionals(professionalsAtLocation, day);
+                                 return (
+                                     <TableCell key={`resting-${day.toISOString()}`} className="p-1 align-top bg-yellow-50">
+                                         <div className="space-y-1">
+                                             {restingProfessionals.length > 0 ? 
+                                                 restingProfessionals.map((item, index) => <NameBadge key={index} {...item} />) : 
+                                                 (<div className="text-center text-muted-foreground text-xs p-2">--</div>)
+                                             }
+                                         </div>
+                                     </TableCell>
+                                 );
+                             })}
+                        </TableRow>
                     </TableBody>
                 </Table>
             </div>
