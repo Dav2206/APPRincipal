@@ -6,14 +6,14 @@ import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
-import { Users, Calendar, Plane, Sun, Star, Loader2, GripVertical, ChevronLeft, ChevronRight, MoveVertical, Edit2 } from 'lucide-react';
+import { Users, Calendar, Plane, Sun, Star, Loader2, GripVertical, ChevronLeft, ChevronRight, MoveVertical, Edit2, Moon, Coffee, Sunrise, Sunset, Palette } from 'lucide-react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { getProfessionals, getContractDisplayStatus, getLocations, getProfessionalAvailabilityForDate, updateProfessional } from '@/lib/data';
 import type { Professional, Location, LocationId, ProfessionalFormData } from '@/types';
 import { useAuth } from '@/contexts/auth-provider';
 import { useAppState } from '@/contexts/app-state-provider';
 import { Button } from '@/components/ui/button';
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator, DropdownMenuSub, DropdownMenuSubTrigger, DropdownMenuSubContent } from '@/components/ui/dropdown-menu';
 import { cn } from '@/lib/utils';
 import { format, startOfWeek, endOfWeek, addDays, eachDayOfInterval, getHours, parse, getDay, startOfDay } from 'date-fns';
 import { es } from 'date-fns/locale';
@@ -32,23 +32,25 @@ interface VacationInfo {
 
 // --- Helper Types & Enums ---
 type Shift = '9am' | '10am' | '11am' | '12:30pm';
-type NameBadgeStatus = 'working' | 'resting' | 'vacation' | 'cover';
+type NameBadgeStatus = 'working' | 'resting' | 'vacation' | 'cover' | 'transfer';
 
 interface NameBadgeProps {
   name: string;
   status: NameBadgeStatus;
   professionalId: string;
+  onDoubleClick: (event: React.MouseEvent) => void;
 }
 
 // --- Components ---
-const NameBadge = ({ name, status, professionalId }: NameBadgeProps) => {
+const NameBadge = ({ name, status, professionalId, onDoubleClick }: NameBadgeProps) => {
   const colorClasses: Record<NameBadgeStatus, string> = {
     working: 'bg-white text-gray-800 border border-gray-200',
-    resting: 'bg-yellow-300 text-yellow-900 font-semibold',
+    resting: 'bg-cyan-200 text-cyan-900 font-semibold',
     vacation: 'bg-orange-400 text-white font-semibold',
     cover: 'bg-green-200 text-green-900 font-semibold',
+    transfer: 'bg-purple-200 text-purple-900 font-semibold',
   };
-  return <div className={cn('p-1 text-sm rounded-sm text-center', colorClasses[status])}>{name}</div>;
+  return <div className={cn('p-1 text-sm rounded-sm text-center', colorClasses[status])} onDoubleClick={onDoubleClick}>{name}</div>;
 };
 
 // --- Page Component ---
@@ -60,7 +62,6 @@ export default function RotationsPage() {
   const [isLoading, setIsLoading] = useState(true);
 
   const [viewDate, setViewDate] = useState(new Date());
-  const [isDragAndDropEnabled, setIsDragAndDropEnabled] = useState(false);
   const { toast } = useToast();
 
   const displayedWeek = useMemo(() => {
@@ -99,7 +100,7 @@ export default function RotationsPage() {
     '12:30pm': { start: 12, end: 13, display: '12:30' },
   };
 
-  const getProfessionalsForShift = useCallback((day: Date, shift: Shift): NameBadgeProps[] => {
+  const getProfessionalsForShift = useCallback((day: Date, shift: Shift): Omit<NameBadgeProps, 'onDoubleClick'>[] => {
     if (!selectedLocationId || selectedLocationId === 'all') return [];
 
     const { start: shiftStartHour, end: shiftEndHour } = shiftTimes[shift];
@@ -112,17 +113,23 @@ export default function RotationsPage() {
         
         if (workStartHour >= shiftStartHour && workStartHour < shiftEndHour) {
           let status: NameBadgeStatus = 'working';
-          if (prof.locationId !== availability.workingLocationId || availability.reason?.toLowerCase().includes('especial')) {
+          const isTransfer = prof.locationId !== availability.workingLocationId;
+          const isSpecialShift = availability.reason?.toLowerCase().includes('especial');
+
+          if (isTransfer) {
+            status = 'transfer';
+          } else if (isSpecialShift) {
              status = 'cover';
-           }
+          }
+
           return { name: prof.firstName, status, professionalId: prof.id };
         }
       }
       return null;
-    }).filter((item): item is NameBadgeProps => item !== null);
+    }).filter((item): item is Omit<NameBadgeProps, 'onDoubleClick'> => item !== null);
   }, [allProfessionals, selectedLocationId, shiftTimes]);
   
-  const getRestingProfessionalsForDay = useCallback((day: Date): NameBadgeProps[] => {
+  const getRestingProfessionalsForDay = useCallback((day: Date): Omit<NameBadgeProps, 'onDoubleClick'>[] => {
       if (!selectedLocationId || selectedLocationId === 'all') return [];
 
       return allProfessionals
@@ -140,75 +147,87 @@ export default function RotationsPage() {
               return { name: prof.firstName, status, professionalId: prof.id };
           }
           return null;
-      }).filter((item): item is NameBadgeProps => item !== null);
-  }, [allProfessionals, selectedLocationId, viewDate]);
+      }).filter((item): item is Omit<NameBadgeProps, 'onDoubleClick'> => item !== null);
+  }, [allProfessionals, selectedLocationId]);
 
-  const handleDragStart = (e: React.DragEvent<HTMLDivElement>, professionalId: string, day: Date) => {
-    if (!isDragAndDropEnabled) return;
-    e.dataTransfer.setData("application/json", JSON.stringify({ professionalId, day: day.toISOString() }));
-  };
+  const handleAction = async (professionalId: string, day: Date, action: 'rest' | 'vacation' | 'special_shift' | 'transfer', details?: { locationId?: LocationId, startTime?: string, endTime?: string }) => {
+    const professional = allProfessionals.find(p => p.id === professionalId);
+    if (!professional) return;
+    
+    const dateISO = formatISO(day, { representation: 'date' });
+    const existingOverrideIndex = (professional.customScheduleOverrides || []).findIndex(
+      ov => startOfDay(new Date(ov.date)).getTime() === startOfDay(day).getTime()
+    );
 
-  const handleDragOver = (e: React.DragEvent<HTMLDivElement>) => {
-    if (!isDragAndDropEnabled) return;
-    e.preventDefault();
-  };
+    let updatedOverrides = [...(professional.customScheduleOverrides || [])];
 
-  const handleDrop = async (e: React.DragEvent<HTMLDivElement>, day: Date, newShift: Shift) => {
-    if (!isDragAndDropEnabled) return;
-    e.preventDefault();
-    try {
-      const data = JSON.parse(e.dataTransfer.getData("application/json"));
-      const { professionalId } = data;
-      const professional = allProfessionals.find(p => p.id === professionalId);
-      
-      if (!professional) return;
-
-      const newStartTime = shiftTimes[newShift].display;
-      
-      const availability = getProfessionalAvailabilityForDate(professional, day);
-      if (!availability || !availability.isWorking || !availability.endTime) {
-        toast({ title: "Acción no permitida", description: "No se puede mover un profesional que no está trabajando este día.", variant: "destructive"});
-        return;
-      }
-
-      const existingOverrideIndex = (professional.customScheduleOverrides || []).findIndex(
-        ov => startOfDay(new Date(ov.date)).getTime() === startOfDay(day).getTime()
-      );
-
-      const updatedOverrides = [...(professional.customScheduleOverrides || [])];
-
-      if (existingOverrideIndex > -1) {
-        updatedOverrides[existingOverrideIndex] = {
-          ...updatedOverrides[existingOverrideIndex],
-          overrideType: 'turno_especial',
-          startTime: newStartTime,
-        };
-      } else {
+    const createOrUpdateOverride = (type: 'descanso' | 'turno_especial' | 'traslado', notes: string) => {
         const newOverride = {
-          id: `override_${Date.now()}`,
-          date: formatISO(day, { representation: 'date'}),
-          overrideType: 'turno_especial' as const,
-          startTime: newStartTime,
-          endTime: availability.endTime, 
-          isWorking: true,
-          notes: "Ajuste de turno visual"
+            id: `override_${Date.now()}`,
+            date: dateISO,
+            overrideType: type,
+            isWorking: type !== 'descanso',
+            startTime: type === 'descanso' ? undefined : details?.startTime,
+            endTime: type === 'descanso' ? undefined : details?.endTime,
+            locationId: type === 'traslado' ? details?.locationId : undefined,
+            notes: notes
         };
-        updatedOverrides.push(newOverride as any); 
-      }
-
+        if (existingOverrideIndex > -1) {
+            updatedOverrides[existingOverrideIndex] = { ...updatedOverrides[existingOverrideIndex], ...newOverride };
+        } else {
+            updatedOverrides.push(newOverride as any);
+        }
+    };
+    
+    switch(action) {
+        case 'rest':
+            createOrUpdateOverride('descanso', 'Descanso Asignado');
+            break;
+        case 'vacation':
+            createOrUpdateOverride('descanso', 'Vacaciones');
+            break;
+        case 'special_shift':
+            createOrUpdateOverride('turno_especial', `Turno Especial ${details?.startTime}-${details?.endTime}`);
+            break;
+        case 'transfer':
+             createOrUpdateOverride('traslado', `Traslado a ${locations.find(l => l.id === details?.locationId)?.name}`);
+            break;
+    }
+    
+    try {
       const updatePayload: Partial<ProfessionalFormData> = {
         customScheduleOverrides: updatedOverrides.map(ov => ({...ov, date: new Date(ov.date)}))
       };
-      
       await updateProfessional(professional.id, updatePayload);
-      toast({ title: "Horario Actualizado", description: `El turno de ${professional.firstName} se movió a las ${newStartTime}.`});
-      loadAllData();
-      
+      toast({ title: "Horario Actualizado", description: `Se actualizó el estado de ${professional.firstName} para el ${format(day, 'PPPP', {locale: es})}.`});
+      loadAllData(); // Refresh all data to reflect changes
     } catch (error) {
-      console.error("Error on drop:", error);
+      console.error("Error updating schedule:", error);
       toast({ title: "Error", description: "No se pudo actualizar el horario.", variant: "destructive"});
     }
   };
+
+  const handleClearException = async (professionalId: string, day: Date) => {
+    const professional = allProfessionals.find(p => p.id === professionalId);
+    if (!professional) return;
+    
+    const updatedOverrides = (professional.customScheduleOverrides || []).filter(
+      ov => startOfDay(new Date(ov.date)).getTime() !== startOfDay(day).getTime()
+    );
+
+    try {
+      const updatePayload: Partial<ProfessionalFormData> = {
+        customScheduleOverrides: updatedOverrides.map(ov => ({...ov, date: new Date(ov.date)}))
+      };
+       await updateProfessional(professional.id, updatePayload);
+       toast({ title: "Horario Restaurado", description: `Se eliminó la excepción para ${professional.firstName} el ${format(day, 'PPPP', {locale: es})}.`});
+       loadAllData();
+    } catch (error) {
+       console.error("Error clearing exception:", error);
+       toast({ title: "Error", description: "No se pudo restaurar el horario base.", variant: "destructive"});
+    }
+  };
+
 
   const currentViewLocationName = useMemo(() => {
     if (!selectedLocationId || selectedLocationId === 'all') return null;
@@ -239,16 +258,6 @@ export default function RotationsPage() {
                   </CardDescription>
               </div>
               <div className="flex items-center gap-2">
-                  <div className="flex items-center space-x-2">
-                    <Switch
-                      id="drag-drop-switch"
-                      checked={isDragAndDropEnabled}
-                      onCheckedChange={setIsDragAndDropEnabled}
-                    />
-                    <Label htmlFor="drag-drop-switch" className="text-xs flex items-center gap-1">
-                      <Edit2 className="h-4 w-4" /> Mover Horarios
-                    </Label>
-                  </div>
                   <Button variant="outline" size="icon" onClick={() => setViewDate(prev => addDays(prev, -7))}><ChevronLeft/></Button>
                   <Button variant="outline" size="sm" onClick={() => setViewDate(new Date())}>Esta Semana</Button>
                   <Button variant="outline" size="icon" onClick={() => setViewDate(prev => addDays(prev, 7))}><ChevronRight/></Button>
@@ -280,19 +289,38 @@ export default function RotationsPage() {
                                         <TableCell 
                                           key={`${day.toISOString()}-${time}`} 
                                           className="p-1 align-top h-24 border border-gray-300"
-                                          onDragOver={handleDragOver}
-                                          onDrop={(e) => handleDrop(e, day, time)}
                                         >
                                             <div className="space-y-1">
                                                 {professionalsInSlot.map((item, index) => (
-                                                  <div
-                                                    key={index}
-                                                    draggable={isDragAndDropEnabled}
-                                                    onDragStart={(e) => handleDragStart(e, item.professionalId, day)}
-                                                    className={cn(isDragAndDropEnabled && "cursor-grab")}
-                                                  >
-                                                    <NameBadge {...item} />
-                                                  </div>
+                                                    <DropdownMenu key={`${item.professionalId}-${index}`}>
+                                                        <DropdownMenuTrigger asChild>
+                                                            <div className="cursor-pointer">
+                                                                <NameBadge {...item} onDoubleClick={() => {}} />
+                                                            </div>
+                                                        </DropdownMenuTrigger>
+                                                        <DropdownMenuContent>
+                                                          <DropdownMenuSub>
+                                                            <DropdownMenuSubTrigger>Turno Especial</DropdownMenuSubTrigger>
+                                                            <DropdownMenuSubContent>
+                                                              <DropdownMenuItem onClick={() => handleAction(item.professionalId, day, 'special_shift', { startTime: '09:00', endTime: '18:00' })}>09:00 - 18:00</DropdownMenuItem>
+                                                              <DropdownMenuItem onClick={() => handleAction(item.professionalId, day, 'special_shift', { startTime: '10:00', endTime: '19:00' })}>10:00 - 19:00</DropdownMenuItem>
+                                                            </DropdownMenuSubContent>
+                                                          </DropdownMenuSub>
+                                                           <DropdownMenuSub>
+                                                              <DropdownMenuSubTrigger>Traslado a Sede</DropdownMenuSubTrigger>
+                                                              <DropdownMenuSubContent>
+                                                                  {locations.filter(l => l.id !== selectedLocationId).map(loc => (
+                                                                      <DropdownMenuItem key={loc.id} onClick={() => handleAction(item.professionalId, day, 'transfer', { locationId: loc.id, startTime: '10:00', endTime: '19:00' })}>{loc.name}</DropdownMenuItem>
+                                                                  ))}
+                                                              </DropdownMenuSubContent>
+                                                          </DropdownMenuSub>
+                                                          <DropdownMenuSeparator />
+                                                          <DropdownMenuItem onClick={() => handleAction(item.professionalId, day, 'rest')}>Marcar Descanso</DropdownMenuItem>
+                                                          <DropdownMenuItem onClick={() => handleAction(item.professionalId, day, 'vacation')}>Marcar Vacaciones</DropdownMenuItem>
+                                                          <DropdownMenuSeparator />
+                                                          <DropdownMenuItem className="text-destructive" onClick={() => handleClearException(item.professionalId, day)}>Limpiar Excepción</DropdownMenuItem>
+                                                        </DropdownMenuContent>
+                                                    </DropdownMenu>
                                                 ))}
                                             </div>
                                         </TableCell>
@@ -310,7 +338,26 @@ export default function RotationsPage() {
                                  return (
                                      <TableCell key={`resting-${day.toISOString()}`} className="p-1 align-top border-x border-gray-300">
                                          <div className="space-y-1">
-                                             {restingProfessionals.map((item, index) => <NameBadge key={index} {...item} />)}
+                                             {restingProfessionals.map((item, index) => (
+                                                <DropdownMenu key={`${item.professionalId}-${index}`}>
+                                                    <DropdownMenuTrigger asChild>
+                                                        <div className="cursor-pointer">
+                                                            <NameBadge {...item} onDoubleClick={() => {}} />
+                                                        </div>
+                                                    </DropdownMenuTrigger>
+                                                    <DropdownMenuContent>
+                                                      <DropdownMenuSub>
+                                                        <DropdownMenuSubTrigger>Asignar Turno Especial</DropdownMenuSubTrigger>
+                                                        <DropdownMenuSubContent>
+                                                          <DropdownMenuItem onClick={() => handleAction(item.professionalId, day, 'special_shift', { startTime: '09:00', endTime: '18:00' })}>09:00 - 18:00</DropdownMenuItem>
+                                                          <DropdownMenuItem onClick={() => handleAction(item.professionalId, day, 'special_shift', { startTime: '10:00', endTime: '19:00' })}>10:00 - 19:00</DropdownMenuItem>
+                                                        </DropdownMenuSubContent>
+                                                      </DropdownMenuSub>
+                                                      <DropdownMenuSeparator />
+                                                      <DropdownMenuItem className="text-destructive" onClick={() => handleClearException(item.professionalId, day)}>Limpiar Excepción</DropdownMenuItem>
+                                                    </DropdownMenuContent>
+                                                </DropdownMenu>
+                                             ))}
                                          </div>
                                      </TableCell>
                                  );
@@ -321,7 +368,8 @@ export default function RotationsPage() {
                  <div className="p-4 mt-4 flex items-center gap-6 text-sm">
                     <h4 className="font-bold">Leyenda:</h4>
                     <div className="flex items-center gap-2"><div className="w-5 h-5 bg-orange-400 rounded-sm"></div><span>Vacaciones</span></div>
-                    <div className="flex items-center gap-2"><div className="w-5 h-5 bg-yellow-300 rounded-sm"></div><span>Descanso</span></div>
+                    <div className="flex items-center gap-2"><div className="w-5 h-5 bg-cyan-200 rounded-sm"></div><span>Descanso</span></div>
+                    <div className="flex items-center gap-2"><div className="w-5 h-5 bg-purple-200 rounded-sm"></div><span>Traslado</span></div>
                     <div className="flex items-center gap-2"><div className="w-5 h-5 bg-green-200 rounded-sm"></div><span>Cubre / Turno Especial</span></div>
                 </div>
             </div>
