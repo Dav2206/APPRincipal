@@ -154,22 +154,36 @@ export function AppointmentForm({
 
   useEffect(() => {
     async function loadInitialServices() {
-      setIsLoadingServices(true);
-      try {
-        const fetchedServices = await getServices();
-        setServicesList(fetchedServices || []);
-      } catch (error) {
-        console.error("Failed to load services for form:", error);
-        setServicesList([]);
-        toast({ title: "Error", description: "No se pudieron cargar los servicios.", variant: "destructive" });
-      } finally {
-        setIsLoadingServices(false);
-      }
+        setIsLoadingServices(true);
+        try {
+            const fetchedServices = await getServices();
+            const services = fetchedServices || [];
+            setServicesList(services);
+
+            // Set default service here after services are loaded
+            if (services.length > 0 && !initialData?.serviceId) {
+                const podoService = services.find(s => s.name.toLowerCase() === 'podología');
+                if (podoService) {
+                    form.setValue('serviceId', podoService.id);
+                } else {
+                    form.setValue('serviceId', services[0].id); // Fallback to first service
+                }
+            } else if (initialData?.serviceId) {
+                form.setValue('serviceId', initialData.serviceId);
+            }
+
+        } catch (error) {
+            console.error("Failed to load services for form:", error);
+            setServicesList([]);
+            toast({ title: "Error", description: "No se pudieron cargar los servicios.", variant: "destructive" });
+        } finally {
+            setIsLoadingServices(false);
+        }
     }
     if (isOpen) {
         loadInitialServices();
     }
-  }, [isOpen, form, toast]);
+}, [isOpen, initialData, form, toast]);
 
   useEffect(() => {
     if (isOpen && initialData?.locationId !== watchLocationId) { 
@@ -1166,3 +1180,4 @@ export function AppointmentForm({
     </Dialog>
   );
 }
+
