@@ -76,7 +76,7 @@ export default function RotationsPage() {
       
       const activeProfs = allProfs.filter(prof => {
         const status = getContractDisplayStatus(prof.currentContract);
-        return status === 'Activo' || status === 'Próximo a Vencer';
+        return (status === 'Activo' || status === 'Próximo a Vencer') && !prof.isManager;
       });
 
       setAllProfessionals(activeProfs);
@@ -107,16 +107,11 @@ export default function RotationsPage() {
     return allProfessionals.map(prof => {
       const availability = getProfessionalAvailabilityForDate(prof, day);
 
-      // A professional is working this shift if:
-      // 1. They are working today.
-      // 2. Their working location for today matches the selected location.
-      // 3. Their start time falls within the shift's time bracket.
       if (availability?.isWorking && availability.workingLocationId === selectedLocationId && availability.startTime) {
         const workStartHour = parseInt(availability.startTime.split(':')[0], 10);
         
         if (workStartHour >= shiftStartHour && workStartHour < shiftEndHour) {
           let status: NameBadgeStatus = 'working';
-          // A "cover" status means they are not at their base location or it's a special shift
           if (prof.locationId !== availability.workingLocationId || availability.reason?.toLowerCase().includes('especial')) {
              status = 'cover';
            }
@@ -132,12 +127,10 @@ export default function RotationsPage() {
 
       return allProfessionals
         .filter(prof => {
-            // Only consider professionals whose base location is the one being viewed
             return prof.locationId === selectedLocationId;
         })
         .map(prof => {
           const availability = getProfessionalAvailabilityForDate(prof, day);
-          // Show as resting only if they are NOT working at the selected location
           if (!availability || !availability.isWorking || availability.workingLocationId !== selectedLocationId) {
               const reason = availability?.reason || 'Descansa';
               let status: NameBadgeStatus = 'resting';
@@ -178,7 +171,6 @@ export default function RotationsPage() {
         return;
       }
 
-      // Find if an override already exists for this day
       const existingOverrideIndex = (professional.customScheduleOverrides || []).findIndex(
         ov => startOfDay(new Date(ov.date)).getTime() === startOfDay(day).getTime()
       );
@@ -186,25 +178,22 @@ export default function RotationsPage() {
       const updatedOverrides = [...(professional.customScheduleOverrides || [])];
 
       if (existingOverrideIndex > -1) {
-        // Update existing override
         updatedOverrides[existingOverrideIndex] = {
           ...updatedOverrides[existingOverrideIndex],
           overrideType: 'turno_especial',
           startTime: newStartTime,
-          // We keep the old endTime
         };
       } else {
-        // Create new override
         const newOverride = {
           id: `override_${Date.now()}`,
           date: formatISO(day, { representation: 'date'}),
           overrideType: 'turno_especial' as const,
           startTime: newStartTime,
-          endTime: availability.endTime, // Use existing end time
+          endTime: availability.endTime, 
           isWorking: true,
           notes: "Ajuste de turno visual"
         };
-        updatedOverrides.push(newOverride as any); // Type assertion needed here
+        updatedOverrides.push(newOverride as any); 
       }
 
       const updatePayload: Partial<ProfessionalFormData> = {
@@ -213,7 +202,7 @@ export default function RotationsPage() {
       
       await updateProfessional(professional.id, updatePayload);
       toast({ title: "Horario Actualizado", description: `El turno de ${professional.firstName} se movió a las ${newStartTime}.`});
-      loadAllData(); // Refresh all data to reflect the change
+      loadAllData();
       
     } catch (error) {
       console.error("Error on drop:", error);
