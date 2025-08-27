@@ -80,7 +80,7 @@ export default function RotationsPage() {
       
       const activeProfs = allProfs.filter(prof => {
         const status = getContractDisplayStatus(prof.currentContract);
-        return (status === 'Activo' || status === 'Próximo a Vencer') && !prof.isManager;
+        return (status === 'Activo' || status === 'Próximo a Vencer');
       });
 
       setAllProfessionals(activeProfs);
@@ -446,4 +446,3 @@ export default function RotationsPage() {
     </div>
   );
 }
-
