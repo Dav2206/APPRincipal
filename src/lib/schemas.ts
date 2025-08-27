@@ -172,7 +172,7 @@ export const AppointmentUpdateSchema = z.object({
   professionalId: z.string().optional().nullable(),
   duration: z.object({
     hours: z.coerce.number().int().min(0, "Horas no pueden ser negativas.").default(0),
-    minutes: z.coerce.number().int().min(0, "Minutos no pueden ser negativos.").default(30),
+    minutes: z.coerce.number().int().min(0, "Minutos no pueden ser más de 59.").default(30),
   }).refine(data => (data.hours * 60 + data.minutes) > 0, {
     message: "La duración total debe ser mayor a 0 minutos.",
     path: ["root"],
