@@ -688,7 +688,7 @@ export function AppointmentEditDialog({ appointment, isOpen, onOpenChange, onApp
                   <FormField control={form.control} name={`addedServices.${index}.serviceId`} render={({ field }) => (
                       <FormItem className="col-span-full"><FormLabel className="text-xs">Servicio Adicional {index + 1}</FormLabel>
                         <Select onValueChange={field.onChange} value={field.value || ''} disabled={!allServices?.length}>
-                          <FormControl><SelectTrigger><SelectValue placeholder={"Seleccionar servicio"} /></SelectTrigger></FormControl>
+                          <FormControl><SelectTrigger><SelectValue placeholder={servicesList?.length ? "Seleccionar servicio" : "No hay servicios"} /></SelectTrigger></FormControl>
                           <SelectContent>{allServices?.map(s => <SelectItem key={`added-${s.id}-${index}`} value={s.id}>{s.name}</SelectItem>)}</SelectContent>
                         </Select><FormMessage />
                       </FormItem>
@@ -724,7 +724,7 @@ export function AppointmentEditDialog({ appointment, isOpen, onOpenChange, onApp
 
           <DialogFooter className="pt-4 flex flex-col sm:flex-row sm:justify-between sm:items-center gap-2">
             <div>
-              {user && (user.role === USER_ROLES.ADMIN || user.role === USER_ROLES.LOCATION_STAFF || user.role === USER_ROLES.CONTADOR) && (
+              {user && (user.role === USER_ROLES.ADMIN || user.role === USER_ROLES.CONTADOR || (user.role === USER_ROLES.LOCATION_STAFF && user.locationId !== 'higuereta')) && (
                 <AlertDialog open={isConfirmDeleteOpen} onOpenChange={setIsConfirmDeleteOpen}>
                   <AlertDialogTrigger asChild>
                     <Button variant="destructive" type="button">
@@ -792,4 +792,3 @@ export function AppointmentEditDialog({ appointment, isOpen, onOpenChange, onApp
     </>
   );
 }
-
