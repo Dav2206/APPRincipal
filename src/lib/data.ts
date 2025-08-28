@@ -1,5 +1,4 @@
 
-
 // src/lib/data.ts
 import type { User, Professional, Patient, Service, Appointment, AppointmentFormData, ProfessionalFormData, AppointmentStatus, ServiceFormData, Contract, PeriodicReminder, ImportantNote, PeriodicReminderFormData, ImportantNoteFormData, AddedServiceItem, AppointmentUpdateFormData, Location, PaymentGroup, GroupingPreset, Material, MaterialFormData } from '@/types';
 import { USER_ROLES, APPOINTMENT_STATUS, APPOINTMENT_STATUS_DISPLAY, TIME_SLOTS, DAYS_OF_WEEK, LOCATIONS_FALLBACK } from '@/lib/constants';
@@ -434,10 +433,11 @@ export async function updateProfessional (id: string, data: Partial<Professional
     
     if (data.hasOwnProperty('commissionRate') && typeof data.commissionRate === 'number') {
       firestoreUpdateData.commissionRate = data.commissionRate / 100;
+    } else if (data.hasOwnProperty('commissionRate') && data.commissionRate === null) {
+      firestoreUpdateData.commissionRate = null;
     }
     
     if (data.workSchedule) {
-      // Merge with existing schedule to avoid overwriting all days
       const newWorkSchedule = { ...existingFirestoreProfessional.workSchedule };
       for (const dayId in data.workSchedule) {
         if (data.workSchedule.hasOwnProperty(dayId)) {
@@ -450,7 +450,6 @@ export async function updateProfessional (id: string, data: Partial<Professional
     if (data.customScheduleOverrides) {
       firestoreUpdateData.customScheduleOverrides = (data.customScheduleOverrides || []).map(ov => ({
         ...ov,
-        // The date coming from the form is already a string 'yyyy-MM-dd' or a Date object. toFirestoreTimestamp handles both.
         date: toFirestoreTimestamp(ov.date),
         notes: ov.notes ?? null,
       }));
@@ -2046,6 +2045,7 @@ export async function markDayAsHoliday(day: Date): Promise<number> {
 
 
 // --- End Rotations ---
+
 
 
 
