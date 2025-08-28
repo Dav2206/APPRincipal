@@ -187,13 +187,17 @@ export default function NewProfessionalPage() {
         try {
             const formattedData: ProfessionalFormData = {
                 ...data,
-                commissionRate: (data.commissionRate ?? 20) / 100,
+                commissionRate: data.commissionRate,
                 customScheduleOverrides: (data.customScheduleOverrides || []).map(ov => ({
                     ...ov,
                     startTime: ov.overrideType !== 'descanso' ? ov.startTime : undefined,
                     endTime: ov.overrideType !== 'descanso' ? ov.endTime : undefined,
                     locationId: ov.overrideType === 'traslado' ? ov.locationId : undefined,
                 })),
+                 baseSalary: data.baseSalary === undefined ? null : data.baseSalary,
+                commissionDeductible: data.commissionDeductible === undefined ? null : data.commissionDeductible,
+                afp: data.afp === undefined ? null : data.afp,
+                seguro: data.seguro === undefined ? null : data.seguro,
             };
 
             await addProfessional(formattedData as any);

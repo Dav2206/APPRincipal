@@ -216,7 +216,7 @@ export default function EditProfessionalPage() {
         try {
             const formattedData: ProfessionalFormData = {
                 ...data,
-                commissionRate: (data.commissionRate ?? 20),
+                commissionRate: data.commissionRate,
                 customScheduleOverrides: (data.customScheduleOverrides || []).map(ov => ({
                     ...ov,
                     startTime: ov.overrideType !== 'descanso' ? ov.startTime : undefined,

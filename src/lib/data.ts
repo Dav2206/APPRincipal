@@ -307,11 +307,11 @@ export async function addProfessional (data: Omit<ProfessionalFormData, 'id'>): 
     birthDay: data.birthDay ?? null,
     birthMonth: data.birthMonth ?? null,
     baseSalary: data.baseSalary ?? null,
-    commissionRate: (data.commissionRate ?? 20) / 100,
-    commissionDeductible: data.commissionDeductible,
+    commissionRate: data.commissionRate ? data.commissionRate / 100 : null,
+    commissionDeductible: data.commissionDeductible ?? null,
     discounts: 0,
-    afp: data.afp,
-    seguro: data.seguro,
+    afp: data.afp ?? null,
+    seguro: data.seguro ?? null,
     workSchedule: {}, 
     customScheduleOverrides: (data.customScheduleOverrides || []).map(ov => ({
       ...ov,
@@ -359,6 +359,8 @@ export async function addProfessional (data: Omit<ProfessionalFormData, 'id'>): 
   }
 
   const firestoreData: any = { ...newProfessionalData, biWeeklyEarnings: 0 };
+  
+  // Sanitize all root-level optional fields to be null if they are undefined
   firestoreData.phone = firestoreData.phone ?? null; 
   firestoreData.isManager = firestoreData.isManager ?? false;
   firestoreData.birthDay = firestoreData.birthDay ?? null;
@@ -367,6 +369,8 @@ export async function addProfessional (data: Omit<ProfessionalFormData, 'id'>): 
   firestoreData.commissionRate = firestoreData.commissionRate ?? null;
   firestoreData.commissionDeductible = firestoreData.commissionDeductible ?? null;
   firestoreData.discounts = firestoreData.discounts ?? null;
+  firestoreData.afp = firestoreData.afp ?? null;
+  firestoreData.seguro = firestoreData.seguro ?? null;
  
   if (firestoreData.currentContract) {
     firestoreData.currentContract.startDate = toFirestoreTimestamp(firestoreData.currentContract.startDate);
@@ -425,23 +429,29 @@ export async function updateProfessional (id: string, data: Partial<Professional
       'firstName', 'lastName', 'locationId', 'phone', 'isManager', 'birthDay', 
       'birthMonth', 'baseSalary', 'commissionDeductible', 'discounts', 'afp', 'seguro'
     ];
+
     plainFields.forEach(key => {
       if (data.hasOwnProperty(key)) {
-        firestoreUpdateData[key] = (data as any)[key] ?? null;
+        // Explicitly check for undefined and convert to null before sending to Firestore
+        firestoreUpdateData[key] = (data as any)[key] === undefined ? null : (data as any)[key];
       }
     });
     
-    if (data.hasOwnProperty('commissionRate') && typeof data.commissionRate === 'number') {
-      firestoreUpdateData.commissionRate = data.commissionRate / 100;
-    } else if (data.hasOwnProperty('commissionRate') && data.commissionRate === null) {
-      firestoreUpdateData.commissionRate = null;
+    if (data.hasOwnProperty('commissionRate')) {
+       // Handle number or null, but prevent undefined
+      if (typeof data.commissionRate === 'number') {
+        firestoreUpdateData.commissionRate = data.commissionRate / 100;
+      } else {
+        firestoreUpdateData.commissionRate = null; // Default to null if not a valid number
+      }
     }
     
     if (data.workSchedule) {
-      const newWorkSchedule = { ...existingFirestoreProfessional.workSchedule };
+      // Merge the new schedule changes with the existing one to prevent data loss
+      const newWorkSchedule = JSON.parse(JSON.stringify(existingFirestoreProfessional.workSchedule || {}));
       for (const dayId in data.workSchedule) {
         if (data.workSchedule.hasOwnProperty(dayId)) {
-          newWorkSchedule[dayId as DayOfWeekId] = data.workSchedule[dayId as DayOfWeekId];
+           newWorkSchedule[dayId as DayOfWeekId] = data.workSchedule[dayId as DayOfWeekId];
         }
       }
       firestoreUpdateData.workSchedule = newWorkSchedule;
@@ -2045,6 +2055,7 @@ export async function markDayAsHoliday(day: Date): Promise<number> {
 
 
 // --- End Rotations ---
+
 
 
 
