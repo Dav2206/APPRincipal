@@ -160,18 +160,19 @@ export default function RotationsPage() {
         .filter((item): item is NameBadgeProps => item !== null);
   }, [allProfessionals, selectedLocationId, shiftTimes]);
   
-  const getRestingProfessionalsForDay = useCallback((day: Date): NameBadgeProps[] => {
+ const getRestingProfessionalsForDay = useCallback((day: Date): NameBadgeProps[] => {
     if (!selectedLocationId || selectedLocationId === 'all') return [];
 
     return allProfessionals
       .map(prof => {
-          // Check if the professional's base location is the one being viewed
+          // A professional is shown in the "Resting" section of a location's view only if their base location matches the one being viewed.
           if (prof.locationId === selectedLocationId) {
              const availability = getProfessionalAvailabilityForDate(prof, day);
-             // Show as resting if they are NOT working, OR if they are working but transferred to another location
-             if (!availability || !availability.isWorking || (availability.isWorking && availability.workingLocationId !== selectedLocationId)) {
+             
+             // The professional is TRULY resting only if their availability for the day is explicitly "isWorking: false".
+             if (availability && !availability.isWorking) {
                 let status: NameBadgeStatus = 'resting';
-                if (availability?.reason?.toLowerCase().includes('vacaciones') || availability?.reason?.toLowerCase().includes('feriado')) {
+                if (availability.reason?.toLowerCase().includes('vacaciones') || availability.reason?.toLowerCase().includes('feriado')) {
                     status = 'vacation';
                 }
                 return { name: prof.firstName, status, professionalId: prof.id };
