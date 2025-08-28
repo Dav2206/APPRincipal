@@ -5,7 +5,7 @@ import type { Professional, Contract, ContractEditFormData, ProfessionalFormData
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useAuth } from '@/contexts/auth-provider';
 import { useAppState } from '@/contexts/app-state-provider';
-import { getProfessionals, updateProfessional, getLocations } from '@/lib/data';
+import { getProfessionals, updateProfessional, getLocations, updateArchivedContract, deleteArchivedContract } from '@/lib/data';
 import type { ContractDisplayStatus } from '@/lib/data';
 import { USER_ROLES, LocationId } from '@/lib/constants';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -28,13 +28,24 @@ import {
   DialogFooter,
   DialogClose,
 } from '@/components/ui/dialog';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+  AlertDialogFooter
+} from "@/components/ui/alert-dialog";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
-import { Loader2, AlertTriangle, FileSpreadsheet, Eye, ChevronsDown, Edit3, Calendar as CalendarIconLucide, Filter, PlusCircle, Pencil } from 'lucide-react';
+import { Loader2, AlertTriangle, FileSpreadsheet, Eye, ChevronsDown, Edit3, Calendar as CalendarIconLucide, Filter, PlusCircle, Pencil, Trash2 } from 'lucide-react';
 import { format, parseISO } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { useRouter } from 'next/navigation';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { ContractEditFormSchema } from '@/lib/schemas';
+import { ContractEditFormSchema, ArchivedContractEditFormSchema } from '@/lib/schemas';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useToast } from '@/hooks/use-toast';
@@ -77,7 +88,9 @@ export default function ContractsPage() {
   
   const [isContractEditModalOpen, setIsContractEditModalOpen] = useState(false);
   const [editingContractProfessional, setEditingContractProfessional] = useState<(Professional & { contractDisplayStatus: ContractDisplayStatus }) | null>(null);
-  const [modalMode, setModalMode] = useState<'edit' | 'new'>('new');
+  const [editingArchivedContract, setEditingArchivedContract] = useState<Contract | null>(null);
+  const [modalMode, setModalMode] = useState<'edit' | 'new' | 'edit_archived'>('new');
+  const [contractToDelete, setContractToDelete] = useState<{ professionalId: string, contractId: string, contractDescription: string } | null>(null);
 
 
   const contractEditForm = useForm<ContractEditFormData>({
@@ -86,6 +99,15 @@ export default function ContractsPage() {
       startDate: null,
       endDate: null,
       empresa: NINGUNA_EMPRESA_FORM_VALUE, 
+    },
+  });
+  
+  const archivedContractEditForm = useForm<ContractEditFormData>({
+    resolver: zodResolver(ArchivedContractEditFormSchema),
+    defaultValues: {
+      startDate: null,
+      endDate: null,
+      empresa: NINGUNA_EMPRESA_FORM_VALUE,
     },
   });
 
@@ -248,17 +270,15 @@ export default function ContractsPage() {
         const statusCompare = statusOrder[a.contractDisplayStatus] - statusOrder[b.contractDisplayStatus];
         if (statusCompare !== 0) return statusCompare;
         if (a.currentContract?.endDate && b.currentContract?.endDate) {
-          // Ensure dates are valid before parsing
           const dateAValid = a.currentContract.endDate && typeof a.currentContract.endDate === 'string';
           const dateBValid = b.currentContract.endDate && typeof b.currentContract.endDate === 'string';
           if (dateAValid && dateBValid) {
             try {
                 return parseISO(a.currentContract.endDate).getTime() - parseISO(b.currentContract.endDate).getTime();
             } catch (e) {
-                // Fallback if parsing fails, or handle as needed
             }
-          } else if (dateAValid) return -1; // a before b if b is invalid
-          else if (dateBValid) return 1;  // b before a if a is invalid
+          } else if (dateAValid) return -1;
+          else if (dateBValid) return 1;
 
         }
         return `${a.firstName} ${a.lastName}`.localeCompare(`${b.firstName} ${b.lastName}`);
@@ -273,9 +293,36 @@ export default function ContractsPage() {
     setSelectedProfessionalForHistory(professional);
     setIsHistoryModalOpen(true);
   };
+  
+  const handleEditArchivedContract = (prof: Professional, contract: Contract) => {
+    setEditingContractProfessional(prof);
+    setEditingArchivedContract(contract);
+    setModalMode('edit_archived');
+    archivedContractEditForm.reset({
+      startDate: contract.startDate ? parseISO(contract.startDate) : null,
+      endDate: contract.endDate ? parseISO(contract.endDate) : null,
+      empresa: contract.empresa || NINGUNA_EMPRESA_FORM_VALUE,
+    });
+    setIsContractEditModalOpen(true);
+  };
+
+  const handleDeleteArchivedContract = async () => {
+    if (!contractToDelete) return;
+    try {
+      await deleteArchivedContract(contractToDelete.professionalId, contractToDelete.contractId);
+      toast({ title: "Contrato Archivado Eliminado", description: "El contrato ha sido eliminado del historial." });
+      setContractToDelete(null);
+      setIsHistoryModalOpen(false); 
+      fetchContractData();
+    } catch (error) {
+      console.error("Error deleting archived contract:", error);
+      toast({ title: "Error", description: "No se pudo eliminar el contrato archivado.", variant: "destructive" });
+    }
+  };
 
   const handleEditContract = (professional: Professional & { contractDisplayStatus: ContractDisplayStatus }) => {
     setEditingContractProfessional(professional);
+    setEditingArchivedContract(null);
     setModalMode('edit');
     contractEditForm.reset({
       startDate: professional.currentContract?.startDate ? parseISO(professional.currentContract.startDate) : null,
@@ -287,6 +334,7 @@ export default function ContractsPage() {
 
   const handleNewContract = (professional: Professional & { contractDisplayStatus: ContractDisplayStatus }) => {
     setEditingContractProfessional(professional);
+    setEditingArchivedContract(null);
     setModalMode('new');
     contractEditForm.reset({
       startDate: null,
@@ -299,6 +347,20 @@ export default function ContractsPage() {
 
   const onContractEditSubmit = async (data: ContractEditFormData) => {
     if (!editingContractProfessional) return;
+
+    if (modalMode === 'edit_archived' && editingArchivedContract) {
+       try {
+        await updateArchivedContract(editingContractProfessional.id, editingArchivedContract.id, data);
+        toast({ title: "Contrato Archivado Actualizado", description: "El contrato del historial ha sido actualizado." });
+        setIsContractEditModalOpen(false);
+        setIsHistoryModalOpen(false);
+        fetchContractData();
+       } catch (error) {
+         console.error("Error updating archived contract:", error);
+         toast({ title: "Error", description: "No se pudo actualizar el contrato archivado.", variant: "destructive"});
+       }
+       return;
+    }
 
     try {
       const professionalId = editingContractProfessional.id;
@@ -331,15 +393,15 @@ export default function ContractsPage() {
   };
 
   const handleOpenManageEmpresasModal = () => {
-    setEditingEmpresaName(null); // Reset edit mode when opening modal
-    setNewEmpresaNameInput(''); // Clear input
+    setEditingEmpresaName(null); 
+    setNewEmpresaNameInput(''); 
     setIsManageEmpresasModalOpen(true);
   };
 
   const handleCloseManageEmpresasModal = () => {
     setIsManageEmpresasModalOpen(false);
-    setEditingEmpresaName(null); // Reset edit mode when closing modal
-    setNewEmpresaNameInput(''); // Clear input
+    setEditingEmpresaName(null); 
+    setNewEmpresaNameInput(''); 
   };
 
 
@@ -369,6 +431,8 @@ export default function ContractsPage() {
       </CardContent>
     </Card>
   );
+
+  const currentForm = modalMode === 'edit_archived' ? archivedContractEditForm : contractEditForm;
 
   return (
     <div className="container mx-auto py-8 px-4 md:px-0 space-y-6">
@@ -488,16 +552,20 @@ export default function ContractsPage() {
           <DialogContent className="sm:max-w-md">
             <DialogHeader>
                <DialogTitle>
-                {modalMode === 'edit' ? `Editar Contrato de ${editingContractProfessional.firstName} ${editingContractProfessional.lastName}` : `Nuevo Contrato para ${editingContractProfessional.firstName} ${editingContractProfessional.lastName}`}
+                {modalMode === 'edit' ? `Editar Contrato de ${editingContractProfessional.firstName}` : 
+                 modalMode === 'edit_archived' ? `Editar Contrato Archivado de ${editingContractProfessional.firstName}` :
+                 `Nuevo Contrato para ${editingContractProfessional.firstName}`}
               </DialogTitle>
               <DialogDescription>
-                {modalMode === 'edit' ? 'Actualice los detalles del contrato actual.' : 'Ingrese los detalles para el nuevo contrato. El contrato actual (si existe) será archivado.'}
+                {modalMode === 'edit' ? 'Actualice los detalles del contrato actual.' : 
+                 modalMode === 'edit_archived' ? 'Actualice los detalles del contrato del historial.' :
+                 'Ingrese los detalles para el nuevo contrato. El contrato actual (si existe) será archivado.'}
               </DialogDescription>
             </DialogHeader>
-            <Form {...contractEditForm}>
-              <form onSubmit={contractEditForm.handleSubmit(onContractEditSubmit)} className="space-y-4 py-2">
+            <Form {...currentForm}>
+              <form onSubmit={currentForm.handleSubmit(onContractEditSubmit)} className="space-y-4 py-2">
                 <FormField
-                  control={contractEditForm.control}
+                  control={currentForm.control}
                   name="startDate"
                   render={({ field }) => (
                     <FormItem className="flex flex-col">
@@ -512,7 +580,7 @@ export default function ContractsPage() {
                           </FormControl>
                         </PopoverTrigger>
                         <PopoverContent className="w-auto p-0" align="start">
-                          <Calendar mode="single" selected={field.value} onSelect={field.onChange} initialFocus />
+                          <Calendar mode="single" selected={field.value as Date | undefined} onSelect={field.onChange} initialFocus />
                         </PopoverContent>
                       </Popover>
                       <FormMessage />
@@ -520,7 +588,7 @@ export default function ContractsPage() {
                   )}
                 />
                 <FormField
-                  control={contractEditForm.control}
+                  control={currentForm.control}
                   name="endDate"
                   render={({ field }) => (
                     <FormItem className="flex flex-col">
@@ -537,9 +605,9 @@ export default function ContractsPage() {
                         <PopoverContent className="w-auto p-0" align="start">
                           <Calendar
                             mode="single"
-                            selected={field.value}
+                            selected={field.value as Date | undefined}
                             onSelect={field.onChange}
-                            disabled={(date) => contractEditForm.getValues("startDate") ? date < contractEditForm.getValues("startDate")! : false}
+                            disabled={(date) => currentForm.getValues("startDate") ? date < currentForm.getValues("startDate")! : false}
                             initialFocus
                           />
                         </PopoverContent>
@@ -549,7 +617,7 @@ export default function ContractsPage() {
                   )}
                 />
                 <FormField
-                  control={contractEditForm.control}
+                  control={currentForm.control}
                   name="empresa"
                   render={({ field }) => (
                     <FormItem>
@@ -578,9 +646,9 @@ export default function ContractsPage() {
                 />
                 <DialogFooter className="pt-4">
                   <DialogClose asChild><Button type="button" variant="outline">Cancelar</Button></DialogClose>
-                   <Button type="submit" disabled={contractEditForm.formState.isSubmitting}>
-                    {contractEditForm.formState.isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                    {modalMode === 'edit' ? 'Guardar Cambios' : 'Crear Contrato'}
+                   <Button type="submit" disabled={currentForm.formState.isSubmitting}>
+                    {currentForm.formState.isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                    Guardar Cambios
                   </Button>
                 </DialogFooter>
               </form>
@@ -672,7 +740,7 @@ export default function ContractsPage() {
       {/* Contract History Modal */}
       {selectedProfessionalForHistory && (
         <Dialog open={isHistoryModalOpen} onOpenChange={setIsHistoryModalOpen}>
-          <DialogContent className="sm:max-w-xl">
+          <DialogContent className="sm:max-w-2xl">
             <DialogHeader>
               <DialogTitle>Historial de Contratos de {selectedProfessionalForHistory.firstName} {selectedProfessionalForHistory.lastName}</DialogTitle>
               <DialogDescription>Lista de contratos anteriores y el contrato vigente del profesional.</DialogDescription>
@@ -686,7 +754,7 @@ export default function ContractsPage() {
                       <TableHead>Fecha Inicio</TableHead>
                       <TableHead>Fecha Fin</TableHead>
                       <TableHead>Empresa</TableHead>
-                      <TableHead>Notas</TableHead>
+                      <TableHead>Acciones</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -696,7 +764,11 @@ export default function ContractsPage() {
                         <TableCell className="text-xs">{selectedProfessionalForHistory.currentContract.startDate ? format(parseISO(selectedProfessionalForHistory.currentContract.startDate), 'dd/MM/yyyy') : '-'}</TableCell>
                         <TableCell className="text-xs">{selectedProfessionalForHistory.currentContract.endDate ? format(parseISO(selectedProfessionalForHistory.currentContract.endDate), 'dd/MM/yyyy') : '-'}</TableCell>
                         <TableCell className="text-xs">{selectedProfessionalForHistory.currentContract.empresa || '-'}</TableCell>
-                        <TableCell className="text-xs">{selectedProfessionalForHistory.currentContract.notes || '-'}</TableCell>
+                        <TableCell>
+                          <Button variant="outline" size="xs" onClick={() => handleEditContract(selectedProfessionalForHistory)}>
+                            <Edit3 className="mr-1 h-3 w-3" /> Editar
+                          </Button>
+                        </TableCell>
                       </TableRow>
                     )}
                     {selectedProfessionalForHistory.contractHistory && selectedProfessionalForHistory.contractHistory
@@ -723,7 +795,39 @@ export default function ContractsPage() {
                         <TableCell className="text-xs">{contract.startDate ? format(parseISO(contract.startDate), 'dd/MM/yyyy') : '-'}</TableCell>
                         <TableCell className="text-xs">{contract.endDate ? format(parseISO(contract.endDate), 'dd/MM/yyyy') : '-'}</TableCell>
                         <TableCell className="text-xs">{contract.empresa || '-'}</TableCell>
-                        <TableCell className="text-xs">{contract.notes || '-'}</TableCell>
+                        <TableCell className="space-x-1">
+                          <Button variant="outline" size="xs" onClick={() => handleEditArchivedContract(selectedProfessionalForHistory, contract)}>
+                            <Edit3 className="mr-1 h-3 w-3" /> Editar
+                          </Button>
+                          <AlertDialog>
+                            <AlertDialogTrigger asChild>
+                              <Button variant="destructive" size="xs">
+                                <Trash2 className="mr-1 h-3 w-3" /> Eliminar
+                              </Button>
+                            </AlertDialogTrigger>
+                             <AlertDialogContent>
+                                <AlertDialogHeader>
+                                  <AlertDialogTitle>¿Confirmar Eliminación?</AlertDialogTitle>
+                                  <AlertDialogDescription>
+                                    Esta acción eliminará permanentemente el contrato archivado del {contract.startDate ? format(parseISO(contract.startDate), 'dd/MM/yyyy') : ''} al {contract.endDate ? format(parseISO(contract.endDate), 'dd/MM/yyyy') : ''}. Esta acción no se puede deshacer.
+                                  </AlertDialogDescription>
+                                </AlertDialogHeader>
+                                <AlertDialogFooter>
+                                  <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                                  <AlertDialogAction onClick={() => {
+                                      setContractToDelete({
+                                        professionalId: selectedProfessionalForHistory.id,
+                                        contractId: contract.id,
+                                        contractDescription: `del ${contract.startDate ? format(parseISO(contract.startDate), 'dd/MM/yy') : ''} al ${contract.endDate ? format(parseISO(contract.endDate), 'dd/MM/yy') : ''}`
+                                      });
+                                      handleDeleteArchivedContract();
+                                  }} className={cn("bg-destructive text-destructive-foreground hover:bg-destructive/90")}>
+                                      Sí, Eliminar
+                                  </AlertDialogAction>
+                                </AlertDialogFooter>
+                              </AlertDialogContent>
+                          </AlertDialog>
+                        </TableCell>
                       </TableRow>
                     ))}
                   </TableBody>
@@ -732,7 +836,7 @@ export default function ContractsPage() {
                 <p className="text-sm text-muted-foreground text-center py-4">No hay historial de contratos ni contrato vigente para este profesional.</p>
               )}
             </ScrollArea>
-            <DialogFooter>
+            <DialogFooter className="mt-4">
               <DialogClose asChild>
                 <Button type="button" variant="outline">Cerrar</Button>
               </DialogClose>
@@ -740,8 +844,25 @@ export default function ContractsPage() {
           </DialogContent>
         </Dialog>
       )}
+
+      <AlertDialog open={!!contractToDelete} onOpenChange={() => setContractToDelete(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>¿Está seguro de eliminar este contrato?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Esta acción eliminará permanentemente el contrato {contractToDelete?.contractDescription}. Esta acción no se puede deshacer.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction onClick={handleDeleteArchivedContract} className={cn("bg-destructive text-destructive-foreground hover:bg-destructive/90")}>
+              Eliminar Contrato
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
     </div>
   );
 }
 
-    

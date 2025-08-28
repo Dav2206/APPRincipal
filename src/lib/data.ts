@@ -1,6 +1,6 @@
 
 // src/lib/data.ts
-import type { User, Professional, Patient, Service, Appointment, AppointmentFormData, ProfessionalFormData, AppointmentStatus, ServiceFormData, Contract, PeriodicReminder, ImportantNote, PeriodicReminderFormData, ImportantNoteFormData, AddedServiceItem, AppointmentUpdateFormData, Location, PaymentGroup, GroupingPreset, Material, MaterialFormData } from '@/types';
+import type { User, Professional, Patient, Service, Appointment, AppointmentFormData, ProfessionalFormData, AppointmentStatus, ServiceFormData, Contract, PeriodicReminder, ImportantNote, PeriodicReminderFormData, ImportantNoteFormData, AddedServiceItem, AppointmentUpdateFormData, Location, PaymentGroup, GroupingPreset, Material, MaterialFormData, ContractEditFormData } from '@/types';
 import { USER_ROLES, APPOINTMENT_STATUS, APPOINTMENT_STATUS_DISPLAY, TIME_SLOTS, DAYS_OF_WEEK, LOCATIONS_FALLBACK } from '@/lib/constants';
 import type { LocationId, DayOfWeekId } from '@/lib/constants';
 import { formatISO, parseISO, addDays, setHours, setMinutes, startOfDay, endOfDay, isSameDay as dateFnsIsSameDay, startOfMonth, endOfMonth, subDays, isEqual, isBefore, isAfter, getDate, getYear, getMonth, setMonth, setYear, getHours, addMinutes as dateFnsAddMinutes, isWithinInterval, getDay, format, differenceInCalendarDays, areIntervalsOverlapping, parse, addMonths, addQuarters, addYears } from 'date-fns';
@@ -85,68 +85,65 @@ const convertDocumentData = (docData: DocumentData): any => {
 
 
 // --- Contract Status Helper ---
-export type ContractDisplayStatus = 'Activo' | 'Próximo a Vencer' | 'Vencido' | 'Sin Contrato' | 'No Vigente Aún';
+export type ContractDisplayStatus = 'Activo' | 'Próximo a Vencer' | 'Vencido' | 'Sin Contrato';
 
 export function getContractDisplayStatus(contract: Contract | null | undefined, referenceDateParam?: Date | string): ContractDisplayStatus {
-  const currentSystemDate = new Date();
-  let referenceDate: Date;
+    const currentSystemDate = new Date();
+    let referenceDate: Date;
 
-  if (referenceDateParam) {
-    if (typeof referenceDateParam === 'string') {
-      try {
-        referenceDate = startOfDay(parseISO(referenceDateParam));
-        if (isNaN(referenceDate.getTime())) {
-          referenceDate = startOfDay(currentSystemDate);
+    if (referenceDateParam) {
+        if (typeof referenceDateParam === 'string') {
+          try {
+            referenceDate = startOfDay(parseISO(referenceDateParam));
+             if(isNaN(referenceDate.getTime())){
+               referenceDate = startOfDay(currentSystemDate);
+            }
+          } catch(e) {
+            referenceDate = startOfDay(currentSystemDate);
+          }
+        } else if (referenceDateParam instanceof Date && !isNaN(referenceDateParam.getTime())) {
+            referenceDate = startOfDay(referenceDateParam);
+        } else {
+             referenceDate = startOfDay(currentSystemDate);
         }
-      } catch (e) {
-        referenceDate = startOfDay(currentSystemDate);
-      }
-    } else if (referenceDateParam instanceof Date && !isNaN(referenceDateParam.getTime())) {
-      referenceDate = startOfDay(referenceDateParam);
     } else {
-      referenceDate = startOfDay(currentSystemDate);
+        referenceDate = startOfDay(currentSystemDate);
     }
-  } else {
-    referenceDate = startOfDay(currentSystemDate);
-  }
 
-  if (!contract || !contract.startDate || !contract.endDate) {
-    return 'Sin Contrato';
-  }
+    if (!contract || !contract.startDate || !contract.endDate) {
+        return 'Sin Contrato';
+    }
 
-  const { startDate: startDateStr, endDate: endDateStr } = contract;
+    const { startDate: startDateStr, endDate: endDateStr } = contract;
 
-  if (typeof startDateStr !== 'string' || typeof endDateStr !== 'string' || startDateStr.length === 0 || endDateStr.length === 0) {
-    return 'Sin Contrato';
-  }
+    if (typeof startDateStr !== 'string' || typeof endDateStr !== 'string' || startDateStr.length === 0 || endDateStr.length === 0) {
+      return 'Sin Contrato';
+    }
 
-  let startDate: Date;
-  let endDate: Date;
+    let startDate: Date;
+    let endDate: Date;
 
-  try {
-    startDate = parseISO(startDateStr);
-    endDate = parseISO(endDateStr);
-  } catch (e) {
-    return 'Sin Contrato'; 
-  }
+    try {
+        startDate = parseISO(startDateStr);
+        endDate = parseISO(endDateStr);
+    } catch(e) {
+      return 'Sin Contrato'; // Fallback for invalid date strings
+    }
+    
+    if (isNaN(startDate.getTime()) || isNaN(endDate.getTime())) {
+      return 'Sin Contrato';
+    }
 
-  if (isNaN(startDate.getTime()) || isNaN(endDate.getTime())) {
-    return 'Sin Contrato';
-  }
-  
-  if (isBefore(referenceDate, startOfDay(startDate))) {
-    return 'No Vigente Aún';
-  }
-  if (isAfter(referenceDate, endOfDay(endDate))) { 
-    return 'Vencido';
-  }
+    if (isAfter(referenceDate, endOfDay(endDate))) { // Use endOfDay to include the last day
+        return 'Vencido';
+    }
 
-  const daysUntilExpiry = differenceInCalendarDays(endOfDay(endDate), referenceDate);
-  if (daysUntilExpiry <= 15 && daysUntilExpiry >= 0) {
-    return 'Próximo a Vencer';
-  }
+    const daysUntilExpiry = differenceInCalendarDays(endOfDay(endDate), referenceDate);
+    if (daysUntilExpiry <= 15 && daysUntilExpiry >= 0) {
+        return 'Próximo a Vencer';
+    }
 
-  return 'Activo';
+    return 'Activo';
 }
 // --- End Contract Status Helper ---
 
@@ -304,14 +301,15 @@ export async function addProfessional (data: Omit<ProfessionalFormData, 'id'>): 
     locationId: data.locationId,
     phone: data.phone || null,
     isManager: data.isManager || false,
-    birthDay: data.birthDay ?? null,
-    birthMonth: data.birthMonth ?? null,
-    baseSalary: data.baseSalary ?? null,
-    commissionRate: data.commissionRate ? data.commissionRate / 100 : null,
-    commissionDeductible: data.commissionDeductible ?? null,
-    discounts: 0,
-    afp: data.afp ?? null,
-    seguro: data.seguro ?? null,
+    birthDay: data.birthDay,
+    birthMonth: data.birthMonth,
+    baseSalary: data.baseSalary,
+    commissionRate: data.commissionRate,
+    commissionDeductible: data.commissionDeductible,
+    discounts: data.discounts || 0,
+    afp: data.afp,
+    seguro: data.seguro,
+
     workSchedule: {}, 
     customScheduleOverrides: (data.customScheduleOverrides || []).map(ov => ({
       ...ov,
@@ -360,47 +358,22 @@ export async function addProfessional (data: Omit<ProfessionalFormData, 'id'>): 
 
   const firestoreData: any = { ...newProfessionalData, biWeeklyEarnings: 0 };
   
-  // Sanitize all root-level optional fields to be null if they are undefined
-  firestoreData.phone = firestoreData.phone ?? null; 
-  firestoreData.isManager = firestoreData.isManager ?? false;
-  firestoreData.birthDay = firestoreData.birthDay ?? null;
-  firestoreData.birthMonth = firestoreData.birthMonth ?? null;
-  firestoreData.baseSalary = firestoreData.baseSalary ?? null;
-  firestoreData.commissionRate = firestoreData.commissionRate ?? null;
-  firestoreData.commissionDeductible = firestoreData.commissionDeductible ?? null;
-  firestoreData.discounts = firestoreData.discounts ?? null;
-  firestoreData.afp = firestoreData.afp ?? null;
-  firestoreData.seguro = firestoreData.seguro ?? null;
- 
   if (firestoreData.currentContract) {
     firestoreData.currentContract.startDate = toFirestoreTimestamp(firestoreData.currentContract.startDate);
     firestoreData.currentContract.endDate = toFirestoreTimestamp(firestoreData.currentContract.endDate);
-    firestoreData.currentContract.notes = firestoreData.currentContract.notes ?? null;
-    firestoreData.currentContract.empresa = firestoreData.currentContract.empresa ?? null;
-  } else {
-    firestoreData.currentContract = null;
   }
 
   if (firestoreData.customScheduleOverrides) {
     firestoreData.customScheduleOverrides = firestoreData.customScheduleOverrides.map((ov: any) => ({
       ...ov,
-      date: toFirestoreTimestamp(ov.date), 
-      startTime: ov.startTime ?? null,
-      endTime: ov.endTime ?? null,
-      notes: ov.notes ?? null,
-      locationId: ov.locationId ?? null,
+      date: toFirestoreTimestamp(ov.date),
     }));
-  } else {
-    firestoreData.customScheduleOverrides = [];
   }
   
    firestoreData.contractHistory = firestoreData.contractHistory ? firestoreData.contractHistory.map((ch:any) => ({
     ...ch,
-    id: ch.id || generateId(),
     startDate: toFirestoreTimestamp(ch.startDate),
     endDate: toFirestoreTimestamp(ch.endDate),
-    notes: ch.notes ?? null,
-    empresa: ch.empresa ?? null,
   })) : [];
 
   const docRef = await addDoc(collection(firestore, 'profesionales'), firestoreData);
@@ -425,7 +398,7 @@ export async function updateProfessional(id: string, data: Partial<ProfessionalF
 
         const firestoreUpdateData: { [key: string]: any } = {};
 
-        // Define all possible keys for sanitization and build the update object safely
+        // Define all possible keys for sanitization
         const allowedKeys: (keyof ProfessionalFormData)[] = [
             'firstName', 'lastName', 'locationId', 'phone', 'isManager', 'birthDay', 'birthMonth',
             'baseSalary', 'commissionRate', 'commissionDeductible', 'discounts', 'afp', 'seguro',
@@ -436,22 +409,16 @@ export async function updateProfessional(id: string, data: Partial<ProfessionalF
         allowedKeys.forEach(key => {
             if (data.hasOwnProperty(key)) {
                 const value = (data as any)[key];
-                 // Sanitize undefined to null for all fields. Also check for NaN for numbers.
-                if (value === undefined || (typeof value === 'number' && isNaN(value))) {
-                    firestoreUpdateData[key] = null;
-                } else {
-                    firestoreUpdateData[key] = value;
-                }
+                firestoreUpdateData[key] = value;
             }
         });
-
-        // Specific handlers for nested objects and special conversions
+        
         if (firestoreUpdateData.commissionRate !== undefined && firestoreUpdateData.commissionRate !== null) {
             firestoreUpdateData.commissionRate /= 100; // Convert from % to decimal
         }
         
         // --- Contract Handling ---
-        if (firestoreUpdateData.currentContract_startDate !== undefined && firestoreUpdateData.currentContract_endDate !== undefined) {
+        if (data.currentContract_startDate !== undefined && data.currentContract_endDate !== undefined) {
              const oldContract = existingProf.currentContract;
              const newHistory = [...(existingProf.contractHistory || [])];
              if(oldContract) {
@@ -460,52 +427,28 @@ export async function updateProfessional(id: string, data: Partial<ProfessionalF
              firestoreUpdateData.contractHistory = newHistory.map(ch => ({
                  ...ch,
                  startDate: toFirestoreTimestamp(ch.startDate),
-                 endDate: toFirestoreTimestamp(ch.endDate),
-                 notes: ch.notes ?? null,
-                 empresa: ch.empresa ?? null
+                 endDate: toFirestoreTimestamp(ch.endDate)
              }));
 
              const newContract = {
                  id: generateId(),
-                 startDate: toFirestoreTimestamp(firestoreUpdateData.currentContract_startDate),
-                 endDate: toFirestoreTimestamp(firestoreUpdateData.currentContract_endDate),
-                 notes: firestoreUpdateData.currentContract_notes ?? oldContract?.notes ?? null,
-                 empresa: firestoreUpdateData.currentContract_empresa ?? oldContract?.empresa ?? null,
+                 startDate: toFirestoreTimestamp(data.currentContract_startDate),
+                 endDate: toFirestoreTimestamp(data.currentContract_endDate),
+                 notes: data.currentContract_notes || oldContract?.notes || null,
+                 empresa: data.currentContract_empresa || oldContract?.empresa || null,
              };
              firestoreUpdateData.currentContract = newContract;
 
-             // Clean up individual fields to avoid conflict
              delete firestoreUpdateData.currentContract_startDate;
              delete firestoreUpdateData.currentContract_endDate;
              delete firestoreUpdateData.currentContract_notes;
              delete firestoreUpdateData.currentContract_empresa;
         }
 
-
-        // --- Schedule Handling ---
-        if (firestoreUpdateData.workSchedule) {
-            const sanitizedSchedule: { [key in DayOfWeekId]?: any } = {};
-            (Object.keys(firestoreUpdateData.workSchedule) as Array<DayOfWeekId>).forEach(dayId => {
-                const dayData = firestoreUpdateData.workSchedule[dayId];
-                sanitizedSchedule[dayId] = {
-                    isWorking: dayData.isWorking ?? false,
-                    startTime: dayData.startTime ?? null,
-                    endTime: dayData.endTime ?? null
-                };
-            });
-            firestoreUpdateData.workSchedule = sanitizedSchedule;
-        }
-
         if (firestoreUpdateData.customScheduleOverrides) {
             firestoreUpdateData.customScheduleOverrides = firestoreUpdateData.customScheduleOverrides.map((ov: any) => ({
-                id: ov.id || generateId(),
-                date: toFirestoreTimestamp(ov.date),
-                overrideType: ov.overrideType || 'descanso',
-                isWorking: ov.overrideType !== 'descanso',
-                startTime: ov.startTime ?? null,
-                endTime: ov.endTime ?? null,
-                notes: ov.notes ?? null,
-                locationId: ov.locationId ?? null,
+                ...ov,
+                date: toFirestoreTimestamp(ov.date)
             }));
         }
         
@@ -515,6 +458,63 @@ export async function updateProfessional(id: string, data: Partial<ProfessionalF
 
         return { ...existingProf, ...data }; // Return optimistic update
     });
+}
+
+export async function updateArchivedContract(professionalId: string, contractId: string, data: ContractEditFormData): Promise<Professional | undefined> {
+  if (!firestore) throw new Error("Firestore not initialized.");
+  const docRef = doc(firestore, 'profesionales', professionalId);
+
+  return runTransaction(firestore, async (transaction) => {
+    const profSnap = await transaction.get(docRef);
+    if (!profSnap.exists()) throw new Error("Professional not found");
+
+    const professional = { id: profSnap.id, ...convertDocumentData(profSnap.data()) } as Professional;
+    const contractHistory = professional.contractHistory || [];
+    const contractIndex = contractHistory.findIndex(c => c.id === contractId);
+
+    if (contractIndex === -1) throw new Error("Archived contract not found");
+    
+    const updatedContract = {
+      ...contractHistory[contractIndex],
+      startDate: data.startDate ? formatISO(data.startDate, { representation: 'date' }) : contractHistory[contractIndex].startDate,
+      endDate: data.endDate ? formatISO(data.endDate, { representation: 'date' }) : contractHistory[contractIndex].endDate,
+      empresa: data.empresa ?? contractHistory[contractIndex].empresa,
+    };
+    
+    const newContractHistory = [...contractHistory];
+    newContractHistory[contractIndex] = updatedContract;
+    
+    const firestoreHistory = newContractHistory.map(ch => ({
+        ...ch,
+        startDate: toFirestoreTimestamp(ch.startDate),
+        endDate: toFirestoreTimestamp(ch.endDate),
+    }));
+
+    transaction.update(docRef, { contractHistory: firestoreHistory });
+    return { ...professional, contractHistory: newContractHistory };
+  });
+}
+
+export async function deleteArchivedContract(professionalId: string, contractId: string): Promise<Professional | undefined> {
+  if (!firestore) throw new Error("Firestore not initialized.");
+  const docRef = doc(firestore, 'profesionales', professionalId);
+
+  return runTransaction(firestore, async (transaction) => {
+    const profSnap = await transaction.get(docRef);
+    if (!profSnap.exists()) throw new Error("Professional not found");
+
+    const professional = { id: profSnap.id, ...convertDocumentData(profSnap.data()) } as Professional;
+    const newContractHistory = (professional.contractHistory || []).filter(c => c.id !== contractId);
+    
+    const firestoreHistory = newContractHistory.map(ch => ({
+        ...ch,
+        startDate: toFirestoreTimestamp(ch.startDate),
+        endDate: toFirestoreTimestamp(ch.endDate),
+    }));
+
+    transaction.update(docRef, { contractHistory: firestoreHistory });
+    return { ...professional, contractHistory: newContractHistory };
+  });
 }
 
 
@@ -579,7 +579,7 @@ export async function addPatient (data: Omit<Patient, 'id'>): Promise<Patient> {
   const patientData = {
     ...data,
     phone: data.phone || null,
-    age: data.age === undefined || data.age === 0 ? null : data.age,
+    age: data.age === undefined ? null : data.age,
     isDiabetic: data.isDiabetic || false,
     preferredProfessionalId: data.preferredProfessionalId || null,
     notes: data.notes || null,
@@ -594,7 +594,7 @@ export async function addPatient (data: Omit<Patient, 'id'>): Promise<Patient> {
 export async function updatePatient (id: string, data: Partial<Patient>): Promise<Patient | undefined> {
    const patientUpdateData = { ...data };
     if (patientUpdateData.hasOwnProperty('phone')) patientUpdateData.phone = patientUpdateData.phone || null;
-    if (patientUpdateData.hasOwnProperty('age')) patientUpdateData.age = patientUpdateData.age === undefined || patientUpdateData.age === 0 ? null : patientUpdateData.age;
+    if (patientUpdateData.hasOwnProperty('age')) patientUpdateData.age = patientUpdateData.age === undefined ? null : patientUpdateData.age;
     if (patientUpdateData.hasOwnProperty('isDiabetic')) patientUpdateData.isDiabetic = patientUpdateData.isDiabetic || false;
     if (patientUpdateData.hasOwnProperty('preferredProfessionalId')) patientUpdateData.preferredProfessionalId = patientUpdateData.preferredProfessionalId || null;
     if (patientUpdateData.hasOwnProperty('notes')) patientUpdateData.notes = patientUpdateData.notes || null;

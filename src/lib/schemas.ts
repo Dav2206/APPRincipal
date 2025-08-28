@@ -1,5 +1,4 @@
 
-
 import { z } from 'zod';
 import { TIME_SLOTS, APPOINTMENT_STATUS, APPOINTMENT_STATUS_DISPLAY, DAYS_OF_WEEK } from '@/lib/constants';
 import type { DayOfWeekId, LocationId } from '@/lib/constants';
@@ -108,6 +107,7 @@ export const ProfessionalFormSchema = z.object({
   baseSalary: z.coerce.number().positive("El sueldo base debe ser un número positivo.").optional().nullable(),
   commissionRate: z.coerce.number().min(0, "La tasa no puede ser negativa").max(100, "La tasa no puede ser mayor a 100").optional().nullable(),
   commissionDeductible: z.coerce.number().min(0, "El deducible no puede ser negativo").optional().nullable(),
+  discounts: z.coerce.number().min(0, "Los descuentos no pueden ser negativos").optional().nullable(),
   afp: z.coerce.number().min(0, "AFP no puede ser negativo.").optional().nullable(),
   seguro: z.coerce.number().min(0, "Seguro no puede ser negativo.").optional().nullable(),
 
@@ -207,11 +207,13 @@ export const ServiceFormSchema = z.object({
 });
 export type ServiceFormData = z.infer<typeof ServiceFormSchema>;
 
-export const ContractEditFormSchema = z.object({
+const ContractBaseSchema = z.object({
   startDate: z.date({ required_error: "La fecha de inicio del contrato es requerida."}).nullable(),
   endDate: z.date({ required_error: "La fecha de fin del contrato es requerida."}).nullable(),
   empresa: z.string().max(100, "Nombre de empresa no debe exceder 100 caracteres.").optional().nullable(),
-}).refine(data => {
+});
+
+export const ContractEditFormSchema = ContractBaseSchema.refine(data => {
   if (data.startDate && data.endDate) {
     return data.endDate >= data.startDate;
   }
@@ -221,6 +223,18 @@ export const ContractEditFormSchema = z.object({
   path: ["endDate"],
 });
 export type ContractEditFormData = z.infer<typeof ContractEditFormSchema>;
+
+export const ArchivedContractEditFormSchema = ContractBaseSchema.extend({
+  id: z.string().optional() // No es requerido para la validación, pero ayuda a identificar
+}).refine(data => {
+  if (data.startDate && data.endDate) {
+    return data.endDate >= data.startDate;
+  }
+  return true;
+}, {
+  message: "La fecha de fin del contrato debe ser igual o posterior a la fecha de inicio.",
+  path: ["endDate"],
+});
 
 export const PeriodicReminderFormSchema = z.object({
   title: z.string().min(1, "El título es requerido."),

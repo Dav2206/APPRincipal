@@ -180,6 +180,7 @@ export type ProfessionalFormData = {
   baseSalary?: number | null;
   commissionRate?: number | null;
   commissionDeductible?: number | null;
+  discounts?: number | null;
   afp?: number | null;
   seguro?: number | null;
 
@@ -239,6 +240,7 @@ export type ServiceFormData = {
 };
 
 export type ContractEditFormData = {
+  id?: string;
   startDate: Date | null;
   endDate: Date | null;
   empresa?: string | null;
