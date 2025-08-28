@@ -185,22 +185,7 @@ export default function NewProfessionalPage() {
 
     const onSubmit = async (data: ProfessionalFormData) => {
         try {
-            const formattedData: ProfessionalFormData = {
-                ...data,
-                commissionRate: data.commissionRate,
-                customScheduleOverrides: (data.customScheduleOverrides || []).map(ov => ({
-                    ...ov,
-                    startTime: ov.overrideType !== 'descanso' ? ov.startTime : undefined,
-                    endTime: ov.overrideType !== 'descanso' ? ov.endTime : undefined,
-                    locationId: ov.overrideType === 'traslado' ? ov.locationId : undefined,
-                })),
-                 baseSalary: data.baseSalary === undefined ? null : data.baseSalary,
-                commissionDeductible: data.commissionDeductible === undefined ? null : data.commissionDeductible,
-                afp: data.afp === undefined ? null : data.afp,
-                seguro: data.seguro === undefined ? null : data.seguro,
-            };
-
-            await addProfessional(formattedData as any);
+            await addProfessional(data as any);
             toast({ title: "Profesional Agregado", description: `${data.firstName} ${data.lastName} agregado.` });
             router.push('/professionals');
             
@@ -641,4 +626,3 @@ function VacationFormDialog({ isOpen, onClose, onSave }: VacationFormDialogProps
           </Dialog>
       );
 }
-

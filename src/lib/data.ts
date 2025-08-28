@@ -446,7 +446,17 @@ export async function updateProfessional (id: string, data: Partial<Professional
     }
     
     if (data.workSchedule) {
+      // Create a full copy of the existing schedule to prevent data loss
       const newWorkSchedule = JSON.parse(JSON.stringify(existingFirestoreProfessional.workSchedule || {}));
+      
+      // Initialize all days if they don't exist in the copy
+      DAYS_OF_WEEK.forEach(day => {
+        if (!newWorkSchedule[day.id]) {
+          newWorkSchedule[day.id] = { isWorking: false, startTime: '00:00', endTime: '00:00' };
+        }
+      });
+      
+      // Now, safely update only the days provided in the partial `data`
       for (const dayId in data.workSchedule) {
         if (data.workSchedule.hasOwnProperty(dayId)) {
            newWorkSchedule[dayId as DayOfWeekId] = data.workSchedule[dayId as DayOfWeekId];
@@ -493,12 +503,13 @@ export async function updateProfessional (id: string, data: Partial<Professional
               endDate: toFirestoreTimestamp(ch.endDate),
             }));
         }
-    } else if (data.hasOwnProperty('currentContract_notes') || data.hasOwnProperty('currentContract_empresa')) {
-      // Only update notes or empresa if the dates haven't changed
-      if (existingFirestoreProfessional.currentContract) {
-        firestoreUpdateData['currentContract.notes'] = data.currentContract_notes ?? existingFirestoreProfessional.currentContract.notes ?? null;
-        firestoreUpdateData['currentContract.empresa'] = data.currentContract_empresa ?? existingFirestoreProfessional.currentContract.empresa ?? null;
-      }
+    } else { // Handle updates to only notes or empresa without changing dates
+       if (data.hasOwnProperty('currentContract_notes')) {
+         firestoreUpdateData['currentContract.notes'] = data.currentContract_notes ?? null;
+       }
+       if (data.hasOwnProperty('currentContract_empresa')) {
+         firestoreUpdateData['currentContract.empresa'] = data.currentContract_empresa ?? null;
+       }
     }
 
     if (Object.keys(firestoreUpdateData).length > 0) {
@@ -2055,4 +2066,3 @@ export async function markDayAsHoliday(day: Date): Promise<number> {
 
 
 // --- End Rotations ---
-
