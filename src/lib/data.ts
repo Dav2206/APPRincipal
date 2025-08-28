@@ -409,98 +409,101 @@ export async function addProfessional (data: Omit<ProfessionalFormData, 'id'>): 
 }
 
 export async function updateProfessional(id: string, data: Partial<ProfessionalFormData>): Promise<Professional | undefined> {
-  if (!firestore) {
-    console.error("[data.ts] updateProfessional: Firestore is not initialized.");
-    throw new Error("Firestore not initialized. Professional not updated.");
-  }
-  const docRef = doc(firestore, 'profesionales', id);
-
-  return runTransaction(firestore, async (transaction) => {
-    const existingProfSnap = await transaction.get(docRef);
-    if (!existingProfSnap.exists()) {
-      console.warn(`[data.ts] Professional with ID ${id} not found.`);
-      return undefined;
+    if (!firestore) {
+        console.error("[data.ts] updateProfessional: Firestore is not initialized.");
+        throw new Error("Firestore not initialized. Professional not updated.");
     }
-    const existingProf = convertDocumentData(existingProfSnap.data()) as Professional;
-    const firestoreUpdateData: { [key: string]: any } = {};
+    const docRef = doc(firestore, 'profesionales', id);
 
-    const directUpdateFields: (keyof ProfessionalFormData)[] = [
-      'firstName', 'lastName', 'locationId', 'phone', 'isManager',
-      'birthDay', 'birthMonth', 'baseSalary', 'commissionDeductible',
-      'discounts', 'afp', 'seguro'
-    ];
+    return runTransaction(firestore, async (transaction) => {
+        const existingProfSnap = await transaction.get(docRef);
+        if (!existingProfSnap.exists()) {
+            console.warn(`[data.ts] Professional with ID ${id} not found.`);
+            return undefined;
+        }
+        const existingProf = convertDocumentData(existingProfSnap.data()) as Professional;
 
-    directUpdateFields.forEach(key => {
-      if (data.hasOwnProperty(key)) {
-        firestoreUpdateData[key] = (data as any)[key] === undefined ? null : (data as any)[key];
-      }
+        const firestoreUpdateData: { [key: string]: any } = {};
+        
+        // Define all possible keys for sanitization
+        const keysToSanitize: (keyof ProfessionalFormData)[] = [
+            'firstName', 'lastName', 'locationId', 'phone', 'isManager',
+            'birthDay', 'birthMonth', 'baseSalary', 'commissionDeductible',
+            'discounts', 'afp', 'seguro', 'commissionRate',
+            'currentContract_startDate', 'currentContract_endDate', 'currentContract_notes', 'currentContract_empresa',
+            'workSchedule', 'customScheduleOverrides'
+        ];
+
+        keysToSanitize.forEach(key => {
+            if (data.hasOwnProperty(key)) {
+                const value = (data as any)[key];
+                // Sanitize undefined or NaN for numeric fields to null
+                if (typeof value === 'number' && isNaN(value)) {
+                    firestoreUpdateData[key] = null;
+                } else if (value !== undefined) {
+                    firestoreUpdateData[key] = value;
+                }
+            }
+        });
+        
+        // Specific handlers
+        if (firestoreUpdateData.commissionRate !== undefined && firestoreUpdateData.commissionRate !== null) {
+            firestoreUpdateData.commissionRate = firestoreUpdateData.commissionRate / 100;
+        }
+        
+        // Handle new contract creation
+        if (firestoreUpdateData.currentContract_startDate && firestoreUpdateData.currentContract_endDate) {
+            const oldContract = existingProf.currentContract;
+            const newHistory = [...(existingProf.contractHistory || [])];
+            if (oldContract) {
+                newHistory.push(oldContract);
+            }
+            firestoreUpdateData.contractHistory = newHistory.map(ch => ({
+                ...ch,
+                startDate: toFirestoreTimestamp(ch.startDate),
+                endDate: toFirestoreTimestamp(ch.endDate),
+            }));
+
+            const newContract = {
+                id: generateId(),
+                startDate: toFirestoreTimestamp(firestoreUpdateData.currentContract_startDate),
+                endDate: toFirestoreTimestamp(firestoreUpdateData.currentContract_endDate),
+                notes: firestoreUpdateData.currentContract_notes ?? oldContract?.notes ?? null,
+                empresa: firestoreUpdateData.currentContract_empresa ?? oldContract?.empresa ?? null,
+            };
+            firestoreUpdateData.currentContract = newContract;
+            
+            // Clean up individual contract fields from the main update object
+            delete firestoreUpdateData.currentContract_startDate;
+            delete firestoreUpdateData.currentContract_endDate;
+            delete firestoreUpdateData.currentContract_notes;
+            delete firestoreUpdateData.currentContract_empresa;
+        } else {
+             // Handle partial contract updates using dot notation
+            if(firestoreUpdateData.hasOwnProperty('currentContract_notes')) {
+                firestoreUpdateData['currentContract.notes'] = firestoreUpdateData.currentContract_notes ?? null;
+                delete firestoreUpdateData.currentContract_notes;
+            }
+            if(firestoreUpdateData.hasOwnProperty('currentContract_empresa')) {
+                firestoreUpdateData['currentContract.empresa'] = firestoreUpdateData.currentContract_empresa ?? null;
+                delete firestoreUpdateData.currentContract_empresa;
+            }
+        }
+        
+        if (firestoreUpdateData.customScheduleOverrides) {
+            firestoreUpdateData.customScheduleOverrides = firestoreUpdateData.customScheduleOverrides.map((ov: any) => ({
+                ...ov,
+                date: toFirestoreTimestamp(ov.date),
+                notes: ov.notes ?? null,
+            }));
+        }
+
+        if (Object.keys(firestoreUpdateData).length > 0) {
+            transaction.update(docRef, firestoreUpdateData);
+        }
+
+        return { ...existingProf, ...data }; // Return optimistic update
     });
-
-    if (data.hasOwnProperty('commissionRate')) {
-      const rate = data.commissionRate;
-      firestoreUpdateData.commissionRate = (typeof rate === 'number' && !isNaN(rate)) ? rate / 100 : null;
-    }
-
-    if (data.workSchedule) {
-      const newWorkSchedule = { ...(existingProf.workSchedule || {}) };
-      for (const dayId in data.workSchedule) {
-          if (Object.prototype.hasOwnProperty.call(data.workSchedule, dayId)) {
-              newWorkSchedule[dayId as DayOfWeekId] = data.workSchedule[dayId as DayOfWeekId];
-          }
-      }
-      firestoreUpdateData.workSchedule = newWorkSchedule;
-    }
-
-    if (data.hasOwnProperty('customScheduleOverrides')) {
-        firestoreUpdateData.customScheduleOverrides = (data.customScheduleOverrides || []).map(ov => ({
-        ...ov,
-        date: toFirestoreTimestamp(ov.date),
-        notes: ov.notes ?? null,
-      }));
-    }
-    
-    const isNewContractBeingSet = data.currentContract_startDate && data.currentContract_endDate;
-    const isOnlyContractDetailsChanging = data.hasOwnProperty('currentContract_notes') || data.hasOwnProperty('currentContract_empresa');
-
-    if (isNewContractBeingSet) {
-        const oldContract = existingProf.currentContract;
-        const newHistory = [...(existingProf.contractHistory || [])];
-        if (oldContract) {
-            newHistory.push(oldContract);
-        }
-        firestoreUpdateData.contractHistory = newHistory.map(ch => ({
-            ...ch,
-            startDate: toFirestoreTimestamp(ch.startDate),
-            endDate: toFirestoreTimestamp(ch.endDate),
-        }));
-
-        const newContract = {
-            id: generateId(),
-            startDate: toFirestoreTimestamp(data.currentContract_startDate),
-            endDate: toFirestoreTimestamp(data.currentContract_endDate),
-            notes: data.currentContract_notes ?? oldContract?.notes ?? null,
-            empresa: data.currentContract_empresa ?? oldContract?.empresa ?? null,
-        };
-        firestoreUpdateData.currentContract = newContract;
-    } else if (isOnlyContractDetailsChanging) {
-        // Dot notation for nested field update
-        if (data.hasOwnProperty('currentContract_notes')) {
-            firestoreUpdateData['currentContract.notes'] = data.currentContract_notes ?? null;
-        }
-        if (data.hasOwnProperty('currentContract_empresa')) {
-            firestoreUpdateData['currentContract.empresa'] = data.currentContract_empresa ?? null;
-        }
-    }
-
-
-    if (Object.keys(firestoreUpdateData).length > 0) {
-      transaction.update(docRef, firestoreUpdateData);
-    }
-
-    const finalData = { ...existingProf, ...data };
-    if (firestoreUpdateData.commissionRate !== undefined) finalData.commissionRate = firestoreUpdateData.commissionRate;
-    return finalData;
-  });
 }
 
 
