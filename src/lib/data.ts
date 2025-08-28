@@ -438,16 +438,14 @@ export async function updateProfessional (id: string, data: Partial<Professional
     });
     
     if (data.hasOwnProperty('commissionRate')) {
-       // Handle number or null, but prevent undefined
-      if (typeof data.commissionRate === 'number') {
+      if (typeof data.commissionRate === 'number' && !isNaN(data.commissionRate)) {
         firestoreUpdateData.commissionRate = data.commissionRate / 100;
       } else {
-        firestoreUpdateData.commissionRate = null; // Default to null if not a valid number
+        firestoreUpdateData.commissionRate = null;
       }
     }
     
     if (data.workSchedule) {
-      // Merge the new schedule changes with the existing one to prevent data loss
       const newWorkSchedule = JSON.parse(JSON.stringify(existingFirestoreProfessional.workSchedule || {}));
       for (const dayId in data.workSchedule) {
         if (data.workSchedule.hasOwnProperty(dayId)) {
@@ -465,20 +463,19 @@ export async function updateProfessional (id: string, data: Partial<Professional
       }));
     }
     
-    const contractFields = ['currentContract_startDate', 'currentContract_endDate', 'currentContract_notes', 'currentContract_empresa'];
-    const hasContractUpdate = contractFields.some(field => data.hasOwnProperty(field));
+    const hasNewContractDates = data.currentContract_startDate && data.currentContract_endDate;
     
-    if (hasContractUpdate) {
-      const newStartDate = data.currentContract_startDate;
-      const newEndDate = data.currentContract_endDate;
-      if (newStartDate && newEndDate) {
+    if (hasNewContractDates) {
+        const newStartDate = data.currentContract_startDate;
+        const newEndDate = data.currentContract_endDate;
+        
         const oldContract = existingFirestoreProfessional.currentContract;
         const newContract: Contract = {
-            id: (oldContract?.id && !data.currentContract_notes && !data.currentContract_empresa) ? oldContract.id : generateId(),
+            id: generateId(),
             startDate: formatISO(newStartDate, { representation: 'date' }),
             endDate: formatISO(newEndDate, { representation: 'date' }),
-            notes: data.currentContract_notes ?? null,
-            empresa: data.currentContract_empresa ?? null,
+            notes: data.currentContract_notes ?? oldContract?.notes ?? null,
+            empresa: data.currentContract_empresa ?? oldContract?.empresa ?? null,
         };
         
         firestoreUpdateData.currentContract = {
@@ -487,7 +484,7 @@ export async function updateProfessional (id: string, data: Partial<Professional
             endDate: toFirestoreTimestamp(newContract.endDate),
         };
         
-        if (oldContract && oldContract.id !== newContract.id) {
+        if (oldContract) {
             const history = (existingFirestoreProfessional.contractHistory || []).filter(h => h.id !== oldContract.id);
             history.push({ ...oldContract, startDate: oldContract.startDate, endDate: oldContract.endDate });
             firestoreUpdateData.contractHistory = history.map(ch => ({
@@ -496,8 +493,11 @@ export async function updateProfessional (id: string, data: Partial<Professional
               endDate: toFirestoreTimestamp(ch.endDate),
             }));
         }
-      } else {
-        firestoreUpdateData.currentContract = null;
+    } else if (data.hasOwnProperty('currentContract_notes') || data.hasOwnProperty('currentContract_empresa')) {
+      // Only update notes or empresa if the dates haven't changed
+      if (existingFirestoreProfessional.currentContract) {
+        firestoreUpdateData['currentContract.notes'] = data.currentContract_notes ?? existingFirestoreProfessional.currentContract.notes ?? null;
+        firestoreUpdateData['currentContract.empresa'] = data.currentContract_empresa ?? existingFirestoreProfessional.currentContract.empresa ?? null;
       }
     }
 
@@ -2055,11 +2055,4 @@ export async function markDayAsHoliday(day: Date): Promise<number> {
 
 
 // --- End Rotations ---
-
-
-
-
-
-
-
 
