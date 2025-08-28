@@ -137,48 +137,46 @@ export default function RotationsPage() {
   const getProfessionalsForShift = useCallback((day: Date, shift: Shift): NameBadgeProps[] => {
     if (!selectedLocationId || selectedLocationId === 'all') return [];
 
-    const shiftStartTime = shiftTimes[shift].display; // "HH:mm"
+    const shiftStartTime = shiftTimes[shift].display;
 
     return allProfessionals
-        .map(prof => {
-            const availability = getProfessionalAvailabilityForDate(prof, day);
-            
-            if (availability?.isWorking && availability.workingLocationId === selectedLocationId && availability.startTime === shiftStartTime) {
-                let status: NameBadgeStatus = 'working';
-                const isTransfer = prof.locationId !== availability.workingLocationId;
-                const isSpecialShift = availability.reason && availability.reason !== 'Horario base';
+      .map(prof => {
+        const availability = getProfessionalAvailabilityForDate(prof, day);
+        
+        // Ensure the professional is working at the currently selected location
+        if (availability?.isWorking && availability.workingLocationId === selectedLocationId && availability.startTime === shiftStartTime) {
+            let status: NameBadgeStatus = 'working';
+            const isTransfer = prof.locationId !== availability.workingLocationId;
+            const isSpecialShift = availability.reason && availability.reason !== 'Horario base';
 
-                if (isTransfer) {
-                    status = 'transfer';
-                } else if (isSpecialShift && !availability.reason?.toLowerCase().includes('vacaciones')) {
-                    status = 'cover';
-                }
-                return { name: prof.firstName, status, professionalId: prof.id };
+            if (isTransfer) {
+                status = 'transfer';
+            } else if (isSpecialShift && !availability.reason?.toLowerCase().includes('vacaciones')) {
+                status = 'cover';
             }
-            return null;
-        })
-        .filter((item): item is NameBadgeProps => item !== null);
+            return { name: prof.firstName, status, professionalId: prof.id };
+        }
+        return null;
+      })
+      .filter((item): item is NameBadgeProps => item !== null);
   }, [allProfessionals, selectedLocationId, shiftTimes]);
   
  const getRestingProfessionalsForDay = useCallback((day: Date): NameBadgeProps[] => {
     if (!selectedLocationId || selectedLocationId === 'all') return [];
 
     return allProfessionals
+      .filter(prof => prof.locationId === selectedLocationId) // Only consider professionals based in the selected location
       .map(prof => {
-          // A professional is shown in the "Resting" section of a location's view only if their base location matches the one being viewed.
-          if (prof.locationId === selectedLocationId) {
-             const availability = getProfessionalAvailabilityForDate(prof, day);
-             
-             // The professional is TRULY resting only if their availability for the day is explicitly "isWorking: false".
-             if (availability && !availability.isWorking) {
-                let status: NameBadgeStatus = 'resting';
-                if (availability.reason?.toLowerCase().includes('vacaciones') || availability.reason?.toLowerCase().includes('feriado')) {
-                    status = 'vacation';
-                }
-                return { name: prof.firstName, status, professionalId: prof.id };
-             }
-          }
-          return null;
+         const availability = getProfessionalAvailabilityForDate(prof, day);
+         
+         if (availability && !availability.isWorking) {
+            let status: NameBadgeStatus = 'resting';
+            if (availability.reason?.toLowerCase().includes('vacaciones') || availability.reason?.toLowerCase().includes('feriado')) {
+                status = 'vacation';
+            }
+            return { name: prof.firstName, status, professionalId: prof.id };
+         }
+         return null;
       }).filter((item): item is NameBadgeProps => item !== null);
   }, [allProfessionals, selectedLocationId]);
 
@@ -537,4 +535,5 @@ export default function RotationsPage() {
     </div>
   );
 }
+
 
