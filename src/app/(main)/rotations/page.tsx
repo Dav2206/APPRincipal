@@ -20,7 +20,7 @@ import { es } from 'date-fns/locale';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
-import { type DayOfWeekId, DAYS_OF_WEEK } from '@/lib/constants';
+import { type DayOfWeekId, DAYS_OF_WEEK, USER_ROLES } from '@/lib/constants';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -66,7 +66,7 @@ const NameBadge = ({ name, status }: Omit<NameBadgeProps, 'professionalId'>) => 
 // --- Page Component ---
 export default function RotationsPage() {
   const { user } = useAuth();
-  const { selectedLocationId } = useAppState();
+  const { selectedLocationId: adminSelectedLocation } = useAppState();
   const [allProfessionals, setAllProfessionals] = useState<Professional[]>([]);
   const [locations, setLocations] = useState<Location[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -77,6 +77,14 @@ export default function RotationsPage() {
 
   const [viewDate, setViewDate] = useState(new Date());
   const { toast } = useToast();
+
+  const effectiveLocationId = useMemo(() => {
+    if (user?.role === USER_ROLES.ADMIN || user?.role === USER_ROLES.CONTADOR) {
+        return adminSelectedLocation === 'all' ? undefined : adminSelectedLocation as LocationId;
+    }
+    return user?.locationId;
+  }, [user, adminSelectedLocation]);
+
 
   const displayedWeek = useMemo(() => {
       const start = startOfWeek(viewDate, { weekStartsOn: 1 }); // Monday
@@ -126,16 +134,16 @@ export default function RotationsPage() {
   };
 
   const displayedShifts = useMemo(() => {
-    if (selectedLocationId && selectedLocationId !== 'all' && shiftsForLocation[selectedLocationId]) {
-      return shiftsForLocation[selectedLocationId];
+    if (effectiveLocationId && effectiveLocationId !== 'all' && shiftsForLocation[effectiveLocationId]) {
+      return shiftsForLocation[effectiveLocationId];
     }
     // Default shifts if no location is selected or if it's not in the specific map
     return ['9am', '10am', '11am', '12:30pm'];
-  }, [selectedLocationId]);
+  }, [effectiveLocationId]);
 
 
   const getProfessionalsForShift = useCallback((day: Date, shift: Shift): NameBadgeProps[] => {
-    if (!selectedLocationId || selectedLocationId === 'all') return [];
+    if (!effectiveLocationId || effectiveLocationId === 'all') return [];
 
     const shiftStartTime = shiftTimes[shift].display;
 
@@ -144,7 +152,7 @@ export default function RotationsPage() {
         const availability = getProfessionalAvailabilityForDate(prof, day);
         
         // Ensure the professional is working at the currently selected location
-        if (availability?.isWorking && availability.workingLocationId === selectedLocationId && availability.startTime === shiftStartTime) {
+        if (availability?.isWorking && availability.workingLocationId === effectiveLocationId && availability.startTime === shiftStartTime) {
             let status: NameBadgeStatus = 'working';
             const isTransfer = prof.locationId !== availability.workingLocationId;
             const isSpecialShift = availability.reason && availability.reason !== 'Horario base';
@@ -159,16 +167,17 @@ export default function RotationsPage() {
         return null;
       })
       .filter((item): item is NameBadgeProps => item !== null);
-  }, [allProfessionals, selectedLocationId, shiftTimes]);
+  }, [allProfessionals, effectiveLocationId, shiftTimes]);
   
  const getRestingProfessionalsForDay = useCallback((day: Date): NameBadgeProps[] => {
-    if (!selectedLocationId || selectedLocationId === 'all') return [];
+    if (!effectiveLocationId || effectiveLocationId === 'all') return [];
 
     return allProfessionals
-      .filter(prof => prof.locationId === selectedLocationId) // Only consider professionals based in the selected location
+      .filter(prof => prof.locationId === effectiveLocationId) // Only consider professionals based in the selected location
       .map(prof => {
          const availability = getProfessionalAvailabilityForDate(prof, day);
          
+         // Only show as resting if they are NOT working. This prevents showing them as resting if they are transferred.
          if (availability && !availability.isWorking) {
             let status: NameBadgeStatus = 'resting';
             if (availability.reason?.toLowerCase().includes('vacaciones') || availability.reason?.toLowerCase().includes('feriado')) {
@@ -178,7 +187,7 @@ export default function RotationsPage() {
          }
          return null;
       }).filter((item): item is NameBadgeProps => item !== null);
-  }, [allProfessionals, selectedLocationId]);
+  }, [allProfessionals, effectiveLocationId]);
 
 
   const handleAction = async (professionalId: string, day: Date, action: 'rest' | 'vacation' | 'special_shift' | 'transfer', details?: { locationId?: LocationId, startTime?: string, endTime?: string }) => {
@@ -341,9 +350,9 @@ export default function RotationsPage() {
   };
 
   const currentViewLocationName = useMemo(() => {
-    if (!selectedLocationId || selectedLocationId === 'all') return null;
-    return locations.find(l => l.id === selectedLocationId)?.name;
-  }, [selectedLocationId, locations]);
+    if (!effectiveLocationId || effectiveLocationId === 'all') return null;
+    return locations.find(l => l.id === effectiveLocationId)?.name;
+  }, [effectiveLocationId, locations]);
 
 
   return (
@@ -458,7 +467,7 @@ export default function RotationsPage() {
                                                             <DropdownMenuSub>
                                                                 <DropdownMenuSubTrigger>Trasladar a Sede (Solo este día)</DropdownMenuSubTrigger>
                                                                 <DropdownMenuSubContent>
-                                                                    {locations.filter(l => l.id !== selectedLocationId).map(loc => (
+                                                                    {locations.filter(l => l.id !== effectiveLocationId).map(loc => (
                                                                         <DropdownMenuItem key={loc.id} onClick={() => handleAction(item.professionalId, day, 'transfer', { locationId: loc.id, startTime: '10:00', endTime: '19:00' })}>{loc.name}</DropdownMenuItem>
                                                                     ))}
                                                                 </DropdownMenuSubContent>
@@ -535,5 +544,3 @@ export default function RotationsPage() {
     </div>
   );
 }
-
-
