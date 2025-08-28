@@ -409,117 +409,98 @@ export async function addProfessional (data: Omit<ProfessionalFormData, 'id'>): 
 }
 
 export async function updateProfessional(id: string, data: Partial<ProfessionalFormData>): Promise<Professional | undefined> {
-    if (!firestore) {
-        console.error("[data.ts] updateProfessional: Firestore is not initialized.");
-        throw new Error("Firestore not initialized. Professional not updated.");
+  if (!firestore) {
+    console.error("[data.ts] updateProfessional: Firestore is not initialized.");
+    throw new Error("Firestore not initialized. Professional not updated.");
+  }
+  const docRef = doc(firestore, 'profesionales', id);
+
+  return runTransaction(firestore, async (transaction) => {
+    const existingProfSnap = await transaction.get(docRef);
+    if (!existingProfSnap.exists()) {
+      console.warn(`[data.ts] Professional with ID ${id} not found.`);
+      return undefined;
+    }
+    const existingProf = convertDocumentData(existingProfSnap.data()) as Professional;
+    const firestoreUpdateData: { [key: string]: any } = {};
+
+    const directUpdateFields: (keyof ProfessionalFormData)[] = [
+      'firstName', 'lastName', 'locationId', 'phone', 'isManager',
+      'birthDay', 'birthMonth', 'baseSalary', 'commissionDeductible',
+      'discounts', 'afp', 'seguro'
+    ];
+
+    directUpdateFields.forEach(key => {
+      if (data.hasOwnProperty(key)) {
+        firestoreUpdateData[key] = (data as any)[key] === undefined ? null : (data as any)[key];
+      }
+    });
+
+    if (data.hasOwnProperty('commissionRate')) {
+      const rate = data.commissionRate;
+      firestoreUpdateData.commissionRate = (typeof rate === 'number' && !isNaN(rate)) ? rate / 100 : null;
     }
 
-    const docRef = doc(firestore, 'profesionales', id);
+    if (data.workSchedule) {
+      const newWorkSchedule = { ...(existingProf.workSchedule || {}) };
+      for (const dayId in data.workSchedule) {
+          if (Object.prototype.hasOwnProperty.call(data.workSchedule, dayId)) {
+              newWorkSchedule[dayId as DayOfWeekId] = data.workSchedule[dayId as DayOfWeekId];
+          }
+      }
+      firestoreUpdateData.workSchedule = newWorkSchedule;
+    }
+
+    if (data.hasOwnProperty('customScheduleOverrides')) {
+        firestoreUpdateData.customScheduleOverrides = (data.customScheduleOverrides || []).map(ov => ({
+        ...ov,
+        date: toFirestoreTimestamp(ov.date),
+        notes: ov.notes ?? null,
+      }));
+    }
     
-    // This transaction ensures we read the existing data before writing, preventing race conditions
-    // and allowing us to merge the new data with the old correctly.
-    return runTransaction(firestore, async (transaction) => {
-        const existingProfSnap = await transaction.get(docRef);
-        if (!existingProfSnap.exists()) {
-            console.warn(`[data.ts] Professional with ID ${id} not found.`);
-            return undefined;
+    const isNewContractBeingSet = data.currentContract_startDate && data.currentContract_endDate;
+    const isOnlyContractDetailsChanging = data.hasOwnProperty('currentContract_notes') || data.hasOwnProperty('currentContract_empresa');
+
+    if (isNewContractBeingSet) {
+        const oldContract = existingProf.currentContract;
+        const newHistory = [...(existingProf.contractHistory || [])];
+        if (oldContract) {
+            newHistory.push(oldContract);
         }
-        const existingProf = convertDocumentData(existingProfSnap.data()) as Professional;
+        firestoreUpdateData.contractHistory = newHistory.map(ch => ({
+            ...ch,
+            startDate: toFirestoreTimestamp(ch.startDate),
+            endDate: toFirestoreTimestamp(ch.endDate),
+        }));
 
-        const firestoreUpdateData: { [key: string]: any } = {};
-
-        // --- Build the update object carefully ---
-
-        // Whitelist of fields that can be directly updated
-        const directUpdateFields: (keyof ProfessionalFormData)[] = [
-            'firstName', 'lastName', 'locationId', 'phone', 'isManager', 
-            'birthDay', 'birthMonth', 'baseSalary', 'commissionDeductible', 
-            'discounts', 'afp', 'seguro'
-        ];
-
-        directUpdateFields.forEach(key => {
-            if (data.hasOwnProperty(key)) {
-                // Convert undefined to null for Firestore compatibility
-                firestoreUpdateData[key] = (data as any)[key] === undefined ? null : (data as any)[key];
-            }
-        });
-
-        // Special handling for commissionRate (percentage to decimal)
-        if (data.hasOwnProperty('commissionRate')) {
-            const rate = data.commissionRate;
-            firestoreUpdateData.commissionRate = (typeof rate === 'number' && !isNaN(rate)) ? rate / 100 : null;
+        const newContract = {
+            id: generateId(),
+            startDate: toFirestoreTimestamp(data.currentContract_startDate),
+            endDate: toFirestoreTimestamp(data.currentContract_endDate),
+            notes: data.currentContract_notes ?? oldContract?.notes ?? null,
+            empresa: data.currentContract_empresa ?? oldContract?.empresa ?? null,
+        };
+        firestoreUpdateData.currentContract = newContract;
+    } else if (isOnlyContractDetailsChanging) {
+        // Dot notation for nested field update
+        if (data.hasOwnProperty('currentContract_notes')) {
+            firestoreUpdateData['currentContract.notes'] = data.currentContract_notes ?? null;
         }
-
-        // Special handling for workSchedule (merge with existing)
-        if (data.workSchedule) {
-            const newWorkSchedule = { ...(existingProf.workSchedule || {}) };
-            for (const dayId in data.workSchedule) {
-                if (Object.prototype.hasOwnProperty.call(data.workSchedule, dayId)) {
-                    newWorkSchedule[dayId as DayOfWeekId] = data.workSchedule[dayId as DayOfWeekId];
-                }
-            }
-            firestoreUpdateData.workSchedule = newWorkSchedule;
+        if (data.hasOwnProperty('currentContract_empresa')) {
+            firestoreUpdateData['currentContract.empresa'] = data.currentContract_empresa ?? null;
         }
+    }
 
-        // Special handling for customScheduleOverrides (replace array)
-        if (data.customScheduleOverrides) {
-            firestoreUpdateData.customScheduleOverrides = (data.customScheduleOverrides || []).map(ov => ({
-                ...ov,
-                date: toFirestoreTimestamp(ov.date), // Convert date to Firestore Timestamp
-                notes: ov.notes ?? null,
-            }));
-        }
 
-        // Special handling for currentContract
-        const hasNewContractDates = data.currentContract_startDate && data.currentContract_endDate;
-        const hasNewContractDetails = data.hasOwnProperty('currentContract_notes') || data.hasOwnProperty('currentContract_empresa');
+    if (Object.keys(firestoreUpdateData).length > 0) {
+      transaction.update(docRef, firestoreUpdateData);
+    }
 
-        if (hasNewContractDates) {
-            // A new contract is being created (or the current one's dates are changing).
-            // Archive the old one.
-            const oldContract = existingProf.currentContract;
-            const newHistory = [...(existingProf.contractHistory || [])];
-            if (oldContract) {
-                newHistory.push(oldContract);
-            }
-            firestoreUpdateData.contractHistory = newHistory.map(ch => ({
-                ...ch,
-                startDate: toFirestoreTimestamp(ch.startDate),
-                endDate: toFirestoreTimestamp(ch.endDate),
-            }));
-
-            // Create the new contract object
-            const newContract = {
-                id: generateId(),
-                startDate: toFirestoreTimestamp(data.currentContract_startDate),
-                endDate: toFirestoreTimestamp(data.currentContract_endDate),
-                notes: data.currentContract_notes ?? oldContract?.notes ?? null,
-                empresa: data.currentContract_empresa ?? oldContract?.empresa ?? null,
-            };
-            firestoreUpdateData.currentContract = newContract;
-        } else if (hasNewContractDetails) {
-            // Only notes or empresa are being updated, not the dates.
-            // We need to use dot notation for this.
-            if (data.hasOwnProperty('currentContract_notes')) {
-                firestoreUpdateData['currentContract.notes'] = data.currentContract_notes ?? null;
-            }
-            if (data.hasOwnProperty('currentContract_empresa')) {
-                firestoreUpdateData['currentContract.empresa'] = data.currentContract_empresa ?? null;
-            }
-        }
-
-        // --- Final Update ---
-        if (Object.keys(firestoreUpdateData).length > 0) {
-            transaction.update(docRef, firestoreUpdateData);
-        } else {
-            console.log("[data.ts] updateProfessional - No actual changes detected to update for ID:", id);
-        }
-        
-        // Return the updated professional data by merging existing data with the changes
-        const finalData = { ...existingProf, ...data };
-        if(firestoreUpdateData.commissionRate) finalData.commissionRate = firestoreUpdateData.commissionRate;
-        return finalData;
-    });
+    const finalData = { ...existingProf, ...data };
+    if (firestoreUpdateData.commissionRate !== undefined) finalData.commissionRate = firestoreUpdateData.commissionRate;
+    return finalData;
+  });
 }
 
 
