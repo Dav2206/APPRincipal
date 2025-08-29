@@ -126,24 +126,27 @@ export default function RotationsPage() {
       setAllProfessionals(activeProfs);
       setLocations(allLocations);
       
-      const higueretaLocation = allLocations.find(l => l.id === 'higuereta');
-      const savedGroups = higueretaLocation?.sundayGroups || {};
-      const initialGroups: Record<string, SundayGroup> = {
-          group1: savedGroups.group1 || { name: 'Grupo 1', professionalIds: [] },
-          group2: savedGroups.group2 || { name: 'Grupo 2', professionalIds: [] },
-          group3: savedGroups.group3 || { name: 'Grupo 3', professionalIds: [] },
-          group4: savedGroups.group4 || { name: 'Grupo 4', professionalIds: [] },
-      };
-      setSundayGroups(initialGroups);
+      const currentViewLocation = allLocations.find(l => l.id === effectiveLocationId);
+      if (currentViewLocation) {
+        const savedGroups = currentViewLocation.sundayGroups || {};
+        const initialGroups: Record<string, SundayGroup> = {
+            group1: savedGroups.group1 || { name: 'Grupo 1', professionalIds: [] },
+            group2: savedGroups.group2 || { name: 'Grupo 2', professionalIds: [] },
+            group3: savedGroups.group3 || { name: 'Grupo 3', professionalIds: [] },
+            group4: savedGroups.group4 || { name: 'Grupo 4', professionalIds: [] },
+        };
+        setSundayGroups(initialGroups);
 
-      // A professional is "groupable" if their base is Higuereta OR if they are already in a saved group.
-      const profsInSavedGroupsIds = new Set(Object.values(initialGroups).flatMap(g => g.professionalIds));
-      const higueretaProfs = activeProfs.filter(p => 
-          p.locationId === 'higuereta' || profsInSavedGroupsIds.has(p.id)
-      );
-      // Remove duplicates
-      const uniqueHigueretaProfs = Array.from(new Map(higueretaProfs.map(p => [p.id, p])).values());
-      setGroupableProfessionals(uniqueHigueretaProfs);
+        const profsInSavedGroupsIds = new Set(Object.values(initialGroups).flatMap(g => g.professionalIds));
+        const locationNativeProfs = activeProfs.filter(p => 
+            p.locationId === effectiveLocationId || profsInSavedGroupsIds.has(p.id)
+        );
+        const uniqueLocationProfs = Array.from(new Map(locationNativeProfs.map(p => [p.id, p])).values());
+        setGroupableProfessionals(uniqueLocationProfs);
+      } else {
+         setGroupableProfessionals([]);
+         setSundayGroups({});
+      }
 
       if (effectiveLocationId && effectiveLocationId !== 'all') {
             const nextSundayDate = nextSunday(viewDate);
@@ -513,9 +516,13 @@ export default function RotationsPage() {
   };
   
   const handleSaveSundayGroups = async () => {
+    if (!effectiveLocationId || effectiveLocationId === 'all') {
+        toast({title: "Error", description: "Seleccione una sede específica para guardar los grupos.", variant: "destructive"});
+        return;
+    }
     setIsSavingSundayGroups(true);
     try {
-        await saveSundayGroups('higuereta', sundayGroups);
+        await saveSundayGroups(effectiveLocationId, sundayGroups);
         toast({title: "Grupos Guardados", description: "La configuración de los grupos dominicales ha sido guardada."});
     } catch (error) {
         toast({title: "Error al Guardar", description: "No se pudo guardar la configuración de los grupos.", variant: "destructive"});
@@ -711,12 +718,12 @@ export default function RotationsPage() {
         </CardContent>
       </Card>
       
-       {effectiveLocationId === 'higuereta' && (
+       {(effectiveLocationId === 'higuereta' || effectiveLocationId === 'san_antonio') && (
         <Card>
             <CardHeader>
                  <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
                     <div>
-                        <CardTitle>Grupos Dominicales (Higuereta)</CardTitle>
+                        <CardTitle>Grupos Dominicales ({currentViewLocationName})</CardTitle>
                         <CardDescription>Organice los profesionales en grupos para las rotaciones de los domingos. Haga doble clic en el nombre de un grupo para editarlo.</CardDescription>
                     </div>
                      <DropdownMenu>
@@ -727,7 +734,7 @@ export default function RotationsPage() {
                             <DropdownMenuSub>
                                 <DropdownMenuSubTrigger>Desde Sede...</DropdownMenuSubTrigger>
                                 <DropdownMenuSubContent>
-                                    {locations.filter(l => l.id !== 'higuereta').map(loc => (
+                                    {locations.filter(l => l.id !== effectiveLocationId).map(loc => (
                                         <DropdownMenuSub key={loc.id}>
                                             <DropdownMenuSubTrigger>{loc.name}</DropdownMenuSubTrigger>
                                             <DropdownMenuSubContent>
@@ -904,4 +911,3 @@ export default function RotationsPage() {
     </div>
   );
 }
-
