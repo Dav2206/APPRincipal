@@ -1,3 +1,4 @@
+
 "use client";
 
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
@@ -13,7 +14,7 @@ import { useAppState } from '@/contexts/app-state-provider';
 import { Button } from '@/components/ui/button';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator, DropdownMenuSub, DropdownMenuSubTrigger, DropdownMenuSubContent, DropdownMenuPortal } from '@/components/ui/dropdown-menu';
 import { cn } from '@/lib/utils';
-import { format, startOfWeek, endOfWeek, addDays, eachDayOfInterval, getHours, parse, getDay, startOfDay, parseISO, formatISO as dateFnsFormatISO, nextSunday, addMonths, subMonths } from 'date-fns';
+import { format, startOfWeek, endOfWeek, addDays, eachDayOfInterval, getHours, parse, getDay, startOfDay, parseISO, formatISO as dateFnsFormatISO, nextSunday, addMonths, subMonths, isWithinInterval } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
