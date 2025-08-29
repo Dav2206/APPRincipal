@@ -523,6 +523,18 @@ const fetchData = useCallback(async (isBackgroundFetch = false) => {
         </CardContent>
       </Card>
 
+      {isNewAppointmentFormOpen && (
+        <AppointmentForm
+          isOpen={isNewAppointmentFormOpen}
+          onOpenChange={setIsNewAppointmentFormOpen}
+          onAppointmentCreated={handleNewAppointmentCreated}
+          defaultDate={currentDate}
+          allProfessionals={allSystemProfessionals} 
+          currentLocationProfessionals={workingProfessionalsForTimeline}
+          isBasicMode={isScheduleBasicMode}
+        />
+      )}
+
       {selectedAppointmentForEdit && isEditModalOpen && (
         <AppointmentEditDialog
           appointment={selectedAppointmentForEdit}
@@ -533,18 +545,6 @@ const fetchData = useCallback(async (isBackgroundFetch = false) => {
           }}
           onAppointmentUpdated={handleAppointmentUpdated}
           onImageClick={handleImageClick}
-        />
-      )}
-
-      {isNewAppointmentFormOpen && (
-        <AppointmentForm
-          isOpen={isNewAppointmentFormOpen}
-          onOpenChange={setIsNewAppointmentFormOpen}
-          onAppointmentCreated={handleNewAppointmentCreated}
-          defaultDate={currentDate}
-          allProfessionals={allSystemProfessionals} 
-          currentLocationProfessionals={currentLocationProfessionals}
-          isBasicMode={isScheduleBasicMode}
         />
       )}
 
