@@ -1,4 +1,3 @@
-
 "use client";
 
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
@@ -54,10 +53,10 @@ interface NameBadgeProps {
   professionalId: string;
 }
 
-interface TentativeRestInfo {
+interface CompensatoryRestInfo {
     professionalId: string;
     professionalName: string;
-    restDayId: DayOfWeekId | 'not_defined';
+    workDate: Date;
 }
 
 
@@ -87,7 +86,9 @@ export default function RotationsPage() {
   const [viewDate, setViewDate] = useState(new Date());
   const { toast } = useToast();
 
-  const [tentativeRestDays, setTentativeRestDays] = useState<TentativeRestInfo[]>([]);
+  const [sundayWorkers, setSundayWorkers] = useState<CompensatoryRestInfo[]>([]);
+  const [holidayWorkers, setHolidayWorkers] = useState<CompensatoryRestInfo[]>([]);
+
 
   const effectiveLocationId = useMemo(() => {
     if (user?.role === USER_ROLES.ADMIN || user?.role === USER_ROLES.CONTADOR) {
@@ -116,35 +117,52 @@ export default function RotationsPage() {
       setAllProfessionals(activeProfs);
       setLocations(allLocations);
 
-      // --- Calculate Tentative Rest Days ---
       if (effectiveLocationId && effectiveLocationId !== 'all') {
-        const nextSundayDate = nextSunday(viewDate);
-        const workingOnSunday: TentativeRestInfo[] = [];
+            const nextSundayDate = nextSunday(viewDate);
+            const workingOnSunday: CompensatoryRestInfo[] = [];
+            const workingOnHolidays: CompensatoryRestInfo[] = [];
+            const holidaysInWeek = new Set<string>();
 
-        activeProfs.forEach(prof => {
-            const availabilityOnSunday = getProfessionalAvailabilityForDate(prof, nextSundayDate);
-            if (availabilityOnSunday?.isWorking && availabilityOnSunday.workingLocationId === effectiveLocationId) {
-                // Find their usual rest day from Monday to Saturday
-                let usualRestDayId: DayOfWeekId | 'not_defined' = 'not_defined';
-                for (const day of DAYS_OF_WEEK) {
-                    if (day.id !== 'sunday') {
-                        const schedule = prof.workSchedule?.[day.id];
-                        if (schedule && !schedule.isWorking) {
-                            usualRestDayId = day.id;
-                            break; // Found the first rest day
+            // First pass: identify which days in the week are holidays for the location
+            allProfs.forEach(prof => {
+                if (prof.locationId === effectiveLocationId) {
+                     (prof.customScheduleOverrides || []).forEach(ov => {
+                        if(ov.notes === 'Feriado' && isWithinInterval(parseISO(ov.date), {start: displayedWeek.days[0], end: displayedWeek.days[6]})) {
+                            holidaysInWeek.add(ov.date);
                         }
-                    }
+                    });
                 }
-                 workingOnSunday.push({
-                    professionalId: prof.id,
-                    professionalName: prof.firstName,
-                    restDayId: usualRestDayId,
+            });
+
+            activeProfs.forEach(prof => {
+                // Check for Sunday work
+                const availabilityOnSunday = getProfessionalAvailabilityForDate(prof, nextSundayDate);
+                if (availabilityOnSunday?.isWorking && availabilityOnSunday.workingLocationId === effectiveLocationId) {
+                     workingOnSunday.push({
+                        professionalId: prof.id,
+                        professionalName: `${prof.firstName} ${prof.lastName}`,
+                        workDate: nextSundayDate,
+                    });
+                }
+                // Check for holiday work
+                holidaysInWeek.forEach(holidayIsoString => {
+                    const holidayDate = parseISO(holidayIsoString);
+                    const availabilityOnHoliday = getProfessionalAvailabilityForDate(prof, holidayDate);
+                    if (availabilityOnHoliday?.isWorking && availabilityOnHoliday.workingLocationId === effectiveLocationId) {
+                         workingOnHolidays.push({
+                            professionalId: prof.id,
+                            professionalName: `${prof.firstName} ${prof.lastName}`,
+                            workDate: holidayDate,
+                        });
+                    }
                 });
-            }
-        });
-        setTentativeRestDays(workingOnSunday);
+            });
+
+            setSundayWorkers(workingOnSunday);
+            setHolidayWorkers(workingOnHolidays.filter((value, index, self) => self.findIndex(v => v.professionalId === value.professionalId && v.workDate.getTime() === value.workDate.getTime()) === index)); // Remove duplicates
       } else {
-        setTentativeRestDays([]);
+        setSundayWorkers([]);
+        setHolidayWorkers([]);
       }
 
 
@@ -153,7 +171,7 @@ export default function RotationsPage() {
     } finally {
       setIsLoading(false);
     }
-  }, [viewDate, effectiveLocationId]);
+  }, [viewDate, effectiveLocationId, displayedWeek.days]);
 
   useEffect(() => {
     loadAllData();
@@ -596,7 +614,7 @@ export default function RotationsPage() {
         </CardContent>
       </Card>
       
-      {tentativeRestDays.length > 0 && (
+      {sundayWorkers.length > 0 && (
             <Card>
                 <CardHeader>
                     <CardTitle className="text-xl">Descansos Compensatorios por Trabajo Dominical</CardTitle>
@@ -613,12 +631,7 @@ export default function RotationsPage() {
                             </TableRow>
                         </TableHeader>
                         <TableBody>
-                            {tentativeRestDays.map(item => {
-                                const prof = allProfessionals.find(p => p.id === item.professionalId);
-                                const nextSundayDate = nextSunday(viewDate);
-                                const overrideForSunday = prof?.customScheduleOverrides?.find(ov => format(parseISO(ov.date), 'yyyy-MM-dd') === format(nextSundayDate, 'yyyy-MM-dd'));
-
-                                return (
+                            {sundayWorkers.map(item => (
                                 <TableRow key={item.professionalId}>
                                     <TableCell className="font-medium">{item.professionalName}</TableCell>
                                     <TableCell>
@@ -626,7 +639,7 @@ export default function RotationsPage() {
                                         <PopoverTrigger asChild>
                                           <Button variant="outline" className="w-full justify-start font-normal">
                                             <Calendar className="mr-2 h-4 w-4"/>
-                                            {overrideForSunday && overrideForSunday.overrideType === 'descanso' ? `Descansando el ${format(nextSundayDate, 'PPP', { locale: es })}` : 'Asignar Descanso'}
+                                            {'Asignar Descanso'}
                                           </Button>
                                         </PopoverTrigger>
                                         <PopoverContent className="w-auto p-0">
@@ -640,12 +653,59 @@ export default function RotationsPage() {
                                       </Popover>
                                     </TableCell>
                                 </TableRow>
-                            )})}
+                            ))}
                         </TableBody>
                     </Table>
                 </CardContent>
             </Card>
         )}
+      
+      {holidayWorkers.length > 0 && (
+            <Card>
+                <CardHeader>
+                    <CardTitle className="text-xl">Descansos Compensatorios por Feriado</CardTitle>
+                    <CardDescription>
+                       Asigne el día de descanso para el personal que trabaja en días feriados.
+                    </CardDescription>
+                </CardHeader>
+                <CardContent>
+                    <Table>
+                        <TableHeader>
+                            <TableRow>
+                                <TableHead className="w-1/2">Trabajan en Feriado</TableHead>
+                                <TableHead className="w-1/2">Asignar Día de Descanso Compensatorio</TableHead>
+                            </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                            {holidayWorkers.map(item => (
+                                <TableRow key={`${item.professionalId}-${item.workDate.toISOString()}`}>
+                                    <TableCell className="font-medium">{item.professionalName} <span className="text-muted-foreground text-xs">({format(item.workDate, 'EEE d', {locale: es})})</span></TableCell>
+                                    <TableCell>
+                                      <Popover>
+                                        <PopoverTrigger asChild>
+                                          <Button variant="outline" className="w-full justify-start font-normal">
+                                            <Calendar className="mr-2 h-4 w-4"/>
+                                            {'Asignar Descanso'}
+                                          </Button>
+                                        </PopoverTrigger>
+                                        <PopoverContent className="w-auto p-0">
+                                          <CalendarComponent
+                                            mode="single"
+                                            onSelect={(date) => handleRestDayChange(item.professionalId, date)}
+                                            initialFocus
+                                            disabled={(date) => date < new Date()}
+                                          />
+                                        </PopoverContent>
+                                      </Popover>
+                                    </TableCell>
+                                </TableRow>
+                            ))}
+                        </TableBody>
+                    </Table>
+                </CardContent>
+            </Card>
+        )}
+
 
     </div>
   );
