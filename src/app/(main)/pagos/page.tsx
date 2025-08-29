@@ -973,7 +973,7 @@ export default function PaymentsPage() {
           <DialogHeader>
             <DialogTitle>{editingReminder ? 'Editar' : 'Añadir'} Pago/Gasto</DialogTitle>
           </DialogHeader>
-          <Form {...form}>
+          <Form {...reminderForm}>
             <form onSubmit={reminderForm.handleSubmit(onSubmitReminderForm)} className="space-y-4 py-2 max-h-[70vh] overflow-y-auto pr-2">
               <FormField
                 control={reminderForm.control}
