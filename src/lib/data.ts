@@ -1,7 +1,7 @@
 
 
 // src/lib/data.ts
-import type { User, Professional, Patient, Service, Appointment, AppointmentFormData, ProfessionalFormData, AppointmentStatus, ServiceFormData, Contract, PeriodicReminder, ImportantNote, PeriodicReminderFormData, ImportantNoteFormData, AddedServiceItem, AppointmentUpdateFormData, Location, PaymentGroup, GroupingPreset, Material, MaterialFormData, ContractEditFormData } from '@/types';
+import type { User, Professional, Patient, Service, Appointment, AppointmentFormData, ProfessionalFormData, AppointmentStatus, ServiceFormData, Contract, PeriodicReminder, ImportantNote, PeriodicReminderFormData, ImportantNoteFormData, AddedServiceItem, AppointmentUpdateFormData, Location, PaymentGroup, GroupingPreset, Material, MaterialFormData, ContractEditFormData, HolidayGroup } from '@/types';
 import { USER_ROLES, APPOINTMENT_STATUS, APPOINTMENT_STATUS_DISPLAY, TIME_SLOTS, DAYS_OF_WEEK, LOCATIONS_FALLBACK } from '@/lib/constants';
 import type { LocationId, DayOfWeekId } from '@/lib/constants';
 import { formatISO, parseISO, addDays, setHours, setMinutes, startOfDay, endOfDay, isSameDay as dateFnsIsSameDay, startOfMonth, endOfMonth, subDays, isEqual, isBefore, isAfter, getDate, getYear, getMonth, setMonth, setYear, getHours, addMinutes as dateFnsAddMinutes, isWithinInterval, getDay, format, differenceInCalendarDays, areIntervalsOverlapping, parse, addMonths, addQuarters, addYears } from 'date-fns';
@@ -197,7 +197,7 @@ export const getUserByUsername = async (identity: string): Promise<User | undefi
 export const getLocations = async (): Promise<Location[]> => {
   if (!firestore) {
     console.warn("[data.ts] Firestore not initialized, returning fallback locations.");
-    return [...LOCATIONS_FALLBACK].map(loc => ({ ...loc, sundayGroups: loc.sundayGroups || {} }));
+    return [...LOCATIONS_FALLBACK].map(loc => ({ ...loc, sundayGroups: loc.sundayGroups || {}, holidayGroups: loc.holidayGroups || {} }));
   }
 
   try {
@@ -209,28 +209,26 @@ export const getLocations = async (): Promise<Location[]> => {
       ...convertDocumentData(doc.data())
     })) as Location[];
 
-    // This ensures that even if Firestore has extra locations, only the ones defined in constants are used.
-    // And if a location from constants is missing in DB, it's still available in the app.
     const mergedLocations = LOCATIONS_FALLBACK.map(fallbackLoc => {
         const dbLoc = dbLocations.find(l => l.id === fallbackLoc.id);
         if (dbLoc) {
-            // If location exists in DB, use its payment methods if they exist, otherwise fallback's
             return {
                 ...fallbackLoc,
                 paymentMethods: (Array.isArray(dbLoc.paymentMethods) && dbLoc.paymentMethods.length > 0) 
                                 ? dbLoc.paymentMethods 
                                 : (fallbackLoc.paymentMethods || []),
                 sundayGroups: dbLoc.sundayGroups || {},
+                holidayGroups: dbLoc.holidayGroups || {},
             };
         }
-        return {...fallbackLoc, sundayGroups: {}}; // Fallback if not in DB
+        return {...fallbackLoc, sundayGroups: {}, holidayGroups: {}};
     });
 
     return mergedLocations;
 
   } catch (error) {
     console.error("[data.ts] Error fetching locations from Firestore, returning fallback list:", error);
-    return [...LOCATIONS_FALLBACK].map(loc => ({ ...loc, sundayGroups: loc.sundayGroups || {} }));
+    return [...LOCATIONS_FALLBACK].map(loc => ({ ...loc, sundayGroups: loc.sundayGroups || {}, holidayGroups: loc.holidayGroups || {} }));
   }
 };
 
@@ -245,8 +243,6 @@ export const updateLocationPaymentMethods = async (
   try {
     const docRef = doc(firestore, 'sedes', locationId);
     
-    // Use setDoc with merge:true. This creates the document if it doesn't exist,
-    // or updates the specific fields if it does, without overwriting other fields.
     await setDoc(docRef, { paymentMethods }, { merge: true });
 
     return true;
@@ -268,7 +264,19 @@ export const saveSundayGroups = async (locationId: LocationId, groups: Record<st
     console.error("Error saving sunday groups:", error);
     throw error;
   }
+};
+
+export const saveHolidayGroups = async (locationId: LocationId, groups: Record<string, HolidayGroup>): Promise<void> => {
+  if (!firestore) throw new Error("Firestore not initialized.");
+  try {
+    const configDocRef = doc(firestore, 'sedes', locationId);
+    await setDoc(configDocRef, { holidayGroups: groups }, { merge: true });
+  } catch (error) {
+    console.error("Error saving holiday groups:", error);
+    throw error;
+  }
 }
+
 
 
 // --- Professionals ---

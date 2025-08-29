@@ -20,11 +20,18 @@ export interface SundayGroup {
   professionalIds: string[];
 }
 
+export interface HolidayGroup {
+  name: string;
+  professionalIds: string[];
+}
+
+
 export interface Location {
     id: LocationId;
     name: string;
     paymentMethods: PaymentMethod[];
-    sundayGroups?: Record<string, SundayGroup>; // e.g., { group1: { name: "Titanes", professionalIds: [...] } }
+    sundayGroups?: Record<string, SundayGroup>;
+    holidayGroups?: Record<string, HolidayGroup>;
 }
 
 export interface PaymentGroup {

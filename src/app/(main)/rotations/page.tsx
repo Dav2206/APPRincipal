@@ -6,10 +6,10 @@ import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
-import { Users, Calendar, Plane, Sun, Star, Loader2, GripVertical, ChevronLeft, ChevronRight, MoveVertical, Edit2, Moon, Coffee, Sunrise, Sunset, Palette, MousePointerClick, RefreshCcw, Group, Save, PlusCircle } from 'lucide-react';
+import { Users, Calendar, Plane, Sun, Star, Loader2, GripVertical, ChevronLeft, ChevronRight, MoveVertical, Edit2, Moon, Coffee, Sunrise, Sunset, Palette, MousePointerClick, RefreshCcw, Group, Save, PlusCircle, Shield } from 'lucide-react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { getProfessionals, getContractDisplayStatus, getLocations, getProfessionalAvailabilityForDate, updateProfessional, markDayAsHoliday, saveSundayGroups } from '@/lib/data';
-import type { Professional, Location, LocationId, ProfessionalFormData, SundayGroup } from '@/types';
+import { getProfessionals, getContractDisplayStatus, getLocations, getProfessionalAvailabilityForDate, updateProfessional, markDayAsHoliday, saveSundayGroups, saveHolidayGroups } from '@/lib/data';
+import type { Professional, Location, LocationId, ProfessionalFormData, SundayGroup, HolidayGroup } from '@/types';
 import { useAuth } from '@/contexts/auth-provider';
 import { useAppState } from '@/contexts/app-state-provider';
 import { Button } from '@/components/ui/button';
@@ -37,14 +37,6 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Calendar as CalendarComponent } from '@/components/ui/calendar'; // Renamed to avoid conflict
 import { Input } from '@/components/ui/input';
-
-// --- Data Structures ---
-interface VacationInfo {
-  nombre: string;
-  periodo: string;
-  regreso: string;
-  estado?: string;
-}
 
 // --- Helper Types & Enums ---
 type Shift = '9am' | '10am' | '10:30am' | '11am' | '12:30pm';
@@ -83,9 +75,6 @@ export default function RotationsPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [isProcessing, setIsProcessing] = useState(false);
   
-  const [isDragDropMode, setIsDragDropMode] = useState(false);
-  const [draggedItem, setDraggedItem] = useState<{ professionalId: string, shift: Shift } | null>(null);
-
   const [viewDate, setViewDate] = useState(new Date());
   const { toast } = useToast();
 
@@ -94,9 +83,16 @@ export default function RotationsPage() {
 
   // State for Sunday Groups
   const [sundayGroups, setSundayGroups] = useState<Record<string, SundayGroup>>({});
-  const [groupableProfessionals, setGroupableProfessionals] = useState<Professional[]>([]);
+  const [groupableSundayProfs, setGroupableSundayProfs] = useState<Professional[]>([]);
   const [isSavingSundayGroups, setIsSavingSundayGroups] = useState(false);
-  const [editingGroupName, setEditingGroupName] = useState<{ groupId: string; name: string } | null>(null);
+  const [editingSundayGroupName, setEditingSundayGroupName] = useState<{ groupId: string; name: string } | null>(null);
+
+  // State for Holiday Groups
+  const [holidayGroups, setHolidayGroups] = useState<Record<string, HolidayGroup>>({});
+  const [groupableHolidayProfs, setGroupableHolidayProfs] = useState<Professional[]>([]);
+  const [isSavingHolidayGroups, setIsSavingHolidayGroups] = useState(false);
+  const [editingHolidayGroupName, setEditingHolidayGroupName] = useState<{ groupId: string; name: string } | null>(null);
+  const [newHolidayGroupName, setNewHolidayGroupName] = useState("");
 
 
   const effectiveLocationId = useMemo(() => {
@@ -127,26 +123,45 @@ export default function RotationsPage() {
       setLocations(allLocations);
       
       const currentViewLocation = allLocations.find(l => l.id === effectiveLocationId);
+      
+      // --- Sunday Groups Logic ---
       if (currentViewLocation && (currentViewLocation.id === 'higuereta' || currentViewLocation.id === 'san_antonio')) {
-        const savedGroups = currentViewLocation.sundayGroups || {};
-        const initialGroups: Record<string, SundayGroup> = {
-            group1: savedGroups.group1 || { name: 'Grupo 1', professionalIds: [] },
-            group2: savedGroups.group2 || { name: 'Grupo 2', professionalIds: [] },
-            group3: savedGroups.group3 || { name: 'Grupo 3', professionalIds: [] },
-            group4: savedGroups.group4 || { name: 'Grupo 4', professionalIds: [] },
+        const savedSundayGroups = currentViewLocation.sundayGroups || {};
+        const initialSundayGroups: Record<string, SundayGroup> = {
+            group1: savedSundayGroups.group1 || { name: 'Grupo 1', professionalIds: [] },
+            group2: savedSundayGroups.group2 || { name: 'Grupo 2', professionalIds: [] },
+            group3: savedSundayGroups.group3 || { name: 'Grupo 3', professionalIds: [] },
+            group4: savedSundayGroups.group4 || { name: 'Grupo 4', professionalIds: [] },
         };
-        setSundayGroups(initialGroups);
+        setSundayGroups(initialSundayGroups);
 
-        const profsInSavedGroupsIds = new Set(Object.values(initialGroups).flatMap(g => g.professionalIds));
-        const locationNativeProfs = activeProfs.filter(p => 
-            p.locationId === effectiveLocationId || profsInSavedGroupsIds.has(p.id)
+        const profsInSavedSundayGroupsIds = new Set(Object.values(initialSundayGroups).flatMap(g => g.professionalIds));
+        const sundayLocationProfs = activeProfs.filter(p => 
+            p.locationId === effectiveLocationId || profsInSavedSundayGroupsIds.has(p.id)
         );
-        const uniqueLocationProfs = Array.from(new Map(locationNativeProfs.map(p => [p.id, p])).values());
-        setGroupableProfessionals(uniqueLocationProfs);
+        const uniqueSundayProfs = Array.from(new Map(sundayLocationProfs.map(p => [p.id, p])).values());
+        setGroupableSundayProfs(uniqueSundayProfs);
       } else {
-         setGroupableProfessionals([]);
+         setGroupableSundayProfs([]);
          setSundayGroups({});
       }
+
+      // --- Holiday Groups Logic ---
+      if (currentViewLocation) {
+        const savedHolidayGroups = currentViewLocation.holidayGroups || {};
+        setHolidayGroups(savedHolidayGroups);
+
+        const profsInSavedHolidayGroupsIds = new Set(Object.values(savedHolidayGroups).flatMap(g => g.professionalIds));
+        const holidayLocationProfs = activeProfs.filter(p => 
+            p.locationId === effectiveLocationId || profsInSavedHolidayGroupsIds.has(p.id)
+        );
+         const uniqueHolidayProfs = Array.from(new Map(holidayLocationProfs.map(p => [p.id, p])).values());
+        setGroupableHolidayProfs(uniqueHolidayProfs);
+      } else {
+        setGroupableHolidayProfs([]);
+        setHolidayGroups({});
+      }
+
 
       if (effectiveLocationId && effectiveLocationId !== 'all') {
             const nextSundayDate = nextSunday(viewDate);
@@ -420,28 +435,6 @@ export default function RotationsPage() {
     }
   };
 
-
-  const handleDrop = async (e: React.DragEvent<HTMLDivElement>, newStartTime: Shift, day: Date) => {
-    e.preventDefault();
-    if (!isDragDropMode) return;
-    try {
-      const { professionalId, shift } = JSON.parse(e.dataTransfer.getData("application/json"));
-      if (shift === newStartTime) return; // No change
-      
-      const newShiftDetails = shiftTimes[newStartTime];
-      const endTime = format(addDays(parse(newShiftDetails.display, 'HH:mm', new Date()), 0), 'HH:mm'); 
-
-      const endHour = parseInt(newShiftDetails.display.split(':')[0],10) + 9;
-      const finalEndTime = `${endHour.toString().padStart(2,'0')}:${newShiftDetails.display.split(':')[1]}`;
-
-
-      await handleAction(professionalId, day, 'special_shift', { startTime: newShiftDetails.display, endTime: finalEndTime });
-
-    } catch (error) {
-      console.error("Error handling drop:", error);
-    }
-  };
-
   const currentViewLocationName = useMemo(() => {
     if (user?.role === USER_ROLES.LOCATION_STAFF) {
         return locations.find(l => l.id === user.locationId)?.name;
@@ -458,31 +451,29 @@ export default function RotationsPage() {
     }
   };
   
-  const professionalsByGroup = useMemo(() => {
+  const sundayProfessionalsByGroup = useMemo(() => {
     const inGroups = new Set<string>();
     Object.values(sundayGroups).forEach(group => group.professionalIds.forEach(id => inGroups.add(id)));
     
     const assigned = new Map<string, Professional[]>();
     Object.entries(sundayGroups).forEach(([groupId, groupData]) => {
-      const profs = groupData.professionalIds.map(id => groupableProfessionals.find(p => p.id === id)).filter((p): p is Professional => !!p);
+      const profs = groupData.professionalIds.map(id => groupableSundayProfs.find(p => p.id === id)).filter((p): p is Professional => !!p);
       assigned.set(groupId, profs);
     });
 
-    const unassigned = groupableProfessionals.filter(p => !inGroups.has(p.id));
+    const unassigned = groupableSundayProfs.filter(p => !inGroups.has(p.id));
     return { assigned, unassigned };
-  }, [sundayGroups, groupableProfessionals]);
+  }, [sundayGroups, groupableSundayProfs]);
 
 
-  const handleMoveProfessional = (profId: string, toGroupId: string | null) => {
+  const handleMoveSundayProfessional = (profId: string, toGroupId: string | null) => {
       const newGroups = JSON.parse(JSON.stringify(sundayGroups));
       
-      // Remove from any existing group first
       for (const groupId in newGroups) {
           const group = newGroups[groupId];
           group.professionalIds = group.professionalIds.filter((id: string) => id !== profId);
       }
 
-      // Add to the new group if one is specified
       if (toGroupId && newGroups[toGroupId]) {
           if (!newGroups[toGroupId].professionalIds.includes(profId)) {
               newGroups[toGroupId].professionalIds.push(profId);
@@ -491,27 +482,27 @@ export default function RotationsPage() {
       setSundayGroups(newGroups);
   };
   
-  const handleAddExternalToGroup = (prof: Professional) => {
-    if (!groupableProfessionals.some(p => p.id === prof.id)) {
-        setGroupableProfessionals(prev => [...prev, prof]);
+  const handleAddExternalToSundayGroup = (prof: Professional) => {
+    if (!groupableSundayProfs.some(p => p.id === prof.id)) {
+        setGroupableSundayProfs(prev => [...prev, prof]);
     }
     toast({title: "Profesional Añadido", description: `${prof.firstName} ${prof.lastName} ahora está disponible para agrupar.`});
   };
 
-  const handleGroupNameChange = (groupId: string, newName: string) => {
-    setEditingGroupName({ groupId, name: newName });
+  const handleSundayGroupNameChange = (groupId: string, newName: string) => {
+    setEditingSundayGroupName({ groupId, name: newName });
   };
   
-  const handleSaveGroupName = (groupId: string) => {
-    if (editingGroupName && editingGroupName.groupId === groupId) {
-      const trimmedName = editingGroupName.name.trim();
+  const handleSaveSundayGroupName = (groupId: string) => {
+    if (editingSundayGroupName && editingSundayGroupName.groupId === groupId) {
+      const trimmedName = editingSundayGroupName.name.trim();
       if (trimmedName) {
         setSundayGroups(prev => ({
           ...prev,
           [groupId]: { ...prev[groupId], name: trimmedName }
         }));
       }
-      setEditingGroupName(null);
+      setEditingSundayGroupName(null);
     }
   };
   
@@ -532,6 +523,101 @@ export default function RotationsPage() {
     }
   };
 
+  // --- Holiday Group Logic ---
+  const holidayProfessionalsByGroup = useMemo(() => {
+    const inGroups = new Set<string>();
+    Object.values(holidayGroups).forEach(group => group.professionalIds.forEach(id => inGroups.add(id)));
+
+    const assigned = new Map<string, Professional[]>();
+    Object.entries(holidayGroups).forEach(([groupId, groupData]) => {
+      const profs = groupData.professionalIds.map(id => groupableHolidayProfs.find(p => p.id === id)).filter((p): p is Professional => !!p);
+      assigned.set(groupId, profs);
+    });
+
+    const unassigned = groupableHolidayProfs.filter(p => !inGroups.has(p.id));
+    return { assigned, unassigned };
+  }, [holidayGroups, groupableHolidayProfs]);
+
+  const handleMoveHolidayProfessional = (profId: string, toGroupId: string | null) => {
+    setHolidayGroups(prevGroups => {
+      const newGroups = JSON.parse(JSON.stringify(prevGroups));
+      for (const groupId in newGroups) {
+        const group = newGroups[groupId];
+        group.professionalIds = group.professionalIds.filter((id: string) => id !== profId);
+      }
+      if (toGroupId && newGroups[toGroupId]) {
+        if (!newGroups[toGroupId].professionalIds.includes(profId)) {
+          newGroups[toGroupId].professionalIds.push(profId);
+        }
+      }
+      return newGroups;
+    });
+  };
+
+  const handleAddExternalToHolidayGroup = (prof: Professional) => {
+    if (!groupableHolidayProfs.some(p => p.id === prof.id)) {
+      setGroupableHolidayProfs(prev => [...prev, prof]);
+    }
+    toast({ title: "Profesional Añadido", description: `${prof.firstName} ${prof.lastName} ahora está disponible para agrupar en feriados.` });
+  };
+  
+  const handleAddNewHolidayGroup = () => {
+    const name = newHolidayGroupName.trim();
+    if (name && !Object.values(holidayGroups).some(g => g.name.toLowerCase() === name.toLowerCase())) {
+        const newGroupId = `group_${Date.now()}`;
+        setHolidayGroups(prev => ({
+            ...prev,
+            [newGroupId]: { name: name, professionalIds: [] }
+        }));
+        setNewHolidayGroupName("");
+    } else {
+        toast({title: "Nombre inválido o duplicado", variant: "default"})
+    }
+  };
+
+  const handleDeleteHolidayGroup = (groupId: string) => {
+    setHolidayGroups(prev => {
+        const newGroups = {...prev};
+        delete newGroups[groupId];
+        return newGroups;
+    });
+  };
+  
+  const handleHolidayGroupNameChange = (groupId: string, newName: string) => {
+    setEditingHolidayGroupName({ groupId, name: newName });
+  };
+  
+  const handleSaveHolidayGroupName = (groupId: string) => {
+    if (editingHolidayGroupName && editingHolidayGroupName.groupId === groupId) {
+      const trimmedName = editingHolidayGroupName.name.trim();
+      if (trimmedName) {
+        setHolidayGroups(prev => ({
+          ...prev,
+          [groupId]: { ...prev[groupId], name: trimmedName }
+        }));
+      }
+      setEditingHolidayGroupName(null);
+    }
+  };
+
+  const handleSaveHolidayGroups = async () => {
+    if (!effectiveLocationId || effectiveLocationId === 'all') {
+      toast({ title: "Error", description: "Seleccione una sede específica para guardar los grupos.", variant: "destructive" });
+      return;
+    }
+    setIsSavingHolidayGroups(true);
+    try {
+      await saveHolidayGroups(effectiveLocationId, holidayGroups);
+      toast({ title: "Grupos de Feriado Guardados", description: "La configuración de los grupos para feriados ha sido guardada." });
+    } catch (error) {
+      toast({ title: "Error al Guardar", description: "No se pudo guardar la configuración de los grupos.", variant: "destructive" });
+      console.error("Error saving holiday groups:", error);
+    } finally {
+      setIsSavingHolidayGroups(false);
+    }
+  };
+
+
   return (
     <div className="container mx-auto py-8 px-4 md:px-0 space-y-8">
       <Card className="shadow-lg">
@@ -547,9 +633,10 @@ export default function RotationsPage() {
       </Card>
       
       <Tabs defaultValue="planner" className="w-full">
-        <TabsList className="grid w-full grid-cols-3">
+        <TabsList className="grid w-full grid-cols-4">
           <TabsTrigger value="planner">Planificador Semanal</TabsTrigger>
           <TabsTrigger value="sunday-groups">Grupos Dominicales</TabsTrigger>
+          <TabsTrigger value="holiday-groups">Grupos Feriados</TabsTrigger>
           <TabsTrigger value="compensatory-rests">Descansos Compensatorios</TabsTrigger>
         </TabsList>
 
@@ -748,7 +835,7 @@ export default function RotationsPage() {
                                                 <DropdownMenuSubTrigger>{loc.name}</DropdownMenuSubTrigger>
                                                 <DropdownMenuSubContent>
                                                     {allProfessionals.filter(p => p.locationId === loc.id).map(prof => (
-                                                        <DropdownMenuItem key={prof.id} onSelect={() => handleAddExternalToGroup(prof)}>
+                                                        <DropdownMenuItem key={prof.id} onSelect={() => handleAddExternalToSundayGroup(prof)}>
                                                             {prof.firstName} {prof.lastName}
                                                         </DropdownMenuItem>
                                                     ))}
@@ -765,12 +852,12 @@ export default function RotationsPage() {
                     <div className="md:col-span-1 p-3 border rounded-lg bg-secondary/50">
                         <h4 className="font-semibold mb-2 text-center">Sin Asignar</h4>
                         <div className="space-y-1 min-h-[100px]">
-                            {professionalsByGroup.unassigned.map(prof => (
+                            {sundayProfessionalsByGroup.unassigned.map(prof => (
                                 <DropdownMenu key={prof.id}>
                                     <DropdownMenuTrigger asChild><Button variant="outline" className="w-full justify-start">{prof.firstName} {prof.lastName.charAt(0)}.</Button></DropdownMenuTrigger>
                                     <DropdownMenuContent>
                                         {Object.entries(sundayGroups).map(([groupId, groupData]) => (
-                                            <DropdownMenuItem key={groupId} onClick={() => handleMoveProfessional(prof.id, groupId)}>Mover a {groupData.name}</DropdownMenuItem>
+                                            <DropdownMenuItem key={groupId} onClick={() => handleMoveSundayProfessional(prof.id, groupId)}>Mover a {groupData.name}</DropdownMenuItem>
                                         ))}
                                     </DropdownMenuContent>
                                 </DropdownMenu>
@@ -779,16 +866,16 @@ export default function RotationsPage() {
                     </div>
                     <div className="md:col-span-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
                         {Object.entries(sundayGroups).map(([groupId, groupData]) => {
-                            const profs = professionalsByGroup.assigned.get(groupId) || [];
+                            const profs = sundayProfessionalsByGroup.assigned.get(groupId) || [];
                             return (
                                 <div key={groupId} className="p-3 border rounded-lg">
-                                    <div className="font-semibold mb-2 text-center capitalize flex items-center justify-center gap-2" onDoubleClick={() => setEditingGroupName({ groupId, name: groupData.name })}>
-                                    {editingGroupName?.groupId === groupId ? (
+                                    <div className="font-semibold mb-2 text-center capitalize flex items-center justify-center gap-2" onDoubleClick={() => setEditingSundayGroupName({ groupId, name: groupData.name })}>
+                                    {editingSundayGroupName?.groupId === groupId ? (
                                         <Input
-                                        value={editingGroupName.name}
-                                        onChange={(e) => handleGroupNameChange(groupId, e.target.value)}
-                                        onBlur={() => handleSaveGroupName(groupId)}
-                                        onKeyDown={(e) => { if (e.key === 'Enter') handleSaveGroupName(groupId); if (e.key === 'Escape') setEditingGroupName(null);}}
+                                        value={editingSundayGroupName.name}
+                                        onChange={(e) => handleSundayGroupNameChange(groupId, e.target.value)}
+                                        onBlur={() => handleSaveSundayGroupName(groupId)}
+                                        onKeyDown={(e) => { if (e.key === 'Enter') handleSaveSundayGroupName(groupId); if (e.key === 'Escape') setEditingSundayGroupName(null);}}
                                         autoFocus
                                         className="h-8 text-center"
                                         />
@@ -801,10 +888,10 @@ export default function RotationsPage() {
                                             <DropdownMenu key={prof.id}>
                                                 <DropdownMenuTrigger asChild><Button variant="secondary" className="w-full justify-start">{prof.firstName} {prof.lastName.charAt(0)}.</Button></DropdownMenuTrigger>
                                                 <DropdownMenuContent>
-                                                    <DropdownMenuItem onClick={() => handleMoveProfessional(prof.id, null)}>Quitar de Grupo</DropdownMenuItem>
+                                                    <DropdownMenuItem onClick={() => handleMoveSundayProfessional(prof.id, null)}>Quitar de Grupo</DropdownMenuItem>
                                                     <DropdownMenuSeparator/>
                                                     {Object.entries(sundayGroups).filter(([id]) => id !== groupId).map(([otherGroupId, otherGroupData]) => (
-                                                        <DropdownMenuItem key={otherGroupId} onClick={() => handleMoveProfessional(prof.id, otherGroupId)}>Mover a {otherGroupData.name}</DropdownMenuItem>
+                                                        <DropdownMenuItem key={otherGroupId} onClick={() => handleMoveSundayProfessional(prof.id, otherGroupId)}>Mover a {otherGroupData.name}</DropdownMenuItem>
                                                     ))}
                                                 </DropdownMenuContent>
                                             </DropdownMenu>
@@ -818,7 +905,99 @@ export default function RotationsPage() {
                 <CardFooter>
                     <Button onClick={handleSaveSundayGroups} disabled={isSavingSundayGroups}>
                         {isSavingSundayGroups && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                        <Save className="mr-2 h-4 w-4" /> Guardar Grupos
+                        <Save className="mr-2 h-4 w-4" /> Guardar Grupos Dominicales
+                    </Button>
+                </CardFooter>
+            </Card>
+        </TabsContent>
+
+        <TabsContent value="holiday-groups">
+            <Card>
+                <CardHeader>
+                    <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
+                        <div>
+                            <CardTitle>Grupos para Feriados ({currentViewLocationName})</CardTitle>
+                            <CardDescription>Organice los profesionales en grupos para los días feriados. La asignación es por sede.</CardDescription>
+                        </div>
+                        <div className="flex gap-2">
+                           <DropdownMenu>
+                                <DropdownMenuTrigger asChild>
+                                    <Button variant="outline"><PlusCircle className="mr-2 h-4 w-4" />Añadir Profesional Externo</Button>
+                                </DropdownMenuTrigger>
+                                <DropdownMenuContent className="w-56">
+                                    {locations.filter(l => l.id !== effectiveLocationId).map(loc => (
+                                        <DropdownMenuSub key={loc.id}>
+                                            <DropdownMenuSubTrigger>{loc.name}</DropdownMenuSubTrigger>
+                                            <DropdownMenuSubContent>
+                                                {allProfessionals.filter(p => p.locationId === loc.id).map(prof => (
+                                                    <DropdownMenuItem key={prof.id} onSelect={() => handleAddExternalToHolidayGroup(prof)}>
+                                                        {prof.firstName} {prof.lastName}
+                                                    </DropdownMenuItem>
+                                                ))}
+                                            </DropdownMenuSubContent>
+                                        </DropdownMenuSub>
+                                    ))}
+                                </DropdownMenuContent>
+                            </DropdownMenu>
+                            <div className="flex gap-1">
+                                <Input placeholder="Nuevo grupo" value={newHolidayGroupName} onChange={e => setNewHolidayGroupName(e.target.value)} />
+                                <Button onClick={handleAddNewHolidayGroup} size="sm">Crear</Button>
+                            </div>
+                        </div>
+                    </div>
+                </CardHeader>
+                <CardContent className="grid grid-cols-1 md:grid-cols-5 gap-4">
+                    <div className="md:col-span-1 p-3 border rounded-lg bg-secondary/50">
+                        <h4 className="font-semibold mb-2 text-center">Sin Asignar</h4>
+                        <div className="space-y-1 min-h-[100px]">
+                             {holidayProfessionalsByGroup.unassigned.map(prof => (
+                                <DropdownMenu key={prof.id}>
+                                    <DropdownMenuTrigger asChild><Button variant="outline" className="w-full justify-start">{prof.firstName} {prof.lastName.charAt(0)}.</Button></DropdownMenuTrigger>
+                                    <DropdownMenuContent>
+                                        {Object.entries(holidayGroups).map(([groupId, groupData]) => (
+                                            <DropdownMenuItem key={groupId} onClick={() => handleMoveHolidayProfessional(prof.id, groupId)}>Mover a {groupData.name}</DropdownMenuItem>
+                                        ))}
+                                    </DropdownMenuContent>
+                                </DropdownMenu>
+                            ))}
+                        </div>
+                    </div>
+                    <div className="md:col-span-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                        {Object.entries(holidayGroups).map(([groupId, groupData]) => {
+                            const profs = holidayProfessionalsByGroup.assigned.get(groupId) || [];
+                            return (
+                                <div key={groupId} className="p-3 border rounded-lg">
+                                    <div className="font-semibold mb-2 text-center capitalize flex items-center justify-center gap-2">
+                                        {editingHolidayGroupName?.groupId === groupId ? (
+                                            <Input value={editingHolidayGroupName.name} onChange={(e) => handleHolidayGroupNameChange(groupId, e.target.value)} onBlur={() => handleSaveHolidayGroupName(groupId)} onKeyDown={(e) => { if (e.key === 'Enter') handleSaveHolidayGroupName(groupId); }} autoFocus className="h-8"/>
+                                        ) : (
+                                            <h4 className="flex items-center gap-2 cursor-pointer" onDoubleClick={() => handleHolidayGroupNameChange(groupId, groupData.name)}><Shield size={16}/> {groupData.name} <Edit2 size={12}/></h4>
+                                        )}
+                                        <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => handleDeleteHolidayGroup(groupId)}><Trash2 size={14} className="text-destructive"/></Button>
+                                    </div>
+                                    <div className="space-y-1 min-h-[100px]">
+                                        {profs.map(prof => (
+                                            <DropdownMenu key={prof.id}>
+                                                <DropdownMenuTrigger asChild><Button variant="secondary" className="w-full justify-start">{prof.firstName} {prof.lastName.charAt(0)}.</Button></DropdownMenuTrigger>
+                                                <DropdownMenuContent>
+                                                    <DropdownMenuItem onClick={() => handleMoveHolidayProfessional(prof.id, null)}>Quitar de Grupo</DropdownMenuItem>
+                                                    <DropdownMenuSeparator/>
+                                                    {Object.entries(holidayGroups).filter(([id]) => id !== groupId).map(([otherGroupId, otherGroupData]) => (
+                                                        <DropdownMenuItem key={otherGroupId} onClick={() => handleMoveHolidayProfessional(prof.id, otherGroupId)}>Mover a {otherGroupData.name}</DropdownMenuItem>
+                                                    ))}
+                                                </DropdownMenuContent>
+                                            </DropdownMenu>
+                                        ))}
+                                    </div>
+                                </div>
+                            );
+                        })}
+                    </div>
+                </CardContent>
+                <CardFooter>
+                    <Button onClick={handleSaveHolidayGroups} disabled={isSavingHolidayGroups}>
+                        {isSavingHolidayGroups && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                        <Save className="mr-2 h-4 w-4" /> Guardar Grupos de Feriados
                     </Button>
                 </CardFooter>
             </Card>
@@ -918,4 +1097,5 @@ export default function RotationsPage() {
     </div>
   );
 }
+
 
