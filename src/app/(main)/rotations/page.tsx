@@ -126,10 +126,6 @@ export default function RotationsPage() {
       setAllProfessionals(activeProfs);
       setLocations(allLocations);
       
-      // Initialize groupable professionals with those from Higuereta
-      const higueretaProfs = activeProfs.filter(p => p.locationId === 'higuereta');
-      setGroupableProfessionals(higueretaProfs);
-      
       const higueretaLocation = allLocations.find(l => l.id === 'higuereta');
       const savedGroups = higueretaLocation?.sundayGroups || {};
       const initialGroups: Record<string, SundayGroup> = {
@@ -139,7 +135,15 @@ export default function RotationsPage() {
           group4: savedGroups.group4 || { name: 'Grupo 4', professionalIds: [] },
       };
       setSundayGroups(initialGroups);
-      
+
+      // A professional is "groupable" if their base is Higuereta OR if they are already in a saved group.
+      const profsInSavedGroupsIds = new Set(Object.values(initialGroups).flatMap(g => g.professionalIds));
+      const higueretaProfs = activeProfs.filter(p => 
+          p.locationId === 'higuereta' || profsInSavedGroupsIds.has(p.id)
+      );
+      // Remove duplicates
+      const uniqueHigueretaProfs = Array.from(new Map(higueretaProfs.map(p => [p.id, p])).values());
+      setGroupableProfessionals(uniqueHigueretaProfs);
 
       if (effectiveLocationId && effectiveLocationId !== 'all') {
             const nextSundayDate = nextSunday(viewDate);
@@ -900,3 +904,4 @@ export default function RotationsPage() {
     </div>
   );
 }
+
