@@ -127,7 +127,7 @@ export default function RotationsPage() {
       setLocations(allLocations);
       
       const currentViewLocation = allLocations.find(l => l.id === effectiveLocationId);
-      if (currentViewLocation) {
+      if (currentViewLocation && (currentViewLocation.id === 'higuereta' || currentViewLocation.id === 'san_antonio')) {
         const savedGroups = currentViewLocation.sundayGroups || {};
         const initialGroups: Record<string, SundayGroup> = {
             group1: savedGroups.group1 || { name: 'Grupo 1', professionalIds: [] },
@@ -546,368 +546,376 @@ export default function RotationsPage() {
         </CardHeader>
       </Card>
       
-      <Card>
-        <CardHeader>
-            <div className="flex items-center justify-between flex-wrap gap-4">
-              <div>
-                  <CardTitle className="text-xl">Planificador Semanal Visual ({currentViewLocationName || 'Seleccione Sede'})</CardTitle>
-                   <CardDescription>
-                      Semana del {format(displayedWeek.start, "d 'de' LLLL", {locale: es})} al {format(addDays(displayedWeek.start, 6), "d 'de' LLLL 'de' yyyy", {locale: es})}.
-                  </CardDescription>
-              </div>
-              <div className="flex items-center gap-2">
-                  <Button variant="outline" size="icon" onClick={() => setViewDate(prev => subMonths(prev, 1))}><ChevronLeft/></Button>
-                  <Button variant="outline" size="sm" onClick={() => setViewDate(new Date())}>Este Mes</Button>
-                  <Button variant="outline" size="icon" onClick={() => setViewDate(prev => addMonths(prev, 1))}><ChevronRight/></Button>
-              </div>
-            </div>
-        </CardHeader>
-        <CardContent>
-            {isLoading ? <div className="flex justify-center p-8"><Loader2 className="h-10 w-10 animate-spin"/></div> :
-             !currentViewLocationName ? <div className="text-center py-10 text-muted-foreground">Por favor, seleccione una sede específica desde el menú superior para ver el planificador.</div> :
-            <div className="border rounded-lg overflow-x-auto">
-                <Table className="min-w-max border-collapse">
-                    <TableHeader>
-                        <TableRow className="bg-blue-100">
-                            <TableHead className="w-[100px] text-center font-bold text-base border border-gray-300 align-middle">HORA</TableHead>
-                            {displayedWeek.days.map(day => (
-                                <TableHead key={day.toISOString()} className="w-[180px] text-center font-bold text-base capitalize border border-gray-300 align-middle">
-                                    <div className="flex items-center justify-center gap-2">
-                                        <span>{format(day, "EEEE d", {locale: es})}</span>
-                                        <AlertDialog>
-                                            <AlertDialogTrigger asChild>
-                                                <Button variant="ghost" size="icon" className="h-6 w-6 text-amber-500 hover:text-amber-400 hover:bg-amber-100/50" title="Marcar como feriado">
-                                                    <Star size={16}/>
-                                                </Button>
-                                            </AlertDialogTrigger>
-                                            <AlertDialogContent>
-                                                <AlertDialogHeader>
-                                                <AlertDialogTitle>¿Marcar como Feriado?</AlertDialogTitle>
-                                                <AlertDialogDescription>
-                                                    Esta acción asignará un descanso por "Feriado" a todos los profesionales activos para el día {format(day, "d 'de' LLLL", {locale: es})}. ¿Desea continuar?
-                                                </AlertDialogDescription>
-                                                </AlertDialogHeader>
-                                                <AlertDialogFooter>
-                                                <AlertDialogCancel>Cancelar</AlertDialogCancel>
-                                                <AlertDialogAction onClick={() => handleMarkAsHoliday(day)}>Sí, marcar como feriado</AlertDialogAction>
-                                                </AlertDialogFooter>
-                                            </AlertDialogContent>
-                                        </AlertDialog>
-                                    </div>
-                                </TableHead>
-                            ))}
-                        </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                        {isProcessing ? (
-                            <TableRow><TableCell colSpan={8} className="text-center p-8"><Loader2 className="h-8 w-8 animate-spin mx-auto"/> Aplicando feriado...</TableCell></TableRow>
-                        ) : (
-                        <>
-                        {displayedShifts.map(time => (
-                             <TableRow key={time}>
-                                <TableCell className="font-bold text-center align-middle bg-blue-100 border border-gray-300">{shiftTimes[time].display}</TableCell>
-                                {displayedWeek.days.map(day => {
-                                    const professionalsInSlot = getProfessionalsForShift(day, time);
-                                    const dayOfWeekId = DAYS_OF_WEEK[(getDay(day) + 6) % 7].id;
-                                    return (
-                                        <TableCell key={`${day.toISOString()}-${time}`} className="p-1 align-top h-24 border border-gray-300">
+      <Tabs defaultValue="planner" className="w-full">
+        <TabsList className="grid w-full grid-cols-3">
+          <TabsTrigger value="planner">Planificador Semanal</TabsTrigger>
+          <TabsTrigger value="sunday-groups">Grupos Dominicales</TabsTrigger>
+          <TabsTrigger value="compensatory-rests">Descansos Compensatorios</TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="planner">
+            <Card>
+                <CardHeader>
+                    <div className="flex items-center justify-between flex-wrap gap-4">
+                      <div>
+                          <CardTitle className="text-xl">Planificador Semanal Visual ({currentViewLocationName || 'Seleccione Sede'})</CardTitle>
+                          <CardDescription>
+                              Semana del {format(displayedWeek.start, "d 'de' LLLL", {locale: es})} al {format(addDays(displayedWeek.start, 6), "d 'de' LLLL 'de' yyyy", {locale: es})}.
+                          </CardDescription>
+                      </div>
+                      <div className="flex items-center gap-2">
+                          <Button variant="outline" size="icon" onClick={() => setViewDate(prev => subMonths(prev, 1))}><ChevronLeft/></Button>
+                          <Button variant="outline" size="sm" onClick={() => setViewDate(new Date())}>Este Mes</Button>
+                          <Button variant="outline" size="icon" onClick={() => setViewDate(prev => addMonths(prev, 1))}><ChevronRight/></Button>
+                      </div>
+                    </div>
+                </CardHeader>
+                <CardContent>
+                    {isLoading ? <div className="flex justify-center p-8"><Loader2 className="h-10 w-10 animate-spin"/></div> :
+                    !currentViewLocationName ? <div className="text-center py-10 text-muted-foreground">Por favor, seleccione una sede específica desde el menú superior para ver el planificador.</div> :
+                    <div className="border rounded-lg overflow-x-auto">
+                        <Table className="min-w-max border-collapse">
+                            <TableHeader>
+                                <TableRow className="bg-blue-100">
+                                    <TableHead className="w-[100px] text-center font-bold text-base border border-gray-300 align-middle">HORA</TableHead>
+                                    {displayedWeek.days.map(day => (
+                                        <TableHead key={day.toISOString()} className="w-[180px] text-center font-bold text-base capitalize border border-gray-300 align-middle">
+                                            <div className="flex items-center justify-center gap-2">
+                                                <span>{format(day, "EEEE d", {locale: es})}</span>
+                                                <AlertDialog>
+                                                    <AlertDialogTrigger asChild>
+                                                        <Button variant="ghost" size="icon" className="h-6 w-6 text-amber-500 hover:text-amber-400 hover:bg-amber-100/50" title="Marcar como feriado">
+                                                            <Star size={16}/>
+                                                        </Button>
+                                                    </AlertDialogTrigger>
+                                                    <AlertDialogContent>
+                                                        <AlertDialogHeader>
+                                                        <AlertDialogTitle>¿Marcar como Feriado?</AlertDialogTitle>
+                                                        <AlertDialogDescription>
+                                                            Esta acción asignará un descanso por "Feriado" a todos los profesionales activos para el día {format(day, "d 'de' LLLL", {locale: es})}. ¿Desea continuar?
+                                                        </AlertDialogDescription>
+                                                        </AlertDialogHeader>
+                                                        <AlertDialogFooter>
+                                                        <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                                                        <AlertDialogAction onClick={() => handleMarkAsHoliday(day)}>Sí, marcar como feriado</AlertDialogAction>
+                                                        </AlertDialogFooter>
+                                                    </AlertDialogContent>
+                                                </AlertDialog>
+                                            </div>
+                                        </TableHead>
+                                    ))}
+                                </TableRow>
+                            </TableHeader>
+                            <TableBody>
+                                {isProcessing ? (
+                                    <TableRow><TableCell colSpan={8} className="text-center p-8"><Loader2 className="h-8 w-8 animate-spin mx-auto"/> Aplicando feriado...</TableCell></TableRow>
+                                ) : (
+                                <>
+                                {displayedShifts.map(time => (
+                                    <TableRow key={time}>
+                                        <TableCell className="font-bold text-center align-middle bg-blue-100 border border-gray-300">{shiftTimes[time].display}</TableCell>
+                                        {displayedWeek.days.map(day => {
+                                            const professionalsInSlot = getProfessionalsForShift(day, time);
+                                            const dayOfWeekId = DAYS_OF_WEEK[(getDay(day) + 6) % 7].id;
+                                            return (
+                                                <TableCell key={`${day.toISOString()}-${time}`} className="p-1 align-top h-24 border border-gray-300">
+                                                    <div className="space-y-1">
+                                                        {professionalsInSlot.map((item, index) => (
+                                                            <DropdownMenu key={`${item.professionalId}-${index}`}>
+                                                                <DropdownMenuTrigger asChild>
+                                                                    <div onDoubleClick={(e) => e.preventDefault()} className="cursor-pointer">
+                                                                        <NameBadge {...item} />
+                                                                    </div>
+                                                                </DropdownMenuTrigger>
+                                                                <DropdownMenuPortal>
+                                                                <DropdownMenuContent>
+                                                                    <DropdownMenuSub>
+                                                                        <DropdownMenuSubTrigger>Cambiar Horario (Solo este día)</DropdownMenuSubTrigger>
+                                                                        <DropdownMenuSubContent>
+                                                                            <DropdownMenuItem onClick={() => handleAction(item.professionalId, day, 'special_shift', { startTime: '09:00', endTime: '18:00' })}>09:00 - 18:00</DropdownMenuItem>
+                                                                            <DropdownMenuItem onClick={() => handleAction(item.professionalId, day, 'special_shift', { startTime: '10:00', endTime: '19:00' })}>10:00 - 19:00</DropdownMenuItem>
+                                                                            <DropdownMenuItem onClick={() => handleAction(item.professionalId, day, 'special_shift', { startTime: '10:30', endTime: '19:30' })}>10:30 - 19:30</DropdownMenuItem>
+                                                                            <DropdownMenuItem onClick={() => handleAction(item.professionalId, day, 'special_shift', { startTime: '11:00', endTime: '20:00' })}>11:00 - 20:00</DropdownMenuItem>
+                                                                            <DropdownMenuItem onClick={() => handleAction(item.professionalId, day, 'special_shift', { startTime: '12:30', endTime: '21:30' })}>12:30 - 21:30</DropdownMenuItem>
+                                                                        </DropdownMenuSubContent>
+                                                                    </DropdownMenuSub>
+                                                                    <DropdownMenuSub>
+                                                                        <DropdownMenuSubTrigger>Actualizar Horario Base (Semanal)</DropdownMenuSubTrigger>
+                                                                        <DropdownMenuSubContent>
+                                                                            <DropdownMenuItem onClick={() => handleUpdateBaseSchedule(item.professionalId, dayOfWeekId, '09:00', '18:00')}>09:00 - 18:00</DropdownMenuItem>
+                                                                            <DropdownMenuItem onClick={() => handleUpdateBaseSchedule(item.professionalId, dayOfWeekId, '10:00', '19:00')}>10:00 - 19:00</DropdownMenuItem>
+                                                                            <DropdownMenuItem onClick={() => handleUpdateBaseSchedule(item.professionalId, dayOfWeekId, '10:30', '19:30')}>10:30 - 19:30</DropdownMenuItem>
+                                                                            <DropdownMenuItem onClick={() => handleUpdateBaseSchedule(item.professionalId, dayOfWeekId, '11:00', '20:00')}>11:00 - 20:00</DropdownMenuItem>
+                                                                            <DropdownMenuItem onClick={() => handleUpdateBaseSchedule(item.professionalId, dayOfWeekId, '12:30', '21:30')}>12:30 - 21:30</DropdownMenuItem>
+                                                                        </DropdownMenuSubContent>
+                                                                    </DropdownMenuSub>
+                                                                    <DropdownMenuSub>
+                                                                        <DropdownMenuSubTrigger>Trasladar a Sede (Solo este día)</DropdownMenuSubTrigger>
+                                                                        <DropdownMenuSubContent>
+                                                                            {locations.filter(l => l.id !== effectiveLocationId).map(loc => (
+                                                                                <DropdownMenuItem key={loc.id} onClick={() => handleAction(item.professionalId, day, 'transfer', { locationId: loc.id, startTime: '10:00', endTime: '19:00' })}>{loc.name}</DropdownMenuItem>
+                                                                            ))}
+                                                                        </DropdownMenuSubContent>
+                                                                    </DropdownMenuSub>
+                                                                    <DropdownMenuSeparator />
+                                                                    <DropdownMenuItem onClick={() => handleAction(item.professionalId, day, 'rest')}>Marcar Descanso</DropdownMenuItem>
+                                                                    <DropdownMenuItem onClick={() => handleAction(item.professionalId, day, 'vacation')}>Marcar Vacaciones</DropdownMenuItem>
+                                                                    <DropdownMenuSeparator />
+                                                                    <DropdownMenuItem className="text-destructive focus:text-destructive" onClick={() => handleClearException(item.professionalId, day)}><RefreshCcw className="mr-2 h-4 w-4" />Limpiar Excepción</DropdownMenuItem>
+                                                                </DropdownMenuContent>
+                                                                </DropdownMenuPortal>
+                                                            </DropdownMenu>
+                                                        ))}
+                                                    </div>
+                                                </TableCell>
+                                            );
+                                        })}
+                                    </TableRow>
+                                ))}
+                                <TableRow>
+                                    <TableCell className="font-bold text-center align-middle bg-blue-100 border-y border-gray-300" colSpan={8}>Descansos del Día</TableCell>
+                                </TableRow>
+                                <TableRow>
+                                    <TableCell colSpan={1} className="border-r border-gray-300"></TableCell>
+                                    {displayedWeek.days.map((day) => {
+                                        const restingProfessionals = getRestingProfessionalsForDay(day);
+                                        return (
+                                        <TableCell key={`resting-${day.toISOString()}`} className="p-1 align-top border-x border-gray-300">
                                             <div className="space-y-1">
-                                                {professionalsInSlot.map((item, index) => (
-                                                    <DropdownMenu key={`${item.professionalId}-${index}`}>
-                                                        <DropdownMenuTrigger asChild>
-                                                            <div onDoubleClick={(e) => e.preventDefault()} className="cursor-pointer">
-                                                                <NameBadge {...item} />
-                                                            </div>
-                                                        </DropdownMenuTrigger>
-                                                        <DropdownMenuPortal>
-                                                          <DropdownMenuContent>
-                                                            <DropdownMenuSub>
-                                                                <DropdownMenuSubTrigger>Cambiar Horario (Solo este día)</DropdownMenuSubTrigger>
-                                                                <DropdownMenuSubContent>
-                                                                    <DropdownMenuItem onClick={() => handleAction(item.professionalId, day, 'special_shift', { startTime: '09:00', endTime: '18:00' })}>09:00 - 18:00</DropdownMenuItem>
-                                                                    <DropdownMenuItem onClick={() => handleAction(item.professionalId, day, 'special_shift', { startTime: '10:00', endTime: '19:00' })}>10:00 - 19:00</DropdownMenuItem>
-                                                                    <DropdownMenuItem onClick={() => handleAction(item.professionalId, day, 'special_shift', { startTime: '10:30', endTime: '19:30' })}>10:30 - 19:30</DropdownMenuItem>
-                                                                    <DropdownMenuItem onClick={() => handleAction(item.professionalId, day, 'special_shift', { startTime: '11:00', endTime: '20:00' })}>11:00 - 20:00</DropdownMenuItem>
-                                                                    <DropdownMenuItem onClick={() => handleAction(item.professionalId, day, 'special_shift', { startTime: '12:30', endTime: '21:30' })}>12:30 - 21:30</DropdownMenuItem>
-                                                                </DropdownMenuSubContent>
-                                                            </DropdownMenuSub>
-                                                            <DropdownMenuSub>
-                                                                <DropdownMenuSubTrigger>Actualizar Horario Base (Semanal)</DropdownMenuSubTrigger>
-                                                                <DropdownMenuSubContent>
-                                                                     <DropdownMenuItem onClick={() => handleUpdateBaseSchedule(item.professionalId, dayOfWeekId, '09:00', '18:00')}>09:00 - 18:00</DropdownMenuItem>
-                                                                     <DropdownMenuItem onClick={() => handleUpdateBaseSchedule(item.professionalId, dayOfWeekId, '10:00', '19:00')}>10:00 - 19:00</DropdownMenuItem>
-                                                                     <DropdownMenuItem onClick={() => handleUpdateBaseSchedule(item.professionalId, dayOfWeekId, '10:30', '19:30')}>10:30 - 19:30</DropdownMenuItem>
-                                                                     <DropdownMenuItem onClick={() => handleUpdateBaseSchedule(item.professionalId, dayOfWeekId, '11:00', '20:00')}>11:00 - 20:00</DropdownMenuItem>
-                                                                     <DropdownMenuItem onClick={() => handleUpdateBaseSchedule(item.professionalId, dayOfWeekId, '12:30', '21:30')}>12:30 - 21:30</DropdownMenuItem>
-                                                                </DropdownMenuSubContent>
-                                                            </DropdownMenuSub>
-                                                            <DropdownMenuSub>
-                                                                <DropdownMenuSubTrigger>Trasladar a Sede (Solo este día)</DropdownMenuSubTrigger>
-                                                                <DropdownMenuSubContent>
-                                                                    {locations.filter(l => l.id !== effectiveLocationId).map(loc => (
-                                                                        <DropdownMenuItem key={loc.id} onClick={() => handleAction(item.professionalId, day, 'transfer', { locationId: loc.id, startTime: '10:00', endTime: '19:00' })}>{loc.name}</DropdownMenuItem>
-                                                                    ))}
-                                                                </DropdownMenuSubContent>
-                                                            </DropdownMenuSub>
-                                                            <DropdownMenuSeparator />
-                                                            <DropdownMenuItem onClick={() => handleAction(item.professionalId, day, 'rest')}>Marcar Descanso</DropdownMenuItem>
-                                                            <DropdownMenuItem onClick={() => handleAction(item.professionalId, day, 'vacation')}>Marcar Vacaciones</DropdownMenuItem>
-                                                            <DropdownMenuSeparator />
-                                                            <DropdownMenuItem className="text-destructive focus:text-destructive" onClick={() => handleClearException(item.professionalId, day)}><RefreshCcw className="mr-2 h-4 w-4" />Limpiar Excepción</DropdownMenuItem>
-                                                          </DropdownMenuContent>
-                                                        </DropdownMenuPortal>
-                                                    </DropdownMenu>
-                                                ))}
+                                            {restingProfessionals.map((item, index) => (
+                                                <DropdownMenu key={`${item.professionalId}-${index}`}>
+                                                <DropdownMenuTrigger asChild>
+                                                    <div onDoubleClick={(e) => e.preventDefault()} className="cursor-pointer">
+                                                    <NameBadge {...item} />
+                                                    </div>
+                                                </DropdownMenuTrigger>
+                                                <DropdownMenuPortal>
+                                                    <DropdownMenuContent>
+                                                    <DropdownMenuSub>
+                                                        <DropdownMenuSubTrigger>Asignar Turno Especial (Solo este día)</DropdownMenuSubTrigger>
+                                                        <DropdownMenuSubContent>
+                                                        <DropdownMenuItem onClick={() => handleAction(item.professionalId, day, 'special_shift', { startTime: '09:00', endTime: '18:00' })}>09:00 - 18:00</DropdownMenuItem>
+                                                        <DropdownMenuItem onClick={() => handleAction(item.professionalId, day, 'special_shift', { startTime: '10:00', endTime: '19:00' })}>10:00 - 19:00</DropdownMenuItem>
+                                                        <DropdownMenuItem onClick={() => handleAction(item.professionalId, day, 'special_shift', { startTime: '10:30', endTime: '19:30' })}>10:30 - 19:30</DropdownMenuItem>
+                                                        </DropdownMenuSubContent>
+                                                    </DropdownMenuSub>
+                                                    <DropdownMenuSeparator />
+                                                    <DropdownMenuItem className="text-destructive focus:text-destructive" onClick={() => handleClearException(item.professionalId, day)}><RefreshCcw className="mr-2 h-4 w-4" />Limpiar Excepción</DropdownMenuItem>
+                                                    </DropdownMenuContent>
+                                                </DropdownMenuPortal>
+                                                </DropdownMenu>
+                                            ))}
                                             </div>
                                         </TableCell>
-                                    );
-                                })}
-                            </TableRow>
-                        ))}
-                         <TableRow>
-                            <TableCell className="font-bold text-center align-middle bg-blue-100 border-y border-gray-300" colSpan={8}>Descansos del Día</TableCell>
-                         </TableRow>
-                         <TableRow>
-                             <TableCell colSpan={1} className="border-r border-gray-300"></TableCell>
-                             {displayedWeek.days.map((day) => {
-                               const restingProfessionals = getRestingProfessionalsForDay(day);
-                               return (
-                                 <TableCell key={`resting-${day.toISOString()}`} className="p-1 align-top border-x border-gray-300">
-                                   <div className="space-y-1">
-                                     {restingProfessionals.map((item, index) => (
-                                       <DropdownMenu key={`${item.professionalId}-${index}`}>
-                                         <DropdownMenuTrigger asChild>
-                                           <div onDoubleClick={(e) => e.preventDefault()} className="cursor-pointer">
-                                             <NameBadge {...item} />
-                                           </div>
-                                         </DropdownMenuTrigger>
-                                         <DropdownMenuPortal>
-                                           <DropdownMenuContent>
-                                             <DropdownMenuSub>
-                                               <DropdownMenuSubTrigger>Asignar Turno Especial (Solo este día)</DropdownMenuSubTrigger>
-                                               <DropdownMenuSubContent>
-                                                 <DropdownMenuItem onClick={() => handleAction(item.professionalId, day, 'special_shift', { startTime: '09:00', endTime: '18:00' })}>09:00 - 18:00</DropdownMenuItem>
-                                                 <DropdownMenuItem onClick={() => handleAction(item.professionalId, day, 'special_shift', { startTime: '10:00', endTime: '19:00' })}>10:00 - 19:00</DropdownMenuItem>
-                                                 <DropdownMenuItem onClick={() => handleAction(item.professionalId, day, 'special_shift', { startTime: '10:30', endTime: '19:30' })}>10:30 - 19:30</DropdownMenuItem>
-                                               </DropdownMenuSubContent>
-                                             </DropdownMenuSub>
-                                             <DropdownMenuSeparator />
-                                             <DropdownMenuItem className="text-destructive focus:text-destructive" onClick={() => handleClearException(item.professionalId, day)}><RefreshCcw className="mr-2 h-4 w-4" />Limpiar Excepción</DropdownMenuItem>
-                                           </DropdownMenuContent>
-                                         </DropdownMenuPortal>
-                                       </DropdownMenu>
-                                     ))}
-                                   </div>
-                                 </TableCell>
-                               );
-                             })}
-                        </TableRow>
-                        </>
-                        )}
-                    </TableBody>
-                </Table>
-                 <div className="p-4 mt-4 flex items-center gap-6 text-sm">
-                    <h4 className="font-bold">Leyenda:</h4>
-                    <div className="flex items-center gap-2"><div className="w-5 h-5 bg-orange-400 rounded-sm"></div><span>Vacaciones / Feriado</span></div>
-                    <div className="flex items-center gap-2"><div className="w-5 h-5 bg-cyan-200 rounded-sm"></div><span>Descanso</span></div>
-                    <div className="flex items-center gap-2"><div className="w-5 h-5 bg-purple-200 rounded-sm"></div><span>Traslado</span></div>
-                    <div className="flex items-center gap-2"><div className="w-5 h-5 bg-green-200 rounded-sm"></div><span>Cubre / Turno Especial</span></div>
-                </div>
+                                        );
+                                    })}
+                                </TableRow>
+                                </>
+                                )}
+                            </TableBody>
+                        </Table>
+                        <div className="p-4 mt-4 flex items-center gap-6 text-sm">
+                            <h4 className="font-bold">Leyenda:</h4>
+                            <div className="flex items-center gap-2"><div className="w-5 h-5 bg-orange-400 rounded-sm"></div><span>Vacaciones / Feriado</span></div>
+                            <div className="flex items-center gap-2"><div className="w-5 h-5 bg-cyan-200 rounded-sm"></div><span>Descanso</span></div>
+                            <div className="flex items-center gap-2"><div className="w-5 h-5 bg-purple-200 rounded-sm"></div><span>Traslado</span></div>
+                            <div className="flex items-center gap-2"><div className="w-5 h-5 bg-green-200 rounded-sm"></div><span>Cubre / Turno Especial</span></div>
+                        </div>
+                    </div>
+                    }
+                </CardContent>
+            </Card>
+        </TabsContent>
+        
+        <TabsContent value="sunday-groups">
+            <Card>
+                <CardHeader>
+                    <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
+                        <div>
+                            <CardTitle>Grupos Dominicales ({currentViewLocationName})</CardTitle>
+                            <CardDescription>Organice los profesionales en grupos para las rotaciones de los domingos. Haga doble clic en el nombre de un grupo para editarlo.</CardDescription>
+                        </div>
+                        <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                                <Button variant="outline"><PlusCircle className="mr-2 h-4 w-4" />Añadir Profesional Externo</Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent className="w-56">
+                                <DropdownMenuSub>
+                                    <DropdownMenuSubTrigger>Desde Sede...</DropdownMenuSubTrigger>
+                                    <DropdownMenuSubContent>
+                                        {locations.filter(l => l.id !== effectiveLocationId).map(loc => (
+                                            <DropdownMenuSub key={loc.id}>
+                                                <DropdownMenuSubTrigger>{loc.name}</DropdownMenuSubTrigger>
+                                                <DropdownMenuSubContent>
+                                                    {allProfessionals.filter(p => p.locationId === loc.id).map(prof => (
+                                                        <DropdownMenuItem key={prof.id} onSelect={() => handleAddExternalToGroup(prof)}>
+                                                            {prof.firstName} {prof.lastName}
+                                                        </DropdownMenuItem>
+                                                    ))}
+                                                </DropdownMenuSubContent>
+                                            </DropdownMenuSub>
+                                        ))}
+                                    </DropdownMenuSubContent>
+                                </DropdownMenuSub>
+                            </DropdownMenuContent>
+                        </DropdownMenu>
+                    </div>
+                </CardHeader>
+                <CardContent className="grid grid-cols-1 md:grid-cols-5 gap-4">
+                    <div className="md:col-span-1 p-3 border rounded-lg bg-secondary/50">
+                        <h4 className="font-semibold mb-2 text-center">Sin Asignar</h4>
+                        <div className="space-y-1 min-h-[100px]">
+                            {professionalsByGroup.unassigned.map(prof => (
+                                <DropdownMenu key={prof.id}>
+                                    <DropdownMenuTrigger asChild><Button variant="outline" className="w-full justify-start">{prof.firstName} {prof.lastName.charAt(0)}.</Button></DropdownMenuTrigger>
+                                    <DropdownMenuContent>
+                                        {Object.entries(sundayGroups).map(([groupId, groupData]) => (
+                                            <DropdownMenuItem key={groupId} onClick={() => handleMoveProfessional(prof.id, groupId)}>Mover a {groupData.name}</DropdownMenuItem>
+                                        ))}
+                                    </DropdownMenuContent>
+                                </DropdownMenu>
+                            ))}
+                        </div>
+                    </div>
+                    <div className="md:col-span-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                        {Object.entries(sundayGroups).map(([groupId, groupData]) => {
+                            const profs = professionalsByGroup.assigned.get(groupId) || [];
+                            return (
+                                <div key={groupId} className="p-3 border rounded-lg">
+                                    <div className="font-semibold mb-2 text-center capitalize flex items-center justify-center gap-2" onDoubleClick={() => setEditingGroupName({ groupId, name: groupData.name })}>
+                                    {editingGroupName?.groupId === groupId ? (
+                                        <Input
+                                        value={editingGroupName.name}
+                                        onChange={(e) => handleGroupNameChange(groupId, e.target.value)}
+                                        onBlur={() => handleSaveGroupName(groupId)}
+                                        onKeyDown={(e) => { if (e.key === 'Enter') handleSaveGroupName(groupId); if (e.key === 'Escape') setEditingGroupName(null);}}
+                                        autoFocus
+                                        className="h-8 text-center"
+                                        />
+                                    ) : (
+                                        <h4 className="flex items-center gap-2 cursor-pointer"><Group size={16}/> {groupData.name} <Edit2 size={12} className="text-muted-foreground"/></h4>
+                                    )}
+                                    </div>
+                                    <div className="space-y-1 min-h-[100px]">
+                                        {profs.map(prof => (
+                                            <DropdownMenu key={prof.id}>
+                                                <DropdownMenuTrigger asChild><Button variant="secondary" className="w-full justify-start">{prof.firstName} {prof.lastName.charAt(0)}.</Button></DropdownMenuTrigger>
+                                                <DropdownMenuContent>
+                                                    <DropdownMenuItem onClick={() => handleMoveProfessional(prof.id, null)}>Quitar de Grupo</DropdownMenuItem>
+                                                    <DropdownMenuSeparator/>
+                                                    {Object.entries(sundayGroups).filter(([id]) => id !== groupId).map(([otherGroupId, otherGroupData]) => (
+                                                        <DropdownMenuItem key={otherGroupId} onClick={() => handleMoveProfessional(prof.id, otherGroupId)}>Mover a {otherGroupData.name}</DropdownMenuItem>
+                                                    ))}
+                                                </DropdownMenuContent>
+                                            </DropdownMenu>
+                                        ))}
+                                    </div>
+                                </div>
+                            );
+                        })}
+                    </div>
+                </CardContent>
+                <CardFooter>
+                    <Button onClick={handleSaveSundayGroups} disabled={isSavingSundayGroups}>
+                        {isSavingSundayGroups && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                        <Save className="mr-2 h-4 w-4" /> Guardar Grupos
+                    </Button>
+                </CardFooter>
+            </Card>
+        </TabsContent>
+
+        <TabsContent value="compensatory-rests">
+            <div className="grid md:grid-cols-2 gap-8">
+                <Card>
+                    <CardHeader>
+                        <CardTitle className="text-xl">Descansos por Trabajo Dominical</CardTitle>
+                        <CardDescription>
+                        Asigne el día de descanso para el personal que trabaja el próximo domingo, {format(nextSunday(viewDate), "d 'de' LLLL", {locale: es})}.
+                        </CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                        <Table>
+                            <TableHeader>
+                                <TableRow>
+                                    <TableHead className="w-1/2">Trabajan Próximo Domingo</TableHead>
+                                    <TableHead className="w-1/2">Asignar Día de Descanso Compensatorio</TableHead>
+                                </TableRow>
+                            </TableHeader>
+                            <TableBody>
+                                {sundayWorkers.length > 0 ? sundayWorkers.map(item => (
+                                    <TableRow key={item.professionalId}>
+                                        <TableCell className="font-medium">{item.professionalName}</TableCell>
+                                        <TableCell>
+                                        <Popover>
+                                            <PopoverTrigger asChild>
+                                            <Button variant="outline" className="w-full justify-start font-normal">
+                                                <Calendar className="mr-2 h-4 w-4"/>
+                                                {'Asignar Descanso'}
+                                            </Button>
+                                            </PopoverTrigger>
+                                            <PopoverContent className="w-auto p-0">
+                                            <CalendarComponent
+                                                mode="single"
+                                                onSelect={(date) => handleRestDayChange(item.professionalId, date)}
+                                                initialFocus
+                                                disabled={(date) => date < new Date()}
+                                            />
+                                            </PopoverContent>
+                                        </Popover>
+                                        </TableCell>
+                                    </TableRow>
+                                )) : <TableRow><TableCell colSpan={2} className="text-center h-24">Nadie trabaja el próximo domingo.</TableCell></TableRow>}
+                            </TableBody>
+                        </Table>
+                    </CardContent>
+                </Card>
+                <Card>
+                    <CardHeader>
+                        <CardTitle className="text-xl">Descansos por Feriado</CardTitle>
+                        <CardDescription>
+                        Asigne el día de descanso para el personal que trabaja en días feriados de la semana actual.
+                        </CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                        <Table>
+                            <TableHeader>
+                                <TableRow>
+                                    <TableHead className="w-1/2">Trabajan en Feriado</TableHead>
+                                    <TableHead className="w-1/2">Asignar Día de Descanso Compensatorio</TableHead>
+                                </TableRow>
+                            </TableHeader>
+                            <TableBody>
+                                {holidayWorkers.length > 0 ? holidayWorkers.map(item => (
+                                    <TableRow key={`${item.professionalId}-${item.workDate.toISOString()}`}>
+                                        <TableCell className="font-medium">{item.professionalName} <span className="text-muted-foreground text-xs">({format(item.workDate, 'EEE d', {locale: es})})</span></TableCell>
+                                        <TableCell>
+                                        <Popover>
+                                            <PopoverTrigger asChild>
+                                            <Button variant="outline" className="w-full justify-start font-normal">
+                                                <Calendar className="mr-2 h-4 w-4"/>
+                                                {'Asignar Descanso'}
+                                            </Button>
+                                            </PopoverTrigger>
+                                            <PopoverContent className="w-auto p-0">
+                                            <CalendarComponent
+                                                mode="single"
+                                                onSelect={(date) => handleRestDayChange(item.professionalId, date)}
+                                                initialFocus
+                                                disabled={(date) => date < new Date()}
+                                            />
+                                            </PopoverContent>
+                                        </Popover>
+                                        </TableCell>
+                                    </TableRow>
+                                )) : <TableRow><TableCell colSpan={2} className="text-center h-24">Nadie trabaja en feriados esta semana.</TableCell></TableRow>}
+                            </TableBody>
+                        </Table>
+                    </CardContent>
+                </Card>
             </div>
-            }
-        </CardContent>
-      </Card>
-      
-       {(effectiveLocationId === 'higuereta' || effectiveLocationId === 'san_antonio') && (
-        <Card>
-            <CardHeader>
-                 <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
-                    <div>
-                        <CardTitle>Grupos Dominicales ({currentViewLocationName})</CardTitle>
-                        <CardDescription>Organice los profesionales en grupos para las rotaciones de los domingos. Haga doble clic en el nombre de un grupo para editarlo.</CardDescription>
-                    </div>
-                     <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                            <Button variant="outline"><PlusCircle className="mr-2 h-4 w-4" />Añadir Profesional Externo</Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent className="w-56">
-                            <DropdownMenuSub>
-                                <DropdownMenuSubTrigger>Desde Sede...</DropdownMenuSubTrigger>
-                                <DropdownMenuSubContent>
-                                    {locations.filter(l => l.id !== effectiveLocationId).map(loc => (
-                                        <DropdownMenuSub key={loc.id}>
-                                            <DropdownMenuSubTrigger>{loc.name}</DropdownMenuSubTrigger>
-                                            <DropdownMenuSubContent>
-                                                {allProfessionals.filter(p => p.locationId === loc.id).map(prof => (
-                                                    <DropdownMenuItem key={prof.id} onSelect={() => handleAddExternalToGroup(prof)}>
-                                                        {prof.firstName} {prof.lastName}
-                                                    </DropdownMenuItem>
-                                                ))}
-                                            </DropdownMenuSubContent>
-                                        </DropdownMenuSub>
-                                    ))}
-                                </DropdownMenuSubContent>
-                            </DropdownMenuSub>
-                        </DropdownMenuContent>
-                    </DropdownMenu>
-                 </div>
-            </CardHeader>
-            <CardContent className="grid grid-cols-1 md:grid-cols-5 gap-4">
-                <div className="md:col-span-1 p-3 border rounded-lg bg-secondary/50">
-                    <h4 className="font-semibold mb-2 text-center">Sin Asignar</h4>
-                    <div className="space-y-1 min-h-[100px]">
-                        {professionalsByGroup.unassigned.map(prof => (
-                             <DropdownMenu key={prof.id}>
-                                <DropdownMenuTrigger asChild><Button variant="outline" className="w-full justify-start">{prof.firstName} {prof.lastName.charAt(0)}.</Button></DropdownMenuTrigger>
-                                <DropdownMenuContent>
-                                    {Object.entries(sundayGroups).map(([groupId, groupData]) => (
-                                        <DropdownMenuItem key={groupId} onClick={() => handleMoveProfessional(prof.id, groupId)}>Mover a {groupData.name}</DropdownMenuItem>
-                                    ))}
-                                </DropdownMenuContent>
-                            </DropdownMenu>
-                        ))}
-                    </div>
-                </div>
-                 <div className="md:col-span-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-                     {Object.entries(sundayGroups).map(([groupId, groupData]) => {
-                        const profs = professionalsByGroup.assigned.get(groupId) || [];
-                        return (
-                            <div key={groupId} className="p-3 border rounded-lg">
-                                <div className="font-semibold mb-2 text-center capitalize flex items-center justify-center gap-2" onDoubleClick={() => setEditingGroupName({ groupId, name: groupData.name })}>
-                                  {editingGroupName?.groupId === groupId ? (
-                                    <Input
-                                      value={editingGroupName.name}
-                                      onChange={(e) => handleGroupNameChange(groupId, e.target.value)}
-                                      onBlur={() => handleSaveGroupName(groupId)}
-                                      onKeyDown={(e) => { if (e.key === 'Enter') handleSaveGroupName(groupId); if (e.key === 'Escape') setEditingGroupName(null);}}
-                                      autoFocus
-                                      className="h-8 text-center"
-                                    />
-                                  ) : (
-                                    <h4 className="flex items-center gap-2 cursor-pointer"><Group size={16}/> {groupData.name} <Edit2 size={12} className="text-muted-foreground"/></h4>
-                                  )}
-                                </div>
-                                <div className="space-y-1 min-h-[100px]">
-                                    {profs.map(prof => (
-                                        <DropdownMenu key={prof.id}>
-                                            <DropdownMenuTrigger asChild><Button variant="secondary" className="w-full justify-start">{prof.firstName} {prof.lastName.charAt(0)}.</Button></DropdownMenuTrigger>
-                                            <DropdownMenuContent>
-                                                <DropdownMenuItem onClick={() => handleMoveProfessional(prof.id, null)}>Quitar de Grupo</DropdownMenuItem>
-                                                <DropdownMenuSeparator/>
-                                                {Object.entries(sundayGroups).filter(([id]) => id !== groupId).map(([otherGroupId, otherGroupData]) => (
-                                                    <DropdownMenuItem key={otherGroupId} onClick={() => handleMoveProfessional(prof.id, otherGroupId)}>Mover a {otherGroupData.name}</DropdownMenuItem>
-                                                ))}
-                                            </DropdownMenuContent>
-                                        </DropdownMenu>
-                                    ))}
-                                </div>
-                            </div>
-                        );
-                    })}
-                </div>
-            </CardContent>
-            <CardFooter>
-                 <Button onClick={handleSaveSundayGroups} disabled={isSavingSundayGroups}>
-                    {isSavingSundayGroups && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                    <Save className="mr-2 h-4 w-4" /> Guardar Grupos
-                 </Button>
-            </CardFooter>
-        </Card>
-      )}
-      
-      {sundayWorkers.length > 0 && (
-            <Card>
-                <CardHeader>
-                    <CardTitle className="text-xl">Descansos Compensatorios por Trabajo Dominical</CardTitle>
-                    <CardDescription>
-                       Asigne el día de descanso para el personal que trabaja el próximo domingo, {format(nextSunday(viewDate), "d 'de' LLLL", {locale: es})}.
-                    </CardDescription>
-                </CardHeader>
-                <CardContent>
-                    <Table>
-                        <TableHeader>
-                            <TableRow>
-                                <TableHead className="w-1/2">Trabajan Próximo Domingo</TableHead>
-                                <TableHead className="w-1/2">Asignar Día de Descanso Compensatorio</TableHead>
-                            </TableRow>
-                        </TableHeader>
-                        <TableBody>
-                            {sundayWorkers.map(item => (
-                                <TableRow key={item.professionalId}>
-                                    <TableCell className="font-medium">{item.professionalName}</TableCell>
-                                    <TableCell>
-                                      <Popover>
-                                        <PopoverTrigger asChild>
-                                          <Button variant="outline" className="w-full justify-start font-normal">
-                                            <Calendar className="mr-2 h-4 w-4"/>
-                                            {'Asignar Descanso'}
-                                          </Button>
-                                        </PopoverTrigger>
-                                        <PopoverContent className="w-auto p-0">
-                                          <CalendarComponent
-                                            mode="single"
-                                            onSelect={(date) => handleRestDayChange(item.professionalId, date)}
-                                            initialFocus
-                                            disabled={(date) => date < new Date()}
-                                          />
-                                        </PopoverContent>
-                                      </Popover>
-                                    </TableCell>
-                                </TableRow>
-                            ))}
-                        </TableBody>
-                    </Table>
-                </CardContent>
-            </Card>
-        )}
-      
-      {holidayWorkers.length > 0 && (
-            <Card>
-                <CardHeader>
-                    <CardTitle className="text-xl">Descansos Compensatorios por Feriado</CardTitle>
-                    <CardDescription>
-                       Asigne el día de descanso para el personal que trabaja en días feriados.
-                    </CardDescription>
-                </CardHeader>
-                <CardContent>
-                    <Table>
-                        <TableHeader>
-                            <TableRow>
-                                <TableHead className="w-1/2">Trabajan en Feriado</TableHead>
-                                <TableHead className="w-1/2">Asignar Día de Descanso Compensatorio</TableHead>
-                            </TableRow>
-                        </TableHeader>
-                        <TableBody>
-                            {holidayWorkers.map(item => (
-                                <TableRow key={`${item.professionalId}-${item.workDate.toISOString()}`}>
-                                    <TableCell className="font-medium">{item.professionalName} <span className="text-muted-foreground text-xs">({format(item.workDate, 'EEE d', {locale: es})})</span></TableCell>
-                                    <TableCell>
-                                      <Popover>
-                                        <PopoverTrigger asChild>
-                                          <Button variant="outline" className="w-full justify-start font-normal">
-                                            <Calendar className="mr-2 h-4 w-4"/>
-                                            {'Asignar Descanso'}
-                                          </Button>
-                                        </PopoverTrigger>
-                                        <PopoverContent className="w-auto p-0">
-                                          <CalendarComponent
-                                            mode="single"
-                                            onSelect={(date) => handleRestDayChange(item.professionalId, date)}
-                                            initialFocus
-                                            disabled={(date) => date < new Date()}
-                                          />
-                                        </PopoverContent>
-                                      </Popover>
-                                    </TableCell>
-                                </TableRow>
-                            ))}
-                        </TableBody>
-                    </Table>
-                </CardContent>
-            </Card>
-        )}
-
-
+        </TabsContent>
+      </Tabs>
     </div>
   );
 }
+
