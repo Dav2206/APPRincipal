@@ -91,9 +91,8 @@ export default function RotationsPage() {
   const [sundayWorkers, setSundayWorkers] = useState<CompensatoryRestInfo[]>([]);
   const [holidayWorkers, setHolidayWorkers] = useState<CompensatoryRestInfo[]>([]);
 
-  // State for Sunday Groups
-  const [sundayGroups, setSundayGroups] = useState<Record<string, string[]>>({});
-  const [isSavingSundayGroups, setIsSavingSundayGroups] = useState(false);
+  // State for Sunday Groups - Mockup state, doesn't persist
+  const [sundayGroups, setSundayGroups] = useState<Record<string, string[]>>({ group1: [], group2: [], group3: [], group4: [] });
 
 
   const effectiveLocationId = useMemo(() => {
@@ -123,11 +122,10 @@ export default function RotationsPage() {
       setAllProfessionals(activeProfs);
       setLocations(allLocations);
       
-      if (effectiveLocationId && effectiveLocationId === 'higuereta') {
-          const higueretaConfig = allLocations.find(l => l.id === 'higuereta');
-          setSundayGroups(higueretaConfig?.sundayGroups || { group1: [], group2: [], group3: [], group4: [] });
-      } else {
-          setSundayGroups({});
+      // For mockup, we don't fetch from DB. It's just local state.
+      // If we switch back, this is where we would fetch sundayGroups from location data.
+      if (effectiveLocationId !== 'higuereta') {
+          setSundayGroups({ group1: [], group2: [], group3: [], group4: [] });
       }
 
       if (effectiveLocationId && effectiveLocationId !== 'all') {
@@ -328,7 +326,7 @@ export default function RotationsPage() {
     }
   };
 
-  const handleUpdateBaseSchedule = async (professionalId: string, dayOfWeek: DayOfWeekId, newStartTime: string, newEndTime: string) => {
+  const handleUpdateBaseSchedule = async (professionalId: string, dayOfWeekId: DayOfWeekId, newStartTime: string, newEndTime: string) => {
     const professional = allProfessionals.find(p => p.id === professionalId);
     if (!professional) return;
   
@@ -343,7 +341,7 @@ export default function RotationsPage() {
     });
   
     // Update only the specific day
-    newWorkSchedule[dayOfWeek] = {
+    newWorkSchedule[dayOfWeekId] = {
       isWorking: true,
       startTime: newStartTime,
       endTime: newEndTime,
@@ -468,21 +466,6 @@ export default function RotationsPage() {
     }
     setSundayGroups(newGroups);
   };
-  
-  const handleSaveSundayGroups = async () => {
-    if (effectiveLocationId !== 'higuereta') return;
-    setIsSavingSundayGroups(true);
-    try {
-      await saveSundayGroups('higuereta', sundayGroups);
-      toast({ title: 'Grupos Guardados', description: 'La configuración de los grupos dominicales ha sido guardada.' });
-    } catch(error) {
-      console.error("Error saving sunday groups:", error);
-      toast({ title: 'Error', description: 'No se pudieron guardar los grupos.', variant: 'destructive'});
-    } finally {
-      setIsSavingSundayGroups(false);
-    }
-  };
-
 
   return (
     <div className="container mx-auto py-8 px-4 md:px-0 space-y-8">
@@ -674,7 +657,7 @@ export default function RotationsPage() {
         <Card>
             <CardHeader>
                 <CardTitle>Grupos Dominicales Tentativos (Higuereta)</CardTitle>
-                <CardDescription>Organice los profesionales de Higuereta en grupos para las rotaciones de los domingos.</CardDescription>
+                <CardDescription>Organice los profesionales de Higuereta en grupos para las rotaciones de los domingos. Estos grupos son solo una maqueta visual y no se guardarán.</CardDescription>
             </CardHeader>
             <CardContent className="grid grid-cols-1 md:grid-cols-5 gap-4">
                 <div className="md:col-span-1 p-3 border rounded-lg bg-secondary/50">
@@ -715,12 +698,6 @@ export default function RotationsPage() {
                     ))}
                 </div>
             </CardContent>
-            <CardFooter>
-                 <Button onClick={handleSaveSundayGroups} disabled={isSavingSundayGroups}>
-                    {isSavingSundayGroups && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                    <Save className="mr-2 h-4 w-4" /> Guardar Grupos
-                </Button>
-            </CardFooter>
         </Card>
       )}
       

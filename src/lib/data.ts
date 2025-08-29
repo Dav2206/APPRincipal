@@ -197,7 +197,7 @@ export const getUserByUsername = async (identity: string): Promise<User | undefi
 export const getLocations = async (): Promise<Location[]> => {
   if (!firestore) {
     console.warn("[data.ts] Firestore not initialized, returning fallback locations.");
-    return [...LOCATIONS_FALLBACK];
+    return [...LOCATIONS_FALLBACK].map(loc => ({ ...loc, sundayGroups: loc.sundayGroups || {} }));
   }
 
   try {
@@ -230,7 +230,7 @@ export const getLocations = async (): Promise<Location[]> => {
 
   } catch (error) {
     console.error("[data.ts] Error fetching locations from Firestore, returning fallback list:", error);
-    return [...LOCATIONS_FALLBACK];
+    return [...LOCATIONS_FALLBACK].map(loc => ({ ...loc, sundayGroups: loc.sundayGroups || {} }));
   }
 };
 
