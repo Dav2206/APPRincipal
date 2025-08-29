@@ -15,7 +15,7 @@ import { useAppState } from '@/contexts/app-state-provider';
 import { Button } from '@/components/ui/button';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator, DropdownMenuSub, DropdownMenuSubTrigger, DropdownMenuSubContent, DropdownMenuPortal } from '@/components/ui/dropdown-menu';
 import { cn } from '@/lib/utils';
-import { format, startOfWeek, endOfWeek, addDays, eachDayOfInterval, getHours, parse, getDay, startOfDay, parseISO, formatISO as dateFnsFormatISO, nextSunday, addMonths, subMonths, isWithinInterval } from 'date-fns';
+import { format, startOfWeek, endOfWeek, addDays, eachDayOfInterval, getHours, parse, getDay, startOfDay, parseISO, formatISO as dateFnsFormatISO, nextSunday, addMonths, subMonths, isWithinInterval, isAfter } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
@@ -52,6 +52,7 @@ interface CompensatoryRestInfo {
     professionalId: string;
     professionalName: string;
     workDate: Date;
+    existingRestDate?: Date | null;
 }
 
 
@@ -170,7 +171,7 @@ export default function RotationsPage() {
             const holidaysInWeek = new Set<string>();
 
             // First pass: identify which days in the week are holidays for the location
-            allProfs.forEach(prof => {
+            activeProfs.forEach(prof => {
                 if (prof.locationId === effectiveLocationId) {
                      (prof.customScheduleOverrides || []).forEach(ov => {
                         if(ov.notes === 'Feriado' && isWithinInterval(parseISO(ov.date), {start: displayedWeek.days[0], end: displayedWeek.days[6]})) {
@@ -180,29 +181,38 @@ export default function RotationsPage() {
                 }
             });
 
-            activeProfs.forEach(prof => {
+            for (const prof of activeProfs) {
+                 const overrides = prof.customScheduleOverrides || [];
                 // Check for Sunday work
                 const availabilityOnSunday = getProfessionalAvailabilityForDate(prof, nextSundayDate);
                 if (availabilityOnSunday?.isWorking && availabilityOnSunday.workingLocationId === effectiveLocationId) {
+                     const existingRest = overrides.find(ov => 
+                        isAfter(parseISO(ov.date), nextSundayDate) && ov.notes === 'Descanso compensatorio'
+                     );
                      workingOnSunday.push({
                         professionalId: prof.id,
                         professionalName: `${prof.firstName} ${prof.lastName}`,
                         workDate: nextSundayDate,
+                        existingRestDate: existingRest ? parseISO(existingRest.date) : null
                     });
                 }
                 // Check for holiday work
-                holidaysInWeek.forEach(holidayIsoString => {
+                for (const holidayIsoString of holidaysInWeek) {
                     const holidayDate = parseISO(holidayIsoString);
                     const availabilityOnHoliday = getProfessionalAvailabilityForDate(prof, holidayDate);
                     if (availabilityOnHoliday?.isWorking && availabilityOnHoliday.workingLocationId === effectiveLocationId) {
+                         const existingRest = overrides.find(ov => 
+                            isAfter(parseISO(ov.date), holidayDate) && ov.notes === 'Descanso compensatorio'
+                         );
                          workingOnHolidays.push({
                             professionalId: prof.id,
                             professionalName: `${prof.firstName} ${prof.lastName}`,
                             workDate: holidayDate,
+                            existingRestDate: existingRest ? parseISO(existingRest.date) : null
                         });
                     }
-                });
-            });
+                }
+            }
 
             setSundayWorkers(workingOnSunday);
             setHolidayWorkers(workingOnHolidays.filter((value, index, self) => self.findIndex(v => v.professionalId === value.professionalId && v.workDate.getTime() === value.workDate.getTime()) === index)); // Remove duplicates
@@ -443,13 +453,46 @@ export default function RotationsPage() {
     return locations.find(l => l.id === effectiveLocationId)?.name;
   }, [effectiveLocationId, locations, user]);
   
-  const handleRestDayChange = async (professionalId: string, dateToUpdate: Date | undefined) => {
-    if (dateToUpdate) {
-        await handleAction(professionalId, dateToUpdate, 'rest', {notes: 'Descanso compensatorio'});
+  const handleRestDayChange = async (professionalId: string, workDate: Date, newRestDate: Date | undefined) => {
+    if (!newRestDate) return;
+
+    const professional = allProfessionals.find(p => p.id === professionalId);
+    if (!professional) return;
+
+    const dateISO = format(newRestDate, "yyyy-MM-dd");
+    let updatedOverrides = [...(professional.customScheduleOverrides || [])];
+
+    // Remove any previous compensatory rest day linked to this work date if needed (more complex logic)
+    // For now, we find any existing override on the *new* date.
+    const existingOverrideIndexOnNewDate = updatedOverrides.findIndex(
+      ov => format(parseISO(ov.date), 'yyyy-MM-dd') === dateISO
+    );
+
+    const overrideNote = `Descanso compensatorio por ${format(workDate, 'dd/MM/yy')}`;
+    const newOverride = {
+        id: existingOverrideIndexOnNewDate > -1 ? updatedOverrides[existingOverrideIndexOnNewDate].id : `override_${Date.now()}`,
+        date: dateISO,
+        overrideType: 'descanso' as const,
+        isWorking: false,
+        notes: overrideNote
+    };
+
+    if (existingOverrideIndexOnNewDate > -1) {
+        updatedOverrides[existingOverrideIndexOnNewDate] = newOverride;
     } else {
-        toast({ variant: 'destructive', title: "Error", description: "No se pudo encontrar la fecha para el día de descanso seleccionado." });
+        updatedOverrides.push(newOverride);
     }
-  };
+    
+    try {
+      await updateProfessional(professional.id, { customScheduleOverrides: updatedOverrides.map(ov => ({ ...ov, date: format(parseISO(ov.date), 'yyyy-MM-dd')}) as any) });
+      toast({ title: "Descanso Asignado", description: `Se asignó el descanso a ${professional.firstName} para el ${format(newRestDate, 'PPP', {locale: es})}.`});
+      loadAllData();
+    } catch (error) {
+       console.error("Error assigning rest day:", error);
+       toast({ title: "Error", description: "No se pudo asignar el descanso.", variant: "destructive"});
+    }
+};
+
   
   const sundayProfessionalsByGroup = useMemo(() => {
     const inGroups = new Set<string>();
@@ -1029,15 +1072,16 @@ export default function RotationsPage() {
                                             <PopoverTrigger asChild>
                                             <Button variant="outline" className="w-full justify-start font-normal">
                                                 <Calendar className="mr-2 h-4 w-4"/>
-                                                {'Asignar Descanso'}
+                                                {item.existingRestDate ? format(item.existingRestDate, 'PPP', {locale: es}) : 'Asignar Descanso'}
                                             </Button>
                                             </PopoverTrigger>
                                             <PopoverContent className="w-auto p-0">
                                             <CalendarComponent
                                                 mode="single"
-                                                onSelect={(date) => handleRestDayChange(item.professionalId, date)}
+                                                selected={item.existingRestDate || undefined}
+                                                onSelect={(date) => handleRestDayChange(item.professionalId, item.workDate, date)}
                                                 initialFocus
-                                                disabled={(date) => date < new Date()}
+                                                disabled={(date) => isBefore(date, item.workDate)}
                                             />
                                             </PopoverContent>
                                         </Popover>
@@ -1072,15 +1116,16 @@ export default function RotationsPage() {
                                             <PopoverTrigger asChild>
                                             <Button variant="outline" className="w-full justify-start font-normal">
                                                 <Calendar className="mr-2 h-4 w-4"/>
-                                                {'Asignar Descanso'}
+                                                 {item.existingRestDate ? format(item.existingRestDate, 'PPP', {locale: es}) : 'Asignar Descanso'}
                                             </Button>
                                             </PopoverTrigger>
                                             <PopoverContent className="w-auto p-0">
                                             <CalendarComponent
                                                 mode="single"
-                                                onSelect={(date) => handleRestDayChange(item.professionalId, date)}
+                                                selected={item.existingRestDate || undefined}
+                                                onSelect={(date) => handleRestDayChange(item.professionalId, item.workDate, date)}
                                                 initialFocus
-                                                disabled={(date) => date < new Date()}
+                                                disabled={(date) => isBefore(date, item.workDate)}
                                             />
                                             </PopoverContent>
                                         </Popover>
@@ -1097,6 +1142,7 @@ export default function RotationsPage() {
     </div>
   );
 }
+
 
 
 
