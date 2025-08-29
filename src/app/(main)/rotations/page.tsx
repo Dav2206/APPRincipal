@@ -123,10 +123,8 @@ export default function RotationsPage() {
       setLocations(allLocations);
       
       // For mockup, we don't fetch from DB. It's just local state.
-      // If we switch back, this is where we would fetch sundayGroups from location data.
-      if (effectiveLocationId !== 'higuereta') {
-          setSundayGroups({ group1: [], group2: [], group3: [], group4: [] });
-      }
+      setSundayGroups({ group1: [], group2: [], group3: [], group4: [] });
+      
 
       if (effectiveLocationId && effectiveLocationId !== 'all') {
             const nextSundayDate = nextSunday(viewDate);
@@ -186,7 +184,7 @@ export default function RotationsPage() {
 
   useEffect(() => {
     loadAllData();
-  }, [loadAllData, viewDate]);
+  }, [loadAllData]);
 
   const shiftTimes: Record<Shift, { start: number; end: number, display: string }> = {
     '9am': { start: 9, end: 10, display: '09:00' },
@@ -677,25 +675,28 @@ export default function RotationsPage() {
                     </div>
                 </div>
                  <div className="md:col-span-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-                    {Object.entries(professionalsByGroup.assigned).map(([groupName, profs]) => (
-                        <div key={groupName} className="p-3 border rounded-lg">
-                            <h4 className="font-semibold mb-2 text-center capitalize flex items-center justify-center gap-2"><Group size={16}/> {groupName.replace('group', 'Grupo ')}</h4>
-                            <div className="space-y-1 min-h-[100px]">
-                                {profs.map(prof => (
-                                    <DropdownMenu key={prof.id}>
-                                        <DropdownMenuTrigger asChild><Button variant="secondary" className="w-full justify-start">{prof.firstName}</Button></DropdownMenuTrigger>
-                                        <DropdownMenuContent>
-                                            <DropdownMenuItem onClick={() => handleMoveProfessional(prof.id, null)}>Quitar de Grupo</DropdownMenuItem>
-                                            <DropdownMenuSeparator/>
-                                            {Object.keys(sundayGroups).filter(g => g !== groupName).map(otherGroup => (
-                                                <DropdownMenuItem key={otherGroup} onClick={() => handleMoveProfessional(prof.id, otherGroup)}>Mover a {otherGroup.replace('group', 'Grupo ')}</DropdownMenuItem>
-                                            ))}
-                                        </DropdownMenuContent>
-                                    </DropdownMenu>
-                                ))}
+                    {['group1', 'group2', 'group3', 'group4'].map(groupName => {
+                        const profs = professionalsByGroup.assigned.get(groupName) || [];
+                        return (
+                            <div key={groupName} className="p-3 border rounded-lg">
+                                <h4 className="font-semibold mb-2 text-center capitalize flex items-center justify-center gap-2"><Group size={16}/> {groupName.replace('group', 'Grupo ')}</h4>
+                                <div className="space-y-1 min-h-[100px]">
+                                    {profs.map(prof => (
+                                        <DropdownMenu key={prof.id}>
+                                            <DropdownMenuTrigger asChild><Button variant="secondary" className="w-full justify-start">{prof.firstName}</Button></DropdownMenuTrigger>
+                                            <DropdownMenuContent>
+                                                <DropdownMenuItem onClick={() => handleMoveProfessional(prof.id, null)}>Quitar de Grupo</DropdownMenuItem>
+                                                <DropdownMenuSeparator/>
+                                                {Object.keys(sundayGroups).filter(g => g !== groupName).map(otherGroup => (
+                                                    <DropdownMenuItem key={otherGroup} onClick={() => handleMoveProfessional(prof.id, otherGroup)}>Mover a {otherGroup.replace('group', 'Grupo ')}</DropdownMenuItem>
+                                                ))}
+                                            </DropdownMenuContent>
+                                        </DropdownMenu>
+                                    ))}
+                                </div>
                             </div>
-                        </div>
-                    ))}
+                        );
+                    })}
                 </div>
             </CardContent>
         </Card>
