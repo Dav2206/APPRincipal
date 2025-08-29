@@ -1,3 +1,4 @@
+
 "use client";
 
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
@@ -32,6 +33,8 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Separator } from '@/components/ui/separator';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { Calendar as CalendarComponent } from '@/components/ui/calendar'; // Renamed to avoid conflict
 
 // --- Data Structures ---
 interface VacationInfo {
@@ -231,7 +234,7 @@ export default function RotationsPage() {
   }, [allProfessionals, effectiveLocationId]);
 
 
-  const handleAction = async (professionalId: string, day: Date, action: 'rest' | 'vacation' | 'special_shift' | 'transfer', details?: { locationId?: LocationId, startTime?: string, endTime?: string }) => {
+  const handleAction = async (professionalId: string, day: Date, action: 'rest' | 'vacation' | 'special_shift' | 'transfer', details?: { locationId?: LocationId, startTime?: string, endTime?: string, notes?: string }) => {
     const professional = allProfessionals.find(p => p.id === professionalId);
     if (!professional) return;
     
@@ -264,7 +267,7 @@ export default function RotationsPage() {
     
     switch(action) {
         case 'rest':
-            createOrUpdateOverride('descanso', 'Descanso Asignado');
+            createOrUpdateOverride('descanso', details?.notes || 'Descanso Asignado');
             break;
         case 'vacation':
             createOrUpdateOverride('descanso', 'Vacaciones');
@@ -398,26 +401,13 @@ export default function RotationsPage() {
     return locations.find(l => l.id === effectiveLocationId)?.name;
   }, [effectiveLocationId, locations, user]);
   
-  const handleRestDayChange = async (professionalId: string, newRestDayId: DayOfWeekId) => {
-    const nextSunday = startOfWeek(addDays(new Date(), 7), { weekStartsOn: 0 }); // Get upcoming Sunday
-    let dateToUpdate: Date | null = null;
-    
-    // Find the date for the selected day in the upcoming week
-    for (let i = 1; i <= 7; i++) {
-        const currentDay = addDays(nextSunday, i - 7); // Iterate from Sunday to Saturday
-        if (DAYS_OF_WEEK[(getDay(currentDay) + 6) % 7].id === newRestDayId) {
-            dateToUpdate = currentDay;
-            break;
-        }
-    }
-    
+  const handleRestDayChange = async (professionalId: string, dateToUpdate: Date | undefined) => {
     if (dateToUpdate) {
         await handleAction(professionalId, dateToUpdate, 'rest', {notes: 'Descanso compensatorio'});
     } else {
         toast({ variant: 'destructive', title: "Error", description: "No se pudo encontrar la fecha para el día de descanso seleccionado." });
     }
   };
-
 
 
   return (
@@ -611,7 +601,7 @@ export default function RotationsPage() {
                 <CardHeader>
                     <CardTitle className="text-xl">Descansos Compensatorios por Trabajo Dominical</CardTitle>
                     <CardDescription>
-                       Asigne el día de descanso en la semana para el personal que trabaja el próximo domingo, {format(nextSunday(viewDate), "d 'de' LLLL", {locale: es})}.
+                       Asigne el día de descanso para el personal que trabaja el próximo domingo, {format(nextSunday(viewDate), "d 'de' LLLL", {locale: es})}.
                     </CardDescription>
                 </CardHeader>
                 <CardContent>
@@ -619,30 +609,38 @@ export default function RotationsPage() {
                         <TableHeader>
                             <TableRow>
                                 <TableHead className="w-1/2">Trabajan Próximo Domingo</TableHead>
-                                <TableHead className="w-1/2">Asignar Día de Descanso</TableHead>
+                                <TableHead className="w-1/2">Asignar Día de Descanso Compensatorio</TableHead>
                             </TableRow>
                         </TableHeader>
                         <TableBody>
-                            {tentativeRestDays.map(item => (
+                            {tentativeRestDays.map(item => {
+                                const prof = allProfessionals.find(p => p.id === item.professionalId);
+                                const nextSundayDate = nextSunday(viewDate);
+                                const overrideForSunday = prof?.customScheduleOverrides?.find(ov => format(parseISO(ov.date), 'yyyy-MM-dd') === format(nextSundayDate, 'yyyy-MM-dd'));
+
+                                return (
                                 <TableRow key={item.professionalId}>
                                     <TableCell className="font-medium">{item.professionalName}</TableCell>
                                     <TableCell>
-                                        <Select 
-                                            defaultValue={item.restDayId} 
-                                            onValueChange={(newDayId) => handleRestDayChange(item.professionalId, newDayId as DayOfWeekId)}
-                                        >
-                                            <SelectTrigger>
-                                                <SelectValue placeholder="Seleccionar descanso..." />
-                                            </SelectTrigger>
-                                            <SelectContent>
-                                                {DAYS_OF_WEEK.filter(d => d.id !== 'sunday').map(day => (
-                                                    <SelectItem key={day.id} value={day.id}>{day.name}</SelectItem>
-                                                ))}
-                                            </SelectContent>
-                                        </Select>
+                                      <Popover>
+                                        <PopoverTrigger asChild>
+                                          <Button variant="outline" className="w-full justify-start font-normal">
+                                            <Calendar className="mr-2 h-4 w-4"/>
+                                            {overrideForSunday && overrideForSunday.overrideType === 'descanso' ? `Descansando el ${format(nextSundayDate, 'PPP', { locale: es })}` : 'Asignar Descanso'}
+                                          </Button>
+                                        </PopoverTrigger>
+                                        <PopoverContent className="w-auto p-0">
+                                          <CalendarComponent
+                                            mode="single"
+                                            onSelect={(date) => handleRestDayChange(item.professionalId, date)}
+                                            initialFocus
+                                            disabled={(date) => date < new Date()}
+                                          />
+                                        </PopoverContent>
+                                      </Popover>
                                     </TableCell>
                                 </TableRow>
-                            ))}
+                            )})}
                         </TableBody>
                     </Table>
                 </CardContent>
