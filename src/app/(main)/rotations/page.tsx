@@ -1,5 +1,3 @@
-
-
 "use client";
 
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
@@ -15,7 +13,7 @@ import { useAppState } from '@/contexts/app-state-provider';
 import { Button } from '@/components/ui/button';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator, DropdownMenuSub, DropdownMenuSubTrigger, DropdownMenuSubContent, DropdownMenuPortal } from '@/components/ui/dropdown-menu';
 import { cn } from '@/lib/utils';
-import { format, startOfWeek, endOfWeek, addDays, eachDayOfInterval, getHours, parse, getDay, startOfDay, parseISO, formatISO as dateFnsFormatISO, nextSunday } from 'date-fns';
+import { format, startOfWeek, endOfWeek, addDays, eachDayOfInterval, getHours, parse, getDay, startOfDay, parseISO, formatISO as dateFnsFormatISO, nextSunday, addMonths, subMonths } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
@@ -33,6 +31,7 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import { Separator } from '@/components/ui/separator';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 
 // --- Data Structures ---
 interface VacationInfo {
@@ -55,7 +54,7 @@ interface NameBadgeProps {
 interface TentativeRestInfo {
     professionalId: string;
     professionalName: string;
-    restDayName: string;
+    restDayId: DayOfWeekId | 'not_defined';
 }
 
 
@@ -123,12 +122,12 @@ export default function RotationsPage() {
             const availabilityOnSunday = getProfessionalAvailabilityForDate(prof, nextSundayDate);
             if (availabilityOnSunday?.isWorking && availabilityOnSunday.workingLocationId === effectiveLocationId) {
                 // Find their usual rest day from Monday to Saturday
-                let usualRestDay = "No definido";
+                let usualRestDayId: DayOfWeekId | 'not_defined' = 'not_defined';
                 for (const day of DAYS_OF_WEEK) {
                     if (day.id !== 'sunday') {
                         const schedule = prof.workSchedule?.[day.id];
                         if (schedule && !schedule.isWorking) {
-                            usualRestDay = day.name;
+                            usualRestDayId = day.id;
                             break; // Found the first rest day
                         }
                     }
@@ -136,7 +135,7 @@ export default function RotationsPage() {
                  workingOnSunday.push({
                     professionalId: prof.id,
                     professionalName: prof.firstName,
-                    restDayName: usualRestDay
+                    restDayId: usualRestDayId,
                 });
             }
         });
@@ -398,6 +397,27 @@ export default function RotationsPage() {
     if (!effectiveLocationId || effectiveLocationId === 'all') return null;
     return locations.find(l => l.id === effectiveLocationId)?.name;
   }, [effectiveLocationId, locations, user]);
+  
+  const handleRestDayChange = async (professionalId: string, newRestDayId: DayOfWeekId) => {
+    const nextSunday = startOfWeek(addDays(new Date(), 7), { weekStartsOn: 0 }); // Get upcoming Sunday
+    let dateToUpdate: Date | null = null;
+    
+    // Find the date for the selected day in the upcoming week
+    for (let i = 1; i <= 7; i++) {
+        const currentDay = addDays(nextSunday, i - 7); // Iterate from Sunday to Saturday
+        if (DAYS_OF_WEEK[(getDay(currentDay) + 6) % 7].id === newRestDayId) {
+            dateToUpdate = currentDay;
+            break;
+        }
+    }
+    
+    if (dateToUpdate) {
+        await handleAction(professionalId, dateToUpdate, 'rest', {notes: 'Descanso compensatorio'});
+    } else {
+        toast({ variant: 'destructive', title: "Error", description: "No se pudo encontrar la fecha para el día de descanso seleccionado." });
+    }
+  };
+
 
 
   return (
@@ -424,9 +444,9 @@ export default function RotationsPage() {
                   </CardDescription>
               </div>
               <div className="flex items-center gap-2">
-                  <Button variant="outline" size="icon" onClick={() => setViewDate(prev => addDays(prev, -7))}><ChevronLeft/></Button>
-                  <Button variant="outline" size="sm" onClick={() => setViewDate(new Date())}>Esta Semana</Button>
-                  <Button variant="outline" size="icon" onClick={() => setViewDate(prev => addDays(prev, 7))}><ChevronRight/></Button>
+                  <Button variant="outline" size="icon" onClick={() => setViewDate(prev => subMonths(prev, 1))}><ChevronLeft/></Button>
+                  <Button variant="outline" size="sm" onClick={() => setViewDate(new Date())}>Este Mes</Button>
+                  <Button variant="outline" size="icon" onClick={() => setViewDate(prev => addMonths(prev, 1))}><ChevronRight/></Button>
               </div>
             </div>
         </CardHeader>
@@ -589,40 +609,42 @@ export default function RotationsPage() {
       {tentativeRestDays.length > 0 && (
             <Card>
                 <CardHeader>
-                    <CardTitle className="text-xl">Descansos Tentativos por Trabajo Dominical</CardTitle>
+                    <CardTitle className="text-xl">Descansos Compensatorios por Trabajo Dominical</CardTitle>
                     <CardDescription>
-                        Guía visual de los días de descanso habituales para el personal que trabaja el próximo domingo, {format(nextSunday(viewDate), "d 'de' LLLL", {locale: es})}.
+                       Asigne el día de descanso en la semana para el personal que trabaja el próximo domingo, {format(nextSunday(viewDate), "d 'de' LLLL", {locale: es})}.
                     </CardDescription>
                 </CardHeader>
                 <CardContent>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                        <div>
-                            <h4 className="font-semibold mb-2 text-center">Trabajan Próximo Domingo</h4>
-                            <Separator />
-                            <Table>
-                                <TableBody>
-                                    {tentativeRestDays.map(item => (
-                                        <TableRow key={item.professionalId}>
-                                            <TableCell className="text-center">{item.professionalName}</TableCell>
-                                        </TableRow>
-                                    ))}
-                                </TableBody>
-                            </Table>
-                        </div>
-                        <div>
-                            <h4 className="font-semibold mb-2 text-center">Descanso Semanal Tentativo</h4>
-                             <Separator />
-                            <Table>
-                                 <TableBody>
-                                    {tentativeRestDays.map(item => (
-                                        <TableRow key={item.professionalId}>
-                                            <TableCell className="text-center">{item.restDayName}</TableCell>
-                                        </TableRow>
-                                    ))}
-                                </TableBody>
-                            </Table>
-                        </div>
-                    </div>
+                    <Table>
+                        <TableHeader>
+                            <TableRow>
+                                <TableHead className="w-1/2">Trabajan Próximo Domingo</TableHead>
+                                <TableHead className="w-1/2">Asignar Día de Descanso</TableHead>
+                            </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                            {tentativeRestDays.map(item => (
+                                <TableRow key={item.professionalId}>
+                                    <TableCell className="font-medium">{item.professionalName}</TableCell>
+                                    <TableCell>
+                                        <Select 
+                                            defaultValue={item.restDayId} 
+                                            onValueChange={(newDayId) => handleRestDayChange(item.professionalId, newDayId as DayOfWeekId)}
+                                        >
+                                            <SelectTrigger>
+                                                <SelectValue placeholder="Seleccionar descanso..." />
+                                            </SelectTrigger>
+                                            <SelectContent>
+                                                {DAYS_OF_WEEK.filter(d => d.id !== 'sunday').map(day => (
+                                                    <SelectItem key={day.id} value={day.id}>{day.name}</SelectItem>
+                                                ))}
+                                            </SelectContent>
+                                        </Select>
+                                    </TableCell>
+                                </TableRow>
+                            ))}
+                        </TableBody>
+                    </Table>
                 </CardContent>
             </Card>
         )}
