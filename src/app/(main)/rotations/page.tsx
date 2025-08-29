@@ -1,4 +1,5 @@
 
+
 "use client";
 
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
@@ -14,7 +15,7 @@ import { useAppState } from '@/contexts/app-state-provider';
 import { Button } from '@/components/ui/button';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator, DropdownMenuSub, DropdownMenuSubTrigger, DropdownMenuSubContent, DropdownMenuPortal } from '@/components/ui/dropdown-menu';
 import { cn } from '@/lib/utils';
-import { format, startOfWeek, endOfWeek, addDays, eachDayOfInterval, getHours, parse, getDay, startOfDay, parseISO, formatISO as dateFnsFormatISO, nextSunday, addMonths, subMonths, isWithinInterval, isAfter, isBefore } from 'date-fns';
+import { format, startOfWeek, endOfWeek, addDays, subDays, eachDayOfInterval, getHours, parse, getDay, startOfDay, parseISO, formatISO as dateFnsFormatISO, nextSunday, addMonths, subMonths, isWithinInterval, isAfter, isBefore } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
@@ -693,9 +694,9 @@ export default function RotationsPage() {
                           </CardDescription>
                       </div>
                       <div className="flex items-center gap-2">
-                          <Button variant="outline" size="icon" onClick={() => setViewDate(prev => subMonths(prev, 1))}><ChevronLeft/></Button>
-                          <Button variant="outline" size="sm" onClick={() => setViewDate(new Date())}>Este Mes</Button>
-                          <Button variant="outline" size="icon" onClick={() => setViewDate(prev => addMonths(prev, 1))}><ChevronRight/></Button>
+                          <Button variant="outline" size="icon" onClick={() => setViewDate(prev => subDays(prev, 7))}><ChevronLeft/></Button>
+                          <Button variant="outline" size="sm" onClick={() => setViewDate(new Date())}>Esta Semana</Button>
+                          <Button variant="outline" size="icon" onClick={() => setViewDate(prev => addDays(prev, 7))}><ChevronRight/></Button>
                       </div>
                     </div>
                 </CardHeader>
