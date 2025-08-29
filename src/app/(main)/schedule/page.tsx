@@ -108,7 +108,7 @@ const fetchData = useCallback(async (isBackgroundFetch = false) => {
         // Rule 1: Add professionals who are scheduled to work AND have a valid contract
         allProfessionals.forEach(prof => {
             const availability = getProfessionalAvailabilityForDate(prof, currentDate);
-            const contractStatus = getContractDisplayStatus(prof.currentContract, currentDate);
+            const contractStatus = getContractDisplayStatus(prof, currentDate);
             
             if(availability?.isWorking && availability.workingLocationId === actualEffectiveLocationId && (contractStatus === 'Activo' || contractStatus === 'Próximo a Vencer')) {
                 professionalIdsInSchedule.add(prof.id);
@@ -543,7 +543,7 @@ const fetchData = useCallback(async (isBackgroundFetch = false) => {
           onAppointmentCreated={handleNewAppointmentCreated}
           defaultDate={currentDate}
           allProfessionals={allSystemProfessionals} 
-          currentLocationProfessionals={allSystemProfessionals.filter(p => p.locationId === actualEffectiveLocationId)}
+          currentLocationProfessionals={currentLocationProfessionals}
           isBasicMode={isScheduleBasicMode}
         />
       )}

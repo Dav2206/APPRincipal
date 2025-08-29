@@ -85,9 +85,9 @@ const convertDocumentData = (docData: DocumentData): any => {
 
 
 // --- Contract Status Helper ---
-export type ContractDisplayStatus = 'Activo' | 'Próximo a Vencer' | 'Vencido' | 'Sin Contrato';
+export type ContractDisplayStatus = 'Activo' | 'Próximo a Vencer' | 'Vencido' | 'No Vigente Aún' | 'Sin Contrato';
 
-export function getContractDisplayStatus(professional: Professional, referenceDateParam?: Date | string): ContractDisplayStatus {
+export function getContractDisplayStatus(professional: Professional | { currentContract?: Contract | null, contractHistory?: Contract[] | null }, referenceDateParam?: Date | string): ContractDisplayStatus {
     const currentSystemDate = new Date();
     let referenceDate: Date;
 
@@ -147,6 +147,10 @@ export function getContractDisplayStatus(professional: Professional, referenceDa
     
     if (isNaN(startDate.getTime()) || isNaN(endDate.getTime())) {
       return 'Sin Contrato';
+    }
+
+    if (isBefore(referenceDate, startOfDay(startDate))) {
+      return 'No Vigente Aún';
     }
 
     if (isAfter(referenceDate, endOfDay(endDate))) {
@@ -319,7 +323,7 @@ export async function addProfessional (data: Omit<ProfessionalFormData, 'id'>): 
     birthDay: data.birthDay,
     birthMonth: data.birthMonth,
     baseSalary: data.baseSalary,
-    commissionRate: data.commissionRate,
+    commissionRate: (data.commissionRate ?? 0) / 100, // Convert percentage to decimal
     commissionDeductible: data.commissionDeductible,
     discounts: data.discounts || 0,
     afp: data.afp,
@@ -347,24 +351,22 @@ export async function addProfessional (data: Omit<ProfessionalFormData, 'id'>): 
     contractHistory: [],
   };
 
-  if (data.workSchedule) {
-    (Object.keys(data.workSchedule) as Array<DayOfWeekId>).forEach(dayId => {
-      const dayData = data.workSchedule![dayId];
-      if (dayData) { 
-        newProfessionalData.workSchedule[dayId] = {
-          startTime: dayData.startTime || '00:00',
-          endTime: dayData.endTime || '00:00',
-          isWorking: dayData.isWorking === undefined ? (!!dayData.startTime && !!dayData.endTime) : dayData.isWorking,
-        };
-      } else {
-         newProfessionalData.workSchedule[dayId] = { startTime: '00:00', endTime: '00:00', isWorking: false };
-      }
-    });
-  } else {
-      DAYS_OF_WEEK.forEach(dayInfo => {
-           newProfessionalData.workSchedule[dayInfo.id] = { startTime: '00:00', endTime: '00:00', isWorking: false };
-      });
-  }
+  // Initialize all days of the week for the work schedule
+  DAYS_OF_WEEK.forEach(dayInfo => {
+    const dayId = dayInfo.id as DayOfWeekId;
+    const dayData = data.workSchedule?.[dayId];
+    if (dayData) { 
+      newProfessionalData.workSchedule[dayId] = {
+        startTime: dayData.startTime || '00:00',
+        endTime: dayData.endTime || '00:00',
+        isWorking: dayData.isWorking === undefined ? (!!dayData.startTime && !!dayData.endTime) : dayData.isWorking,
+      };
+    } else {
+       // If no data for a day is provided, default to non-working.
+       newProfessionalData.workSchedule[dayId] = { startTime: '10:00', endTime: '19:00', isWorking: false };
+    }
+  });
+
 
   if (!firestore) {
     console.error("[data.ts] addProfessional: Firestore is not initialized.");
@@ -410,39 +412,51 @@ export async function updateProfessional(id: string, data: Partial<ProfessionalF
             return undefined;
         }
         const existingProf = convertDocumentData(existingProfSnap.data()) as Professional;
-
         const firestoreUpdateData: { [key: string]: any } = {};
 
+        // Define all keys that can be updated from the form
         const allowedKeys: (keyof ProfessionalFormData)[] = [
             'firstName', 'lastName', 'locationId', 'phone', 'isManager', 'birthDay', 'birthMonth',
             'baseSalary', 'commissionRate', 'commissionDeductible', 'discounts', 'afp', 'seguro',
             'workSchedule', 'customScheduleOverrides', 'currentContract_startDate', 'currentContract_endDate',
             'currentContract_notes', 'currentContract_empresa'
         ];
-
-        allowedKeys.forEach(key => {
-            const value = (data as any)[key];
-            if (value !== undefined) { // Check for undefined specifically
-                firestoreUpdateData[key] = value;
-            }
-        });
         
-        // Sanitize numeric fields - convert empty string/NaN to null
-        ['baseSalary', 'commissionDeductible', 'discounts', 'afp', 'seguro', 'birthDay', 'birthMonth'].forEach(key => {
-            if (firestoreUpdateData.hasOwnProperty(key)) {
-                const numValue = parseFloat(firestoreUpdateData[key]);
-                firestoreUpdateData[key] = isNaN(numValue) ? null : numValue;
+        // Build the update object, converting undefined to null for Firestore compatibility
+        allowedKeys.forEach(key => {
+            if (data.hasOwnProperty(key)) {
+                const value = (data as any)[key];
+                
+                // Special handling for numeric fields to convert "" or invalid parses to null
+                if (['baseSalary', 'commissionRate', 'commissionDeductible', 'discounts', 'afp', 'seguro', 'birthDay', 'birthMonth'].includes(key)) {
+                    const numValue = parseFloat(value as any);
+                    firestoreUpdateData[key] = isNaN(numValue) ? null : numValue;
+                } else if (key === 'workSchedule') {
+                    // CRITICAL FIX: Merge new schedule with existing to prevent data loss
+                    const mergedSchedule = { ...(existingProf.workSchedule || {}) };
+                    if (value && typeof value === 'object') {
+                        (Object.keys(value) as DayOfWeekId[]).forEach(dayId => {
+                            mergedSchedule[dayId] = {
+                                isWorking: value[dayId]?.isWorking || false,
+                                startTime: value[dayId]?.startTime || '00:00',
+                                endTime: value[dayId]?.endTime || '00:00',
+                            };
+                        });
+                    }
+                    firestoreUpdateData[key] = mergedSchedule;
+                } else {
+                     firestoreUpdateData[key] = value === undefined ? null : value;
+                }
             }
         });
 
-        if (firestoreUpdateData.hasOwnProperty('commissionRate')) {
-            const rateValue = parseFloat(firestoreUpdateData.commissionRate);
-            firestoreUpdateData.commissionRate = isNaN(rateValue) ? null : rateValue / 100; // Convert from %
+        // Convert percentage to decimal for commissionRate before saving
+        if (firestoreUpdateData.hasOwnProperty('commissionRate') && typeof firestoreUpdateData.commissionRate === 'number') {
+            firestoreUpdateData.commissionRate = firestoreUpdateData.commissionRate / 100;
         }
         
-        // --- Contract Handling ---
-        const hasNewContractData = firestoreUpdateData.currentContract_startDate !== undefined || firestoreUpdateData.currentContract_endDate !== undefined;
-        
+        // --- Contract Handling (from previous implementation) ---
+        const hasNewContractData = data.currentContract_startDate !== undefined || data.currentContract_endDate !== undefined;
         if (hasNewContractData) {
              const oldContract = existingProf.currentContract;
              const newHistory = [...(existingProf.contractHistory || [])];
@@ -459,19 +473,23 @@ export async function updateProfessional(id: string, data: Partial<ProfessionalF
                  id: generateId(),
                  startDate: toFirestoreTimestamp(data.currentContract_startDate),
                  endDate: toFirestoreTimestamp(data.currentContract_endDate),
-                 notes: data.currentContract_notes || null,
-                 empresa: data.currentContract_empresa || null,
+                 notes: data.currentContract_notes ?? null,
+                 empresa: data.currentContract_empresa ?? null,
              };
              firestoreUpdateData.currentContract = newContract;
+        } else {
+            // If only notes or empresa are changed on the existing contract
+            if(existingProf.currentContract && (data.currentContract_notes !== undefined || data.currentContract_empresa !== undefined)){
+                firestoreUpdateData['currentContract.notes'] = data.currentContract_notes ?? existingProf.currentContract.notes;
+                firestoreUpdateData['currentContract.empresa'] = data.currentContract_empresa ?? existingProf.currentContract.empresa;
+            }
         }
-        // Always delete the form-specific keys
         delete firestoreUpdateData.currentContract_startDate;
         delete firestoreUpdateData.currentContract_endDate;
         delete firestoreUpdateData.currentContract_notes;
         delete firestoreUpdateData.currentContract_empresa;
 
-
-        // --- Schedule Handling ---
+        // --- Schedule Overrides Handling (from previous implementation) ---
         if (firestoreUpdateData.customScheduleOverrides) {
             firestoreUpdateData.customScheduleOverrides = firestoreUpdateData.customScheduleOverrides.map((ov: any) => ({
                 id: ov.id || generateId(),
@@ -484,30 +502,25 @@ export async function updateProfessional(id: string, data: Partial<ProfessionalF
                 notes: ov.notes || null,
             }));
         }
-        
-        if (firestoreUpdateData.workSchedule) {
-            const sanitizedSchedule: any = {};
-            (Object.keys(firestoreUpdateData.workSchedule) as DayOfWeekId[]).forEach(dayId => {
-                const dayData = firestoreUpdateData.workSchedule[dayId];
-                if (dayData) {
-                    sanitizedSchedule[dayId] = {
-                        isWorking: dayData.isWorking || false,
-                        startTime: dayData.startTime || '00:00',
-                        endTime: dayData.endTime || '00:00',
-                    };
-                }
-            });
-            firestoreUpdateData.workSchedule = sanitizedSchedule;
-        }
+
+        // Final check to prevent undefined values in nested objects
+        Object.keys(firestoreUpdateData).forEach(key => {
+            if (firestoreUpdateData[key] === undefined) {
+                delete firestoreUpdateData[key];
+            }
+        });
 
         if (Object.keys(firestoreUpdateData).length > 0) {
             transaction.update(docRef, firestoreUpdateData);
         }
 
-        const updatedProfessionalData = { ...existingProf, ...data };
-        return updatedProfessionalData; // Return optimistic update
+        // Return an optimistic update object
+        const updatedDataForClient = { ...existingProf, ...data };
+        if(typeof data.commissionRate === 'number') updatedDataForClient.commissionRate = data.commissionRate / 100;
+        return updatedDataForClient;
     });
 }
+
 
 export async function updateArchivedContract(professionalId: string, contractId: string, data: ContractEditFormData): Promise<Professional | undefined> {
   if (!firestore) throw new Error("Firestore not initialized.");
