@@ -15,11 +15,16 @@ export interface User extends BaseEntity {
   useruid?: string; // Firebase Auth UID
 }
 
+export interface SundayGroup {
+  name: string;
+  professionalIds: string[];
+}
+
 export interface Location {
     id: LocationId;
     name: string;
     paymentMethods: PaymentMethod[];
-    sundayGroups?: Record<string, string[]>; // e.g., { group1: [profId1, profId2], group2: [...] }
+    sundayGroups?: Record<string, SundayGroup>; // e.g., { group1: { name: "Titanes", professionalIds: [...] } }
 }
 
 export interface PaymentGroup {

@@ -9,7 +9,7 @@ import { Badge } from '@/components/ui/badge';
 import { Users, Calendar, Plane, Sun, Star, Loader2, GripVertical, ChevronLeft, ChevronRight, MoveVertical, Edit2, Moon, Coffee, Sunrise, Sunset, Palette, MousePointerClick, RefreshCcw, Group, Save, PlusCircle } from 'lucide-react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { getProfessionals, getContractDisplayStatus, getLocations, getProfessionalAvailabilityForDate, updateProfessional, markDayAsHoliday, saveSundayGroups } from '@/lib/data';
-import type { Professional, Location, LocationId, ProfessionalFormData } from '@/types';
+import type { Professional, Location, LocationId, ProfessionalFormData, SundayGroup } from '@/types';
 import { useAuth } from '@/contexts/auth-provider';
 import { useAppState } from '@/contexts/app-state-provider';
 import { Button } from '@/components/ui/button';
@@ -36,6 +36,7 @@ import { Separator } from '@/components/ui/separator';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Calendar as CalendarComponent } from '@/components/ui/calendar'; // Renamed to avoid conflict
+import { Input } from '@/components/ui/input';
 
 // --- Data Structures ---
 interface VacationInfo {
@@ -91,9 +92,11 @@ export default function RotationsPage() {
   const [sundayWorkers, setSundayWorkers] = useState<CompensatoryRestInfo[]>([]);
   const [holidayWorkers, setHolidayWorkers] = useState<CompensatoryRestInfo[]>([]);
 
-  // State for Sunday Groups - Mockup state, doesn't persist
-  const [sundayGroups, setSundayGroups] = useState<Record<string, string[]>>({ group1: [], group2: [], group3: [], group4: [] });
+  // State for Sunday Groups
+  const [sundayGroups, setSundayGroups] = useState<Record<string, SundayGroup>>({});
   const [groupableProfessionals, setGroupableProfessionals] = useState<Professional[]>([]);
+  const [isSavingSundayGroups, setIsSavingSundayGroups] = useState(false);
+  const [editingGroupName, setEditingGroupName] = useState<{ groupId: string; name: string } | null>(null);
 
 
   const effectiveLocationId = useMemo(() => {
@@ -126,9 +129,16 @@ export default function RotationsPage() {
       // Initialize groupable professionals with those from Higuereta
       const higueretaProfs = activeProfs.filter(p => p.locationId === 'higuereta');
       setGroupableProfessionals(higueretaProfs);
-
-      // Reset sunday groups on data load
-      setSundayGroups({ group1: [], group2: [], group3: [], group4: [] });
+      
+      const higueretaLocation = allLocations.find(l => l.id === 'higuereta');
+      const savedGroups = higueretaLocation?.sundayGroups || {};
+      const initialGroups: Record<string, SundayGroup> = {
+          group1: savedGroups.group1 || { name: 'Grupo 1', professionalIds: [] },
+          group2: savedGroups.group2 || { name: 'Grupo 2', professionalIds: [] },
+          group3: savedGroups.group3 || { name: 'Grupo 3', professionalIds: [] },
+          group4: savedGroups.group4 || { name: 'Grupo 4', professionalIds: [] },
+      };
+      setSundayGroups(initialGroups);
       
 
       if (effectiveLocationId && effectiveLocationId !== 'all') {
@@ -443,12 +453,12 @@ export default function RotationsPage() {
   
   const professionalsByGroup = useMemo(() => {
     const inGroups = new Set<string>();
-    Object.values(sundayGroups).forEach(group => group.forEach(id => inGroups.add(id)));
+    Object.values(sundayGroups).forEach(group => group.professionalIds.forEach(id => inGroups.add(id)));
     
     const assigned = new Map<string, Professional[]>();
-    Object.entries(sundayGroups).forEach(([groupName, profIds]) => {
-      const profs = profIds.map(id => groupableProfessionals.find(p => p.id === id)).filter((p): p is Professional => !!p);
-      assigned.set(groupName, profs);
+    Object.entries(sundayGroups).forEach(([groupId, groupData]) => {
+      const profs = groupData.professionalIds.map(id => groupableProfessionals.find(p => p.id === id)).filter((p): p is Professional => !!p);
+      assigned.set(groupId, profs);
     });
 
     const unassigned = groupableProfessionals.filter(p => !inGroups.has(p.id));
@@ -456,17 +466,22 @@ export default function RotationsPage() {
   }, [sundayGroups, groupableProfessionals]);
 
 
-  const handleMoveProfessional = (profId: string, toGroup: string | null) => {
-    const newGroups = JSON.parse(JSON.stringify(sundayGroups));
-    // Remove from any existing group
-    for (const groupName in newGroups) {
-      newGroups[groupName] = newGroups[groupName].filter((id: string) => id !== profId);
-    }
-    // Add to the new group if specified
-    if (toGroup && newGroups[toGroup]) {
-      newGroups[toGroup].push(profId);
-    }
-    setSundayGroups(newGroups);
+  const handleMoveProfessional = (profId: string, toGroupId: string | null) => {
+      const newGroups = JSON.parse(JSON.stringify(sundayGroups));
+      
+      // Remove from any existing group first
+      for (const groupId in newGroups) {
+          const group = newGroups[groupId];
+          group.professionalIds = group.professionalIds.filter((id: string) => id !== profId);
+      }
+
+      // Add to the new group if one is specified
+      if (toGroupId && newGroups[toGroupId]) {
+          if (!newGroups[toGroupId].professionalIds.includes(profId)) {
+              newGroups[toGroupId].professionalIds.push(profId);
+          }
+      }
+      setSundayGroups(newGroups);
   };
   
   const handleAddExternalToGroup = (prof: Professional) => {
@@ -474,6 +489,36 @@ export default function RotationsPage() {
         setGroupableProfessionals(prev => [...prev, prof]);
     }
     toast({title: "Profesional Añadido", description: `${prof.firstName} ${prof.lastName} ahora está disponible para agrupar.`});
+  };
+
+  const handleGroupNameChange = (groupId: string, newName: string) => {
+    setEditingGroupName({ groupId, name: newName });
+  };
+  
+  const handleSaveGroupName = (groupId: string) => {
+    if (editingGroupName && editingGroupName.groupId === groupId) {
+      const trimmedName = editingGroupName.name.trim();
+      if (trimmedName) {
+        setSundayGroups(prev => ({
+          ...prev,
+          [groupId]: { ...prev[groupId], name: trimmedName }
+        }));
+      }
+      setEditingGroupName(null);
+    }
+  };
+  
+  const handleSaveSundayGroups = async () => {
+    setIsSavingSundayGroups(true);
+    try {
+        await saveSundayGroups('higuereta', sundayGroups);
+        toast({title: "Grupos Guardados", description: "La configuración de los grupos dominicales ha sido guardada."});
+    } catch (error) {
+        toast({title: "Error al Guardar", description: "No se pudo guardar la configuración de los grupos.", variant: "destructive"});
+        console.error("Error saving sunday groups:", error);
+    } finally {
+        setIsSavingSundayGroups(false);
+    }
   };
 
   return (
@@ -667,8 +712,8 @@ export default function RotationsPage() {
             <CardHeader>
                  <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
                     <div>
-                        <CardTitle>Grupos Dominicales Tentativos (Higuereta)</CardTitle>
-                        <CardDescription>Organice los profesionales en grupos para las rotaciones de los domingos. Estos grupos son solo una maqueta visual y no se guardarán.</CardDescription>
+                        <CardTitle>Grupos Dominicales (Higuereta)</CardTitle>
+                        <CardDescription>Organice los profesionales en grupos para las rotaciones de los domingos. Haga doble clic en el nombre de un grupo para editarlo.</CardDescription>
                     </div>
                      <DropdownMenu>
                         <DropdownMenuTrigger asChild>
@@ -704,21 +749,33 @@ export default function RotationsPage() {
                              <DropdownMenu key={prof.id}>
                                 <DropdownMenuTrigger asChild><Button variant="outline" className="w-full justify-start">{prof.firstName} {prof.lastName.charAt(0)}.</Button></DropdownMenuTrigger>
                                 <DropdownMenuContent>
-                                    <DropdownMenuItem onClick={() => handleMoveProfessional(prof.id, 'group1')}>Mover a Grupo 1</DropdownMenuItem>
-                                    <DropdownMenuItem onClick={() => handleMoveProfessional(prof.id, 'group2')}>Mover a Grupo 2</DropdownMenuItem>
-                                    <DropdownMenuItem onClick={() => handleMoveProfessional(prof.id, 'group3')}>Mover a Grupo 3</DropdownMenuItem>
-                                    <DropdownMenuItem onClick={() => handleMoveProfessional(prof.id, 'group4')}>Mover a Grupo 4</DropdownMenuItem>
+                                    {Object.entries(sundayGroups).map(([groupId, groupData]) => (
+                                        <DropdownMenuItem key={groupId} onClick={() => handleMoveProfessional(prof.id, groupId)}>Mover a {groupData.name}</DropdownMenuItem>
+                                    ))}
                                 </DropdownMenuContent>
                             </DropdownMenu>
                         ))}
                     </div>
                 </div>
                  <div className="md:col-span-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-                     {Object.keys(sundayGroups).map(groupName => {
-                        const profs = professionalsByGroup.assigned.get(groupName) || [];
+                     {Object.entries(sundayGroups).map(([groupId, groupData]) => {
+                        const profs = professionalsByGroup.assigned.get(groupId) || [];
                         return (
-                            <div key={groupName} className="p-3 border rounded-lg">
-                                <h4 className="font-semibold mb-2 text-center capitalize flex items-center justify-center gap-2"><Group size={16}/> {groupName.replace('group', 'Grupo ')}</h4>
+                            <div key={groupId} className="p-3 border rounded-lg">
+                                <div className="font-semibold mb-2 text-center capitalize flex items-center justify-center gap-2" onDoubleClick={() => setEditingGroupName({ groupId, name: groupData.name })}>
+                                  {editingGroupName?.groupId === groupId ? (
+                                    <Input
+                                      value={editingGroupName.name}
+                                      onChange={(e) => handleGroupNameChange(groupId, e.target.value)}
+                                      onBlur={() => handleSaveGroupName(groupId)}
+                                      onKeyDown={(e) => { if (e.key === 'Enter') handleSaveGroupName(groupId); if (e.key === 'Escape') setEditingGroupName(null);}}
+                                      autoFocus
+                                      className="h-8 text-center"
+                                    />
+                                  ) : (
+                                    <h4 className="flex items-center gap-2 cursor-pointer"><Group size={16}/> {groupData.name} <Edit2 size={12} className="text-muted-foreground"/></h4>
+                                  )}
+                                </div>
                                 <div className="space-y-1 min-h-[100px]">
                                     {profs.map(prof => (
                                         <DropdownMenu key={prof.id}>
@@ -726,8 +783,8 @@ export default function RotationsPage() {
                                             <DropdownMenuContent>
                                                 <DropdownMenuItem onClick={() => handleMoveProfessional(prof.id, null)}>Quitar de Grupo</DropdownMenuItem>
                                                 <DropdownMenuSeparator/>
-                                                {Object.keys(sundayGroups).filter(g => g !== groupName).map(otherGroup => (
-                                                    <DropdownMenuItem key={otherGroup} onClick={() => handleMoveProfessional(prof.id, otherGroup)}>Mover a {otherGroup.replace('group', 'Grupo ')}</DropdownMenuItem>
+                                                {Object.entries(sundayGroups).filter(([id]) => id !== groupId).map(([otherGroupId, otherGroupData]) => (
+                                                    <DropdownMenuItem key={otherGroupId} onClick={() => handleMoveProfessional(prof.id, otherGroupId)}>Mover a {otherGroupData.name}</DropdownMenuItem>
                                                 ))}
                                             </DropdownMenuContent>
                                         </DropdownMenu>
@@ -738,6 +795,12 @@ export default function RotationsPage() {
                     })}
                 </div>
             </CardContent>
+            <CardFooter>
+                 <Button onClick={handleSaveSundayGroups} disabled={isSavingSundayGroups}>
+                    {isSavingSundayGroups && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                    <Save className="mr-2 h-4 w-4" /> Guardar Grupos
+                 </Button>
+            </CardFooter>
         </Card>
       )}
       
