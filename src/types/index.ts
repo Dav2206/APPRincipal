@@ -19,6 +19,7 @@ export interface Location {
     id: LocationId;
     name: string;
     paymentMethods: PaymentMethod[];
+    sundayGroups?: Record<string, string[]>; // e.g., { group1: [profId1, profId2], group2: [...] }
 }
 
 export interface PaymentGroup {

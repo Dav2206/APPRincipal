@@ -206,7 +206,7 @@ export const getLocations = async (): Promise<Location[]> => {
     
     const dbLocations = snapshot.docs.map(doc => ({
       id: doc.id as LocationId,
-      ...doc.data()
+      ...convertDocumentData(doc.data())
     })) as Location[];
 
     // This ensures that even if Firestore has extra locations, only the ones defined in constants are used.
@@ -220,9 +220,10 @@ export const getLocations = async (): Promise<Location[]> => {
                 paymentMethods: (Array.isArray(dbLoc.paymentMethods) && dbLoc.paymentMethods.length > 0) 
                                 ? dbLoc.paymentMethods 
                                 : (fallbackLoc.paymentMethods || []),
+                sundayGroups: dbLoc.sundayGroups || {},
             };
         }
-        return fallbackLoc; // Fallback if not in DB
+        return {...fallbackLoc, sundayGroups: {}}; // Fallback if not in DB
     });
 
     return mergedLocations;
@@ -257,6 +258,17 @@ export const updateLocationPaymentMethods = async (
     return false;
   }
 };
+
+export const saveSundayGroups = async (locationId: LocationId, groups: Record<string, string[]>): Promise<void> => {
+  if (!firestore) throw new Error("Firestore not initialized.");
+  try {
+    const configDocRef = doc(firestore, 'sedes', locationId);
+    await setDoc(configDocRef, { sundayGroups: groups }, { merge: true });
+  } catch (error) {
+    console.error("Error saving sunday groups:", error);
+    throw error;
+  }
+}
 
 
 // --- Professionals ---

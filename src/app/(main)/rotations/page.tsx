@@ -1,13 +1,14 @@
 
+
 "use client";
 
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
-import { Users, Calendar, Plane, Sun, Star, Loader2, GripVertical, ChevronLeft, ChevronRight, MoveVertical, Edit2, Moon, Coffee, Sunrise, Sunset, Palette, MousePointerClick, RefreshCcw } from 'lucide-react';
+import { Users, Calendar, Plane, Sun, Star, Loader2, GripVertical, ChevronLeft, ChevronRight, MoveVertical, Edit2, Moon, Coffee, Sunrise, Sunset, Palette, MousePointerClick, RefreshCcw, Group, Save } from 'lucide-react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { getProfessionals, getContractDisplayStatus, getLocations, getProfessionalAvailabilityForDate, updateProfessional, markDayAsHoliday } from '@/lib/data';
+import { getProfessionals, getContractDisplayStatus, getLocations, getProfessionalAvailabilityForDate, updateProfessional, markDayAsHoliday, saveSundayGroups } from '@/lib/data';
 import type { Professional, Location, LocationId, ProfessionalFormData } from '@/types';
 import { useAuth } from '@/contexts/auth-provider';
 import { useAppState } from '@/contexts/app-state-provider';
@@ -90,6 +91,10 @@ export default function RotationsPage() {
   const [sundayWorkers, setSundayWorkers] = useState<CompensatoryRestInfo[]>([]);
   const [holidayWorkers, setHolidayWorkers] = useState<CompensatoryRestInfo[]>([]);
 
+  // State for Sunday Groups
+  const [sundayGroups, setSundayGroups] = useState<Record<string, string[]>>({});
+  const [isSavingSundayGroups, setIsSavingSundayGroups] = useState(false);
+
 
   const effectiveLocationId = useMemo(() => {
     if (user?.role === USER_ROLES.ADMIN || user?.role === USER_ROLES.CONTADOR) {
@@ -117,6 +122,13 @@ export default function RotationsPage() {
 
       setAllProfessionals(activeProfs);
       setLocations(allLocations);
+      
+      if (effectiveLocationId && effectiveLocationId === 'higuereta') {
+          const higueretaConfig = allLocations.find(l => l.id === 'higuereta');
+          setSundayGroups(higueretaConfig?.sundayGroups || { group1: [], group2: [], group3: [], group4: [] });
+      } else {
+          setSundayGroups({});
+      }
 
       if (effectiveLocationId && effectiveLocationId !== 'all') {
             const nextSundayDate = nextSunday(viewDate);
@@ -340,7 +352,7 @@ export default function RotationsPage() {
     try {
       await updateProfessional(professional.id, { workSchedule: newWorkSchedule });
       
-      const dayName = DAYS_OF_WEEK.find(d => d.id === dayOfWeek)?.name || 'día de la semana';
+      const dayName = DAYS_OF_WEEK.find(d => d.id === dayOfWeekId)?.name || 'día de la semana';
       toast({
         title: "Horario Base Actualizado",
         description: `El horario de ${professional.firstName} para los ${dayName} ha sido actualizado a ${newStartTime} - ${newEndTime}.`,
@@ -425,6 +437,49 @@ export default function RotationsPage() {
         await handleAction(professionalId, dateToUpdate, 'rest', {notes: 'Descanso compensatorio'});
     } else {
         toast({ variant: 'destructive', title: "Error", description: "No se pudo encontrar la fecha para el día de descanso seleccionado." });
+    }
+  };
+  
+  const higueretaProfessionals = useMemo(() => {
+    return allProfessionals.filter(p => p.locationId === 'higuereta');
+  }, [allProfessionals]);
+
+  const professionalsByGroup = useMemo(() => {
+    const inGroups = new Set<string>();
+    Object.values(sundayGroups).forEach(group => group.forEach(id => inGroups.add(id)));
+    const assigned = new Map<string, Professional[]>();
+    Object.entries(sundayGroups).forEach(([groupName, profIds]) => {
+      const profs = profIds.map(id => higueretaProfessionals.find(p => p.id === id)).filter((p): p is Professional => !!p);
+      assigned.set(groupName, profs);
+    });
+    const unassigned = higueretaProfessionals.filter(p => !inGroups.has(p.id));
+    return { assigned, unassigned };
+  }, [sundayGroups, higueretaProfessionals]);
+
+  const handleMoveProfessional = (profId: string, toGroup: string | null) => {
+    const newGroups = JSON.parse(JSON.stringify(sundayGroups));
+    // Remove from any existing group
+    for (const groupName in newGroups) {
+      newGroups[groupName] = newGroups[groupName].filter((id: string) => id !== profId);
+    }
+    // Add to the new group if specified
+    if (toGroup && newGroups[toGroup]) {
+      newGroups[toGroup].push(profId);
+    }
+    setSundayGroups(newGroups);
+  };
+  
+  const handleSaveSundayGroups = async () => {
+    if (effectiveLocationId !== 'higuereta') return;
+    setIsSavingSundayGroups(true);
+    try {
+      await saveSundayGroups('higuereta', sundayGroups);
+      toast({ title: 'Grupos Guardados', description: 'La configuración de los grupos dominicales ha sido guardada.' });
+    } catch(error) {
+      console.error("Error saving sunday groups:", error);
+      toast({ title: 'Error', description: 'No se pudieron guardar los grupos.', variant: 'destructive'});
+    } finally {
+      setIsSavingSundayGroups(false);
     }
   };
 
@@ -614,6 +669,60 @@ export default function RotationsPage() {
             }
         </CardContent>
       </Card>
+      
+       {effectiveLocationId === 'higuereta' && (
+        <Card>
+            <CardHeader>
+                <CardTitle>Grupos Dominicales Tentativos (Higuereta)</CardTitle>
+                <CardDescription>Organice los profesionales de Higuereta en grupos para las rotaciones de los domingos.</CardDescription>
+            </CardHeader>
+            <CardContent className="grid grid-cols-1 md:grid-cols-5 gap-4">
+                <div className="md:col-span-1 p-3 border rounded-lg bg-secondary/50">
+                    <h4 className="font-semibold mb-2 text-center">Sin Asignar</h4>
+                    <div className="space-y-1 min-h-[100px]">
+                        {professionalsByGroup.unassigned.map(prof => (
+                             <DropdownMenu key={prof.id}>
+                                <DropdownMenuTrigger asChild><Button variant="outline" className="w-full justify-start">{prof.firstName}</Button></DropdownMenuTrigger>
+                                <DropdownMenuContent>
+                                    <DropdownMenuItem onClick={() => handleMoveProfessional(prof.id, 'group1')}>Mover a Grupo 1</DropdownMenuItem>
+                                    <DropdownMenuItem onClick={() => handleMoveProfessional(prof.id, 'group2')}>Mover a Grupo 2</DropdownMenuItem>
+                                    <DropdownMenuItem onClick={() => handleMoveProfessional(prof.id, 'group3')}>Mover a Grupo 3</DropdownMenuItem>
+                                    <DropdownMenuItem onClick={() => handleMoveProfessional(prof.id, 'group4')}>Mover a Grupo 4</DropdownMenuItem>
+                                </DropdownMenuContent>
+                            </DropdownMenu>
+                        ))}
+                    </div>
+                </div>
+                 <div className="md:col-span-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                    {Object.entries(professionalsByGroup.assigned).map(([groupName, profs]) => (
+                        <div key={groupName} className="p-3 border rounded-lg">
+                            <h4 className="font-semibold mb-2 text-center capitalize flex items-center justify-center gap-2"><Group size={16}/> {groupName.replace('group', 'Grupo ')}</h4>
+                            <div className="space-y-1 min-h-[100px]">
+                                {profs.map(prof => (
+                                    <DropdownMenu key={prof.id}>
+                                        <DropdownMenuTrigger asChild><Button variant="secondary" className="w-full justify-start">{prof.firstName}</Button></DropdownMenuTrigger>
+                                        <DropdownMenuContent>
+                                            <DropdownMenuItem onClick={() => handleMoveProfessional(prof.id, null)}>Quitar de Grupo</DropdownMenuItem>
+                                            <DropdownMenuSeparator/>
+                                            {Object.keys(sundayGroups).filter(g => g !== groupName).map(otherGroup => (
+                                                <DropdownMenuItem key={otherGroup} onClick={() => handleMoveProfessional(prof.id, otherGroup)}>Mover a {otherGroup.replace('group', 'Grupo ')}</DropdownMenuItem>
+                                            ))}
+                                        </DropdownMenuContent>
+                                    </DropdownMenu>
+                                ))}
+                            </div>
+                        </div>
+                    ))}
+                </div>
+            </CardContent>
+            <CardFooter>
+                 <Button onClick={handleSaveSundayGroups} disabled={isSavingSundayGroups}>
+                    {isSavingSundayGroups && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                    <Save className="mr-2 h-4 w-4" /> Guardar Grupos
+                </Button>
+            </CardFooter>
+        </Card>
+      )}
       
       {sundayWorkers.length > 0 && (
             <Card>
