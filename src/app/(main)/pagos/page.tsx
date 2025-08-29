@@ -160,11 +160,7 @@ export default function PaymentsPage() {
 
     try {
         const allProfessionals = await getProfessionals();
-        const activeProfessionals = allProfessionals.filter(p => {
-          const contractStatus = getContractDisplayStatus(p.currentContract, endDate);
-          return contractStatus === 'Activo' || contractStatus === 'Próximo a Vencer';
-        });
-
+        
         const appointmentsResponse = await getAppointments({ 
             dateRange: { start: startDate, end: endDate },
             statuses: [APPOINTMENT_STATUS.COMPLETED]
@@ -187,9 +183,15 @@ export default function PaymentsPage() {
               processIncomeForProfessional(profIdForAddedService, addedService.amountPaid);
           });
         });
+        
+        const professionalsInPayroll = allProfessionals.filter(prof => {
+            const contractStatus = getContractDisplayStatus(prof, endDate);
+            const hasIncome = (incomeByProfessional[prof.id] || 0) > 0;
+            return hasIncome || (contractStatus === 'Activo' || contractStatus === 'Próximo a Vencer');
+        });
 
         let totalPayrollForPeriod = 0;
-        const newPayrollData: PayrollData[] = activeProfessionals.map(prof => {
+        const newPayrollData: PayrollData[] = professionalsInPayroll.map(prof => {
             const totalIncome = incomeByProfessional[prof.id] || 0;
             const deductible = prof.commissionDeductible ?? (prof.locationId === 'higuereta' ? 2200 : 1800);
             const rate = prof.commissionRate ?? 0.20;
@@ -971,7 +973,7 @@ export default function PaymentsPage() {
           <DialogHeader>
             <DialogTitle>{editingReminder ? 'Editar' : 'Añadir'} Pago/Gasto</DialogTitle>
           </DialogHeader>
-          <Form {...reminderForm}>
+          <Form {...form}>
             <form onSubmit={reminderForm.handleSubmit(onSubmitReminderForm)} className="space-y-4 py-2 max-h-[70vh] overflow-y-auto pr-2">
               <FormField
                 control={reminderForm.control}
