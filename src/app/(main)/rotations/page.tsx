@@ -15,7 +15,7 @@ import { useAppState } from '@/contexts/app-state-provider';
 import { Button } from '@/components/ui/button';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator, DropdownMenuSub, DropdownMenuSubTrigger, DropdownMenuSubContent, DropdownMenuPortal } from '@/components/ui/dropdown-menu';
 import { cn } from '@/lib/utils';
-import { format, startOfWeek, endOfWeek, addDays, eachDayOfInterval, getHours, parse, getDay, startOfDay, parseISO, formatISO as dateFnsFormatISO } from 'date-fns';
+import { format, startOfWeek, endOfWeek, addDays, eachDayOfInterval, getHours, parse, getDay, startOfDay, parseISO, formatISO as dateFnsFormatISO, nextSunday } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
@@ -32,6 +32,7 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
+import { Separator } from '@/components/ui/separator';
 
 // --- Data Structures ---
 interface VacationInfo {
@@ -49,6 +50,12 @@ interface NameBadgeProps {
   name: string;
   status: NameBadgeStatus;
   professionalId: string;
+}
+
+interface TentativeRestInfo {
+    professionalId: string;
+    professionalName: string;
+    restDayName: string;
 }
 
 
@@ -78,6 +85,8 @@ export default function RotationsPage() {
   const [viewDate, setViewDate] = useState(new Date());
   const { toast } = useToast();
 
+  const [tentativeRestDays, setTentativeRestDays] = useState<TentativeRestInfo[]>([]);
+
   const effectiveLocationId = useMemo(() => {
     if (user?.role === USER_ROLES.ADMIN || user?.role === USER_ROLES.CONTADOR) {
         return adminSelectedLocation === 'all' ? undefined : adminSelectedLocation as LocationId;
@@ -104,12 +113,45 @@ export default function RotationsPage() {
 
       setAllProfessionals(activeProfs);
       setLocations(allLocations);
+
+      // --- Calculate Tentative Rest Days ---
+      if (effectiveLocationId && effectiveLocationId !== 'all') {
+        const nextSundayDate = nextSunday(viewDate);
+        const workingOnSunday: TentativeRestInfo[] = [];
+
+        activeProfs.forEach(prof => {
+            const availabilityOnSunday = getProfessionalAvailabilityForDate(prof, nextSundayDate);
+            if (availabilityOnSunday?.isWorking && availabilityOnSunday.workingLocationId === effectiveLocationId) {
+                // Find their usual rest day from Monday to Saturday
+                let usualRestDay = "No definido";
+                for (const day of DAYS_OF_WEEK) {
+                    if (day.id !== 'sunday') {
+                        const schedule = prof.workSchedule?.[day.id];
+                        if (schedule && !schedule.isWorking) {
+                            usualRestDay = day.name;
+                            break; // Found the first rest day
+                        }
+                    }
+                }
+                 workingOnSunday.push({
+                    professionalId: prof.id,
+                    professionalName: prof.firstName,
+                    restDayName: usualRestDay
+                });
+            }
+        });
+        setTentativeRestDays(workingOnSunday);
+      } else {
+        setTentativeRestDays([]);
+      }
+
+
     } catch (error) {
       console.error("Error loading initial rotation data:", error);
     } finally {
       setIsLoading(false);
     }
-  }, [viewDate]);
+  }, [viewDate, effectiveLocationId]);
 
   useEffect(() => {
     loadAllData();
@@ -543,6 +585,47 @@ export default function RotationsPage() {
             }
         </CardContent>
       </Card>
+      
+      {tentativeRestDays.length > 0 && (
+            <Card>
+                <CardHeader>
+                    <CardTitle className="text-xl">Descansos Tentativos por Trabajo Dominical</CardTitle>
+                    <CardDescription>
+                        Guía visual de los días de descanso habituales para el personal que trabaja el próximo domingo, {format(nextSunday(viewDate), "d 'de' LLLL", {locale: es})}.
+                    </CardDescription>
+                </CardHeader>
+                <CardContent>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                        <div>
+                            <h4 className="font-semibold mb-2 text-center">Trabajan Próximo Domingo</h4>
+                            <Separator />
+                            <Table>
+                                <TableBody>
+                                    {tentativeRestDays.map(item => (
+                                        <TableRow key={item.professionalId}>
+                                            <TableCell className="text-center">{item.professionalName}</TableCell>
+                                        </TableRow>
+                                    ))}
+                                </TableBody>
+                            </Table>
+                        </div>
+                        <div>
+                            <h4 className="font-semibold mb-2 text-center">Descanso Semanal Tentativo</h4>
+                             <Separator />
+                            <Table>
+                                 <TableBody>
+                                    {tentativeRestDays.map(item => (
+                                        <TableRow key={item.professionalId}>
+                                            <TableCell className="text-center">{item.restDayName}</TableCell>
+                                        </TableRow>
+                                    ))}
+                                </TableBody>
+                            </Table>
+                        </div>
+                    </div>
+                </CardContent>
+            </Card>
+        )}
 
     </div>
   );
