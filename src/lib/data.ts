@@ -1,4 +1,5 @@
 
+
 // src/lib/data.ts
 import type { User, Professional, Patient, Service, Appointment, AppointmentFormData, ProfessionalFormData, AppointmentStatus, ServiceFormData, Contract, PeriodicReminder, ImportantNote, PeriodicReminderFormData, ImportantNoteFormData, AddedServiceItem, AppointmentUpdateFormData, Location, PaymentGroup, GroupingPreset, Material, MaterialFormData, ContractEditFormData } from '@/types';
 import { USER_ROLES, APPOINTMENT_STATUS, APPOINTMENT_STATUS_DISPLAY, TIME_SLOTS, DAYS_OF_WEEK, LOCATIONS_FALLBACK } from '@/lib/constants';
@@ -1607,8 +1608,15 @@ export async function getPatientAppointmentHistory(patientId: string): Promise<{
 // --- Professional Availability ---
 export function getProfessionalAvailabilityForDate(professional: Professional, targetDate: Date): { startTime: string; endTime: string; isWorking: boolean; reason?: string, notes?: string, workingLocationId?: LocationId | null } | null {
   const targetDateISO = format(targetDate, 'yyyy-MM-dd');
+  
+  // First, check for contract validity
+  const contractStatus = getContractDisplayStatus(professional, targetDate);
+  if (contractStatus !== 'Activo' && contractStatus !== 'Próximo a Vencer') {
+    return { startTime: '', endTime: '', isWorking: false, reason: `Contrato ${contractStatus}`, workingLocationId: professional.locationId };
+  }
 
-  // First, check for a specific override for the target date.
+
+  // Then, check for a specific override for the target date.
   const customOverride = professional.customScheduleOverrides?.find(
     (override) => format(parseISO(override.date), 'yyyy-MM-dd') === targetDateISO
   );
