@@ -98,7 +98,7 @@ export default function RotationsPage() {
       const [allProfs, allLocations] = await Promise.all([getProfessionals(), getLocations()]);
       
       const activeProfs = allProfs.filter(prof => {
-        const status = getContractDisplayStatus(prof.currentContract, viewDate);
+        const status = getContractDisplayStatus(prof, viewDate);
         return (status === 'Activo' || status === 'Próximo a Vencer')
       });
 
@@ -350,9 +350,12 @@ export default function RotationsPage() {
   };
 
   const currentViewLocationName = useMemo(() => {
+    if (user?.role === USER_ROLES.LOCATION_STAFF) {
+        return locations.find(l => l.id === user.locationId)?.name;
+    }
     if (!effectiveLocationId || effectiveLocationId === 'all') return null;
     return locations.find(l => l.id === effectiveLocationId)?.name;
-  }, [effectiveLocationId, locations]);
+  }, [effectiveLocationId, locations, user]);
 
 
   return (
