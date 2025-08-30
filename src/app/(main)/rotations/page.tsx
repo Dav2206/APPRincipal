@@ -187,7 +187,7 @@ export default function RotationsPage() {
                 const availabilityOnSunday = getProfessionalAvailabilityForDate(prof, nextSundayDate);
                 if (availabilityOnSunday?.isWorking && availabilityOnSunday.workingLocationId === effectiveLocationId) {
                      const existingRest = overrides.find(ov => 
-                        isAfter(parseISO(ov.date), nextSundayDate) && ov.notes === 'Descanso compensatorio'
+                        isAfter(parseISO(ov.date), nextSundayDate) && ov.notes && ov.notes.includes('compensatorio por')
                      );
                      workingOnSunday.push({
                         professionalId: prof.id,
@@ -202,7 +202,7 @@ export default function RotationsPage() {
                     const availabilityOnHoliday = getProfessionalAvailabilityForDate(prof, holidayDate);
                     if (availabilityOnHoliday?.isWorking && availabilityOnHoliday.workingLocationId === effectiveLocationId) {
                          const existingRest = overrides.find(ov => 
-                            isAfter(parseISO(ov.date), holidayDate) && ov.notes === 'Descanso compensatorio'
+                            isAfter(parseISO(ov.date), holidayDate) && ov.notes && ov.notes.includes('compensatorio por')
                          );
                          workingOnHolidays.push({
                             professionalId: prof.id,
@@ -486,7 +486,7 @@ export default function RotationsPage() {
     try {
       await updateProfessional(professional.id, { customScheduleOverrides: updatedOverrides.map(ov => ({ ...ov, date: format(parseISO(ov.date), 'yyyy-MM-dd')}) as any) });
       toast({ title: "Descanso Asignado", description: `Se asignó el descanso a ${professional.firstName} para el ${format(newRestDate, 'PPP', {locale: es})}.`});
-      loadAllData();
+      await loadAllData();
     } catch (error) {
        console.error("Error assigning rest day:", error);
        toast({ title: "Error", description: "No se pudo asignar el descanso.", variant: "destructive"});
