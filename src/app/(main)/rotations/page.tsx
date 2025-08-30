@@ -110,6 +110,8 @@ export default function RotationsPage() {
       return { start, days };
   }, [viewDate]);
 
+  const generateId = () => Math.random().toString(36).substring(2, 11);
+
   const loadAllData = useCallback(async () => {
     setIsLoading(true);
     try {
@@ -1142,4 +1144,3 @@ export default function RotationsPage() {
     </div>
   );
 }
-
