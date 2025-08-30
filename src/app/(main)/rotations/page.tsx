@@ -182,28 +182,32 @@ export default function RotationsPage() {
             });
 
             for (const prof of activeProfs) {
-                 const overrides = prof.customScheduleOverrides || [];
+                const overrides = prof.customScheduleOverrides || [];
+                
                 // Check for Sunday work
                 const availabilityOnSunday = getProfessionalAvailabilityForDate(prof, nextSundayDate);
                 if (availabilityOnSunday?.isWorking && availabilityOnSunday.workingLocationId === effectiveLocationId) {
-                     const existingRest = overrides.find(ov => 
-                        isAfter(parseISO(ov.date), nextSundayDate) && ov.notes && ov.notes.includes('compensatorio por')
-                     );
-                     workingOnSunday.push({
+                    const sundayWorkDateStr = format(nextSundayDate, 'dd/MM/yy');
+                    const expectedSundayNote = `Descanso compensatorio por dom ${sundayWorkDateStr}`;
+                    const existingRest = overrides.find(ov => ov.notes === expectedSundayNote);
+
+                    workingOnSunday.push({
                         professionalId: prof.id,
                         professionalName: `${prof.firstName} ${prof.lastName}`,
                         workDate: nextSundayDate,
                         existingRestDate: existingRest ? parseISO(existingRest.date) : null
                     });
                 }
+                
                 // Check for holiday work
                 for (const holidayIsoString of holidaysInWeek) {
                     const holidayDate = parseISO(holidayIsoString);
                     const availabilityOnHoliday = getProfessionalAvailabilityForDate(prof, holidayDate);
                     if (availabilityOnHoliday?.isWorking && availabilityOnHoliday.workingLocationId === effectiveLocationId) {
-                         const existingRest = overrides.find(ov => 
-                            isAfter(parseISO(ov.date), holidayDate) && ov.notes && ov.notes.includes('compensatorio por')
-                         );
+                        const holidayWorkDateStr = format(holidayDate, 'dd/MM/yy');
+                        const expectedHolidayNote = `Descanso compensatorio por feriado ${holidayWorkDateStr}`;
+                        const existingRest = overrides.find(ov => ov.notes === expectedHolidayNote);
+
                          workingOnHolidays.push({
                             professionalId: prof.id,
                             professionalName: `${prof.firstName} ${prof.lastName}`,
@@ -459,29 +463,25 @@ export default function RotationsPage() {
     const professional = allProfessionals.find(p => p.id === professionalId);
     if (!professional) return;
 
-    const dateISO = format(newRestDate, "yyyy-MM-dd");
+    const newRestDateISO = format(newRestDate, "yyyy-MM-dd");
     let updatedOverrides = [...(professional.customScheduleOverrides || [])];
 
-    // Remove any previous compensatory rest day linked to this work date if needed (more complex logic)
-    // For now, we find any existing override on the *new* date.
-    const existingOverrideIndexOnNewDate = updatedOverrides.findIndex(
-      ov => format(parseISO(ov.date), 'yyyy-MM-dd') === dateISO
-    );
+    const workDateStr = format(workDate, 'dd/MM/yy');
+    const isSunday = getDay(workDate) === 0;
+    const overrideNote = `Descanso compensatorio por ${isSunday ? 'dom' : 'feriado'} ${workDateStr}`;
 
-    const overrideNote = `Descanso compensatorio por ${format(workDate, 'dd/MM/yy')}`;
+    // Remove any previous compensatory rest day for THIS SPECIFIC workDate
+    updatedOverrides = updatedOverrides.filter(ov => ov.notes !== overrideNote);
+
     const newOverride = {
-        id: existingOverrideIndexOnNewDate > -1 ? updatedOverrides[existingOverrideIndexOnNewDate].id : `override_${Date.now()}`,
-        date: dateISO,
+        id: `override_${generateId()}`,
+        date: newRestDateISO,
         overrideType: 'descanso' as const,
         isWorking: false,
         notes: overrideNote
     };
-
-    if (existingOverrideIndexOnNewDate > -1) {
-        updatedOverrides[existingOverrideIndexOnNewDate] = newOverride;
-    } else {
-        updatedOverrides.push(newOverride);
-    }
+    
+    updatedOverrides.push(newOverride);
     
     try {
       await updateProfessional(professional.id, { customScheduleOverrides: updatedOverrides.map(ov => ({ ...ov, date: format(parseISO(ov.date), 'yyyy-MM-dd')}) as any) });
@@ -1108,8 +1108,8 @@ export default function RotationsPage() {
                                 </TableRow>
                             </TableHeader>
                             <TableBody>
-                                {holidayWorkers.length > 0 ? holidayWorkers.map(item => (
-                                    <TableRow key={`${item.professionalId}-${item.workDate.toISOString()}`}>
+                                {holidayWorkers.length > 0 ? holidayWorkers.map((item, index) => (
+                                    <TableRow key={`${item.professionalId}-${item.workDate.toISOString()}-${index}`}>
                                         <TableCell className="font-medium">{item.professionalName} <span className="text-muted-foreground text-xs">({format(item.workDate, 'EEE d', {locale: es})})</span></TableCell>
                                         <TableCell>
                                         <Popover>
@@ -1142,3 +1142,4 @@ export default function RotationsPage() {
     </div>
   );
 }
+
